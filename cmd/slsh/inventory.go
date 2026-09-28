@@ -369,27 +369,6 @@ func (sh *Shell) linkTarget(ctx context.Context, e sl.Entry) (sl.Entry, error) {
 	return to, nil
 }
 
-// itemAt is the whole inventory item an entry names, fetched from the
-// folder the entry was listed in.
-//
-// Matched on the id and not the name it was found by, because a folder
-// may hold a dozen items called one thing -- the case rm --newest and
-// --oldest exist for -- and a lookup by name would answer with
-// whichever of them came back first.  The entry already carries the id
-// that settles it.
-func (sh *Shell) itemAt(ctx context.Context, e sl.Entry) (*sl.Item, error) {
-	items, err := sh.s.FolderItems(ctx, e.Parent)
-	if err != nil {
-		return nil, err
-	}
-	for _, it := range items {
-		if it.ID == e.ID {
-			return it, nil
-		}
-	}
-	return nil, fmt.Errorf("%s is no longer in the folder it was listed in", e.Name)
-}
-
 func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
 	args, done, err := subOptions("cd", &o, out, args)
@@ -423,7 +402,7 @@ func cmdCd(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 // alone: it registers every field it can set, and a field with no tag
 // would become a flag named after itself.
 type lsOptions struct {
-	Long   bool   `getopt:"-l          the columns: kind, when it was acquired, id and path"`
+	Long   bool   `getopt:"-l          the columns: kind, when it was acquired, id, what its owner may do, and path"`
 	Follow bool   `getopt:"-L          the columns, with a link shown as the item it points at"`
 	Deep   bool   `getopt:"-r          descend into the folders below"`
 	ByTime bool   `getopt:"-t          newest first, rather than by name"`
@@ -471,8 +450,8 @@ type longFormat struct {
 	byID map[msg.UUID]sl.Entry
 }
 
-// line writes one row: kind, when it was acquired, id, and the whole
-// path.
+// line writes one row: kind, when it was acquired, id, what its owner
+// may do, and the whole path.
 //
 // Under -L the id column is the id of the THING, whether or not its
 // kind could be found out -- a link names what it points at already,
@@ -481,14 +460,38 @@ type longFormat struct {
 // happened: this is a link, and following it got nowhere.  The path is
 // always where the entry was found, since that is what was listed.
 func (f longFormat) line(out io.Writer, e sl.Entry, full string) {
-	kind, when, id := kindOf(e), lsWhen(e.Created), e.ID
+	kind, when, id, may := kindOf(e), lsWhen(e.Created), e.ID, lsPerms(e)
 	if f.follow && e.IsLink && !e.Asset.IsZero() {
 		id = e.Asset
 		if to, ok := f.byID[e.Asset]; ok {
-			kind, when = kindOf(to), lsWhen(to.Created)
+			kind, when, may = kindOf(to), lsWhen(to.Created), lsPerms(to)
 		}
 	}
-	fmt.Fprintf(out, "%-10s %-19s %-36s %s\n", kind, when, id, full)
+	fmt.Fprintf(out, "%-10s %-19s %-36s %-3s %s\n", kind, when, id, may, full)
+}
+
+// lsPerms is the permissions column: what the owner may do with an item,
+// as M, C and X for modify, copy and transfer, a dash for each it may
+// not.  A copy-only item is -C-.
+//
+// A folder has no permissions and gets a dash, as it does for a date,
+// so that the columns after it do not move.  A link's are its own, as
+// the viewer takes them (llviewerinventory.cpp:2507-2511); -L shows the
+// item's.
+func lsPerms(e sl.Entry) string {
+	if e.Folder {
+		return "-"
+	}
+	b := []byte("---")
+	for i, p := range []struct {
+		bit  uint32
+		mark byte
+	}{{sl.PermModify, 'M'}, {sl.PermCopy, 'C'}, {sl.PermTransfer, 'X'}} {
+		if e.OwnerMask&p.bit != 0 {
+			b[i] = p.mark
+		}
+	}
+	return string(b)
 }
 
 // longFormatFor builds the format one listing wants.
@@ -1345,7 +1348,7 @@ func cmdEmptyTrash(ctx context.Context, sh *Shell, out io.Writer, args []string)
 // paths and the columns are what settle it.  Naming it anything else
 // would be a second thing to remember for the same question.
 type findOptions struct {
-	Long   bool `getopt:"-l          the columns: kind, when it was acquired, id and path"`
+	Long   bool `getopt:"-l          the columns: kind, when it was acquired, id, what its owner may do, and path"`
 	Follow bool `getopt:"-L          the columns, with a link shown as the item it points at"`
 	Help   bool `getopt:"--help -h   show what this command takes"`
 }

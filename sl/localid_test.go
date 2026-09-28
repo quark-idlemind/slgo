@@ -207,12 +207,18 @@ var sendsLocal = []struct {
 		return w.SetFaces(ctx, a, PlainFaces(1))
 	}},
 	{"Touch", func(ctx context.Context, w *Session, a, _ *Object) error {
-		return w.Touch(ctx, a, Touch{})
+		return w.Touch(ctx, a, bothCoordinates)
 	}},
 	{"TouchEnd", func(ctx context.Context, w *Session, a, _ *Object) error {
-		return w.TouchEnd(ctx, a, Touch{})
+		return w.TouchEnd(ctx, a, bothCoordinates)
 	}},
 }
+
+// bothCoordinates is a touch given both its coordinates, so that nothing
+// is read to work one out from the other: what these tests watch is the
+// local id, and a touch that reads the appearance may ask the region for
+// it by local id as well.
+var bothCoordinates = Touch{ST: middle, UV: middle}
 
 // TestALocalIDIsTheRegionsItCameFrom: two prims found at 77 and 78, and
 // then the avatar is somewhere else.  Where the same two are there too,
@@ -430,7 +436,7 @@ func TestALookupThatCrossesAMoveIsNotSent(t *testing.T) {
 func TestAnObjectBuiltByHandIsLookedUp(t *testing.T) {
 	w, f := newFakeSession(t)
 	f.objects = []*Seen{named(thePrim, 12)}
-	if err := w.TouchStart(context.Background(), &Object{ID: thePrim, Local: 77}, Touch{}); err != nil {
+	if err := w.TouchStart(context.Background(), &Object{ID: thePrim, Local: 77}, bothCoordinates); err != nil {
 		t.Fatalf("TouchStart: %v", err)
 	}
 	if got := localsSent(f); len(got) != 1 || got[0] != 12 {
@@ -438,7 +444,7 @@ func TestAnObjectBuiltByHandIsLookedUp(t *testing.T) {
 	}
 
 	f.Forget()
-	err := w.TouchStart(context.Background(), &Object{Local: 77}, Touch{})
+	err := w.TouchStart(context.Background(), &Object{Local: 77}, bothCoordinates)
 	if err == nil || len(f.Sent()) != 0 {
 		t.Errorf("a local id with no object id to check it by went out: %v, %s", err, f.describe())
 	}
@@ -458,7 +464,7 @@ func TestAnObjectFromAnotherSessionIsLookedUp(t *testing.T) {
 	fb.objects = []*Seen{named(thePrim, 55)}
 	findHere(t, b, thePrim)
 	fb.Forget()
-	if err := b.TouchStart(context.Background(), o, Touch{}); err != nil {
+	if err := b.TouchStart(context.Background(), o, bothCoordinates); err != nil {
 		t.Fatalf("TouchStart: %v", err)
 	}
 	if got := localsSent(fb); len(got) != 1 || got[0] != 55 {

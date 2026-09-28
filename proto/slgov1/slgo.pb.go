@@ -4657,8 +4657,8 @@ type ObjectInfo struct {
 	// in by a compressed update as well as by asking.
 	Name  string `protobuf:"bytes,7,opt,name=name,proto3" json:"name,omitempty"`
 	Owner string `protobuf:"bytes,8,opt,name=owner,proto3" json:"owner,omitempty"`
-	// TextureEntry is the packed per face appearance, when one has been
-	// seen.  It usually arrives only in a compressed update.
+	// TextureEntry is the packed per face appearance, as the last update
+	// that carried one said it.
 	TextureEntry []byte `protobuf:"bytes,9,opt,name=texture_entry,json=textureEntry,proto3" json:"texture_entry,omitempty"`
 	// Text is the floating text above the object.
 	Text string `protobuf:"bytes,10,opt,name=text,proto3" json:"text,omitempty"`
@@ -4677,8 +4677,11 @@ type ObjectInfo struct {
 	// Both arrive with every update and neither can be asked for
 	// afterwards, so a client that wants to describe an object as it
 	// stands has to be told them by whoever was listening.
-	Rotation      *Quaternion `protobuf:"bytes,13,opt,name=rotation,proto3" json:"rotation,omitempty"`
-	Shape         *PrimShape  `protobuf:"bytes,14,opt,name=shape,proto3" json:"shape,omitempty"`
+	Rotation *Quaternion `protobuf:"bytes,13,opt,name=rotation,proto3" json:"rotation,omitempty"`
+	Shape    *PrimShape  `protobuf:"bytes,14,opt,name=shape,proto3" json:"shape,omitempty"`
+	// TextureAnim is the texture animation, still packed, as the last
+	// full or compressed update said it; empty when it said none.
+	TextureAnim   []byte `protobuf:"bytes,15,opt,name=texture_anim,json=textureAnim,proto3" json:"texture_anim,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4807,6 +4810,13 @@ func (x *ObjectInfo) GetRotation() *Quaternion {
 func (x *ObjectInfo) GetShape() *PrimShape {
 	if x != nil {
 		return x.Shape
+	}
+	return nil
+}
+
+func (x *ObjectInfo) GetTextureAnim() []byte {
+	if x != nil {
+		return x.TextureAnim
 	}
 	return nil
 }
@@ -6482,7 +6492,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x0eObjectsRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
 	"\x05named\x18\x02 \x01(\tR\x05named\x12\x0e\n" +
-	"\x02id\x18\x03 \x01(\tR\x02id\"\xb8\x03\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"\xdb\x03\n" +
 	"\n" +
 	"ObjectInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
@@ -6500,7 +6510,8 @@ const file_slgo_proto_rawDesc = "" +
 	"\vattach_item\x18\f \x01(\tR\n" +
 	"attachItem\x12/\n" +
 	"\brotation\x18\r \x01(\v2\x13.slgo.v1.QuaternionR\brotation\x12(\n" +
-	"\x05shape\x18\x0e \x01(\v2\x12.slgo.v1.PrimShapeR\x05shape\"D\n" +
+	"\x05shape\x18\x0e \x01(\v2\x12.slgo.v1.PrimShapeR\x05shape\x12!\n" +
+	"\ftexture_anim\x18\x0f \x01(\fR\vtextureAnim\"D\n" +
 	"\n" +
 	"Quaternion\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x02R\x01x\x12\f\n" +

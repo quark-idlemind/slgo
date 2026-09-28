@@ -1087,9 +1087,10 @@ commands, which together are the point:
     $ slsh -f moves
 
 `ls` prints one bare path per line so a listing can be cut up by
-anything; `ls -l` adds the kind, the date and the id. A folder has no
-date, so that column holds a `-` rather than collapsing and moving
-every column after it. Names are not unique -- one folder here holds
+anything; `ls -l` adds the kind, the date, the id and what the owner
+may do -- `M`, `C` and `X` for modify, copy and transfer, a `-` for each
+it may not. A folder has no date and no permissions, so those columns
+hold a `-` rather than collapsing and moving every column after it. Names are not unique -- one folder here holds
 eighteen things of the same name -- so `mv`, `rm` and `cat` take an id
 wherever they take a path, which is what makes a listing of duplicates
 editable into commands that each mean one thing.
@@ -1608,6 +1609,15 @@ the size is read first, by the codec's own `DecodeConfig` -- the header
 the decoder would have believed, a second SIZ marker included -- and
 anything larger is refused before anything is allocated for the image.
 
+The tiles are counted before that, because `DecodeConfig` itself makes
+a record for every tile the header claims: a million tiles of four
+pixels, which the codec allows, cost it 226 MB to be asked the size
+(measured here, offline, on a crafted header). `MaxDecodeTiles`, 4096,
+is a tile of 64 pixels a side over the largest texture decoded; the
+viewer's own encoder writes one tile for the whole image. Every SIZ
+marker is checked, including one after a tile-part, where
+`DecodeConfig` has stopped reading and the decoder takes it afresh.
+
 ## Resizing to a size the grid takes
 
     img = sl.Resize(img, sl.ResizeOptions{
@@ -1897,10 +1907,10 @@ look untextured:
 ## Touching things
 
     touch "a button"                       # a click, middle of face 0
-    touch -f 2 --uv 0.9,0.25 "a button"    # a named point on a named face
+    touch -f 2 --st 0.9,0.25 "a button"    # a named point on a named face
     touch -H 1.5 "a button"                # held, so touch fires repeatedly
 
-    w.Touch(ctx, o, sl.Touch{Face: 2, UV: msg.Vector3{X: 0.9, Y: 0.25}})
+    w.Touch(ctx, o, sl.Touch{Face: 2, ST: msg.Vector3{X: 0.9, Y: 0.25}})
     w.TouchHold(ctx, o, t, 1500*time.Millisecond)
 
 **The raycast is not on the wire.** A viewer works out what was clicked
@@ -1920,6 +1930,20 @@ in world:
 
     start face=2 uv=<0.90000, 0.25000, 0.00000> st=<0.10000, 0.20000, 0.00000>
     start pos=<254.30000, 187.00000, 21.00000> normal=<1.00000, 0.00000, 0.00000>
+
+That shows each field arriving as it was given, and no more: with both
+given, it cannot say which is which. That comes from the viewer's
+source, not from a measurement. ST is where on the face the ray landed
+and UV the same point in the texture after the face's repeats, offset
+and rotation: `LLPickInfo::getSurfaceInfo` takes the first from the
+raycast and computes the second with `LLFace::surfaceToTexture`
+(`newview/llviewerwindow.cpp:7686-7697`, `llface.cpp:904-960`), and
+`send_ObjectGrab_message` sends them as `STCoord` and `UVCoord`
+(`lltoolgrab.cpp:1200-1202`). So `llDetectedTouchST` is the point on the
+face and `llDetectedTouchUV` the point in the texture. Given one, `sl`
+works out the other the same way from the face's texture entry; with
+planar mapping or a texture animation, where the viewer uses more than
+the entry, the one given goes as both.
 
 Three messages, three events: `ObjectGrab` is `touch_start`,
 `ObjectGrabUpdate` is `touch`, `ObjectDeGrab` is `touch_end`. A click

@@ -863,6 +863,7 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			AttachItem:   attachItemString(o.AttachItem),
 			Rotation:     quat(o.Rotation),
 			Shape:        shape(o.Shape),
+			TextureAnim:  o.TextureAnim,
 		})
 	}
 	return out, nil

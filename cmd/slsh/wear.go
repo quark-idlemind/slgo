@@ -145,10 +145,7 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	}
 	// The item rather than the entry, since sl.Wear takes an item and
 	// sends its name, description, flags and permission masks.
-	it, err := sh.itemAt(ctx, e)
-	if err != nil {
-		return err
-	}
+	it := e.Item()
 
 	// What is on now, asked before anything changes it.  An add has to
 	// know whether this item is already worn, since a second copy of one
@@ -328,10 +325,7 @@ func attachPointArg(text string) (int, error) {
 // wear of one is a replace however it is worded, and saying what came
 // off is the honest way to do that rather than the quiet way.
 func (sh *Shell) wearWearable(ctx context.Context, out io.Writer, e sl.Entry, replace bool) error {
-	it, err := sh.itemAt(ctx, e)
-	if err != nil {
-		return err
-	}
+	it := e.Item()
 	slot, ok := sl.SlotOf(sl.AssetType(it.Type), it.Flags)
 	if !ok {
 		return fmt.Errorf("%s is %s and has no wearable slot", it.Name, aKind(kindOf(e)))

@@ -35,8 +35,8 @@ var objectFileCommands = map[string]*command{
 	"dump": {
 		params:   "NAME|UUID",
 		flags:    func() any { return new(dumpFlags) },
-		brief:    "describe an object as the simulator's JSON",
-		keywords: "export save describe object json file backup prims linkset",
+		brief:    "describe an object as the simulator's JSON, or with --item an inventory item",
+		keywords: "export save describe object json file backup prims linkset permissions masks item inventory transfer",
 		man:      "dump",
 		run:      cmdDump,
 	},
@@ -76,6 +76,7 @@ var objectFileCommands = map[string]*command{
 
 type dumpFlags struct {
 	Out  string `getopt:"--out -o=FILE  write here, rather than to the terminal"`
+	Item bool   `getopt:"--item -i      an item in inventory, by path or id, rather than an object in the region"`
 	Wait int    `getopt:"--wait -w=SECONDS  how long to let the region describe itself [30]"`
 	Help bool   `getopt:"--help -h      show what this command takes"`
 }
@@ -90,15 +91,26 @@ func cmdDump(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		return usageError("dump")
 	}
 
-	target, err := sh.objectNamed(ctx, args[0], o.Wait)
-	if err != nil {
-		return err
+	var v any
+	var said string
+	if o.Item {
+		ij, err := sh.itemJSON(ctx, args[0])
+		if err != nil {
+			return err
+		}
+		v, said = ij, ij.Name
+	} else {
+		target, err := sh.objectNamed(ctx, args[0], o.Wait)
+		if err != nil {
+			return err
+		}
+		oj, err := sh.s.Describe(ctx, target, waitFor(o.Wait))
+		if err != nil {
+			return err
+		}
+		v, said = oj, fmt.Sprintf("%d prims", len(oj.Prims))
 	}
-	oj, err := sh.s.Describe(ctx, target, waitFor(o.Wait))
-	if err != nil {
-		return err
-	}
-	b, err := json.MarshalIndent(oj, "", "  ")
+	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -111,8 +123,50 @@ func cmdDump(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	if err := os.WriteFile(o.Out, b, 0o644); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "%s: %d prims\n", o.Out, len(oj.Prims))
+	fmt.Fprintf(out, "%s: %s\n", o.Out, said)
 	return nil
+}
+
+// itemJSON is an inventory item as dump --item writes it: what it is,
+// and its permission masks under the names dump gives an object's.
+type itemJSON struct {
+	Name    string       `json:"name"`
+	Type    string       `json:"type"`
+	UUID    string       `json:"uuid"`
+	Desc    string       `json:"desc,omitempty"`
+	Creator string       `json:"creator,omitempty"`
+	Owner   string       `json:"owner,omitempty"`
+	Group   string       `json:"group,omitempty"`
+	Perms   sl.PermsJSON `json:"perms"`
+}
+
+// itemJSON describes the item a path or an id names, followed through a
+// link, since what a link's own masks allow is not the question.
+func (sh *Shell) itemJSON(ctx context.Context, path string) (*itemJSON, error) {
+	e, err := sh.thingAt(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	if e.Folder {
+		return nil, fmt.Errorf("%s is a folder, which has no permissions; dump --item takes one item", path)
+	}
+	ij := &itemJSON{
+		Name: e.Name, Type: kindOf(e), UUID: e.ID.String(), Desc: e.Desc,
+		Perms: sl.PermsJSON{
+			Base: e.BaseMask, Owner: e.OwnerMask, Group: e.GroupMask,
+			Everyone: e.EveryoneMask, Next: e.NextOwnerMask,
+		},
+	}
+	if !e.Creator.IsZero() {
+		ij.Creator = e.Creator.String()
+	}
+	if !e.Owner.IsZero() {
+		ij.Owner = e.Owner.String()
+	}
+	if !e.Group.IsZero() {
+		ij.Group = e.Group.String()
+	}
+	return ij, nil
 }
 
 type rezFlags struct {
@@ -323,8 +377,8 @@ func parseVector(s string) (msg.Vector3, error) {
 
 type touchFlags struct {
 	Face  int    `getopt:"--face -f=N        which face, counting as LSL does; -1 for none"`
-	UV    string `getopt:"--uv=U,V           where on the face, each 0 to 1 [0.5,0.5]"`
-	ST    string `getopt:"--st=S,T           the same point in the texture's coordinates"`
+	ST    string `getopt:"--st=S,T           where on the face, each 0 to 1 across it [0.5,0.5]"`
+	UV    string `getopt:"--uv=U,V           the same point in the texture's coordinates [from --st]"`
 	At    string `getopt:"--at=X,Y,Z         the point touched, in region coordinates"`
 	Norm  string `getopt:"--normal=X,Y,Z     the surface direction there [0,0,1]"`
 	Press string `getopt:"--press=SECONDS    hold still at the first point before moving"`
@@ -353,7 +407,8 @@ func parseSeconds(flag, s string) (time.Duration, error) {
 // Two numbers are a place on a face and three are a place in the
 // region, since that is what tells them apart without a second flag.
 // A leading "N:" names the face, so a drag can cross from one to
-// another.
+// another.  A place on a face is its ST, and the UV the point before it
+// had is dropped, so that sl works the new one out from it.
 func parseTouchPoint(s string, base sl.Touch) (sl.Touch, error) {
 	t := base
 	if i := strings.Index(s, ":"); i >= 0 {
@@ -369,10 +424,10 @@ func parseTouchPoint(s string, base sl.Touch) (sl.Touch, error) {
 		return t, nil
 	}
 	if n, err := fmt.Sscanf(s, "%f,%f", &x, &y); err == nil && n == 2 {
-		t.UV = msg.Vector3{X: x, Y: y}
+		t.ST, t.UV = msg.Vector3{X: x, Y: y}, msg.Vector3{}
 		return t, nil
 	}
-	return t, fmt.Errorf("a point is U,V or X,Y,Z, optionally after a face and a colon, not %q", s)
+	return t, fmt.Errorf("a point is S,T or X,Y,Z, optionally after a face and a colon, not %q", s)
 }
 
 func cmdTouch(ctx context.Context, sh *Shell, out io.Writer, args []string) error {

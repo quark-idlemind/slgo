@@ -482,8 +482,7 @@ func TestEchoHasNoHelpOfItsOwn(t *testing.T) {
 
 // TestAUsageErrorNamesWhatWasTyped: a command known by two names
 // refuses what it was given in the name it was typed as, as its --help
-// answers in it.  quit takes no usage error to show: it ignores what
-// follows it.
+// answers in it.
 func TestAUsageErrorNamesWhatWasTyped(t *testing.T) {
 	x := newTestShell(t)
 	for _, c := range []struct{ line, want, other string }{
@@ -491,9 +490,27 @@ func TestAUsageErrorNamesWhatWasTyped(t *testing.T) {
 		{"source", "usage: source", "usage: ."},
 		{". one two", "usage: .", "usage: source"},
 		{"How", "usage: How", "usage: how"},
+		{"exit now", "usage: exit", "usage: quit"},
+		{"quit now", "usage: quit", "usage: exit"},
 	} {
 		if got := x.do(t, c.line); !strings.Contains(got, c.want) || strings.Contains(got, c.other) {
 			t.Errorf("%q printed %q, want %q", c.line, got, c.want)
+		}
+	}
+}
+
+// TestQuitWithSomethingAfterItStays: "exit now" is a mistyped line, and
+// leaving on one is not something to do on a guess.
+func TestQuitWithSomethingAfterItStays(t *testing.T) {
+	x := newTestShell(t)
+	for _, line := range []string{"exit now", "quit please", "quit -- later"} {
+		if got := x.do(t, line); !strings.Contains(got, "takes nothing") {
+			t.Errorf("%q printed %q", line, got)
+		}
+		select {
+		case <-x.quit:
+			t.Fatalf("%q left the shell", line)
+		default:
 		}
 	}
 }

@@ -5,6 +5,9 @@ before typing it.
 
     quit
 
+It takes nothing after it.  `exit now` is refused, and the shell stays,
+rather than a mistyped line being taken as the word to go.
+
 Attached to the daemon -- the ordinary case -- the avatar stays
 exactly where it is, logged in, with the daemon holding the session
 for whatever attaches next.  Started with `--direct`, this shell

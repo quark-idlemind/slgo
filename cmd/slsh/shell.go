@@ -1001,8 +1001,15 @@ func init() {
 		man:      "quit",
 		run: func(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 			var flags helpOnly
-			if _, done, err := subOptions(typedAs(ctx, "quit"), &flags, out, args); err != nil || done {
+			name := typedAs(ctx, "quit")
+			args, done, err := subOptions(name, &flags, out, args)
+			if err != nil || done {
 				return err
+			}
+			// Refused rather than ignored: "exit now" would otherwise
+			// leave, and a mistyped line is not a request to go.
+			if len(args) != 0 {
+				return usageError(name, name+" takes nothing")
 			}
 			sh.Quit()
 			return nil

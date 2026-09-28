@@ -61,10 +61,10 @@ type Face struct {
 	Material msg.UUID
 }
 
-// Offsets and rotation are signed fractions of their range.  These are
-// the conventional readings; the sections they come from have only
-// been seen holding zero, so the scaling here is not something this
-// package has confirmed against a simulator.
+// Offsets and rotation are signed fractions of their range, read as the
+// viewer reads them: offsets over 0x7fff, and rotation over 0x8000 of a
+// whole turn (llprimitive.cpp:1464-1466).  The sections they come from
+// have only been seen holding zero from a simulator.
 func (f Face) OffsetsF() (float32, float32) {
 	return float32(f.OffsetS) / 32767, float32(f.OffsetT) / 32767
 }

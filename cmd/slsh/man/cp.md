@@ -28,10 +28,10 @@ being slow, it is an item that was never going to be duplicated.
 A `cp` interrupted while it waits, whose copy turns up all the same,
 says so with the error and gives the copy's id there.
 
-Nothing here says what an item's permissions are beforehand: `ls -l`
-gives the kind, the date, the id and the path, and `perms` works on an
-object standing in the region rather than on an item in inventory.  The
-copy not arriving is how a no-copy item is found out.
+`ls -l` says beforehand whether the item may be copied: a `C` in its
+fourth column, as in `MCX`, and a dash there, as in `M-X`, for one that
+may not.  `dump --item` prints all its masks.  Without looking first,
+the copy not arriving is how a no-copy item is found out.
 
 ## Examples
 

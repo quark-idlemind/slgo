@@ -1107,3 +1107,65 @@ func TestATracedPacketIsCountedOnce(t *testing.T) {
 		t.Errorf("the trace has %d lines for two packets:\n%s", n, traced.String())
 	}
 }
+
+// TestARetransmissionIsTracedWithAViewerAttached: with a circuit, the
+// trace is kept from the relay, and the relay is not offered a
+// retransmission.  simRepeat records those, and only for a session with
+// a circuit, since without one the tap has recorded everything.  Each
+// packet is counted once either way.  The packets go through a
+// dispatcher wired as the session wires it.
+func TestARetransmissionIsTracedWithAViewerAttached(t *testing.T) {
+	r := newHomingRig(t, 0)
+	r.host(t)
+	census := viewer.NewCensus()
+	var traced strings.Builder
+	trace := viewer.NewTrace(&traced, nil, false)
+	vh := newViewerHost(r.ctx, "127.0.0.1", r.srv,
+		func(string) string { return "" }, census, trace, func(string, ...any) {})
+	defer vh.closeAll()
+
+	d := msg.NewDispatcher(
+		msg.WithTap(simTap("example", vh, census, trace)),
+		msg.WithRelay(vh.relayFor("example")),
+		msg.OnDuplicate(simRepeat("example", vh, census, trace)),
+	)
+	// A ping, sent and then sent again under its own number, which a
+	// circuit absorbs on the spot, so its record is made in passing.
+	arrives := func(seq uint32) {
+		in := make(chan *msg.Packet, 2)
+		for range 2 {
+			in <- &msg.Packet{Header: msg.Header{Sequence: seq, Flags: msg.FlagReliable},
+				ID: msg.IDOf(&msg.StartPingCheck{}), Message: &msg.StartPingCheck{}, At: time.Now()}
+		}
+		close(in)
+		if err := d.Run(r.ctx, in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	by := func() map[viewer.Disposition]uint64 {
+		for _, c := range census.Counts() {
+			if c.Name == "StartPingCheck" {
+				return c.By
+			}
+		}
+		return nil
+	}
+
+	arrives(1)
+	if got := by(); census.Total() != 2 || got[viewer.NoViewer] != 2 {
+		t.Fatalf("with no circuit, recorded %v, want both as having no viewer", got)
+	}
+
+	if _, err := vh.circuitFor("example"); err != nil {
+		t.Fatal(err)
+	}
+	arrives(2)
+	got := by()
+	if census.Total() != 4 || got[viewer.Absorbed] != 1 || got[viewer.Retransmission] != 1 {
+		t.Errorf("with a circuit, recorded %v in %d, want the first absorbed and the second "+
+			"a retransmission", got, census.Total())
+	}
+	if n := strings.Count(traced.String(), "retransmission"); n != 1 {
+		t.Errorf("the trace has %d retransmissions:\n%s", n, traced.String())
+	}
+}

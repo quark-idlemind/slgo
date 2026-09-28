@@ -223,6 +223,18 @@ asks the land nothing at all.
 It is quicker even when rezzing is allowed. Rez, name, take is eight
 seconds and change; a copy is under two.
 
+Two items called `auto` are refused, with both ids, rather than one of
+them taken as the one to copy. Taking the worn one, or else the oldest,
+was considered, since the objects are the program's own and a refusal
+leaves the setup stopped until somebody deletes one. It was not done for
+two reasons, both read from the code rather than measured. The wearing
+that follows (`sl.EnsureAttached`) refuses a name several items have, so
+a choice made here would only move the refusal past the copies. And two
+items of one name may be two different objects -- one built here, one
+given by another avatar and since edited -- so which one the copies came
+from would decide what a benchmark measures. The refusal says to keep
+one and delete the rest by id, which `slsh`'s `rm` takes.
+
 ## What was built and thrown away
 
 ### Locks, a group at a time

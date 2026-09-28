@@ -368,6 +368,11 @@ func (w *Session) NewScript(ctx context.Context, name, source string) (*Item, *U
 //
 // An object keeps every copy it is given and renames the newcomer, so
 // putting the same item in twice leaves "thing" and "thing 1".
+//
+// The item goes as the viewer builds it (LLViewerObject::updateInventory,
+// llviewerobject.cpp:3735-3766): with the object as its folder, its
+// creation date, and the checksum taskItemCRC gives, which sums the
+// asset and the last owner the message does not carry.
 func (w *Session) PutInObject(ctx context.Context, o *Object, it *Item) error {
 	local, err := w.local(ctx, o)
 	if err != nil {
@@ -376,17 +381,20 @@ func (w *Session) PutInObject(ctx context.Context, o *Object, it *Item) error {
 	m := &msg.UpdateTaskInventory{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.UpdateData.LocalID = local
+	m.UpdateData.Key = 0 // 0 selects the object's inventory
 	d := &m.InventoryData
-	d.ItemID, d.FolderID = it.ID, it.ParentID
+	d.ItemID, d.FolderID = it.ID, o.ID
 	d.CreatorID, d.OwnerID, d.GroupID = it.CreatorID, it.OwnerID, it.GroupID
 	d.BaseMask, d.OwnerMask = it.BaseMask, it.OwnerMask
 	d.GroupMask, d.EveryoneMask = it.GroupMask, it.EveryoneMask
 	d.NextOwnerMask = it.NextOwnerMask
 	d.Type, d.InvType = int8(it.Type), int8(it.InvType)
 	d.Flags = it.Flags
+	d.CreationDate = int32(it.Created)
 	d.SaleType, d.SalePrice = uint8(it.SaleType), int32(it.SalePrice)
 	d.Name = append([]byte(it.Name), 0)
 	d.Description = append([]byte(it.Desc), 0)
+	d.CRC = taskItemCRC(d, it.AssetID, it.LastOwnerID)
 	return w.Send(ctx, m)
 }
 

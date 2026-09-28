@@ -1,7 +1,6 @@
 package main
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 
@@ -393,66 +392,6 @@ func TestPickEntryMatchesTheCaseItHas(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `did you mean "something else"?`) {
 		t.Errorf("the refusal does not offer the near miss: %v", err)
-	}
-}
-
-// A rez sends every permission mask the item carries, so an item that
-// lost them on the way through would be rezzed with permissions nobody
-// asked for.
-func TestAListingEntryBecomesAWholeItem(t *testing.T) {
-	e := sl.Entry{
-		ID: testLamp, Parent: testRoot, Asset: testStranger, Name: "a lamp",
-		Type: int(sl.AssetObject), InvType: 6,
-		BaseMask: 0x7ffffff0, OwnerMask: 0x7ffffff1, GroupMask: 2,
-		EveryoneMask: 3, NextOwnerMask: 4, SalePrice: 10, SaleType: 1,
-	}
-	it := itemOf(e)
-	if it.ID != e.ID || it.ParentID != e.Parent || it.AssetID != e.Asset {
-		t.Errorf("the identifiers did not survive: %+v", it)
-	}
-	if it.BaseMask != e.BaseMask || it.OwnerMask != e.OwnerMask ||
-		it.GroupMask != e.GroupMask || it.EveryoneMask != e.EveryoneMask ||
-		it.NextOwnerMask != e.NextOwnerMask {
-		t.Errorf("a permission mask was lost: %+v", it)
-	}
-	if it.SalePrice != e.SalePrice || it.SaleType != e.SaleType {
-		t.Errorf("the sale terms were lost: %+v", it)
-	}
-}
-
-// Every field of an Item comes out of the Entry set.  Each Entry field
-// is given a value of its own, so a field left behind -- the flags were,
-// and they carry the slot a wearable goes in, and so was the group --
-// comes out zero.
-func TestAListingEntryLeavesNothingOfItselfBehind(t *testing.T) {
-	var e sl.Entry
-	v := reflect.ValueOf(&e).Elem()
-	for i := range v.NumField() {
-		f := v.Field(i)
-		switch f.Kind() {
-		case reflect.Bool:
-			f.SetBool(true)
-		case reflect.Int, reflect.Int64:
-			f.SetInt(int64(i + 1))
-		case reflect.Uint32:
-			f.SetUint(uint64(i + 1))
-		case reflect.String:
-			f.SetString(v.Type().Field(i).Name)
-		case reflect.Array:
-			f.Index(0).SetUint(uint64(i + 1))
-		default:
-			t.Fatalf("Entry.%s is a %s, which this test does not fill", v.Type().Field(i).Name, f.Kind())
-		}
-	}
-
-	it := reflect.ValueOf(itemOf(e)).Elem()
-	for i := range it.NumField() {
-		if it.Field(i).IsZero() {
-			t.Errorf("Item.%s came out zero from an Entry with every field set", it.Type().Field(i).Name)
-		}
-	}
-	if got := itemOf(e).Flags; got != e.Flags {
-		t.Errorf("Flags = %#x, want %#x", got, e.Flags)
 	}
 }
 

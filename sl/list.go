@@ -65,11 +65,14 @@ type Entry struct {
 	// are both "bodypart" and are told apart by nothing else.
 	Flags uint32
 
-	// Creator, Owner and Group are the item's, from its permissions.
-	// A rez or a wear sends the group back as the item's own.
-	Creator msg.UUID
-	Owner   msg.UUID
-	Group   msg.UUID
+	// Creator, Owner, LastOwner and Group are the item's, from its
+	// permissions.  A rez or a wear sends the group back as the item's
+	// own, and putting it in an object sums the last owner into the
+	// checksum.
+	Creator   msg.UUID
+	Owner     msg.UUID
+	LastOwner msg.UUID
+	Group     msg.UUID
 
 	BaseMask      uint32
 	OwnerMask     uint32
@@ -84,6 +87,39 @@ type Entry struct {
 // IsFolder reports whether this is a folder, for callers who prefer
 // asking to reading a field.
 func (e Entry) IsFolder() bool { return e.Folder }
+
+// Item is the entry as the item the operations take: RezFromInventory,
+// Wear, PutInObject and the rest.
+//
+// A listing reads the same AIS record an item is made from, so nothing
+// needs fetching again.  Every field is copied, because those calls
+// send them all back as the item's own: a mask left behind would go out
+// as zero, which takes that permission away.
+func (e Entry) Item() *Item {
+	return &Item{
+		ID:            e.ID,
+		ParentID:      e.Parent,
+		AssetID:       e.Asset,
+		Name:          e.Name,
+		Desc:          e.Desc,
+		Type:          e.Type,
+		InvType:       e.InvType,
+		Flags:         e.Flags,
+		Created:       e.Created,
+		CreatorID:     e.Creator,
+		OwnerID:       e.Owner,
+		LastOwnerID:   e.LastOwner,
+		GroupID:       e.Group,
+		BaseMask:      e.BaseMask,
+		OwnerMask:     e.OwnerMask,
+		GroupMask:     e.GroupMask,
+		EveryoneMask:  e.EveryoneMask,
+		NextOwnerMask: e.NextOwnerMask,
+		SaleType:      e.SaleType,
+		SalePrice:     e.SalePrice,
+		IsLink:        e.IsLink,
+	}
+}
 
 func (e Entry) String() string {
 	if e.Folder {
@@ -298,7 +334,8 @@ func (w *Session) children(ctx context.Context, folder msg.UUID, depth uint) ([]
 				Path: join(prefix, it.Name), Depth: level,
 				Type: it.Type, InvType: it.InvType, Asset: it.AssetID,
 				Desc: it.Desc, Created: it.Created, IsLink: it.IsLink,
-				Creator: it.CreatorID, Owner: it.OwnerID, Group: it.GroupID,
+				Creator: it.CreatorID, Owner: it.OwnerID,
+				LastOwner: it.LastOwnerID, Group: it.GroupID,
 				BaseMask: it.BaseMask, OwnerMask: it.OwnerMask,
 				GroupMask: it.GroupMask, EveryoneMask: it.EveryoneMask,
 				NextOwnerMask: it.NextOwnerMask,

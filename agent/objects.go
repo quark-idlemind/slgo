@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/binary"
 	"strings"
 	"sync"
 	"time"
@@ -66,6 +67,11 @@ type Object struct {
 	// Text is the floating text above the object, when it has any, as
 	// the last update of either kind said it.
 	Text string
+
+	// TextureAnim is the texture animation, still packed, as the last
+	// full or compressed update said it, and nil when that said none.
+	// A running one moves a face's texture on from what its entry says.
+	TextureAnim []byte
 
 	// AttachPoint is where a worn object is attached, and zero when it
 	// is not worn.  AttachItem is the inventory item it was worn from.
@@ -478,6 +484,11 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	if len(d.TextureEntry) > 0 {
 		v.TextureEntry = d.TextureEntry
 	}
+	// An update without an animation stops one (llvovolume.cpp:406-441).
+	v.TextureAnim = nil
+	if len(d.TextureAnim) > 0 {
+		v.TextureAnim = d.TextureAnim
+	}
 	if havePos {
 		v.Position, v.Rotation = pos, rot
 	}
@@ -569,6 +580,8 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	if len(c.TextureEntry) > 0 {
 		v.TextureEntry = c.TextureEntry
 	}
+	// Absent here stops an animation too (llvovolume.cpp:608-642).
+	v.TextureAnim = c.TextureAnim
 	// Every update says what the text is now, and one without any has
 	// none: the viewer clears it (llviewerobject.cpp:1865-1895).
 	v.Text = c.Text
@@ -595,13 +608,19 @@ func (o *Objects) judgedLocked(v *Object, far bool) {
 	}
 }
 
-// moved records a terse update.
+// moved records a terse update, with the texture entry its block may
+// carry beside the placement.
 //
 // It only updates something already known.  A terse update names an
 // object by local id alone, so one for something never described is
 // not enough to make an entry with -- there would be nothing to say
 // what it is.
-func (o *Objects) moved(t *msg.Terse) bool {
+//
+// The entry is how the viewer is told of an appearance changed on its
+// own: it reads one from a terse update for a prim, and keeps what it
+// had when there is none (llvovolume.cpp:650-668).
+// Why: doc/objects.md#an-appearance-on-a-terse-update
+func (o *Objects) moved(t *msg.Terse, te []byte) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	for _, v := range o.byID {
@@ -609,10 +628,57 @@ func (o *Objects) moved(t *msg.Terse) bool {
 			v.Position, v.Rotation, v.Velocity = t.Position, t.Rotation, t.Velocity
 			v.Last = time.Now()
 			v.Moved = v.Last
+			if e, ok := terseTextureEntry(te); ok && v.PCode != pcodeAvatar {
+				v.TextureEntry = e
+			}
 			return true
 		}
 	}
 	return false
+}
+
+// terseTextureEntry is the entry in a terse update's TextureEntry field,
+// which holds it behind a four byte length, as the viewer reads it
+// (unpackBinaryData, lldatapacker.cpp:292-320).  An empty field, or one
+// whose length does not fit, is none.
+func terseTextureEntry(field []byte) ([]byte, bool) {
+	if len(field) < 4 {
+		return nil, false
+	}
+	n := binary.LittleEndian.Uint32(field)
+	if n == 0 || uint64(n) > uint64(len(field)-4) {
+		return nil, false
+	}
+	return append([]byte(nil), field[4:4+n]...), true
+}
+
+// unsure records what a compressed update that did not decode whole
+// still says for certain -- its header: where the object is, how big,
+// and whose -- and forgets its appearance.  What followed the point
+// the blob went wrong cannot be told from what it held before, and an
+// appearance the update may have changed is not kept as if it had not:
+// the next reader asks the region, as sl.Session.Faces does for one it
+// has not got.
+func (o *Objects) unsure(c *msg.Compressed, camera msg.Vector3, drawDistance float32) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	v := o.seen(c.FullID)
+	far := false
+	if c.PCode != pcodeAvatar {
+		at, judge := c.Position, true
+		if v.Parent != 0 {
+			at, judge = o.anchorLocked(v.Parent)
+		}
+		far = judge && !o.keepLocked(at, camera, drawDistance)
+	}
+	o.judgedLocked(v, far)
+	v.Local, v.PCode = c.LocalID, c.PCode
+	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
+	if !c.Owner.IsZero() {
+		v.Owner = c.Owner
+	}
+	v.TextureEntry = nil
 }
 
 // worthDescribing says whether something at this position is close
@@ -759,11 +825,13 @@ var objectImage = (&msg.ObjectImage{}).MsgInfo().ID
 // on the wire.
 //
 // Only one message matters: ObjectImage replaces every face of an
-// object at once, and the region does NOT describe the result.  Nothing
-// arrives to correct the appearance held here, so what is held goes on
-// describing the object as it was before the change -- for as long as
-// the session lasts -- and the next change, which a client makes by
-// reading every face and sending them all back, starts from it.
+// object at once, and nothing the store read described the result when
+// that was measured -- a terse update's texture entry was not read then,
+// so whether the region says nothing or said it there is open.  Without
+// a description the appearance held goes on describing the object as it
+// was before the change -- for as long as the session lasts -- and the
+// next change, which a client makes by reading every face and sending
+// them all back, starts from it.
 //
 // So the appearance is forgotten rather than corrected.  Correcting it
 // means asking the region to describe the object again, which is a
@@ -860,21 +928,30 @@ func (a *Agent) trackObjects() {
 		m := p.Message.(*msg.ObjectUpdateCompressed)
 		l := a.Look()
 		var parents []uint32
+		var unsure []uint32
 		for i := range m.ObjectData {
 			c, err := msg.DecodeCompressed(m.ObjectData[i].Data)
 			if c == nil {
 				continue
 			}
 			// A partly decoded object still says where it is and what
-			// it is, which is what the cache is for.  The error is
-			// worth nothing here beyond not trusting the tail.
-			_ = err
+			// it is, and nothing after the point it went wrong is
+			// trusted -- its appearance included, which is asked for
+			// again, as a viewer that finds an update bogus asks for
+			// the whole object (llvovolume.cpp:538 and 585).
+			if err != nil {
+				a.Objects().unsure(c, l.Center, l.Far)
+				if a.askAgain(c.LocalID) {
+					unsure = append(unsure, c.LocalID)
+				}
+				continue
+			}
 			a.Objects().compressed(c, l.Center, l.Far)
 			if c.ParentID != nil {
 				parents = a.orphaned(parents, *c.ParentID)
 			}
 		}
-		a.askAfter(parents)
+		a.askAfter(append(parents, unsure...))
 	}, msg.Inline())
 
 	// ImprovedTerseObjectUpdate is the message the simulator sends
@@ -891,7 +968,7 @@ func (a *Agent) trackObjects() {
 			if err != nil {
 				continue
 			}
-			if store.moved(t) {
+			if store.moved(t, m.ObjectData[i].TextureEntry) {
 				continue
 			}
 			// Something the simulator believes we already hold and

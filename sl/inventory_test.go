@@ -598,7 +598,10 @@ func relayCreated(t *testing.T, f *fakeBackend, cb uint32) {
 
 // TestPutInObjectSendsTheWholeItem: the message carries the item's
 // permissions, and anything left out of it is sent as zero -- which for
-// a mask means handing over something the next owner cannot use.
+// a mask means handing over something the next owner cannot use.  The
+// rest is filled as the viewer fills it (llviewerobject.cpp:3735-3766):
+// the object is the folder, the creation date goes, and so does the
+// checksum, which sums the asset and last owner the message lacks.
 func TestPutInObjectSendsTheWholeItem(t *testing.T) {
 	w, f := newFakeSession(t)
 
@@ -606,7 +609,9 @@ func TestPutInObjectSendsTheWholeItem(t *testing.T) {
 	it.Desc = "does something"
 	it.AssetID = theOther
 	it.Flags, it.SaleType, it.SalePrice = 7, 2, 11
+	it.Created = 1700000000
 	it.CreatorID, it.OwnerID, it.GroupID = testAgentID, testAgentID, theOther
+	it.LastOwnerID = theLastOwner
 	it.BaseMask, it.OwnerMask = PermAll, PermAll
 	it.GroupMask, it.EveryoneMask, it.NextOwnerMask = PermCopy, PermMove, PermTransfer
 
@@ -620,8 +625,14 @@ func TestPutInObjectSendsTheWholeItem(t *testing.T) {
 		t.Errorf("put it in local id %d", m.UpdateData.LocalID)
 	}
 	d := &m.InventoryData
-	if d.ItemID != it.ID || d.FolderID != it.ParentID {
-		t.Errorf("put in %s from %s", d.ItemID, d.FolderID)
+	if d.ItemID != it.ID || d.FolderID != thePrim {
+		t.Errorf("put in %s with folder %s, want the object's own id", d.ItemID, d.FolderID)
+	}
+	if d.CreationDate != 1700000000 {
+		t.Errorf("creation date went out as %d", d.CreationDate)
+	}
+	if want := taskItemCRC(d, theOther, theLastOwner); d.CRC != want || want == taskItemCRC(d, msg.UUID{}, msg.UUID{}) {
+		t.Errorf("checksum %#x, want %#x, which counts the asset and the last owner", d.CRC, want)
 	}
 	if d.BaseMask != PermAll || d.NextOwnerMask != PermTransfer ||
 		d.GroupMask != PermCopy || d.EveryoneMask != PermMove || d.OwnerMask != PermAll {

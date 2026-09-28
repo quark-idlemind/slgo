@@ -2,6 +2,7 @@ package msg
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -558,6 +559,31 @@ func TestRelaySkipsWhatATapWouldRepeat(t *testing.T) {
 	}
 	if st := d.Stats(); st.Relayed != 2 {
 		t.Errorf("stats = %+v, want 2 relayed", st)
+	}
+}
+
+// TestOnDuplicateSeesWhatTheRelayIsNotOffered: a record kept from the
+// relay misses every retransmission, since the relay is offered each
+// message once.  OnDuplicate is given exactly those, so that the relay
+// and it between them see each packet once.
+func TestOnDuplicateSeesWhatTheRelayIsNotOffered(t *testing.T) {
+	var relayed, repeated []uint32
+	d := NewDispatcher(
+		WithRelay(func(p *Packet) { relayed = append(relayed, p.Header.Sequence) }),
+		OnDuplicate(func(p *Packet) { repeated = append(repeated, p.Header.Sequence) }),
+	)
+
+	m := &CompletePingCheck{}
+	feed(t, d, pkt(1, m), pkt(2, m), pkt(2, m), pkt(3, m), pkt(1, m), pkt(2, m))
+
+	if got, want := fmt.Sprint(relayed), "[1 2 3]"; got != want {
+		t.Errorf("the relay saw %s, want %s", got, want)
+	}
+	if got, want := fmt.Sprint(repeated), "[2 1 2]"; got != want {
+		t.Errorf("OnDuplicate saw %s, want %s", got, want)
+	}
+	if st := d.Stats(); st.Duplicates != 3 {
+		t.Errorf("stats = %+v, want 3 duplicates", st)
 	}
 }
 

@@ -127,3 +127,44 @@ did not: the red was gone from all six. The composing was watched with
 a build that asked on every read rather than only on a forgotten one;
 the request that goes out and the answer that comes back are the same
 either way.
+
+What those measurements do not settle, read from the viewer's source
+since and not measured: the store did not then read the texture entry a
+terse update can carry (see the next section), so "the region does not
+describe the result" may have been a description it sent and the store
+dropped. Forgetting stays right either way.
+
+## An appearance on a terse update
+
+`ImprovedTerseObjectUpdate` carries, beside each object's placement, a
+`TextureEntry` field, and the viewer takes a prim's new appearance from
+it when it is not empty (`newview/llvovolume.cpp:650-668`, reached from
+`processObjectUpdate` for `OUT_TERSE_IMPROVED`,
+`llviewerobjectlist.cpp:554-566`). The field holds the entry behind a
+four byte length, as the compressed update's does, since the viewer
+reads it with `unpackBinaryData` (`llmessage/lldatapacker.cpp:292-320`).
+An avatar's is not read there. Until 2026-09-27 the store read only the
+placement, so an appearance changed and announced this way was never
+seen, and every read of it said what it was before.
+
+That is the shape of what a session reported on 2026-09-27, observed
+live and not explained: a script retextured the faces of two child
+prims and of a separate root prim, a full viewer showed the change, and
+`slsh texture`, `sl.Session.Faces` and the store all went on giving the
+old texture ids over several reads seconds apart. Asking for the
+objects with `RequestMultipleObjects` brought the new ids within a
+second, and changes after that were seen without asking. Whether the
+region sent those changes on terse updates is inferred from the source
+and not yet watched; the second half, later changes seen without
+asking, is not explained by it. A trace of the four object update
+messages, with their bodies, taken while the script retextures, is what
+would settle both.
+
+A compressed update that does not decode whole is a second way in, found
+reading the code: it was stored as if what followed the point it went
+wrong had said nothing, which kept the old appearance, took the text
+down and could take a half-read shape. Now only its header is kept, the
+appearance is forgotten, and the object is asked for again, as
+Firestorm asks for one it finds bogus when enforcing strict object
+checks (`llvovolume.cpp:538` and `585`). Whether the region ever sends
+such a blob is not known; none has been recorded.

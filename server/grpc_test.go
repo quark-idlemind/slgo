@@ -93,7 +93,9 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 
 	// The object cache, which fills from updates nobody asked for.
 	prim := msg.MustParseUUID("14ff7e57-7e57-c0de-3d5f-1eb0c71e7610")
-	upd := &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{ID: 4242, FullID: prim, PCode: 9}}}
+	anim := []byte{1, 0xff, 4, 4, 0, 0, 0, 0, 0, 0, 0x80, 0x40, 0, 0, 0x20, 0x41}
+	upd := &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{ID: 4242, FullID: prim, PCode: 9,
+		TextureEntry: []byte{7, 7, 7}, TextureAnim: anim}}}
 	r.sim.send(upd, 0)
 	waitFor(t, 5*time.Second, "the object update to be recorded", func() bool {
 		return h.Agent().Objects().Count() > 0
@@ -105,6 +107,11 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	}
 	if all.GetKnown() != 1 || len(all.GetObjects()) != 1 || all.GetObjects()[0].GetLocal() != 4242 {
 		t.Fatalf("objects = %v", all.GetObjects())
+	}
+	// The appearance and the animation over it, as they arrived.
+	if o := all.GetObjects()[0]; string(o.GetTextureEntry()) != "\x07\x07\x07" ||
+		string(o.GetTextureAnim()) != string(anim) {
+		t.Errorf("appearance %v animation %v", o.GetTextureEntry(), o.GetTextureAnim())
 	}
 	// An object nobody is wearing has no item, so "is it worn" is a
 	// test on the field being set rather than on a zero uuid.

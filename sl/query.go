@@ -143,6 +143,10 @@ type Seen struct {
 	// been seen.  DecodeTextureEntry unpacks it.
 	TextureEntry []byte
 
+	// TextureAnim is the texture animation, still packed, and nil when
+	// the object has none.
+	TextureAnim []byte
+
 	// Shape is the prim's profile and path, still packed.  Form
 	// unpacks it into something with names.
 	Shape msg.PrimShape

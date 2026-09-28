@@ -345,6 +345,7 @@ func main() {
 			// What the simulator sent; see simTap for which side
 			// records it.
 			opts.Tap = simTap(name, viewers, census, tracer)
+			opts.OnDuplicate = simRepeat(name, viewers, census, tracer)
 			// The other half.  Without it the record answers
 			// "what arrived" and not "was it ever sent", and the
 			// second is the question a relay gets asked.

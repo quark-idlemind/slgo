@@ -999,7 +999,7 @@ func TestEveryAutoObjectIsACopyOfTheFirst(t *testing.T) {
 // TestTwoFirstAutoObjectsAreRefused: every copy is made from the item
 // called auto, and two of them is two different things either could be
 // a copy of.  One name has to be one thing, so it is refused with both
-// ids, and nothing is copied.
+// ids and the way out, and nothing is copied.
 func TestTwoFirstAutoObjectsAreRefused(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
@@ -1020,6 +1020,10 @@ func TestTwoFirstAutoObjectsAreRefused(t *testing.T) {
 		if !strings.Contains(err.Error(), id.String()) {
 			t.Errorf("the refusal does not name %s: %v", id, err)
 		}
+	}
+	// And it says the way out, since nothing here will take one.
+	if !strings.Contains(err.Error(), "delete the rest by id") {
+		t.Errorf("the refusal does not say what to do: %v", err)
 	}
 	if got := len(f.Sent()); got != 0 {
 		t.Errorf("%d messages went out, want nothing copied", got)
@@ -1064,21 +1068,23 @@ func TestTheFirstAutoObjectHasToComeFromSomewhere(t *testing.T) {
 	}
 }
 
-// TestTheFirstAutoObjectIsBuiltAndThenCopied: the one case in the life
-// of an account where something is built rather than copied.  Once it
-// exists there is a seed, and everything after it is a copy -- which is
-// what makes every auto object the same object, exactly what a benchmark
-// wants.
-func TestTheFirstAutoObjectIsBuiltAndThenCopied(t *testing.T) {
+// TestWhatTheWearingLeavesIsTheSeed: with nothing to copy from,
+// EnsureAutoItems leaves the first object to EnsureAttached, then looks
+// the folder up again and copies everything else from what is there.
+// That is what makes every auto object the same object, exactly what a
+// benchmark wants.
+//
+// It builds nothing: the folder looks empty the first time it is read
+// and holds the object afterwards, which is an account that has just
+// been given one, so EnsureAttached finds it and puts it on.  The build
+// itself -- rez, name, take, wear -- is sl's
+// TestEnsureAttachedMakesOneWhenThereIsNone.
+func TestWhatTheWearingLeavesIsTheSeed(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
 	f.stock(1)
 	answerCopies(f)
 
-	// The folder looks empty the first time it is read and has the
-	// object in it afterwards, which is an account that has just been
-	// given one: EnsureAttached finds it, puts it on, and it becomes the
-	// seed everything else is copied from.
 	f.hide(func(folder msg.UUID, nth int) bool { return folder == testObjects && nth == 1 })
 
 	if err := EnsureAutoItems(context.Background(), s, testObjects, 2); err != nil {
@@ -1090,6 +1096,21 @@ func TestTheFirstAutoObjectIsBuiltAndThenCopied(t *testing.T) {
 	}
 	if len(items) != 2 {
 		t.Errorf("the folder holds %d items, want the seed and one copy", len(items))
+	}
+	copies := 0
+	for _, m := range f.Sent() {
+		switch m := m.(type) {
+		case *msg.ObjectAdd:
+			t.Error("something was rezzed for an object that was already there")
+		case *msg.CopyInventoryItem:
+			copies++
+			if m.InventoryData[0].OldItemID != autoItemID(0) {
+				t.Errorf("copied %s, want the one the wearing found", m.InventoryData[0].OldItemID)
+			}
+		}
+	}
+	if copies != 1 {
+		t.Errorf("%d copies were made, want one", copies)
 	}
 }
 

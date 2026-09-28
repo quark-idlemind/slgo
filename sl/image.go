@@ -54,15 +54,30 @@ type TextureOptions struct {
 // otherwise. See TextureOptions.Ratio for where the number comes from.
 const DefaultRatio = 8
 
+// MaxDecodeTiles is the most tiles a codestream may be cut into and
+// still be decoded.
+//
+// The decoder makes a record for every tile as it reads the header, so
+// a header claiming a million tiles of four pixels costs over 200 MB
+// before a pixel is read -- even to DecodeConfig, which is asked only
+// for the size.  Its own ceiling is 1<<20.  The viewer's encoder writes
+// one tile for the whole image (llimagej2coj.cpp sets no tile size), and
+// 4096 is a tile of 64 pixels a side over the largest texture decoded.
+const MaxDecodeTiles = 4096
+
 // DecodeTexture turns a codestream into a picture.
 //
 // It is liberal where EncodeTexture is strict: any shape decodes, power
-// of two or not, up to MaxDecodeSize on each side. A codestream claiming
-// more is refused before anything is allocated for it, since the decoder
-// sizes its buffers from the header and the header says whatever the
-// bytes say. The size is read by the decoder's own parser, so it is the
-// size the decoder would have believed.
+// of two or not, up to MaxDecodeSize on each side and MaxDecodeTiles
+// tiles. A codestream claiming more is refused before anything is
+// allocated for it, since the decoder sizes its buffers from the header
+// and the header says whatever the bytes say. The size is checked in
+// every SIZ, and again as the decoder's own parser reads it, so it is
+// the size the decoder would have believed.
 func DecodeTexture(b []byte) (image.Image, error) {
+	if err := checkSIZs(b); err != nil {
+		return nil, fmt.Errorf("sl: a texture of %d bytes %w", len(b), err)
+	}
 	c, err := j2k.DecodeConfig(bytes.NewReader(b))
 	if err != nil {
 		return nil, fmt.Errorf("sl: decoding a texture of %d bytes: %w", len(b), err)
@@ -76,6 +91,80 @@ func DecodeTexture(b []byte) (image.Image, error) {
 		return nil, fmt.Errorf("sl: decoding a texture of %d bytes: %w", len(b), err)
 	}
 	return m, nil
+}
+
+// checkSIZs refuses a codestream any of whose SIZ markers claims more
+// than MaxDecodeSize a side or MaxDecodeTiles tiles.
+//
+// Every SIZ, because the decoder takes each one it meets as the image
+// afresh: a second in the main header, or one after a tile-part, where
+// DecodeConfig has stopped reading.  The markers are walked by their
+// lengths and the tile-parts by Psot, as the standard lays them out and
+// the decoder reads them; a SIZ is read for as long as the decoder reads
+// it, which is its 38 bytes and three a component whatever its length
+// says.  Where the stream stops making sense the walk stops, and leaves
+// the decoder to refuse it.
+func checkSIZs(b []byte) error {
+	if len(b) < 2 || b[0] != 0xff || b[1] != 0x4f {
+		return nil
+	}
+	for i := 2; i+4 <= len(b); {
+		at := i
+		mk := uint16(b[i])<<8 | uint16(b[i+1])
+		i += 2
+		switch {
+		case mk >= 0xff30 && mk <= 0xff3f:
+			continue // a delimiter, with no segment
+		case mk == 0xffd9:
+			return nil // EOC
+		}
+		l := int(b[i])<<8 | int(b[i+1])
+		switch mk {
+		case 0xff51: // SIZ
+			if i+38 > len(b) {
+				return nil
+			}
+			if err := checkSIZ(b[i:]); err != nil {
+				return err
+			}
+			comps := int(b[i+36])<<8 | int(b[i+37])
+			i += max(l, 38+3*comps)
+		case 0xff90: // SOT: the tile-part runs Psot bytes from its marker
+			if i+8 > len(b) {
+				return nil
+			}
+			psot := int(be32(b[i+4:]))
+			if psot == 0 {
+				return nil // to the end of the stream
+			}
+			i = at + psot
+		default:
+			i += max(l, 2) // the decoder reads a length below 2 and goes on
+		}
+	}
+	return nil
+}
+
+// checkSIZ is checkSIZs for one SIZ segment, from its length on, with
+// the decoder's own arithmetic for the size and the tiles.
+func checkSIZ(siz []byte) error {
+	w := int64(be32(siz[4:])) - int64(be32(siz[12:]))
+	h := int64(be32(siz[8:])) - int64(be32(siz[16:]))
+	if w > MaxDecodeSize || h > MaxDecodeSize {
+		return fmt.Errorf("claims to be %dx%d, and nothing larger than %d a side is decoded",
+			w, h, MaxDecodeSize)
+	}
+	tw, th := int64(be32(siz[20:])), int64(be32(siz[24:]))
+	if w <= 0 || h <= 0 || tw <= 0 || th <= 0 {
+		return nil // the decoder refuses it
+	}
+	across := (int64(be32(siz[4:])) - int64(be32(siz[28:])) + tw - 1) / tw
+	down := (int64(be32(siz[8:])) - int64(be32(siz[32:])) + th - 1) / th
+	if across > 0 && down > 0 && across*down > MaxDecodeTiles {
+		return fmt.Errorf("is cut into %dx%d tiles of %dx%d, and nothing of more than %d tiles is decoded",
+			across, down, tw, th, MaxDecodeTiles)
+	}
+	return nil
 }
 
 // EncodeTexture turns a picture into a codestream Second Life will

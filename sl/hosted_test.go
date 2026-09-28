@@ -579,7 +579,7 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 			Id: thePrim.String(), Local: 77, Parent: 3, Pcode: 9,
 			Name: "workbench", Owner: testAgentID.String(),
 			Position: &pb.Vector3{X: 128}, Scale: &pb.Vector3{X: 0.5, Y: 0.5, Z: 0.5},
-			TextureEntry: []byte{1, 2, 3}, Text: "floating",
+			TextureEntry: []byte{1, 2, 3}, TextureAnim: []byte{4, 5}, Text: "floating",
 			AttachPoint: 6, AttachItem: theChild.String(),
 		},
 		{Id: "not a uuid", Local: 78},
@@ -602,7 +602,7 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 	if o.Position != (msg.Vector3{X: 128}) || o.Scale.X != 0.5 {
 		t.Errorf("the object is at %v scaled %v", o.Position, o.Scale)
 	}
-	if len(o.TextureEntry) != 3 || o.Text != "floating" {
+	if len(o.TextureEntry) != 3 || len(o.TextureAnim) != 2 || o.Text != "floating" {
 		t.Errorf("appearance came out as %+v", o)
 	}
 	if o.AttachPoint != 6 || o.AttachItem != theChild {

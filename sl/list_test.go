@@ -3,6 +3,7 @@ package sl
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -160,6 +161,50 @@ func TestEntryString(t *testing.T) {
 	}
 	if got := (Entry{Path: "Objects/thing"}).String(); got != "Objects/thing" {
 		t.Errorf("item = %q", got)
+	}
+}
+
+// TestAnEntryIsTheWholeItem: every field of an Item comes from the Entry
+// field of the same name, or of that name without "ID" -- ParentID from
+// Parent.  Each Entry field is given a value of its own, so a field left
+// behind comes out zero and one taken from the wrong place comes out
+// holding another's value.  The operations send every field back as the
+// item's own, and a mask lost on the way would go out as zero.
+func TestAnEntryIsTheWholeItem(t *testing.T) {
+	var e Entry
+	v := reflect.ValueOf(&e).Elem()
+	for i := range v.NumField() {
+		f := v.Field(i)
+		switch f.Kind() {
+		case reflect.Bool:
+			f.SetBool(true)
+		case reflect.Int, reflect.Int64:
+			f.SetInt(int64(i + 1))
+		case reflect.Uint32:
+			f.SetUint(uint64(i + 1))
+		case reflect.String:
+			f.SetString(v.Type().Field(i).Name)
+		case reflect.Array:
+			f.Index(0).SetUint(uint64(i + 1))
+		default:
+			t.Fatalf("Entry.%s is a %s, which this test does not fill", v.Type().Field(i).Name, f.Kind())
+		}
+	}
+
+	it := reflect.ValueOf(e.Item()).Elem()
+	for i := range it.NumField() {
+		name := it.Type().Field(i).Name
+		from := v.FieldByName(name)
+		if !from.IsValid() {
+			from = v.FieldByName(strings.TrimSuffix(name, "ID"))
+		}
+		if !from.IsValid() {
+			t.Errorf("Item.%s has no Entry field to come from", name)
+			continue
+		}
+		if got, want := it.Field(i).Interface(), from.Interface(); !reflect.DeepEqual(got, want) {
+			t.Errorf("Item.%s = %v, want %v", name, got, want)
+		}
 	}
 }
 

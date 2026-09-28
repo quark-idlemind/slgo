@@ -27,7 +27,7 @@
     <div class="term">
       <pre><span class="p">/$</span> <span class="k">cd Objects</span>
 <span class="p">/Objects$</span> <span class="k">ls -l lantern</span>
-<span class="o">object     2026-08-02T15:09:30 40f17e57-… /Objects/lantern</span>
+<span class="o">object     2026-08-02T15:09:30 40f17e57-… MCX /Objects/lantern</span>
 <span class="p">/Objects$</span> <span class="k">place lantern</span>
 <span class="o">"lantern" a8de7e57-… (local 83565482) is at 129, 128, 25</span>
 <span class="p">/Objects$</span> <span class="k">start lantern</span>
@@ -507,10 +507,10 @@ For one command:       COMMAND --help, or man COMMAND
 <span class="o">/Objects/lantern
 /Objects/sign
 /Objects/spares</span>
-<span class="p">/Objects$</span> <span class="k">ls -l</span>                    <span class="c">kind, when, id, path</span>
-<span class="o">object     2026-08-02T15:09:30 40f17e57-… /Objects/lantern
-object     2026-07-29T09:41:12 91357e57-… /Objects/sign
-folder     -                   1ae57e57-… /Objects/spares</span>
+<span class="p">/Objects$</span> <span class="k">ls -l</span>                    <span class="c">kind, when, id, permissions, path</span>
+<span class="o">object     2026-08-02T15:09:30 40f17e57-… MCX /Objects/lantern
+object     2026-07-29T09:41:12 91357e57-… -C- /Objects/sign
+folder     -                   1ae57e57-… -   /Objects/spares</span>
 <span class="p">/Objects$</span> <span class="k">ls -lt</span>                   <span class="c">newest first</span>
 <span class="p">/Objects$</span> <span class="k">ls -r spares</span>             <span class="c">and four levels below it</span>
 <span class="p">/Objects$</span> <span class="k">ls -l lantern</span>            <span class="c">not a folder: lists what it names</span>
@@ -534,6 +534,14 @@ folder     -                   1ae57e57-… /Objects/spares</span>
           below.
         </p>
         <p>
+          The fourth column is what the item's owner may do with it:
+          <code>M</code> modify, <code>C</code> copy and <code>X</code>
+          transfer, with a dash for each it may not, so <code>-C-</code> is
+          copy only. A folder has none and gets a dash, as it does for a date.
+          <code>dump --item</code> prints all five of an item's masks, the next
+          owner's among them.
+        </p>
+        <p>
           Names are matched exactly, in the case they have. The grid keeps
           "lantern" and "Lantern" as two names, and so does the shell. A name
           spelt a way nothing is spelt is refused, and the refusal names what
@@ -550,9 +558,9 @@ folder     -                   1ae57e57-… /Objects/spares</span>
 
         <div class="term">
           <pre><span class="p">/$</span> <span class="k">ls -l /Scripts/greeter</span>
-<span class="o">script     2026-08-07T12:06:57 cb567e57-… /Scripts/greeter
-script     2026-08-07T11:26:01 e9d97e57-… /Scripts/greeter
-script     2026-08-07T11:25:53 7e277e57-… /Scripts/greeter</span>
+<span class="o">script     2026-08-07T12:06:57 cb567e57-… MCX /Scripts/greeter
+script     2026-08-07T11:26:01 e9d97e57-… MCX /Scripts/greeter
+script     2026-08-07T11:25:53 7e277e57-… MCX /Scripts/greeter</span>
 <span class="p">/$</span> <span class="k">ls /Scripts/greeter</span>          <span class="c">without -l, three identical lines</span>
 <span class="o">/Scripts/greeter
 /Scripts/greeter
