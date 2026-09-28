@@ -210,11 +210,10 @@ func (v *viewerHost) hasCircuit(profile string) bool {
 // A session with a viewer circuit has each message recorded by the
 // circuit, which is offered it by the relay and records what became of
 // it -- forwarded, absorbed, dropped, or held for a viewer not yet
-// joined.  So the tap records only for a session without one, where
-// nothing is forwarded: from the tap, the wire as it really was,
-// retransmissions included, since the tap runs ahead of duplicate
-// suppression.  With a circuit the retransmissions go unrecorded, as the
-// relay never sees them.
+// joined -- and each retransmission by simRepeat.  So the tap records
+// only for a session without one, where nothing is forwarded: from the
+// tap, the wire as it really was, retransmissions included, since the
+// tap runs ahead of duplicate suppression.
 func simTap(profile string, v *viewerHost, census *viewer.Census, trace *viewer.Trace) msg.Handler {
 	return func(p *msg.Packet) {
 		if v.hasCircuit(profile) {
@@ -222,6 +221,20 @@ func simTap(profile string, v *viewerHost, census *viewer.Census, trace *viewer.
 		}
 		census.Record(viewer.MessageName(p), viewer.FromSim, p.At, viewer.NoViewer)
 		trace.Write(viewer.FromSim, p, viewer.NoViewer)
+	}
+}
+
+// simRepeat records, for -trace, a retransmission the session drops as
+// already handled, for a session with a viewer circuit: the relay the
+// circuit records from is not offered one, and simTap, which saw it,
+// leaves such a session to the circuit.
+func simRepeat(profile string, v *viewerHost, census *viewer.Census, trace *viewer.Trace) msg.Handler {
+	return func(p *msg.Packet) {
+		if !v.hasCircuit(profile) {
+			return
+		}
+		census.Record(viewer.MessageName(p), viewer.FromSim, p.At, viewer.Retransmission)
+		trace.Write(viewer.FromSim, p, viewer.Retransmission)
 	}
 }
 

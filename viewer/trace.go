@@ -78,7 +78,8 @@ func (d Direction) String() string {
 // directions is every Direction, in the order a report should list them.
 var directions = []Direction{FromSim, ToSim, FromViewer, ToViewer}
 
-// Disposition is what became of a message the relay was offered.
+// Disposition is what became of a message the relay was offered, or,
+// for a retransmission, why it was not offered one.
 type Disposition uint8
 
 const (
@@ -100,6 +101,11 @@ const (
 	// counted rather than waited on, because waiting would be the
 	// grid session waiting.
 	Dropped
+
+	// Retransmission means the packet repeated one already handled, so
+	// the relay was not offered it again: whatever became of the first
+	// is what became of the message.
+	Retransmission
 )
 
 func (d Disposition) String() string {
@@ -112,12 +118,14 @@ func (d Disposition) String() string {
 		return "no viewer attached"
 	case Dropped:
 		return "dropped, viewer behind"
+	case Retransmission:
+		return "retransmission, not relayed again"
 	}
 	return fmt.Sprintf("disposition(%d)", uint8(d))
 }
 
 // dispositions is every Disposition, in report order.
-var dispositions = []Disposition{Forwarded, Absorbed, NoViewer, Dropped}
+var dispositions = []Disposition{Forwarded, Absorbed, NoViewer, Dropped, Retransmission}
 
 // Count is what the census knows about one message in one direction.
 type Count struct {

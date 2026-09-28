@@ -310,6 +310,11 @@ type Options struct {
 	// OnError sees packets that would not decode.
 	OnError msg.Handler
 
+	// OnDuplicate sees a retransmission of a message already handled,
+	// which Tap saw and Relay is not offered.  Keep it quick: it runs
+	// on the dispatch goroutine.
+	OnDuplicate msg.Handler
+
 	// Caps names the capabilities to ask the seed capability for.
 	// Empty means DefaultCaps; SkipCaps skips the request.
 	Caps     []string
@@ -525,6 +530,9 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	}
 	if opts.OnError != nil {
 		dopts = append(dopts, msg.OnError(opts.OnError))
+	}
+	if opts.OnDuplicate != nil {
+		dopts = append(dopts, msg.OnDuplicate(opts.OnDuplicate))
 	}
 	a.Disp = msg.NewDispatcher(dopts...)
 	a.register()

@@ -41,6 +41,7 @@ type Dispatcher struct {
 
 	onUnhandled Handler
 	onError     Handler
+	onDuplicate Handler
 	tap         Handler
 	relay       Handler
 	gate        func(*Packet) bool
@@ -122,6 +123,14 @@ func OnUnhandled(fn Handler) DispatcherOption {
 // OnError is called for a packet the receiver could not decode.
 func OnError(fn Handler) DispatcherOption {
 	return func(d *Dispatcher) { d.onError = fn }
+}
+
+// OnDuplicate is called, on the dispatch goroutine, for a packet dropped
+// as a retransmission of one already handled: the packets the tap sees
+// and the relay is not offered.  A record kept from the relay needs it
+// to see the wire whole.
+func OnDuplicate(fn Handler) DispatcherOption {
+	return func(d *Dispatcher) { d.onDuplicate = fn }
 }
 
 // WithTap calls fn for every packet, before routing and before
@@ -339,6 +348,9 @@ func (d *Dispatcher) one(ctx context.Context, p *Packet) {
 
 	if d.duplicate(p.Header.Sequence) {
 		d.duplicates.Add(1)
+		if d.onDuplicate != nil {
+			d.onDuplicate(p)
+		}
 		return
 	}
 

@@ -743,8 +743,11 @@ Each packet the simulator sends is recorded once. Until a viewer has
 logged in to a session, that is the packet as it arrived, retransmissions
 included. From then on it is what the relay to the viewer was offered,
 with what became of it -- forwarded, absorbed, dropped, or held while no
-viewer is joined -- and a retransmission, which the relay never sees, is
-not recorded.
+viewer is joined -- and a retransmission of something already handled,
+which the relay is not offered again, is recorded as a retransmission.
+A packet carrying nothing but acknowledgements, a `PacketAck`, and one
+that would not decode are not offered to the relay either, and with a
+viewer logged in they are not recorded.
 
 The trace file is created mode 600, and one already there is narrowed to
 600 before it is emptied. That matters most with `-trace-bodies`, which
