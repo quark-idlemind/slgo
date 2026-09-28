@@ -154,9 +154,10 @@ func main() {
 	// cannot be collected afterwards.
 	//
 	// Both are shared by every session, so one file holds the whole
-	// daemon in arrival order.  Which avatar a packet belonged to is
-	// not recorded yet; when a viewer circuit exists there will be two
-	// directions to tell apart and that is the point to add it.
+	// daemon in arrival order.  Each packet's direction is recorded,
+	// the simulator's circuit and a viewer's told apart, but which
+	// avatar it belonged to is not: with several sessions up, their
+	// packets are interleaved with nothing to say whose each is.
 	census := viewer.NewCensus()
 	var tracer *viewer.Trace
 	if *trace != "" {

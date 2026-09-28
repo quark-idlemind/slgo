@@ -173,8 +173,12 @@ type Behaviour struct {
 	Fault       string
 	OutOfMemory bool
 
-	// Silent runs the script but never says the sentinel, which is the
-	// timeout a caller has to report rather than hang on.
+	// Silent runs the script without the sentinel this backend would
+	// add: a benchmark's transcript is said without it, and a script
+	// with nothing this can read to say is not given it as its one line.
+	// A script that says the sentinel in its own source still says it,
+	// and so do Lines.  The run then waits out its timeout, which is
+	// what a caller has to report rather than hang on.
 	Silent bool
 
 	// LineDelay is how long to leave between lines, for a caller that
