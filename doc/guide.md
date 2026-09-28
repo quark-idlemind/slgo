@@ -423,6 +423,10 @@ run; see `doc/rez.md`.
 
 A profile's own `group` line settles it; `-group` overrides that, by
 name or uuid, and the `PROFILE=GROUP` form says which avatar it is for.
+PROFILE is one word run up against the `=`; any other value with an `=`
+in it is taken whole as a group name, and a group whose name starts with
+one word and an `=` is given with its profile in front, as
+`example="E=mc2 Society"`.
 The setting belongs to the session rather than to a client, so every
 program attached shares it, and a reconnect does not lose it.
 

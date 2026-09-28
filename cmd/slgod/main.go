@@ -30,6 +30,7 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/auth"
@@ -686,6 +687,11 @@ func groupNames(gs []agent.Group) string {
 //	slgod -group Builders example
 //	slgod -group example=Builders -group qi=Testers example qi
 //
+// A group name may have an "=" in it, so PROFILE is taken as a profile
+// only when it looks like one: see profileLike.  Any other value is a
+// group name whole, and a group whose name would be misread is given
+// with its profile in front, since the value is cut at the first "=".
+//
 // The ordinary place for this is the profile's "group =" line.  The
 // flag is for a one-off, and it wins.
 type groupFlag struct {
@@ -709,18 +715,25 @@ func (g *groupFlag) String() string {
 }
 
 func (g *groupFlag) Set(s string) error {
-	// A group NAME may contain an "=" in principle, so only a
-	// left-hand side that looks like a profile name is taken as one.
 	name, want, ok := strings.Cut(s, "=")
-	if !ok {
+	if !ok || !profileLike(name) {
 		g.all = s
 		return nil
 	}
 	if g.each == nil {
 		g.each = map[string]string{}
 	}
-	g.each[strings.TrimSpace(name)] = strings.TrimSpace(want)
+	g.each[name] = strings.TrimSpace(want)
 	return nil
+}
+
+// profileLike is whether the left of a -group value looks like a
+// profile name: one word, as a profile is named on the command line,
+// with nothing between it and the "=", and one agent.ProfilePath would
+// take -- no slash or backslash, and not "." or "..".
+func profileLike(s string) bool {
+	return s != "" && s != "." && s != ".." &&
+		!strings.ContainsAny(s, "/\\") && strings.IndexFunc(s, unicode.IsSpace) < 0
 }
 
 // For is the group this profile should act as: the flag if it names
