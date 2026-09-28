@@ -999,7 +999,7 @@ func TestEveryAutoObjectIsACopyOfTheFirst(t *testing.T) {
 // TestTwoFirstAutoObjectsAreRefused: every copy is made from the item
 // called auto, and two of them is two different things either could be
 // a copy of.  One name has to be one thing, so it is refused with both
-// ids, and nothing is copied.
+// ids and the way out, and nothing is copied.
 func TestTwoFirstAutoObjectsAreRefused(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
@@ -1020,6 +1020,10 @@ func TestTwoFirstAutoObjectsAreRefused(t *testing.T) {
 		if !strings.Contains(err.Error(), id.String()) {
 			t.Errorf("the refusal does not name %s: %v", id, err)
 		}
+	}
+	// And it says the way out, since nothing here will take one.
+	if !strings.Contains(err.Error(), "delete the rest by id") {
+		t.Errorf("the refusal does not say what to do: %v", err)
 	}
 	if got := len(f.Sent()); got != 0 {
 		t.Errorf("%d messages went out, want nothing copied", got)

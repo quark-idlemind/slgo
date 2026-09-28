@@ -166,8 +166,13 @@ func AutoPool() int { return len(AutoPoints) }
 // may not rez can be given one object by somebody who can and make all
 // the others from it; and a copy is quicker than rez, name and take even
 // where rezzing is allowed.  Every auto object is then the same object --
-// exactly what a benchmark wants.  Several items called AutoObject are
-// refused, listing their ids, as sl.PickNamed refuses them.
+// exactly what a benchmark wants.
+//
+// Several items called AutoObject are refused, listing their ids, as
+// sl.PickNamed refuses them, rather than one being taken.  The wearing
+// that follows refuses them too, so taking one here would only move the
+// refusal past the copies; and two of them may be two different objects,
+// so which one the copies came from would decide what is measured.
 // Why: doc/slots.md#every-object-is-a-copy-of-the-first
 func EnsureAutoItems(ctx context.Context, s *sl.Session, folder msg.UUID, n int) error {
 	items, err := s.FolderItems(ctx, folder)
@@ -183,7 +188,8 @@ func EnsureAutoItems(ctx context.Context, s *sl.Session, folder msg.UUID, n int)
 		func(it *sl.Item) (string, msg.UUID) { return it.Name, it.ID })
 	var ne *sl.NameError
 	if err != nil && (!errors.As(err, &ne) || len(ne.IDs) > 1) {
-		return err
+		return fmt.Errorf("%w\n        every %s object is a copy of one of these: keep the one "+
+			"to copy and delete the rest by id", err, AutoObject)
 	}
 
 	// Nothing to copy from.  EnsureAttached will build the first one
