@@ -169,6 +169,7 @@ func (a *aisServer) embedded(b *strings.Builder, id string, level, depth int) {
 		b.WriteString(`<key>permissions</key><map>`)
 		fmt.Fprintf(b, `<key>creator_id</key><string>%s</string>`, uid(777))
 		fmt.Fprintf(b, `<key>owner_id</key><string>%s</string>`, uid(778))
+		fmt.Fprintf(b, `<key>last_owner_id</key><string>%s</string>`, uid(779))
 		b.WriteString(`<key>base_mask</key><integer>2147483647</integer>`)
 		b.WriteString(`<key>next_owner_mask</key><integer>532480</integer>`)
 		b.WriteString(`</map>`)
@@ -235,8 +236,8 @@ func TestFetchInventoryTree(t *testing.T) {
 	if it.Type != 7 || it.InvType != 7 {
 		t.Errorf("type = %d/%d", it.Type, it.InvType)
 	}
-	if it.CreatorID.String() != uid(777) || it.OwnerID.String() != uid(778) {
-		t.Errorf("permissions = %v / %v", it.CreatorID, it.OwnerID)
+	if it.CreatorID.String() != uid(777) || it.OwnerID.String() != uid(778) || it.LastOwnerID.String() != uid(779) {
+		t.Errorf("permissions = %v / %v / %v", it.CreatorID, it.OwnerID, it.LastOwnerID)
 	}
 	if it.BaseMask != 2147483647 || it.NextOwnerMask != 532480 {
 		t.Errorf("masks = %d %d", it.BaseMask, it.NextOwnerMask)

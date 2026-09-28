@@ -65,11 +65,14 @@ type Entry struct {
 	// are both "bodypart" and are told apart by nothing else.
 	Flags uint32
 
-	// Creator, Owner and Group are the item's, from its permissions.
-	// A rez or a wear sends the group back as the item's own.
-	Creator msg.UUID
-	Owner   msg.UUID
-	Group   msg.UUID
+	// Creator, Owner, LastOwner and Group are the item's, from its
+	// permissions.  A rez or a wear sends the group back as the item's
+	// own, and putting it in an object sums the last owner into the
+	// checksum.
+	Creator   msg.UUID
+	Owner     msg.UUID
+	LastOwner msg.UUID
+	Group     msg.UUID
 
 	BaseMask      uint32
 	OwnerMask     uint32
@@ -105,6 +108,7 @@ func (e Entry) Item() *Item {
 		Created:       e.Created,
 		CreatorID:     e.Creator,
 		OwnerID:       e.Owner,
+		LastOwnerID:   e.LastOwner,
 		GroupID:       e.Group,
 		BaseMask:      e.BaseMask,
 		OwnerMask:     e.OwnerMask,
@@ -330,7 +334,8 @@ func (w *Session) children(ctx context.Context, folder msg.UUID, depth uint) ([]
 				Path: join(prefix, it.Name), Depth: level,
 				Type: it.Type, InvType: it.InvType, Asset: it.AssetID,
 				Desc: it.Desc, Created: it.Created, IsLink: it.IsLink,
-				Creator: it.CreatorID, Owner: it.OwnerID, Group: it.GroupID,
+				Creator: it.CreatorID, Owner: it.OwnerID,
+				LastOwner: it.LastOwnerID, Group: it.GroupID,
 				BaseMask: it.BaseMask, OwnerMask: it.OwnerMask,
 				GroupMask: it.GroupMask, EveryoneMask: it.EveryoneMask,
 				NextOwnerMask: it.NextOwnerMask,

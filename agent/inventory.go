@@ -48,9 +48,10 @@ type Item struct {
 	Flags    uint32
 	Created  int64
 
-	CreatorID msg.UUID
-	OwnerID   msg.UUID
-	GroupID   msg.UUID
+	CreatorID   msg.UUID
+	OwnerID     msg.UUID
+	LastOwnerID msg.UUID
+	GroupID     msg.UUID
 
 	BaseMask      uint32
 	OwnerMask     uint32
@@ -688,6 +689,7 @@ func itemFrom(m map[string]any) *Item {
 	if p := llsd.Map(m["permissions"]); p != nil {
 		it.CreatorID, _ = msg.ParseUUID(llsd.String(p, "creator_id"))
 		it.OwnerID, _ = msg.ParseUUID(llsd.String(p, "owner_id"))
+		it.LastOwnerID, _ = msg.ParseUUID(llsd.String(p, "last_owner_id"))
 		it.GroupID, _ = msg.ParseUUID(llsd.String(p, "group_id"))
 		it.BaseMask = uint32(llsd.Int(p, "base_mask"))
 		it.OwnerMask = uint32(llsd.Int(p, "owner_mask"))
