@@ -251,8 +251,13 @@ func (w *Session) Typing(ctx context.Context, to msg.UUID, on bool) error {
 // The viewer computes it rather than inventing one, so that both ends
 // agree without being told: the two agent ids exclusive ored together.
 // Getting it wrong does not stop the message arriving, but it lands in
-// a conversation the other end thinks is new.
+// a conversation the other end thinks is new.  A message to oneself
+// would be the zero id that way, and the viewer uses the agent's own id
+// instead (llimview.cpp:2551-2557).
 func imSessionID(a, b msg.UUID) msg.UUID {
+	if a == b {
+		return a
+	}
 	var out msg.UUID
 	for i := range out {
 		out[i] = a[i] ^ b[i]

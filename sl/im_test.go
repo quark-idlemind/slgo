@@ -836,12 +836,14 @@ func TestSendIMComputesTheSessionBothEndsAgreeOn(t *testing.T) {
 	}
 
 	// It has to be the same from either side, which is the whole point
-	// of deriving it, and it must not be the zero id.
+	// of deriving it, and it must not be the zero id -- which a message
+	// to oneself would get from the exclusive or, and which the viewer
+	// replaces with the agent's own id (llimview.cpp:2551-2557).
 	if imSessionID(testAgentID, somebody) != imSessionID(somebody, testAgentID) {
 		t.Error("the two ends would compute different conversation ids")
 	}
-	if !imSessionID(somebody, somebody).IsZero() {
-		t.Error("a uuid exclusive ored with itself should be zero")
+	if got := imSessionID(somebody, somebody); got != somebody {
+		t.Errorf("a conversation with oneself is %s, want the agent's own id", got)
 	}
 
 	// Where it was sent from rides along, so the far end can offer a
@@ -856,6 +858,15 @@ func TestSendIMComputesTheSessionBothEndsAgreeOn(t *testing.T) {
 	// message and nothing tells the sender it was lost.
 	if sent := f.Sent(); !sent[0].Reliable {
 		t.Error("the instant message went unreliably")
+	}
+
+	// And one to oneself goes under the agent's own id.
+	f.Forget()
+	if err := w.SendIM(context.Background(), testAgentID, "a note to self"); err != nil {
+		t.Fatalf("SendIM to oneself: %v", err)
+	}
+	if got := onlySent[*msg.ImprovedInstantMessage](t, f).MessageBlock.ID; got != testAgentID {
+		t.Errorf("a message to oneself went as session %s, want %s", got, testAgentID)
 	}
 }
 
