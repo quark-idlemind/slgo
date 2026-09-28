@@ -2,7 +2,9 @@ package msg
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
+	"math"
 	"math/rand"
 	"reflect"
 	"strings"
@@ -199,23 +201,54 @@ func TestWireSizes(t *testing.T) {
 	}
 }
 
-// TestAgentUpdateSize records that the whole message comes to 114
-// bytes, which is what messages/q_AgentUpdate.c allocates with
-// sizeof(luuid_t) * 2 + 6 * 12 + 10.
+// TestAgentUpdateIsLaidOutAsTheTemplateSays, byte for byte: 114 of
+// them, in the template's order.  Every field holds a value of its own,
+// so a field out of place shows as bytes in the wrong place, which a
+// message of zeros -- 114 bytes whatever the order -- cannot show.
 //
-// Treat that agreement as a curiosity, not as evidence: the only call
-// to queueAgentUpdate is commented out at s.c:1267, so this message has
-// never been sent and the C was never validated against a sim.  The
-// authority for the field widths is TestWireSizes above.
-func TestAgentUpdateSize(t *testing.T) {
+// Flags is the one to watch.  The viewer adds it straight after State
+// (send_agent_update, llviewermessage.cpp:4371-4372), and the template,
+// which is what decides, puts it last; see "Where the wire format came
+// from" in README.md.  The widths are TestWireSizes'.
+func TestAgentUpdateIsLaidOutAsTheTemplateSays(t *testing.T) {
 	var m AgentUpdate
-	b, err := m.Encode()
+	a := &m.AgentData
+	for i := range a.AgentID {
+		a.AgentID[i], a.SessionID[i] = byte(i), byte(16+i)
+	}
+	a.BodyRotation = Quaternion{X: 1, Y: 2, Z: 3}
+	a.HeadRotation = Quaternion{X: 4, Y: 5, Z: 6}
+	a.State = 7
+	a.CameraCenter = Vector3{X: 8, Y: 9, Z: 10}
+	a.CameraAtAxis = Vector3{X: 11, Y: 12, Z: 13}
+	a.CameraLeftAxis = Vector3{X: 14, Y: 15, Z: 16}
+	a.CameraUpAxis = Vector3{X: 17, Y: 18, Z: 19}
+	a.Far = 20
+	a.ControlFlags = 0x15161718
+	a.Flags = 0x19
+
+	floats := func(b []byte, fs ...float32) []byte {
+		for _, f := range fs {
+			b = binary.LittleEndian.AppendUint32(b, math.Float32bits(f))
+		}
+		return b
+	}
+	want := append(append([]byte(nil), a.AgentID[:]...), a.SessionID[:]...)
+	want = floats(want, 1, 2, 3, 4, 5, 6)
+	want = append(want, 7)
+	want = floats(want, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20)
+	want = binary.LittleEndian.AppendUint32(want, 0x15161718)
+	want = append(want, 0x19)
+	if len(want) != 16*2+12*2+1+12*4+4+4+1 {
+		t.Fatalf("the expected body is %d bytes; the arithmetic here is wrong", len(want))
+	}
+
+	got, err := m.Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = 16*2 + 12*2 + 1 + 12*4 + 4 + 4 + 1
-	if len(b) != want {
-		t.Errorf("AgentUpdate encodes to %d bytes, want %d", len(b), want)
+	if !bytes.Equal(got, want) {
+		t.Errorf("AgentUpdate encodes to %d bytes\n have %x\n want %x", len(got), got, want)
 	}
 }
 

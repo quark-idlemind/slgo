@@ -489,7 +489,8 @@ not by itself mean the subset was checked.
   round trip, plus a re-encode byte comparison
 - golden byte vectors hand-derived from `q_UseCircuitCode.c`,
   `q_PacketAck.c` and `q_CompletePingCheck.c`
-- the `AgentUpdate` size cross-check against the C allocation
+- `AgentUpdate` byte for byte, in the template's order rather than the
+  order the viewer adds its fields in
 - message number framing for all 483, and the shape of each priority class
 - packet header, appended acks, zero coding round trip, the C's
   extended 256-zero run form, and the ceiling on what a body expands to
