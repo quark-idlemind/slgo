@@ -30,7 +30,9 @@ type (
 // the agent inventory id instead is the mistake this type exists to
 // make hard.
 type TaskItem struct {
-	ID    msg.UUID
+	ID msg.UUID
+	// Asset is the asset id, decoded from the shadow id the file gives
+	// in its place for an item the avatar may not copy.
 	Asset msg.UUID
 	Name  string
 	Type  string
@@ -38,13 +40,15 @@ type TaskItem struct {
 	// The rest of what the contents file says. It is read because
 	// changing an item in an object means sending the whole item back,
 	// so anything not read here would be silently reset to zero.
-	InvType   string
-	Desc      string
-	Flags     uint32
-	Created   int64
-	CreatorID msg.UUID
-	OwnerID   msg.UUID
-	GroupID   msg.UUID
+	InvType     string
+	Desc        string
+	Flags       uint32
+	Created     int64
+	CreatorID   msg.UUID
+	OwnerID     msg.UUID
+	LastOwnerID msg.UUID
+	GroupID     msg.UUID
+	GroupOwned  bool
 
 	BaseMask      uint32
 	OwnerMask     uint32
@@ -584,9 +588,14 @@ func parseTaskInventory(b []byte) []TaskItem {
 		switch f[0] {
 		case "item_id":
 			cur.ID, _ = msg.ParseUUID(val)
-		case "asset_id", "shadow_id":
+		case "asset_id":
 			if cur.Asset.IsZero() {
 				cur.Asset, _ = msg.ParseUUID(val)
+			}
+		case "shadow_id":
+			if cur.Asset.IsZero() {
+				cur.Asset, _ = msg.ParseUUID(val)
+				cur.Asset = unshadow(cur.Asset)
 			}
 		case "type":
 			if cur.Type == "" {
@@ -606,8 +615,13 @@ func parseTaskInventory(b []byte) []TaskItem {
 			cur.CreatorID, _ = msg.ParseUUID(val)
 		case "owner_id":
 			cur.OwnerID, _ = msg.ParseUUID(val)
+		case "last_owner_id":
+			cur.LastOwnerID, _ = msg.ParseUUID(val)
 		case "group_id":
 			cur.GroupID, _ = msg.ParseUUID(val)
+		case "group_owned":
+			n, _ := strconv.Atoi(val)
+			cur.GroupOwned = n != 0
 		case "base_mask":
 			cur.BaseMask = uint32(hexOrDec(val))
 		case "owner_mask":
@@ -658,6 +672,19 @@ func notecardAsset(text string) []byte {
 	return b.Bytes()
 }
 
+// shadowPad is the viewer's MAGIC_ID (llinventory.cpp:73), which a
+// shadow id is the asset id XORed with.
+var shadowPad = msg.MustParseUUID("3c115e51-04f4-523c-9fa6-98aff1034730")
+
+// unshadow decodes a shadow id as the viewer does
+// (llinventory.cpp:803-808): XOR with shadowPad, byte by byte.
+func unshadow(u msg.UUID) msg.UUID {
+	for i := range u {
+		u[i] ^= shadowPad[i]
+	}
+	return u
+}
+
 // hexOrDec reads a number from the contents file.
 //
 // The masks are written in hex without an 0x, the dates and prices in
@@ -685,7 +712,9 @@ func hexOrDec(s string) uint64 {
 // permission mask means taking the rights away and for the sale type
 // means taking it off sale.  So it is the item as TaskInventory or
 // FindInObject read it, and one whose sale type is not a word the
-// contents file uses is refused before anything is sent.
+// contents file uses is refused before anything is sent.  The rest is
+// filled as the viewer fills it (llviewerobject.cpp:3735-3766): the
+// folder is the object, and the checksum is worked out over the item.
 //
 // Nothing answers the message, so the contents are read back until the
 // item, found by its id, carries the new name.  One that has not by the
@@ -715,8 +744,9 @@ func (w *Session) RenameInObject(ctx context.Context, o *Object, it TaskItem, na
 	m.UpdateData.Key = 0 // 0 selects the object's inventory
 
 	d := &m.InventoryData
-	d.ItemID = it.ID
+	d.ItemID, d.FolderID = it.ID, o.ID
 	d.CreatorID, d.OwnerID, d.GroupID = it.CreatorID, it.OwnerID, it.GroupID
+	d.GroupOwned = it.GroupOwned
 	d.BaseMask, d.OwnerMask = it.BaseMask, it.OwnerMask
 	d.GroupMask, d.EveryoneMask = it.GroupMask, it.EveryoneMask
 	d.NextOwnerMask = it.NextOwnerMask
@@ -726,6 +756,7 @@ func (w *Session) RenameInObject(ctx context.Context, o *Object, it TaskItem, na
 	d.SaleType, d.SalePrice = sale, it.SalePrice
 	d.Name = append([]byte(name), 0)
 	d.Description = append([]byte(it.Desc), 0)
+	d.CRC = taskItemCRC(d, it.Asset, it.LastOwnerID)
 	if err := w.Send(ctx, m); err != nil {
 		return err
 	}
@@ -744,6 +775,24 @@ func (w *Session) RenameInObject(ctx context.Context, o *Object, it TaskItem, na
 			}
 			return false, nil
 		})
+}
+
+// taskItemCRC is the viewer's checksum of an item
+// (llinventory.cpp:460-485, llpermissions.cpp:129-137,
+// llsaleinfo.cpp:74-79): a sum over what the message carries, and the
+// asset and last owner it does not.  The next-owner mask, the name and
+// the description are left out, as the viewer leaves them, and an item
+// read from an object's contents has no thumbnail to add.  itemCRC, for
+// agent inventory, is a different sum; its comment says how.
+func taskItemCRC(d *msg.UpdateTaskInventory_InventoryData, asset, lastOwner msg.UUID) uint32 {
+	crc := uuidCRC(d.ItemID) + uuidCRC(d.FolderID)
+	crc += uuidCRC(d.CreatorID) + uuidCRC(d.OwnerID) + uuidCRC(lastOwner) + uuidCRC(d.GroupID)
+	crc += d.BaseMask + d.OwnerMask + d.EveryoneMask + d.GroupMask
+	crc += uuidCRC(asset)
+	crc += uint32(int32(d.Type)) + uint32(int32(d.InvType)) + d.Flags
+	crc += uint32(d.SalePrice) + uint32(d.SaleType)*0x07073096
+	crc += uint32(d.CreationDate)
+	return crc
 }
 
 // saleTypeNumber turns the contents file's word for a sale type back
