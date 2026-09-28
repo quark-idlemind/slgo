@@ -1608,6 +1608,15 @@ the size is read first, by the codec's own `DecodeConfig` -- the header
 the decoder would have believed, a second SIZ marker included -- and
 anything larger is refused before anything is allocated for the image.
 
+The tiles are counted before that, because `DecodeConfig` itself makes
+a record for every tile the header claims: a million tiles of four
+pixels, which the codec allows, cost it 226 MB to be asked the size
+(measured here, offline, on a crafted header). `MaxDecodeTiles`, 4096,
+is a tile of 64 pixels a side over the largest texture decoded; the
+viewer's own encoder writes one tile for the whole image. Every SIZ
+marker is checked, including one after a tile-part, where
+`DecodeConfig` has stopped reading and the decoder takes it afresh.
+
 ## Resizing to a size the grid takes
 
     img = sl.Resize(img, sl.ResizeOptions{

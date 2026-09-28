@@ -234,6 +234,75 @@ func TestAnOversizedTextureIsRefusedBeforeItIsDecoded(t *testing.T) {
 	}
 }
 
+// tiled is claims with the image cut into tiles of tw by th.
+func tiled(w, h, tw, th int) []byte {
+	b := claims(w, h)
+	for i, v := range []int{tw, th} {
+		b[24+4*i], b[25+4*i], b[26+4*i], b[27+4*i] = byte(v>>24), byte(v>>16), byte(v>>8), byte(v)
+	}
+	return b
+}
+
+// afterATilePart is a header that passes, one tile-part of four bytes,
+// and then the SIZ of next, which the decoder takes afresh once it has
+// read the tile-part -- after DecodeConfig has stopped reading.
+func afterATilePart(next []byte) []byte {
+	b := slices.Clip(claims(64, 64))
+	b = b[:len(b)-2] // its EOC
+	// SOT: Lsot 10, tile 0, Psot 18 from the marker to the end of the
+	// data, part 0 of 1; then SOD and the four bytes.
+	b = append(b, 0xff, 0x90, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 18, 0x00, 0x01)
+	b = append(b, 0xff, 0x93, 0x01, 0x02, 0x03, 0x04)
+	return append(b, next[2:]...)
+}
+
+// TestATextureOfTinyTilesIsRefusedBeforeItIsRead: the decoder makes a
+// record for every tile while it reads the header, so a million tiles
+// of four pixels, which it allows, cost over 200 MB to be told the size.
+// So the tiles are counted first, in every SIZ the decoder would read,
+// and more than MaxDecodeTiles is refused without the allocation.
+func TestATextureOfTinyTilesIsRefusedBeforeItIsRead(t *testing.T) {
+	small := claims(64, 64)
+	tiny := tiled(MaxDecodeSize, MaxDecodeSize, 4, 4)
+	for _, c := range []struct {
+		what string
+		b    []byte
+	}{
+		{"a million tiles of four pixels", tiny},
+		{"one tile over the limit", tiled(MaxDecodeSize, MaxDecodeSize, 64, 63)},
+		{"a second SIZ of tiny tiles", append(slices.Clip(small[:len(small)-2]), tiny[2:]...)},
+		{"a SIZ of tiny tiles after a tile-part", afterATilePart(tiny)},
+	} {
+		_, err := DecodeTexture(c.b)
+		if err == nil || !strings.Contains(err.Error(), "tiles") ||
+			!strings.Contains(err.Error(), strconv.Itoa(MaxDecodeTiles)) {
+			t.Errorf("%s: error = %v, want it refused at %d tiles", c.what, err, MaxDecodeTiles)
+			continue
+		}
+		if n := allocated(10, func() { DecodeTexture(c.b) }); n > 64<<10 {
+			t.Errorf("%s: refusing it allocated %d bytes", c.what, n)
+		}
+	}
+
+	// The limit itself is decoded as far as the tiles go, and so is the
+	// one tile everything the viewer makes has.
+	for _, b := range [][]byte{tiled(MaxDecodeSize, MaxDecodeSize, 64, 64), small} {
+		if err := checkSIZs(b); err != nil {
+			t.Errorf("refused %d bytes: %v", len(b), err)
+		}
+	}
+}
+
+// TestASecondSizeAfterATilePartIsChecked: the size is read by the
+// decoder's own parser too, but only as far as the first tile-part, and
+// the decoder goes on to take a SIZ it meets after one.
+func TestASecondSizeAfterATilePartIsChecked(t *testing.T) {
+	_, err := DecodeTexture(afterATilePart(claims(MaxDecodeSize+1, 8)))
+	if err == nil || !strings.Contains(err.Error(), strconv.Itoa(MaxDecodeSize)) {
+		t.Errorf("error = %v, want it refused at %d a side", err, MaxDecodeSize)
+	}
+}
+
 // TestAnyShapeDecodes: the grid's rules are for what is sent to it, and
 // a codestream from anywhere else -- a file on disk, a texture uploaded
 // by some other client -- decodes whatever its shape, up to the limit.

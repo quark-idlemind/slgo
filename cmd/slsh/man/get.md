@@ -40,8 +40,9 @@ The grid stores JPEG 2000.  What is written is a PNG, and the report
 says the size it decoded to and how many bytes that came from.
 
 Any shape decodes, power of two or not, up to 4096 on each side, which
-is the viewer's own limit.  A texture claiming more is refused before
-it is decoded; `--raw` still writes it.
+is the viewer's own limit, and cut into up to 4096 tiles, where
+everything a viewer makes is one.  A texture claiming more is refused
+before it is decoded; `--raw` still writes it.
 
 The file is the item's name, with separators replaced, and `.png` or
 `.j2c` on the end.  A texture asked for by uuid has no name here, so
