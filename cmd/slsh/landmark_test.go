@@ -255,8 +255,10 @@ func TestLandmarkReadsTheOneItWasAskedAbout(t *testing.T) {
 		t.Errorf("the wrong landmark's asset was read:\n%s", got)
 	}
 	// The path names it too, with or without the leading separator.
-	if got := x.do(t, "landmark /Landmarks/Thrushmoor"); !strings.Contains(got, "1000.09") {
-		t.Errorf("a whole path should name a landmark:\n%s", got)
+	for _, path := range []string{"/Landmarks/Pelmar Reach Workshop", "Landmarks/Pelmar Reach Workshop"} {
+		if got := x.do(t, "landmark "+path); !strings.Contains(got, "at       28.00, 71.95, 2001.20") {
+			t.Errorf("landmark %s should read that landmark:\n%s", path, got)
+		}
 	}
 }
 

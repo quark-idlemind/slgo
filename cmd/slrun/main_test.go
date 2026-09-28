@@ -16,6 +16,7 @@ package main
 // them.
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -82,36 +83,102 @@ func stdoutOf(t *testing.T, fn func()) string {
 // for a minute is one worth watching, so the lines are printed as they
 // come rather than at the end -- and with several scripts named on one
 // command line, the only thing saying which said what is the tag.
+//
+// The script's DONE is held back until its first line has been read off
+// standard output, so a run that printed only at the end never gets as
+// far as ending.
 func TestALineIsPrintedAsItArrivesAndTaggedWithItsScript(t *testing.T) {
 	reset(t)
 	s, obj, f := newFakeSession(t, flags.Script)
+	hold := make(chan struct{})
+	f.mu.Lock()
 	f.says = []string{"hello", "still here"}
+	f.hold = hold
+	f.mu.Unlock()
 
-	got := stdoutOf(t, func() {
-		if !once(context.Background(), s, obj, "a.lsl", "default {}") {
-			t.Error("a script that said DONE was reported as having failed")
-		}
-	})
-	for _, want := range []string{"a.lsl: hello\n", "a.lsl: still here\n"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("output is missing %q:\n%s", want, got)
-		}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
 	}
+	save := os.Stdout
+	os.Stdout = w
+	lines := make(chan string, 16)
+	go func() {
+		defer close(lines)
+		br := bufio.NewReader(r)
+		for {
+			line, err := br.ReadString('\n')
+			if err != nil {
+				return
+			}
+			lines <- line
+		}
+	}()
+	ended := make(chan bool, 1)
+	go func() { ended <- once(context.Background(), s, obj, "a.lsl", "default {}") }()
 
+	select {
+	case line := <-lines:
+		if line != "a.lsl: hello\n" {
+			t.Errorf("the first line printed was %q", line)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("nothing was printed while the script was still running")
+	}
+	close(hold)
+	var finished bool
+	select {
+	case finished = <-ended:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the run did not end once DONE was said")
+	}
+	os.Stdout = save
+	w.Close()
+	var got strings.Builder
+	for line := range lines {
+		got.WriteString(line)
+	}
+	r.Close()
+
+	if !finished {
+		t.Error("a script that said DONE was reported as having failed")
+	}
+	if !strings.Contains(got.String(), "a.lsl: still here\n") {
+		t.Errorf("output is missing the second line:\n%s", got.String())
+	}
 	// The sentinel is the script talking to us rather than to the person
 	// reading, so it is not printed.
-	if strings.Contains(got, "DONE") {
-		t.Errorf("the sentinel was printed as output:\n%s", got)
+	if strings.Contains(got.String(), "DONE") {
+		t.Errorf("the sentinel was printed as output:\n%s", got.String())
 	}
 	// And the source really went up: what is being watched is a run.
-	if f.ran != 1 {
-		t.Errorf("%d scripts ran", f.ran)
-	}
 	// sl puts a newline in front of every script it installs, so that an
 	// upload which arrived empty can be told from one whose first line is
 	// wrong.  What matters here is that the source went up at all.
-	if len(f.sources) != 1 || strings.TrimPrefix(f.sources[0], "\n") != "default {}" {
-		t.Errorf("what was sent was %q", f.sources)
+	f.mu.Lock()
+	ran, sources := f.ran, append([]string(nil), f.sources...)
+	f.mu.Unlock()
+	if ran != 1 {
+		t.Errorf("%d scripts ran", ran)
+	}
+	if len(sources) != 1 || strings.TrimPrefix(sources[0], "\n") != "default {}" {
+		t.Errorf("what was sent was %q", sources)
+	}
+
+	// Two scripts, as run sets the tags for two named on its command
+	// line: each line carries its own script's name, in one column.
+	tagWidth = len("scripts/longer.lsl") + 2
+	out := stdoutOf(t, func() {
+		once(context.Background(), s, obj, "a.lsl", "default {}")
+		once(context.Background(), s, obj, "scripts/longer.lsl", "default {}")
+	})
+	for _, want := range []string{
+		"a.lsl:              hello\n",
+		"scripts/longer.lsl: hello\n",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output is missing %q:\n%s", want, out)
+		}
 	}
 }
 

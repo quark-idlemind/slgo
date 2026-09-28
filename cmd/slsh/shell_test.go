@@ -370,11 +370,28 @@ func TestSourceCountsMoreThanOneLineInThePlural(t *testing.T) {
 }
 
 // TestSourceRefusesAFileThatIsNotThere, and says so as itself rather
-// than as a command that failed.
+// than as a command that failed: no line of it ran, so there is no
+// line to name and nothing left over to count, and the error is the
+// file's own, for whoever called Source to say.
 func TestSourceRefusesAFileThatIsNotThere(t *testing.T) {
 	x := newTestShell(t)
-	if err := x.Source(context.Background(), filepath.Join(t.TempDir(), "absent")); err == nil {
-		t.Error("sourcing a file that is not there should fail")
+	path := filepath.Join(t.TempDir(), "absent")
+
+	err := x.Source(context.Background(), path)
+	if !errors.Is(err, os.ErrNotExist) || !strings.Contains(err.Error(), path) {
+		t.Errorf("Source = %v, want the file's own error, naming it", err)
+	}
+	if errors.Is(err, errStopped) {
+		t.Error("a file that is not there was reported as a line that failed")
+	}
+	if got := x.out.String(); got != "" {
+		t.Errorf("Source printed something of its own about it:\n%s", got)
+	}
+
+	// Typed, it is said once, as what the command came to.
+	got := x.do(t, "source "+path)
+	if !strings.Contains(got, "slsh: source: open "+path) || strings.Contains(got, "stopped") {
+		t.Errorf("source said:\n%s", got)
 	}
 }
 

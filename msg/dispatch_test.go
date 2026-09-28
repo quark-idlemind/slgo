@@ -186,37 +186,46 @@ func TestDispatchDedupeEvicts(t *testing.T) {
 // second viewer opens with 1 and 2, the numbers the first one used, and
 // without forgetting them its handshake is thrown away as a
 // retransmission and never reaches anything that would answer it.  The
-// change of peer is noticed on the dispatch goroutine -- in a gate, or
-// as here a tap -- which is the one that owns the fields Forget writes,
-// so that is where the forgetting has to be safe.
+// change of peer is noticed on the dispatch goroutine -- in a gate, as
+// the viewer circuit does, or in a tap, as an agent's move does -- which
+// is the one that owns the fields Forget writes, so that is where the
+// forgetting has to be safe.  Both are driven here, and each forgets
+// while the replacement's first packet is being dispatched, which is
+// the packet that has to get through.
 func TestForgetLetsAReplacementPeerStartOverAtOne(t *testing.T) {
-	var n atomic.Int64
-	var forget atomic.Bool
-	var d *Dispatcher
-	d = NewDispatcher(WithTap(func(p *Packet) {
-		if forget.CompareAndSwap(true, false) {
-			d.Forget()
-		}
-	}))
-	d.MustHandle("CompletePingCheck", func(p *Packet) { n.Add(1) })
+	for _, via := range []string{"a tap", "a gate"} {
+		t.Run(via, func(t *testing.T) {
+			var n atomic.Int64
+			var forget atomic.Bool
+			var d *Dispatcher
+			notice := func(p *Packet) {
+				if forget.CompareAndSwap(true, false) {
+					d.Forget()
+				}
+			}
+			opt := WithTap(notice)
+			if via == "a gate" {
+				opt = WithGate(func(p *Packet) bool { notice(p); return true })
+			}
+			d = NewDispatcher(opt)
+			d.MustHandle("CompletePingCheck", func(p *Packet) { n.Add(1) })
 
-	in := make(chan *Packet, 4)
-	in <- pkt(1, &CompletePingCheck{})
-	in <- pkt(2, &CompletePingCheck{})
-	close(in)
-	if err := d.Run(context.Background(), in); err != nil {
-		t.Fatal(err)
-	}
+			feed(t, d, pkt(1, &CompletePingCheck{}), pkt(2, &CompletePingCheck{}))
 
-	// The peer changes, and the same two numbers arrive again.
-	forget.Store(true)
-	feed(t, d, pkt(1, &CompletePingCheck{}), pkt(2, &CompletePingCheck{}))
+			// The peer changes, and the same two numbers arrive again.
+			forget.Store(true)
+			feed(t, d, pkt(1, &CompletePingCheck{}), pkt(2, &CompletePingCheck{}))
 
-	if n.Load() != 4 {
-		t.Errorf("the handler ran %d times, want 4: the replacement's packets were taken for the first peer's", n.Load())
-	}
-	if st := d.Stats(); st.Duplicates != 0 {
-		t.Errorf("stats = %+v, want nothing suppressed", st)
+			if forget.Load() {
+				t.Fatalf("%s never saw the replacement's packets", via)
+			}
+			if n.Load() != 4 {
+				t.Errorf("the handler ran %d times, want 4: the replacement's packets were taken for the first peer's", n.Load())
+			}
+			if st := d.Stats(); st.Duplicates != 0 || st.Gated != 0 {
+				t.Errorf("stats = %+v, want nothing suppressed", st)
+			}
+		})
 	}
 }
 

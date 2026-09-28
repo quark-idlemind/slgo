@@ -337,13 +337,6 @@ func TestClosingUndoesWhateverGettingTheObjectTook(t *testing.T) {
 
 // ---------------------------------------------------- what -vvv shows
 
-// recovered runs fn and answers with what it panicked with, if anything.
-func recovered(fn func()) (p any) {
-	defer func() { p = recover() }()
-	fn()
-	return nil
-}
-
 // TestShowPrintsTheScriptAndTheCommentary: -vvv is how a person watches
 // a benchmark work, and what they need to see is the source that was
 // sent and the INFO lines the script said.

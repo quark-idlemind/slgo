@@ -20,8 +20,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestTheDefaultAddrIsNobodysGuess.
@@ -135,17 +137,14 @@ func TestConfigReadsEverySettingAndBothSpellings(t *testing.T) {
 
 // TestEverySettingCanBeWrittenDownAndReadBack.
 //
-// The one test that keeps the table honest.  Every setting is written
-// out through its own show, read back through the reader, and the whole
-// Config compared -- so a row whose show and parse disagree, or a field
-// the reader never reaches, fails here rather than at somebody's
-// prompt.  It is also what says a listing can be pasted into a file:
-// what "set" prints is what LoadConfig takes.
+// The one test that keeps the table honest.  Every setting is given a
+// value that is not its default, written out through its own show, read
+// back through the reader, and the whole Config compared -- so a row
+// whose show and parse disagree, or a field the reader never reaches,
+// fails here rather than at somebody's prompt.  It is also what says a
+// listing can be pasted into a file: what "set" prints is what
+// LoadConfig takes.
 func TestEverySettingCanBeWrittenDownAndReadBack(t *testing.T) {
-	// Nothing set here is a default, so a setting the reader quietly
-	// ignores comes back as the default and is caught.  log, log_dir,
-	// notice_keep and the how_ settings are left at their defaults, so
-	// for those it is not.
 	want := DefaultConfig()
 	want.Addr = "lab.local:7807"
 	want.Agent = "somebody"
@@ -159,6 +158,37 @@ func TestEverySettingCanBeWrittenDownAndReadBack(t *testing.T) {
 	want.MapRatio = CellRatio{Tall: 2, Wide: 1}
 	want.MapLevel = 5
 	want.MapFriendColour = "bright cyan"
+	want.Log = false
+	want.LogDir = "/somewhere/else"
+	want.NoticeKeep = 45 * time.Minute
+	want.AskURL = "http://127.0.0.1:8081"
+	want.AskModel = "a-model"
+	slot := 3
+	want.AskSlot = &slot
+	want.AskTimeout = 45 * time.Second
+	want.AskExtra = `{"reasoning_effort": "none"}`
+
+	// A setting left at its default would come back as the default
+	// whether or not the reader reached it.  So every row has to show
+	// something other than its default here, and every field of Config
+	// has to hold something else -- apart from the ones a flag sets and
+	// no row does -- which is what fails when a setting is added and not
+	// given a value above.
+	def := DefaultConfig()
+	for _, s := range settings {
+		if s.show(&want) == s.show(&def) {
+			t.Errorf("%s is left at its default %q here, so reading it back proves nothing",
+				s.name, s.show(&def))
+		}
+	}
+	notSettings := map[string]bool{"Direct": true, "Chat": true}
+	w, d := reflect.ValueOf(want), reflect.ValueOf(def)
+	for i := 0; i < w.NumField(); i++ {
+		name := w.Type().Field(i).Name
+		if !notSettings[name] && reflect.DeepEqual(w.Field(i).Interface(), d.Field(i).Interface()) {
+			t.Errorf("Config.%s is left at its default here, so reading it back proves nothing", name)
+		}
+	}
 
 	var b strings.Builder
 	for _, s := range settings {
@@ -170,7 +200,7 @@ func TestEverySettingCanBeWrittenDownAndReadBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a file of every setting should load: %v", err)
 	}
-	if got != want {
+	if !reflect.DeepEqual(got, want) {
 		t.Errorf("LoadConfig = %+v\nwant %+v\nfrom\n%s", got, want, b.String())
 	}
 

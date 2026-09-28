@@ -855,41 +855,70 @@ func TestTheStreamEndingIsRememberedAsWhy(t *testing.T) {
 	}
 }
 
-// TestEverythingTheDaemonRelaysArrivesOnItsOwnChannel: messages, events
-// and notices come down one stream and they are not interchangeable -- a
-// message is the binary encoding, an event is LLSD, and a notice is
-// about the connection rather than about the grid.
+// TestEverythingTheDaemonRelaysArrivesOnItsOwnChannel: all six kinds
+// come down one stream and they are not interchangeable -- a message is
+// the binary encoding, an event is LLSD, a notice is about the
+// connection rather than about the grid, a handled offer is one some
+// client has dealt with, and the answers to a lock and to a request for
+// places belong to whoever is waiting on them.
 func TestEverythingTheDaemonRelaysArrivesOnItsOwnChannel(t *testing.T) {
 	t.Parallel()
 	d, conn := attachFake(t)
+	ctx := context.Background()
+
+	// A lock and a request for places, each waiting for its answer.
+	locked := make(chan error, 1)
+	go func() { locked <- conn.Lock(ctx, "the workbench") }()
+	lock := waitForLock(t, d)
+	granted := make(chan grantResult, 1)
+	go func() {
+		g, err := conn.Slots(ctx, 1, time.Minute, "")
+		granted <- grantResult{g, err}
+	}()
+	slots := waitForSlots(t, d)
 
 	at := time.Now().UnixMicro()
-	say := &msg.ChatFromSimulator{}
-	body, err := say.Encode()
-	if err != nil {
-		t.Fatal(err)
+	message := func(seq uint32) *pb.ServerPacket {
+		say := &msg.ChatFromSimulator{}
+		body, err := say.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return &pb.ServerPacket{Body: &pb.ServerPacket_Message{Message: &pb.InboundMessage{
+			Id: uint32(msg.IDOf(say)), Name: "ChatFromSimulator", Body: body,
+			Sequence: seq, Flags: msg.FlagReliable, ReceivedAt: at,
+		}}}
 	}
-	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Message{Message: &pb.InboundMessage{
-		Id: uint32(msg.IDOf(say)), Name: "ChatFromSimulator", Body: body,
-		Sequence: 42, Flags: msg.FlagReliable, ReceivedAt: at,
-	}}}
+	d.relay <- message(42)
 	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Event{Event: &pb.InboundEvent{
 		Message: "TeleportFinish", Body: []byte("some llsd"), ReceivedAt: at,
 	}}}
 	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Notice{Notice: &pb.AgentEvent{
 		Kind: pb.AgentEvent_DISCONNECTED, Detail: "the circuit went away",
 	}}}
+	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Handled{Handled: &pb.OfferHandled{
+		Offer: "offer 7", How: "accepted", By: "slsh",
+	}}}
+	d.relay <- &pb.ServerPacket{Body: &pb.ServerPacket_Locked{Locked: &pb.Locked{
+		Name: lock.Name, Held: true, Request: lock.Request,
+	}}}
+	d.relay <- grantFor(slots.Request, "g1", "")
+	// A second message last.  The stream is read in order, so once it is
+	// out everything before it has been put wherever it went.
+	d.relay <- message(43)
 
-	select {
-	case m := <-conn.Messages():
-		if m.Name != "ChatFromSimulator" || m.Sequence != 42 || !m.Reliable() {
-			t.Errorf("the relayed message came out as %+v", m)
+	for _, seq := range []uint32{42, 43} {
+		select {
+		case m := <-conn.Messages():
+			if m.Name != "ChatFromSimulator" || m.Sequence != seq || !m.Reliable() {
+				t.Errorf("the relayed message came out as %+v, want sequence %d", m, seq)
+			}
+			if m.At.UnixMicro() != at {
+				t.Errorf("the arrival time came out as %v", m.At)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("message %d never came back on Messages", seq)
 		}
-		if m.At.UnixMicro() != at {
-			t.Errorf("the arrival time came out as %v", m.At)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("nothing came back on Messages")
 	}
 
 	select {
@@ -900,8 +929,8 @@ func TestEverythingTheDaemonRelaysArrivesOnItsOwnChannel(t *testing.T) {
 		if e.At.UnixMicro() != at {
 			t.Errorf("the arrival time came out as %v", e.At)
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("nothing came back on Events")
+	default:
+		t.Error("nothing came back on Events")
 	}
 
 	select {
@@ -909,8 +938,49 @@ func TestEverythingTheDaemonRelaysArrivesOnItsOwnChannel(t *testing.T) {
 		if n.Kind != pb.AgentEvent_DISCONNECTED || n.Detail != "the circuit went away" {
 			t.Errorf("the relayed notice came out as %+v", n)
 		}
+	default:
+		t.Error("nothing came back on Notices")
+	}
+
+	select {
+	case h := <-conn.HandledOffers():
+		if h.Offer != "offer 7" || h.How != "accepted" || h.By != "slsh" {
+			t.Errorf("the handled offer came out as %+v", h)
+		}
+	default:
+		t.Error("nothing came back on HandledOffers")
+	}
+
+	select {
+	case err := <-locked:
+		if err != nil {
+			t.Errorf("Lock = %v, want it held", err)
+		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("nothing came back on Notices")
+		t.Error("the lock's answer never reached the Lock waiting for it")
+	}
+	select {
+	case r := <-granted:
+		if r.err != nil || r.g.ID != "g1" {
+			t.Errorf("Slots = %+v, %v, want grant g1", r.g, r.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("the grant never reached the Slots waiting for it")
+	}
+
+	// And nothing arrived anywhere else as well.
+	select {
+	case m := <-conn.Messages():
+		t.Errorf("Messages had something else on it: %+v", m)
+	case e := <-conn.Events():
+		t.Errorf("Events had something else on it: %+v", e)
+	case n := <-conn.Notices():
+		t.Errorf("Notices had something else on it: %+v", n)
+	case h := <-conn.HandledOffers():
+		t.Errorf("HandledOffers had something else on it: %+v", h)
+	case c := <-conn.RegionChanges():
+		t.Errorf("RegionChanges had something on it: %+v", c)
+	default:
 	}
 }
 

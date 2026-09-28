@@ -330,6 +330,8 @@ func (d *fakeDaemon) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Login
 // reach the program that started it.  The pump stops when the client
 // hangs up.
 func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.ServerPacket]) error {
+	d.grid.streams.Add(1)
+	defer d.grid.streams.Done()
 	first, err := s.Recv()
 	if err != nil {
 		return err
@@ -376,6 +378,9 @@ func (d *fakeDaemon) Stream(s grpc.BidiStreamingServer[pb.ClientPacket, pb.Serve
 			if in == nil || in.Decode(out.Body) != nil {
 				continue
 			}
+			d.grid.mu.Lock()
+			d.grid.heard = append(d.grid.heard, in)
+			d.grid.mu.Unlock()
 			// On a goroutine of its own, as the grid's answers are: the
 			// answer goes back through the relay, and answering inline
 			// would be this loop waiting for the pump it is not running.
@@ -722,9 +727,9 @@ func TestTheFirstVAsksForTheNameAndNotForTheAvatar(t *testing.T) {
 }
 
 // TestANamedObjectIsUsedAsItIsAndNotTidiedAway: --object is somebody
-// else's object, so there is nothing to undo when the run ends -- and
-// --keep says where the run happened, which is the only way to go and
-// look at what it left behind.
+// else's object, so nothing is rezzed, renamed or deleted, and there is
+// nothing to undo when the run ends -- and --keep says where the run
+// happened, which is the only way to go and look at what it left behind.
 func TestANamedObjectIsUsedAsItIsAndNotTidiedAway(t *testing.T) {
 	reset(t)
 	f, addr := newFakeDaemon(t)
@@ -732,16 +737,43 @@ func TestANamedObjectIsUsedAsItIsAndNotTidiedAway(t *testing.T) {
 	commandLine(t, "--addr", addr, "--object", "a prim", "--keep", script(t, "default {}"))
 
 	var err error
-	out, _ := bothOf(t, func() { err = run() })
+	out, errOut := bothOf(t, func() { err = run() })
 
 	if err != nil {
 		t.Fatalf("run = %v", err)
 	}
-	if !strings.Contains(out, "running in ") {
-		t.Errorf("--keep did not say where the run happened:\n%s", out)
+	if !strings.Contains(out, "running in \"a prim\" "+thePrim.String()) {
+		t.Errorf("--keep did not say the run was in the named object:\n%s", out)
 	}
 	if !strings.Contains(out, "hello from a named prim") {
 		t.Errorf("what the script said was lost:\n%s", out)
+	}
+	if strings.Contains(errOut, "still there") {
+		t.Errorf("the run tried to get rid of something:\n%s", errOut)
+	}
+
+	// Everything the program sent, once the daemon has read the lot.
+	closed := make(chan struct{})
+	go func() { f.streams.Wait(); close(closed) }()
+	select {
+	case <-closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the program's stream to the daemon was never closed")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.ran != 1 {
+		t.Errorf("%d scripts ran in it, want the one", f.ran)
+	}
+	if len(f.heard) == 0 {
+		t.Fatal("the daemon heard nothing from the run, so nothing here is checked")
+	}
+	for _, m := range f.heard {
+		switch m.(type) {
+		case *msg.ObjectAdd, *msg.RezObject, *msg.ObjectName, *msg.DeRezObject:
+			t.Errorf("the run sent %s, and the named object is not the run's to change",
+				m.MsgInfo().Name)
+		}
 	}
 }
 

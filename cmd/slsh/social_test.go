@@ -495,7 +495,7 @@ func TestAnArrivalNobodyAskedForIsPrinted(t *testing.T) {
 //
 // A dialog and a permission request both wait for an answer that has
 // to be typed, and neither says how on its own -- so the notice names
-// the commands that answer it.
+// the commands that answer it, and typing what it says answers it.
 func TestAScriptAskingForSomethingSaysHowToAnswerIt(t *testing.T) {
 	x := newTestShell(t)
 	watching(t, x)
@@ -515,36 +515,85 @@ func TestAScriptAskingForSomethingSaysHowToAnswerIt(t *testing.T) {
 	if !strings.Contains(got, "* [Object] a lamp asks") {
 		t.Errorf("the notice should say the lamp is an object:\n%s", got)
 	}
-	if !strings.Contains(got, "waiting") || !strings.Contains(got, "answer") {
-		t.Errorf("the notice should name the commands that answer it:\n%s", got)
-	}
 	if !strings.Contains(got, "[on off]") {
 		t.Errorf("the notice should list the buttons:\n%s", got)
 	}
-
-	q := &msg.ScriptQuestion{}
-	q.Data.TaskID = testLamp
-	q.Data.ItemID = testProbe
-	q.Data.ObjectName = append([]byte("a lamp"), 0)
-	q.Data.ObjectOwner = append([]byte("Quark Idlemind"), 0)
-	q.Data.Questions = 2 // take controls
-	x.grid.Relay(t, q)
-
 	// This asserted "accept-perms" for as long as the notice said it,
 	// and no such command has ever existed.  A test that checks the
 	// advice is spelled the same way it was written down does not check
-	// that the advice works.
-	got = waits(t, x, "a lamp wants")
-	if !strings.Contains(got, "answer") {
-		t.Errorf("a permission request should say how to grant it:\n%s", got)
+	// that the advice works, so it is followed.
+	followAdvice(t, x, got, "a lamp asks", "dialog", " on")
+	var reply *msg.ScriptDialogReply
+	for _, m := range x.grid.Sent() {
+		if r, ok := m.(*msg.ScriptDialogReply); ok {
+			reply = r
+		}
 	}
+	if reply == nil {
+		t.Fatal("answering the dialog as the notice said sent no reply")
+	}
+	if label := strings.TrimRight(string(reply.Data.ButtonLabel), "\x00"); reply.Data.ObjectID != testLamp ||
+		reply.Data.ChatChannel != -1379 || label != "on" {
+		t.Errorf("the reply pressed %q on channel %d of %s", label, reply.Data.ChatChannel, reply.Data.ObjectID)
+	}
+
+	x.grid.Relay(t, asking("a lamp", sl.PermissionTakeControls))
+
+	got = waits(t, x, "a lamp wants")
 	if !strings.Contains(got, "* [Object] a lamp wants") {
 		t.Errorf("the request should say the lamp is an object:\n%s", got)
 	}
-	for _, name := range []string{"waiting", "answer", "no", "ignore"} {
-		if _, ok := commands[name]; !ok {
-			t.Errorf("the notices name %q, which is not a command", name)
+	followAdvice(t, x, got, "a lamp wants", "permission", "")
+	sent := scriptAnswers(x)
+	if len(sent) != 1 {
+		t.Fatalf("granting as the notice said sent %d answers, want one", len(sent))
+	}
+	if a := sent[0].Data; a.TaskID != testLamp || a.ItemID != testProbe ||
+		sl.Perms(a.Questions) != sl.PermissionTakeControls {
+		t.Errorf("the grant was %+v, want take controls for the lamp's script", a)
+	}
+}
+
+// followAdvice does what the notice saying marker tells somebody to do:
+// every command it names has to be one, the one that lists things has
+// to list this kind, and "answer", given the number it was listed
+// under and then what, has to take it.
+func followAdvice(t *testing.T, x *testShell, screen, marker, kind, what string) {
+	t.Helper()
+	var notice string
+	for _, line := range strings.Split(screen, "\n") {
+		if strings.Contains(line, marker) {
+			notice = line
 		}
+	}
+	at := strings.LastIndex(notice, " -- ")
+	if at < 0 {
+		t.Fatalf("the notice does not say how to answer it: %q", notice)
+	}
+	named := map[string]bool{}
+	for _, clause := range strings.Split(notice[at+len(" -- "):], ", ") {
+		name := strings.Fields(clause)[0]
+		named[name] = true
+		if _, ok := commands[name]; !ok {
+			t.Errorf("the notice names %q, which is not a command: %q", name, notice)
+		}
+	}
+	if !named["waiting"] || !named["answer"] {
+		t.Fatalf("the notice should name waiting and answer: %q", notice)
+	}
+
+	listing := x.do(t, "waiting")
+	n := ""
+	for _, line := range strings.Split(listing, "\n") {
+		if f := strings.Fields(line); len(f) > 1 && f[1] == kind {
+			n = f[0]
+		}
+	}
+	if n == "" {
+		t.Fatalf("waiting does not list the %s:\n%s", kind, listing)
+	}
+	if got := x.do(t, "answer "+n+what); strings.Contains(got, "slsh:") {
+		t.Fatalf("answer %s%s, as the notice said, failed: %s", n, what, got)
 	}
 }
 

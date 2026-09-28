@@ -131,6 +131,9 @@ type fakeGrid struct {
 	reads    map[msg.UUID]int
 
 	caps map[string]string
+
+	// capCalls counts the capability requests made, answered or not.
+	capCalls int
 }
 
 // newFakeGrid builds a backend that answers plausibly and reaches
@@ -441,6 +444,7 @@ func (f *fakeGrid) HasCap(name string) bool {
 
 func (f *fakeGrid) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
 	f.mu.Lock()
+	f.capCalls++
 	err, base := f.capErr, f.caps[r.Cap]
 	f.mu.Unlock()
 	if err != nil {
@@ -885,8 +889,19 @@ func TestConnectWithNoAddressAsksSlHost(t *testing.T) {
 // a profile that is not there is a refusal before anything is dialled.
 func TestConnectDirectLogsInFromThisProcess(t *testing.T) {
 	// A login server that refuses everything, so that the login is
-	// reached and answered without a grid being involved.
+	// reached and answered without a grid being involved, and counts
+	// what reaches it.
+	var mu sync.Mutex
+	logins := 0
+	asked := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return logins
+	}
 	grid := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		logins++
+		mu.Unlock()
 		io.WriteString(w, "this is not an xml-rpc response")
 	}))
 	defer grid.Close()
@@ -908,23 +923,32 @@ func TestConnectDirectLogsInFromThisProcess(t *testing.T) {
 	defer in.Close()
 
 	o := Options{Direct: true, Agent: "qi", Channel: "slgo test", In: in, Out: io.Discard}
-	if _, err := Connect(context.Background(), o); err == nil {
-		t.Error("a login server answering nonsense was taken for a login")
+	_, err = Connect(context.Background(), o)
+	if err == nil || !strings.Contains(err.Error(), "login response") || asked() == 0 {
+		t.Errorf("Connect = %v after %d requests, want the login server's answer refused",
+			err, asked())
 	}
 
 	// Saying nothing about where to ask means the terminal, which is
 	// the ordinary case and asks nothing at all when the profile is
 	// complete.
+	before := asked()
 	o.In, o.Out = nil, nil
-	if _, err := Connect(context.Background(), o); err == nil {
-		t.Error("a login server answering nonsense was taken for a login")
+	_, err = Connect(context.Background(), o)
+	if err == nil || !strings.Contains(err.Error(), "login response") || asked() == before {
+		t.Errorf("Connect = %v, and the login server was not asked again", err)
 	}
 
 	// A profile that is not there is the caller's mistake and is
 	// refused without anything being dialled at all.
+	before = asked()
 	o.Agent = "nobody"
-	if _, err := Connect(context.Background(), o); err == nil {
-		t.Error("Connect logged in as a profile that does not exist")
+	_, err = Connect(context.Background(), o)
+	if err == nil || !strings.Contains(err.Error(), `profile "nobody"`) {
+		t.Errorf("Connect = %v, want the missing profile named", err)
+	}
+	if asked() != before {
+		t.Error("a profile that does not exist got as far as the login server")
 	}
 }
 
@@ -1119,6 +1143,10 @@ func TestAnObjectThatCannotBeCopiedIsFewerObjectsAndNotAFailure(t *testing.T) {
 // list, so an inventory that will not answer is not something to carry
 // on past with an empty one -- that would look exactly like an account
 // with no objects and quietly build a second set.
+//
+// Every later step reads inventory too, and would fail the same way, so
+// what shows it stopped here is that nothing after the one read was
+// asked or sent, and the error is the read's own.
 func TestReadingTheFolderIsWhereThisGivesUp(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
@@ -1126,8 +1154,19 @@ func TestReadingTheFolderIsWhereThisGivesUp(t *testing.T) {
 	f.capErr = fmt.Errorf("the capability is not answering")
 	f.mu.Unlock()
 
-	if err := EnsureAutoItems(context.Background(), s, testObjects, 2); err == nil {
-		t.Error("EnsureAutoItems carried on past an inventory it could not read")
+	err := EnsureAutoItems(context.Background(), s, testObjects, 2)
+	if err == nil || !strings.Contains(err.Error(), "the capability is not answering") ||
+		strings.Contains(err.Error(), "making the first") {
+		t.Errorf("EnsureAutoItems = %v, want the read's own failure", err)
+	}
+	f.mu.Lock()
+	calls := f.capCalls
+	f.mu.Unlock()
+	if calls != 1 {
+		t.Errorf("inventory was asked %d times, want the one read that failed", calls)
+	}
+	if sent := f.Sent(); len(sent) != 0 {
+		t.Errorf("%d messages went out after the read failed", len(sent))
 	}
 }
 
@@ -1288,10 +1327,18 @@ func TestSetupStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
 	}
 
 	// Nothing at all is a different matter: there is no benchmark to
-	// run, so it is reported rather than mentioned.
-	f.stock(0)
-	if _, err := SetupAuto(context.Background(), s, 4); err == nil {
-		t.Error("SetupAuto reported success with no objects at all")
+	// run, so it is reported rather than mentioned.  The first object is
+	// there to copy from, so this gets as far as the wearing, but it is
+	// not on and cannot be put on.
+	f.stock(1)
+	f.mu.Lock()
+	f.objects = nil
+	f.mu.Unlock()
+	objs, err = SetupAuto(context.Background(), s, 4)
+	if err == nil {
+		t.Errorf("SetupAuto made %d ready and reported success, with none of them worn", len(objs))
+	} else if strings.Contains(err.Error(), "making the first") {
+		t.Errorf("SetupAuto = %v, want it to fail wearing the first, not making it", err)
 	}
 }
 
@@ -1318,7 +1365,9 @@ func TestSetupWithNoFirstObjectIsASetupThatDidNothing(t *testing.T) {
 
 // TestSetupNeedsToKnowWhereObjectsGo: the folder is where a taken object
 // lands and so where the auto object is kept, and an inventory that will
-// not answer is not something to guess past.
+// not answer is not something to guess past.  Everything after the guess
+// would read inventory too and fail the same way, so what shows it was
+// not made is that nothing more was asked.
 func TestSetupNeedsToKnowWhereObjectsGo(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
@@ -1326,8 +1375,18 @@ func TestSetupNeedsToKnowWhereObjectsGo(t *testing.T) {
 	f.capErr = fmt.Errorf("the capability is not answering")
 	f.mu.Unlock()
 
-	if _, err := SetupAuto(context.Background(), s, 1); err == nil {
-		t.Error("SetupAuto found a folder in an inventory it could not read")
+	_, err := SetupAuto(context.Background(), s, 1)
+	if err == nil || !strings.Contains(err.Error(), "the capability is not answering") {
+		t.Errorf("SetupAuto = %v, want the failure to find the folder", err)
+	}
+	f.mu.Lock()
+	calls := f.capCalls
+	f.mu.Unlock()
+	if calls != 1 {
+		t.Errorf("inventory was asked %d times, want the one look for the folder", calls)
+	}
+	if sent := f.Sent(); len(sent) != 0 {
+		t.Errorf("%d messages went out without a folder to put anything in", len(sent))
 	}
 }
 
@@ -1434,11 +1493,15 @@ func TestRunInSaysWhenTheNamedObjectIsNotThere(t *testing.T) {
 		t.Errorf("RunIn = %v, want it to say the object was not found", err)
 	}
 
+	// A session that could not answer has not said the object is not
+	// there, and is not reported as though it had.
 	f.mu.Lock()
 	f.objectsErr = fmt.Errorf("the circuit went away")
 	f.mu.Unlock()
-	if _, _, err := RunIn(context.Background(), s, "workbench", false); err == nil {
-		t.Error("RunIn looked for an object on a session that could not answer")
+	_, _, err = RunIn(context.Background(), s, "workbench", false)
+	if err == nil || !strings.Contains(err.Error(), "the circuit went away") ||
+		strings.Contains(err.Error(), "in range") {
+		t.Errorf("RunIn = %v, want the session's failure rather than an object not found", err)
 	}
 }
 
@@ -1608,9 +1671,9 @@ func TestRunInClearsAwayARezGivenUpOn(t *testing.T) {
 
 // TestATidyUpThatFailsSaysWhatIsStillThere: the object is in the world
 // and somebody has to know, since the run's own context may well be why
-// the tidying is happening at all.
+// the tidying is happening at all.  It is said on standard error, which
+// this test borrows, so it does not run alongside the others.
 func TestATidyUpThatFailsSaysWhatIsStillThere(t *testing.T) {
-	t.Parallel()
 	s, f := newFakeSession(t)
 	confirmRez(t, f)
 
@@ -1624,12 +1687,35 @@ func TestATidyUpThatFailsSaysWhatIsStillThere(t *testing.T) {
 	f.inv.Dirs = nil
 	f.mu.Unlock()
 
-	undo()
+	said := stderrOf(t, undo)
 	for _, m := range f.Sent() {
 		if _, ok := m.(*msg.DeRezObject); ok {
 			t.Error("the object was sent to a trash folder that does not exist")
 		}
 	}
+	if !strings.Contains(said, thePrim.String()) || !strings.Contains(said, "is still there") {
+		t.Errorf("the failed tidy-up said %q, want the object named as still there", said)
+	}
+}
+
+// stderrOf is what fn wrote to standard error.
+func stderrOf(t *testing.T, fn func()) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "stderr")
+	w, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	save := os.Stderr
+	os.Stderr = w
+	fn()
+	os.Stderr = save
+	w.Close()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }
 
 // ---------------------------------------------------------- test tools

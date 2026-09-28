@@ -68,10 +68,6 @@ type fakeGrid struct {
 	objects  []*sl.Seen
 	parcel   *agent.Parcel
 
-	// fail, when set for a call's name, is what that call answers
-	// with instead of doing anything.
-	fail map[string]error
-
 	// folders, when a test sets it, is what the inventory capability
 	// lists: each folder's contents, by the folder's id.
 	folders map[msg.UUID][]fakeEntry
@@ -107,7 +103,6 @@ func newFakeGrid() *fakeGrid {
 			Position: msg.Vector3{X: 128, Y: 64, Z: 25},
 		},
 		region: &sl.Region{Name: "Nowhere", Access: sl.AccessGeneral, WaterHeight: 20},
-		fail:   map[string]error{},
 	}
 }
 
@@ -170,10 +165,6 @@ func (f *fakeGrid) Refresh(context.Context) (*sl.Info, error) { return f.Info(),
 
 func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error {
 	f.mu.Lock()
-	if err := f.fail["Send"]; err != nil {
-		f.mu.Unlock()
-		return err
-	}
 	f.sent = append(f.sent, m)
 	onSend := f.onSend
 	f.mu.Unlock()
@@ -200,9 +191,6 @@ func (f *fakeGrid) SimAttachments(ctx context.Context, avatar msg.UUID) (*sl.Sim
 func (f *fakeGrid) Presence(ctx context.Context, drawDistance float32) (*sl.Presence, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.fail["Presence"]; err != nil {
-		return nil, err
-	}
 	p := *f.presence
 	return &p, nil
 }
@@ -214,9 +202,6 @@ func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, e
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.fail["Objects"]; err != nil {
-		return nil, err
-	}
 	var out []*sl.Seen
 	for _, o := range f.objects {
 		switch {
@@ -238,9 +223,6 @@ func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, e
 func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if err := f.fail["Region"]; err != nil {
-		return nil, false, err
-	}
 	if f.region == nil {
 		return nil, false, nil
 	}

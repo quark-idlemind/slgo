@@ -6,6 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
 
@@ -132,8 +133,10 @@ func TestWhatDidNotFitIsSaid(t *testing.T) {
 }
 
 // The session works out the conversation id the way a viewer does, so
-// that both ends agree without being told.  A reply that invented one
-// would land in a conversation the far end thinks is new.
+// that both ends agree without being told: the two avatars' ids,
+// exclusive ored (LLIMMgr::computeSessionID, llimview.cpp:2560-2561).
+// A reply that invented one would land in a conversation the far end
+// thinks is new.
 func TestAReplyGoesToWhoAsked(t *testing.T) {
 	_, b, f := newTestDaemon(t)
 	s := b.Session()
@@ -149,6 +152,14 @@ func TestAReplyGoesToWhoAsked(t *testing.T) {
 	}
 	if ims[0].MessageBlock.Dialog != sl.DialogMessage {
 		t.Errorf("dialog = %d, want a plain message", ims[0].MessageBlock.Dialog)
+	}
+	var conversation msg.UUID
+	for i := range conversation {
+		conversation[i] = testMe[i] ^ testSender[i]
+	}
+	if got := ims[0].MessageBlock.ID; got != conversation {
+		t.Errorf("the reply is in conversation %s, want %s, the one the asker's viewer is in",
+			got, conversation)
 	}
 }
 
