@@ -26,6 +26,8 @@ import (
 
 	"github.com/pborman/getopt/v2"
 	"github.com/quark-idlemind/slgo/sl"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // runWith calls run as though it had been typed, with a fresh option
@@ -142,6 +144,23 @@ func TestADaemonThatIsNotThereSaysWhatElseThereIs(t *testing.T) {
 		t.Fatal("dialling a daemon that is not there should fail")
 	}
 	if !strings.Contains(err.Error(), "--direct logs in without slgod") {
+		t.Errorf("run = %v", err)
+	}
+}
+
+// TestASessionDownForGoodSaysHowToBringItBack: attaching to it is
+// refused, so --direct is the wrong advice; login through another
+// profile is the way back.
+func TestASessionDownForGoodSaysHowToBringItBack(t *testing.T) {
+	d, addr := newAuthDaemon(t)
+	d.attachFail = status.Error(codes.FailedPrecondition,
+		"fake is not connected (logged out); it will not come back on its own")
+	err := runWith(t, t.TempDir(), "--addr", addr, "--agent", "fake", "-c", "echo hi")
+	if err == nil {
+		t.Fatal("attaching to a session down for good should fail")
+	}
+	if !strings.Contains(err.Error(), "slsh -a OTHER -c 'login fake' brings it back") ||
+		strings.Contains(err.Error(), "--direct") {
 		t.Errorf("run = %v", err)
 	}
 }
