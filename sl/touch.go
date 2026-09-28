@@ -9,14 +9,15 @@ package sl
 // index, the point of intersection, the surface normal, the texture
 // coordinates.  The simulator does no geometry of its own -- it takes
 // the numbers it is given and hands them to the script as
-// llDetectedTouchFace, llDetectedTouchPos, llDetectedTouchUV and the
-// rest.  See send_ObjectGrab_message in the viewer's lltoolgrab.cpp,
-// which packs pick.mIntersection straight into the message.
+// llDetectedTouchFace, llDetectedTouchPos, llDetectedTouchST,
+// llDetectedTouchUV and the rest.  See send_ObjectGrab_message in the
+// viewer's lltoolgrab.cpp, which packs pick.mIntersection straight into
+// the message.
 //
 // That is worth knowing because it makes this MORE precise than a
 // viewer, not less.  A test that has to touch the third face of a prim
 // nine tenths of the way along one edge does not have to place a camera
-// and aim: it says face 3, uv <0.9, 0.5>.
+// and aim: it says face 3, st <0.9, 0.5>.
 //
 // # Three messages, three events
 //
@@ -31,6 +32,8 @@ package sl
 import (
 	"context"
 	"fmt"
+	"math"
+	"slices"
 	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
@@ -50,10 +53,28 @@ type Touch struct {
 	// but not a face of it.
 	Face int
 
-	// UV is where on the face, each 0 to 1, and ST is the same point in
-	// the texture's own coordinates.  Zero means the middle.
-	UV msg.Vector3
+	// ST is where on the face, each 0 to 1 across it, which is what
+	// llDetectedTouchST reports.  UV is the same point in the texture's
+	// coordinates -- after the face's repeats, offset and rotation --
+	// which is what llDetectedTouchUV reports.  A viewer's raycast finds
+	// the first and works the second out from it (LLPickInfo::
+	// getSurfaceInfo, llviewerwindow.cpp:7686-7697), and sends both
+	// (lltoolgrab.cpp:1200-1202).
+	//
+	// Give both and both go as given.  Give one and the other is worked
+	// out from the face's texture entry as the viewer does -- see
+	// Face.SurfaceToTexture -- and give neither and the touch is in the
+	// middle of the face.  Zero means not given.
+	//
+	// The entry is not all the viewer uses for a face with planar
+	// mapping or a running texture animation, and nothing here follows
+	// it there: such a face, a face that is not the object's, no face,
+	// and an object whose appearance cannot be read are touched with
+	// the given coordinate sent for both, which is what the viewer
+	// sends for a face with no entry (llface.cpp:910-914).  The entry
+	// is read as Faces reads it, and can be as out of date as Faces's.
 	ST msg.Vector3
+	UV msg.Vector3
 
 	// Position is the point touched, in region coordinates.  It is
 	// what llDetectedTouchPos reports.
@@ -70,15 +91,10 @@ type Touch struct {
 	Offset msg.Vector3
 }
 
-// fill supplies the defaults, so that a zero Touch is a click in the
-// middle of face 0 rather than a click on a corner pointing nowhere.
+// fill supplies the defaults for the surface directions, so that a
+// zero Touch points up rather than nowhere.  The coordinates are
+// placeTouches's.
 func (t Touch) fill() Touch {
-	if t.UV == (msg.Vector3{}) {
-		t.UV = msg.Vector3{X: 0.5, Y: 0.5}
-	}
-	if t.ST == (msg.Vector3{}) {
-		t.ST = msg.Vector3{X: 0.5, Y: 0.5}
-	}
 	if t.Normal == (msg.Vector3{}) {
 		t.Normal = msg.Vector3{Z: 1}
 	}
@@ -109,12 +125,137 @@ func (t Touch) updateSurface() msg.ObjectGrabUpdate_SurfaceInfo {
 	}
 }
 
+// middle is the centre of a face, where a touch that names neither
+// coordinate lands.
+var middle = msg.Vector3{X: 0.5, Y: 0.5}
+
+// SurfaceToTexture is the texture coordinate of a point on this face, as
+// the viewer works it out from the texture entry: about the middle of
+// the face, turned by the rotation, stretched by the repeats and moved
+// by the offset (LLFace::surfaceToTexture and xform, llface.cpp:760-785
+// and 904-960).
+func (f Face) SurfaceToTexture(st msg.Vector3) msg.Vector3 {
+	sin, cos := math.Sincos(float64(f.RotationRad()))
+	offS, offT := f.OffsetsF()
+	s, t := float64(st.X)-0.5, float64(st.Y)-0.5
+	s, t = s*cos+t*sin, -s*sin+t*cos
+	return msg.Vector3{
+		X: float32(s*float64(f.ScaleS) + float64(offS) + 0.5),
+		Y: float32(t*float64(f.ScaleT) + float64(offT) + 0.5),
+	}
+}
+
+// TextureToSurface is SurfaceToTexture undone: the point on this face
+// that a texture coordinate is at.  A face whose texture repeats zero
+// times either way has no one such point, and is refused.
+func (f Face) TextureToSurface(uv msg.Vector3) (msg.Vector3, error) {
+	if f.ScaleS == 0 || f.ScaleT == 0 {
+		return msg.Vector3{}, fmt.Errorf("the face repeats its texture %gx%g times, "+
+			"so a texture coordinate is no one point on it", f.ScaleS, f.ScaleT)
+	}
+	sin, cos := math.Sincos(float64(f.RotationRad()))
+	offS, offT := f.OffsetsF()
+	a := (float64(uv.X) - 0.5 - float64(offS)) / float64(f.ScaleS)
+	b := (float64(uv.Y) - 0.5 - float64(offT)) / float64(f.ScaleT)
+	return msg.Vector3{
+		X: float32(a*cos - b*sin + 0.5),
+		Y: float32(a*sin + b*cos + 0.5),
+	}, nil
+}
+
+// Planar reports whether the face maps its texture by planar projection
+// (TEX_GEN_PLANAR in the media byte, lltextureentry.h:64-79), where the
+// viewer's texture coordinate is not the entry's transform alone.
+func (f Face) Planar() bool { return f.Media&0x06 == 0x02 }
+
+// animated reports whether a texture animation runs on this face: a
+// block of sixteen whose mode has ON set, for the face it names, or for
+// every face when it names none of the object's
+// (llvovolume.cpp:740-744, llviewertextureanim.cpp:83).
+func animated(anim []byte, face, faces int) bool {
+	if len(anim) != 16 || anim[0]&0x01 == 0 {
+		return false
+	}
+	on := int(int8(anim[1]))
+	return on < 0 || on >= faces || on == face
+}
+
+// placeTouches works out, for each touch, whichever of ST and UV it was
+// not given; see Touch.  The object's appearance is read once, and only
+// if a touch needs it.
+func (w *Session) placeTouches(ctx context.Context, o *Object, ts ...Touch) ([]Touch, error) {
+	out := slices.Clone(ts)
+	var faces []Face
+	var anim []byte
+	read := false
+	for i, t := range out {
+		haveST, haveUV := t.ST != (msg.Vector3{}), t.UV != (msg.Vector3{})
+		if haveST && haveUV {
+			continue
+		}
+		if !haveST && !haveUV {
+			t.ST, haveST = middle, true
+		}
+		if !read && t.Face >= 0 {
+			faces, anim = w.looksOf(ctx, o)
+			read = true
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
+		entry := t.Face >= 0 && t.Face < len(faces) &&
+			!faces[t.Face].Planar() && !animated(anim, t.Face, len(faces))
+		switch {
+		case !entry && haveST:
+			t.UV = t.ST
+		case !entry:
+			t.ST = t.UV
+		case haveST:
+			t.UV = faces[t.Face].SurfaceToTexture(t.ST)
+		default:
+			st, err := faces[t.Face].TextureToSurface(t.UV)
+			if err != nil {
+				return nil, fmt.Errorf("sl: touching face %d of %s at uv %g,%g: %w", t.Face, o, t.UV.X, t.UV.Y, err)
+			}
+			t.ST = st
+		}
+		out[i] = t
+	}
+	return out, nil
+}
+
+// looksOf is what o looks like, face by face, and its texture animation,
+// read as Faces reads them.  Nothing comes back when they cannot be read,
+// which a touch takes as a face with no entry.
+func (w *Session) looksOf(ctx context.Context, o *Object) ([]Face, []byte) {
+	if o == nil || o.ID.IsZero() {
+		return nil, nil
+	}
+	found, err := w.fetch(ctx, "", o.ID.String())
+	if err != nil || len(found) == 0 {
+		return nil, nil
+	}
+	faces, seen, _, err := w.appearance(ctx, o, found[0])
+	if err != nil {
+		return nil, nil
+	}
+	return faces, seen.TextureAnim
+}
+
 // TouchStart begins a touch: the script's touch_start.
 //
 // Nothing waits for anything.  A touch is not acknowledged, the script
 // may not be listening, and it may take a second to do whatever it does
 // -- so what a caller waits for is the script's own output, not this.
 func (w *Session) TouchStart(ctx context.Context, o *Object, t Touch) error {
+	ts, err := w.placeTouches(ctx, o, t)
+	if err != nil {
+		return err
+	}
+	return w.touchStart(ctx, o, ts[0])
+}
+
+func (w *Session) touchStart(ctx context.Context, o *Object, t Touch) error {
 	if o == nil || (o.Local == 0 && o.ID.IsZero()) {
 		return fmt.Errorf("sl: nothing to touch")
 	}
@@ -137,6 +278,14 @@ func (w *Session) TouchStart(ctx context.Context, o *Object, t Touch) error {
 // a script can read as the drag's timing.  This is the one message of
 // the three that names the object by id rather than by local id.
 func (w *Session) TouchMove(ctx context.Context, o *Object, t Touch, held time.Duration) error {
+	ts, err := w.placeTouches(ctx, o, t)
+	if err != nil {
+		return err
+	}
+	return w.touchMove(ctx, o, ts[0], held)
+}
+
+func (w *Session) touchMove(ctx context.Context, o *Object, t Touch, held time.Duration) error {
 	if o == nil || o.ID.IsZero() {
 		return fmt.Errorf("sl: nothing to touch")
 	}
@@ -153,6 +302,14 @@ func (w *Session) TouchMove(ctx context.Context, o *Object, t Touch, held time.D
 
 // TouchEnd finishes a touch: the script's touch_end.
 func (w *Session) TouchEnd(ctx context.Context, o *Object, t Touch) error {
+	ts, err := w.placeTouches(ctx, o, t)
+	if err != nil {
+		return err
+	}
+	return w.touchEnd(ctx, o, ts[0])
+}
+
+func (w *Session) touchEnd(ctx context.Context, o *Object, t Touch) error {
 	if o == nil || (o.Local == 0 && o.ID.IsZero()) {
 		return fmt.Errorf("sl: nothing to touch")
 	}
@@ -174,10 +331,14 @@ func (w *Session) TouchEnd(ctx context.Context, o *Object, t Touch) error {
 // script sees touch_start and touch_end -- and one touch, since the
 // simulator fires that for the frame the grab was live in.
 func (w *Session) Touch(ctx context.Context, o *Object, t Touch) error {
-	if err := w.TouchStart(ctx, o, t); err != nil {
+	ts, err := w.placeTouches(ctx, o, t)
+	if err != nil {
 		return err
 	}
-	return w.TouchEnd(ctx, o, t)
+	if err := w.touchStart(ctx, o, ts[0]); err != nil {
+		return err
+	}
+	return w.touchEnd(ctx, o, ts[0])
 }
 
 // TouchRate is how many updates a second a moving touch sends, which
@@ -245,8 +406,8 @@ type Drag struct {
 //
 // Time is divided equally between the segments rather than by distance.
 // A caller that wants an even speed spaces its points evenly, which is
-// something it can do and this cannot: the points may be texture
-// coordinates on different faces, where distance means nothing.
+// something it can do and this cannot: the points may be on different
+// faces, where distance means nothing.
 //
 // It always lets go, cancellation included.
 func (w *Session) Drag(ctx context.Context, o *Object, d Drag) error {
@@ -259,35 +420,42 @@ func (w *Session) Drag(ctx context.Context, o *Object, d Drag) error {
 	}
 	every := time.Second / time.Duration(rate)
 
-	if err := w.TouchStart(ctx, o, d.Points[0]); err != nil {
+	// Every point placed at once, so the appearance is read once and
+	// not with every update.
+	points, err := w.placeTouches(ctx, o, d.Points...)
+	if err != nil {
+		return err
+	}
+
+	if err := w.touchStart(ctx, o, points[0]); err != nil {
 		return err
 	}
 	defer func() {
 		end, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
-		_ = w.TouchEnd(end, o, d.Points[len(d.Points)-1])
+		_ = w.touchEnd(end, o, points[len(points)-1])
 	}()
 
 	last := time.Now()
 	tick := func(at Touch) error {
 		now := time.Now()
-		err := w.TouchMove(ctx, o, at, now.Sub(last))
+		err := w.touchMove(ctx, o, at, now.Sub(last))
 		last = now
 		return err
 	}
 
 	// Held still at the start.
-	if err := w.hold(ctx, d.Points[0], d.Press, every, tick); err != nil {
+	if err := w.hold(ctx, points[0], d.Press, every, tick); err != nil {
 		return err
 	}
 
 	// Along the path.  Each segment gets an equal share of the time and
 	// however many updates fit in it, and the point itself is always
 	// sent, so a path is never skipped over by a rate too slow for it.
-	if n := len(d.Points) - 1; n > 0 && d.Move > 0 {
+	if n := len(points) - 1; n > 0 && d.Move > 0 {
 		per := d.Move / time.Duration(n)
 		for i := 0; i < n; i++ {
-			from, to := d.Points[i], d.Points[i+1]
+			from, to := points[i], points[i+1]
 			steps := int(per / every)
 			for s := 1; s <= steps; s++ {
 				select {
@@ -306,7 +474,7 @@ func (w *Session) Drag(ctx context.Context, o *Object, d Drag) error {
 	}
 
 	// Resting at the end.
-	return w.hold(ctx, d.Points[len(d.Points)-1], d.Dwell, every, tick)
+	return w.hold(ctx, points[len(points)-1], d.Dwell, every, tick)
 }
 
 // hold sends updates at one point for a while.

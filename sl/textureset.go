@@ -274,10 +274,18 @@ func (w *Session) faces(ctx context.Context, o *Object) ([]Face, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
+	faces, _, known, err := w.appearance(ctx, o, seen)
+	return faces, known, err
+}
+
+// appearance is faces for an object already found: seen's faces,
+// asking the region to describe it again when nothing has said what it
+// looks like, and the Seen they were read from.
+func (w *Session) appearance(ctx context.Context, o *Object, seen *Seen) ([]Face, *Seen, bool, error) {
 	if len(seen.TextureEntry) == 0 {
 		again, err := w.describeAgain(ctx, seen)
 		if err != nil {
-			return nil, false, err
+			return nil, seen, false, err
 		}
 		if again != nil {
 			seen = again
@@ -287,11 +295,11 @@ func (w *Session) faces(ctx context.Context, o *Object) ([]Face, bool, error) {
 	faces, err := seen.Faces(n)
 	if err != nil {
 		if len(seen.TextureEntry) > 0 {
-			return nil, false, fmt.Errorf("sl: reading what %s looks like: %w", o, err)
+			return nil, seen, false, fmt.Errorf("sl: reading what %s looks like: %w", o, err)
 		}
-		return PlainFaces(n), false, nil
+		return PlainFaces(n), seen, false, nil
 	}
-	return faces, true, nil
+	return faces, seen, true, nil
 }
 
 // describeAgainFor is how long to wait for the region to say what an

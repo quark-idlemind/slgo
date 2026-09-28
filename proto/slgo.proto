@@ -1329,8 +1329,8 @@ message ObjectInfo {
   string name = 7;
   string owner = 8;
 
-  // TextureEntry is the packed per face appearance, when one has been
-  // seen.  It usually arrives only in a compressed update.
+  // TextureEntry is the packed per face appearance, as the last update
+  // that carried one said it.
   bytes texture_entry = 9;
 
   // Text is the floating text above the object.
@@ -1354,6 +1354,10 @@ message ObjectInfo {
   // stands has to be told them by whoever was listening.
   Quaternion rotation = 13;
   PrimShape shape = 14;
+
+  // TextureAnim is the texture animation, still packed, as the last
+  // full or compressed update said it; empty when it said none.
+  bytes texture_anim = 15;
 }
 
 // Quaternion is a rotation, unpacked: the wire form is three floats

@@ -67,6 +67,11 @@ type Object struct {
 	// the last update of either kind said it.
 	Text string
 
+	// TextureAnim is the texture animation, still packed, as the last
+	// full or compressed update said it, and nil when that said none.
+	// A running one moves a face's texture on from what its entry says.
+	TextureAnim []byte
+
 	// AttachPoint is where a worn object is attached, and zero when it
 	// is not worn.  AttachItem is the inventory item it was worn from.
 	//
@@ -478,6 +483,11 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	if len(d.TextureEntry) > 0 {
 		v.TextureEntry = d.TextureEntry
 	}
+	// An update without an animation stops one (llvovolume.cpp:406-441).
+	v.TextureAnim = nil
+	if len(d.TextureAnim) > 0 {
+		v.TextureAnim = d.TextureAnim
+	}
 	if havePos {
 		v.Position, v.Rotation = pos, rot
 	}
@@ -569,6 +579,8 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	if len(c.TextureEntry) > 0 {
 		v.TextureEntry = c.TextureEntry
 	}
+	// Absent here stops an animation too (llvovolume.cpp:608-642).
+	v.TextureAnim = c.TextureAnim
 	// Every update says what the text is now, and one without any has
 	// none: the viewer clears it (llviewerobject.cpp:1865-1895).
 	v.Text = c.Text

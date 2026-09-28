@@ -97,6 +97,7 @@ type compressedObject struct {
 	parent   *uint32
 	text     string
 	texture  []byte
+	anim     []byte
 
 	// state is the State byte, and nameValues the name-values, which
 	// together say what a worn object is worn from and where.
@@ -107,9 +108,10 @@ type compressedObject struct {
 // Flags from the viewer's llviewerobject.h, repeated here so the bytes
 // are not laid out from the same constants that read them.
 const (
-	hasText       = 0x04
-	hasParent     = 0x20
-	hasNameValues = 0x100
+	hasText        = 0x04
+	hasParent      = 0x20
+	hasTextureAnim = 0x40
+	hasNameValues  = 0x100
 )
 
 func (c compressedObject) bytes() []byte {
@@ -122,6 +124,9 @@ func (c compressedObject) bytes() []byte {
 	}
 	if c.nameValues != "" {
 		flags |= hasNameValues
+	}
+	if c.anim != nil {
+		flags |= hasTextureAnim
 	}
 
 	w := &blob{}
@@ -176,6 +181,10 @@ func (c compressedObject) bytes() []byte {
 
 	w.u32(uint32(len(c.texture)))
 	w.raw(c.texture)
+	if c.anim != nil {
+		w.u32(uint32(len(c.anim)))
+		w.raw(c.anim)
+	}
 	return w.b
 }
 
@@ -625,6 +634,43 @@ func TestACompressedUpdateWithNothingNewLeavesWhatIsKnown(t *testing.T) {
 	got, _ := o.Get(aPrim)
 	if got.Owner != anOwner || len(got.TextureEntry) != 1 {
 		t.Errorf("a quiet update erased what was known: %+v", got)
+	}
+}
+
+// TestAnUpdateSaysWhetherATextureAnimationRuns: each full or compressed
+// update says what the animation over an object's faces is now, and one
+// without any stops it, as the viewer's does (llvovolume.cpp:406-441 and
+// 608-642).  A touch reads it to know whether a face's texture has moved
+// on from what its entry says.
+func TestAnUpdateSaysWhetherATextureAnimationRuns(t *testing.T) {
+	t.Parallel()
+	anim := []byte{1, 3, 4, 4, 0, 0, 0, 0, 0, 0, 0x80, 0x40, 0, 0, 0x20, 0x41}
+
+	a, _ := offlineSession(t)
+	a.SetLook(Look{Far: 128})
+	full := func(anim []byte) *msg.ObjectUpdate {
+		return arriving(t, msg.ObjectUpdate_ObjectData{
+			ID: 7, FullID: aPrim, PCode: 9, TextureAnim: anim,
+			ObjectData: placement(msg.Vector3{}, msg.Quaternion{}),
+		})
+	}
+	feed(t, a, full(anim))
+	if got, _ := a.Objects().Get(aPrim); string(got.TextureAnim) != string(anim) {
+		t.Fatalf("animation = %v after a full update with %v", got.TextureAnim, anim)
+	}
+	feed(t, a, full(nil))
+	if got, _ := a.Objects().Get(aPrim); got.TextureAnim != nil {
+		t.Errorf("animation = %v after a full update with none", got.TextureAnim)
+	}
+
+	o := a.Objects()
+	o.compressed(decodeCompressed(t, compressedObject{id: aPrim, local: 7, pcode: 9, anim: anim}), msg.Vector3{}, 0)
+	if got, _ := o.Get(aPrim); string(got.TextureAnim) != string(anim) {
+		t.Fatalf("animation = %v after a compressed update with %v", got.TextureAnim, anim)
+	}
+	o.compressed(decodeCompressed(t, compressedObject{id: aPrim, local: 7, pcode: 9}), msg.Vector3{}, 0)
+	if got, _ := o.Get(aPrim); got.TextureAnim != nil {
+		t.Errorf("animation = %v after a compressed update with none", got.TextureAnim)
 	}
 }
 

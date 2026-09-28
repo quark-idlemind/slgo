@@ -377,6 +377,7 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			Parent:       o.Parent,
 			PCode:        uint8(o.Pcode),
 			TextureEntry: o.TextureEntry,
+			TextureAnim:  o.TextureAnim,
 			Text:         o.Text,
 		}
 		s.Object.Name = o.Name

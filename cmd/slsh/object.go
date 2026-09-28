@@ -377,8 +377,8 @@ func parseVector(s string) (msg.Vector3, error) {
 
 type touchFlags struct {
 	Face  int    `getopt:"--face -f=N        which face, counting as LSL does; -1 for none"`
-	UV    string `getopt:"--uv=U,V           where on the face, each 0 to 1 [0.5,0.5]"`
-	ST    string `getopt:"--st=S,T           the same point in the texture's coordinates"`
+	ST    string `getopt:"--st=S,T           where on the face, each 0 to 1 across it [0.5,0.5]"`
+	UV    string `getopt:"--uv=U,V           the same point in the texture's coordinates [from --st]"`
 	At    string `getopt:"--at=X,Y,Z         the point touched, in region coordinates"`
 	Norm  string `getopt:"--normal=X,Y,Z     the surface direction there [0,0,1]"`
 	Press string `getopt:"--press=SECONDS    hold still at the first point before moving"`
@@ -407,7 +407,8 @@ func parseSeconds(flag, s string) (time.Duration, error) {
 // Two numbers are a place on a face and three are a place in the
 // region, since that is what tells them apart without a second flag.
 // A leading "N:" names the face, so a drag can cross from one to
-// another.
+// another.  A place on a face is its ST, and the UV the point before it
+// had is dropped, so that sl works the new one out from it.
 func parseTouchPoint(s string, base sl.Touch) (sl.Touch, error) {
 	t := base
 	if i := strings.Index(s, ":"); i >= 0 {
@@ -423,10 +424,10 @@ func parseTouchPoint(s string, base sl.Touch) (sl.Touch, error) {
 		return t, nil
 	}
 	if n, err := fmt.Sscanf(s, "%f,%f", &x, &y); err == nil && n == 2 {
-		t.UV = msg.Vector3{X: x, Y: y}
+		t.ST, t.UV = msg.Vector3{X: x, Y: y}, msg.Vector3{}
 		return t, nil
 	}
-	return t, fmt.Errorf("a point is U,V or X,Y,Z, optionally after a face and a colon, not %q", s)
+	return t, fmt.Errorf("a point is S,T or X,Y,Z, optionally after a face and a colon, not %q", s)
 }
 
 func cmdTouch(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
