@@ -35,6 +35,8 @@ import (
 	"github.com/quark-idlemind/slgo/internal/slhost"
 	"github.com/quark-idlemind/slgo/internal/version"
 	"github.com/quark-idlemind/slgo/sl"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type opts struct {
@@ -139,6 +141,11 @@ func run() error {
 		dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		if s, err = sl.Dial(dialCtx, cfg.Addr, cfg.Agent); err != nil {
+			// A session down for good cannot be attached to, so the
+			// way back is to ask for it through another one.
+			if status.Code(err) == codes.FailedPrecondition && cfg.Agent != "" {
+				return fmt.Errorf("%w\n        slsh -a OTHER -c 'login %s' brings it back", err, cfg.Agent)
+			}
 			return fmt.Errorf("%w\n        --direct logs in without slgod", err)
 		}
 	}

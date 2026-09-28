@@ -44,6 +44,10 @@ the avatar having been thrown off, and the grid's own words follow;
 the commonest cause of that is the avatar being logged in somewhere
 else, which means `login` would take it back off whoever has it.
 
+It is asked for through another session, because one that is down
+cannot be attached to: `slsh -a builder -c login` is refused at the
+attach, and `slsh -a other -c 'login builder'` is the way back.
+
 A login that was refused is a different case.  The daemon remembers
 the refusal and will not try again for a while, and says how long.
 A login server throttles whatever hammers it, and the throttling then
