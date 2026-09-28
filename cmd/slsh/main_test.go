@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/pborman/getopt/v2"
-	"github.com/quark-idlemind/slgo/msg"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 // runWith calls run as though it had been typed, with a fresh option
@@ -191,24 +191,27 @@ func TestTheProfileInTheEnvironmentBeatsTheFile(t *testing.T) {
 // A run that prints one command's output and leaves must not have a
 // remark from the region landing in the middle of it, so the relay is
 // read and thrown away rather than left to print itself.
+//
+// The subscription is the test's own and unbuffered, so that handing a
+// line over is the moment it is taken, and the second is taken only
+// once the first has been dealt with -- printed, if it was going to be.
 func TestChatIsSwallowedByAOneShotRun(t *testing.T) {
 	x := newTestShell(t)
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
+	lines := make(chan sl.Line)
 	stopped := make(chan struct{})
-	go func() { x.watchQuietly(ctx); close(stopped) }()
+	go func() { x.watchQuietly(ctx, lines); close(stopped) }()
 
-	m := &msg.ChatFromSimulator{}
-	m.ChatData.FromName = append([]byte("Somebody"), 0)
-	m.ChatData.Message = append([]byte("a remark nobody asked for"), 0)
-	m.ChatData.SourceID = testSomebody
-	m.ChatData.ChatType = 1
-	x.grid.Relay(t, m)
-
-	// There is nothing to wait for on the other side -- what it does
-	// with the line is drop it -- so the check is that it took the line
-	// and did not print it.
-	time.Sleep(50 * time.Millisecond)
+	remark := sl.Line{Source: testSomebody, From: "Somebody", Text: "a remark nobody asked for", Type: 1}
+	for i := 0; i < 2; i++ {
+		select {
+		case lines <- remark:
+		case <-time.After(5 * time.Second):
+			t.Fatal("watchQuietly did not take the line")
+		}
+	}
 	if got := x.out.String(); got != "" {
 		t.Errorf("a one-shot run printed chat: %q", got)
 	}
@@ -218,6 +221,19 @@ func TestChatIsSwallowedByAOneShotRun(t *testing.T) {
 	case <-stopped:
 	case <-time.After(5 * time.Second):
 		t.Error("watchQuietly did not stop with its context")
+	}
+
+	// And with the session, which closes the subscription: a closed
+	// channel is always ready, and reading on past it is a loop that
+	// spins until the context ends.
+	ended := make(chan sl.Line)
+	stopped = make(chan struct{})
+	go func() { x.watchQuietly(context.Background(), ended); close(stopped) }()
+	close(ended)
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Error("watchQuietly did not stop when the session closed its subscription")
 	}
 }
 

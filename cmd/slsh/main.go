@@ -171,7 +171,7 @@ func run() error {
 	// script and from another program.  Chat is swallowed rather than
 	// printed, so it cannot land in the middle of the output.
 	if oneShot {
-		go sh.watchQuietly(ctx)
+		go sh.watchQuietly(ctx, sh.s.Chat(sl.ChatFilter{}, 64))
 		// A failed command is a failed run.  Exiting 0 either way left
 		// anything driving slsh from a script no way to tell without
 		// scraping the output.
@@ -211,15 +211,19 @@ func run() error {
 }
 
 // watchQuietly reads the relay without printing it, so that a one-shot
-// run does not have chat landing in the middle of its output.
-func (sh *Shell) watchQuietly(ctx context.Context) {
-	lines := sh.s.Chat(sl.ChatFilter{}, 64)
+// run does not have chat landing in the middle of its output.  It takes
+// the subscription rather than making one, and stops it when ctx ends
+// or the session closes it.
+func (sh *Shell) watchQuietly(ctx context.Context, lines <-chan sl.Line) {
 	defer sh.s.StopChat(lines)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-lines:
+		case _, ok := <-lines:
+			if !ok {
+				return
+			}
 		}
 	}
 }
