@@ -54,6 +54,10 @@ func TestTheGapReadsAsASentence(t *testing.T) {
 	if got := Gap(72 * time.Hour); got != "(It has been 3 days since they last wrote to you.)" {
 		t.Errorf("got %q", got)
 	}
+	// A chat-gap under a minute can offer one.
+	if got := Gap(30 * time.Second); got != "(It has been under a minute since they last wrote to you.)" {
+		t.Errorf("got %q", got)
+	}
 }
 
 // Medium carries the instruction, because the hint does nothing

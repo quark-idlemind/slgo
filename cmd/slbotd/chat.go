@@ -234,9 +234,14 @@ func (c *Conversation) Paused(floor time.Duration, now time.Time) (time.Duration
 //
 // "It has been X" rather than "X have passed", because X is sometimes
 // "an hour" and sometimes "3 days" and only one of those phrasings
-// survives both.
+// survives both.  ago's "just now" survives neither, so a chat-gap under
+// a minute says "under a minute".
 func Gap(d time.Duration) string {
-	return fmt.Sprintf("(It has been %s since they last wrote to you.)", ago(d))
+	s := ago(d)
+	if s == justNow {
+		s = "under a minute"
+	}
+	return fmt.Sprintf("(It has been %s since they last wrote to you.)", s)
 }
 
 // Add records something said.
