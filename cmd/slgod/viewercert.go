@@ -39,6 +39,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -59,7 +60,8 @@ const viewerCertLife = 10 * 365 * 24 * time.Hour
 // host is the address -viewer was bound to, and is what the generated
 // certificate has to cover.  An empty or wildcard host means the
 // endpoint answers on addresses this cannot know, so the certificate
-// covers loopback and the caller is told the rest is uncovered.
+// covers loopback, and logf is told what it covers and that the rest is
+// uncovered.
 func viewerCertFiles(certFile, keyFile, host string, logf func(string, ...any)) (string, string, error) {
 	if certFile != "" {
 		// The operator's own, which may well be from a real authority
@@ -76,6 +78,7 @@ func viewerCertFiles(certFile, keyFile, host string, logf func(string, ...any)) 
 
 	switch why := viewerCertUnusable(certFile, keyFile, host); why {
 	case "":
+		sayUncovered(certFile, host, logf)
 		return certFile, keyFile, nil
 	default:
 		if _, err := os.Stat(certFile); err == nil {
@@ -96,7 +99,38 @@ func viewerCertFiles(certFile, keyFile, host string, logf func(string, ...any)) 
 	logf("viewer: wrote a self-signed certificate to %s", certFile)
 	logf("viewer: a viewer will refuse it until it is trusted -- on Firestorm, append it to " +
 		"user_settings/CA.pem, or accept the certificate dialog once")
+	sayUncovered(certFile, host, logf)
 	return certFile, keyFile, nil
+}
+
+// sayUncovered tells logf, for an endpoint bound to every address, what
+// the certificate covers: the other addresses are ones this cannot know,
+// and a viewer dialling one of them refuses the certificate.
+func sayUncovered(certFile, host string, logf func(string, ...any)) {
+	if certHost(host) != "" {
+		return
+	}
+	covers := "loopback"
+	if b, err := os.ReadFile(certFile); err == nil {
+		if cert, err := parseCertPEM(b); err == nil {
+			var names []string
+			for _, ip := range cert.IPAddresses {
+				names = append(names, ip.String())
+			}
+			covers = strings.Join(append(names, cert.DNSNames...), ", ")
+		}
+	}
+	logf("viewer: bound to every address, and the certificate covers only %s; "+
+		"a viewer dialling this machine at any other address or name will refuse it", covers)
+}
+
+// parseCertPEM reads the one certificate in a PEM file.
+func parseCertPEM(b []byte) (*x509.Certificate, error) {
+	block, _ := pem.Decode(b)
+	if block == nil {
+		return nil, fmt.Errorf("no PEM block")
+	}
+	return x509.ParseCertificate(block.Bytes)
 }
 
 // viewerCertUnusable says why the stored pair cannot be served, or ""
@@ -114,11 +148,7 @@ func viewerCertUnusable(certFile, keyFile, host string) string {
 	if _, err := os.Stat(keyFile); err != nil {
 		return "the key beside it is missing"
 	}
-	block, _ := pem.Decode(pemBytes)
-	if block == nil {
-		return "it does not parse"
-	}
-	cert, err := x509.ParseCertificate(block.Bytes)
+	cert, err := parseCertPEM(pemBytes)
 	if err != nil {
 		return "it does not parse"
 	}

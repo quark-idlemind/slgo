@@ -564,7 +564,9 @@ by hand, because the grid manager's own probe of a new address has no
 dialog behind it. The certificate covers loopback and whatever address
 `-viewer` names; move the daemon to a different address and it is
 replaced, which is said in the log, and every viewer has to be told
-again. `-viewer-cert` and `-viewer-key` take your own pair instead, from
+again. Bound to every address, it covers loopback alone, and the log
+says so at each start: a viewer dialling any other address of the
+machine refuses it. `-viewer-cert` and `-viewer-key` take your own pair instead, from
 a real authority or anywhere else.
 
 The capabilities are behind the login too. A viewer that logs in
