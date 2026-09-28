@@ -82,6 +82,11 @@ type fakeGrid struct {
 	sentinel string
 	silent   bool
 
+	// hold, when set, is waited on after says and before anything else
+	// is said, so that a test can see what was printed while the script
+	// is still running.
+	hold chan struct{}
+
 	// refuse is Second Life declining to compile, and fault is a script
 	// that stopped where it was.  refuseSilently is the same refusal with
 	// nothing attached to it, which happens more often than one would
@@ -107,6 +112,12 @@ type fakeGrid struct {
 	// that a test can assert on the source as well as on the answer.
 	ran     int
 	sources []string
+
+	// heard is every message a client sent through the daemon, in the
+	// order the daemon read them, and streams counts the daemon's
+	// streams still open: once it is down to nothing, heard is complete.
+	heard   []msg.Message
+	streams sync.WaitGroup
 }
 
 // newFakeGrid is the grid on its own, for the runs that reach it through
@@ -222,11 +233,18 @@ func (f *fakeGrid) serveUpload(t *testing.T) {
 func (f *fakeGrid) run() {
 	f.mu.Lock()
 	says := append([]string(nil), f.says...)
-	fault, silent, sentinel := f.fault, f.silent, f.sentinel
+	fault, silent, sentinel, hold := f.fault, f.silent, f.sentinel, f.hold
 	f.mu.Unlock()
 
 	for _, line := range says {
 		f.say(sl.ChatSay, line)
+	}
+	if hold != nil {
+		select {
+		case <-hold:
+		case <-f.done:
+			return
+		}
 	}
 	if fault != "" {
 		// A fault is two messages: the header naming the script, then one
