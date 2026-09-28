@@ -758,7 +758,8 @@ func (s *Server) Names() []string {
 	return out
 }
 
-// Close logs every hosted agent out and stops it.
+// Close logs every hosted agent out and stops it, and ends the streams
+// on each, as a logout does, with a notice first saying why.
 func (s *Server) Close(ctx context.Context) {
 	s.mu.Lock()
 	hosted := make([]*Hosted, 0, len(s.agents))
@@ -782,6 +783,8 @@ func (s *Server) Close(ctx context.Context) {
 		if a := h.Agent(); a != nil {
 			_ = a.Logout(ctx, 10*time.Second)
 		}
+		h.notify(pb.AgentEvent_DISCONNECTED, "logged out: slgod is shutting down")
+		h.end("slgod is shutting down")
 	}
 }
 

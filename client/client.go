@@ -498,7 +498,8 @@ func (c *Conn) Handled(ctx context.Context, offer, how string, undo bool) (*pb.H
 //
 // The stream outlives a session that drops and is re-established under
 // it.  It ends, with codes.FailedPrecondition and the daemon's reason,
-// when the session is stopped for good or no longer hosted.
+// when the session is stopped for good or no longer hosted, the daemon
+// shutting down among them.
 func (c *Conn) Attach(ctx context.Context, agentName string, subscribe ...string) (*pb.AgentInfo, error) {
 	return c.attach(ctx, agentName, false, subscribe)
 }
