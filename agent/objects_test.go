@@ -813,6 +813,118 @@ func TestATerseUpdateMovesSomethingAlreadyKnown(t *testing.T) {
 	}
 }
 
+// withLength is a texture entry as a terse update's TextureEntry field
+// carries it: behind a four byte length, as the compressed update's is.
+func withLength(te []byte) []byte {
+	w := &blob{}
+	w.u32(uint32(len(te)))
+	w.raw(te)
+	return w.b
+}
+
+// TestATerseUpdateCarriesTheAppearance: a terse update's block has a
+// TextureEntry beside its placement, and the viewer takes a prim's new
+// appearance from it (llvovolume.cpp:650-668).  The store kept only the
+// placement, so an appearance changed that way was never seen.  An
+// empty field, one whose length does not fit, and one for an avatar,
+// whose appearance the viewer does not take from here, change nothing.
+func TestATerseUpdateCarriesTheAppearance(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	a.SetLook(Look{Far: 128})
+	before, after := []byte{1, 2, 3, 4}, []byte{9, 8, 7, 6, 5}
+	feed(t, a, arriving(t,
+		msg.ObjectUpdate_ObjectData{
+			ID: 4242, FullID: aPrim, PCode: 9, TextureEntry: before,
+			ObjectData: placement(msg.Vector3{X: 1, Y: 2, Z: 3}, msg.Quaternion{}),
+		},
+		msg.ObjectUpdate_ObjectData{
+			ID: 4343, FullID: someone, PCode: 47, TextureEntry: before,
+			ObjectData: placement(msg.Vector3{X: 1, Y: 2, Z: 3}, msg.Quaternion{}),
+		},
+	))
+	terse := func(local uint32, field []byte) *msg.ImprovedTerseObjectUpdate {
+		m := &msg.ImprovedTerseObjectUpdate{}
+		m.ObjectData = []msg.ImprovedTerseObjectUpdate_ObjectData{
+			{Data: terseBlob(local, msg.Vector3{X: 4, Y: 5, Z: 6}), TextureEntry: field},
+		}
+		return m
+	}
+	te := func(id msg.UUID) string {
+		got, _ := a.Objects().Get(id)
+		return string(got.TextureEntry)
+	}
+
+	feed(t, a, terse(4242, withLength(after)))
+	if te(aPrim) != string(after) {
+		t.Fatalf("texture entry = %v after a terse update carrying %v", []byte(te(aPrim)), after)
+	}
+	for _, field := range [][]byte{nil, {0, 0, 0, 0}, {100, 0, 0, 0, 1, 2, 3}, {1, 2}} {
+		feed(t, a, terse(4242, field))
+		if te(aPrim) != string(after) {
+			t.Errorf("texture entry = %v after a terse update carrying %v", []byte(te(aPrim)), field)
+		}
+	}
+	feed(t, a, terse(4343, withLength(after)))
+	if te(someone) != string(before) {
+		t.Errorf("an avatar's texture entry = %v from a terse update", []byte(te(someone)))
+	}
+}
+
+// TestACompressedUpdateThatWouldNotDecodeIsAskedForAgain: a blob cut off
+// after its header was stored as if the rest had said nothing, so the
+// appearance it may have changed stayed as it was, and its missing text
+// and shape were taken as none.  Now the header is kept, the appearance
+// is forgotten, what came before stands, and the region is asked for
+// the object again.
+func TestACompressedUpdateThatWouldNotDecodeIsAskedForAgain(t *testing.T) {
+	t.Parallel()
+
+	a, sent := offlineSession(t)
+	a.SetLook(Look{Far: 128})
+	o := a.Objects()
+	whole := compressedObject{id: aPrim, local: 4242, pcode: 9, text: someText, texture: []byte{7, 7, 7}}
+	o.compressed(decodeCompressed(t, whole), msg.Vector3{}, 0)
+	was, _ := o.Get(aPrim)
+
+	// Cut off five bytes into the text, which follows the header's
+	// eighty-four when there is no parent.
+	moved := whole
+	moved.position = msg.Vector3{X: 10, Y: 20, Z: 30}
+	cut := moved.bytes()[:84+5]
+	if _, err := msg.DecodeCompressed(cut); err == nil {
+		t.Fatal("the cut blob decodes whole, so this tests nothing")
+	}
+	m := &msg.ObjectUpdateCompressed{}
+	m.ObjectData = []msg.ObjectUpdateCompressed_ObjectData{{Data: cut}}
+	feed(t, a, m)
+
+	got, _ := o.Get(aPrim)
+	if got.TextureEntry != nil {
+		t.Errorf("texture entry = %v after an update that did not decode, want it forgotten", got.TextureEntry)
+	}
+	if got.Position != moved.position {
+		t.Errorf("position = %v, want the header's %v", got.Position, moved.position)
+	}
+	if got.Text != someText || got.Shape != was.Shape {
+		t.Errorf("text %q shape %+v, want what was known: %q %+v", got.Text, got.Shape, someText, was.Shape)
+	}
+
+	sent.waitFor(t, 1)
+	var asked []uint32
+	for _, sm := range sent.messages(t) {
+		if r, ok := sm.(*msg.RequestMultipleObjects); ok {
+			for _, d := range r.ObjectData {
+				asked = append(asked, d.ID)
+			}
+		}
+	}
+	if len(asked) != 1 || asked[0] != 4242 {
+		t.Errorf("asked about %v, want the object that would not decode", asked)
+	}
+}
+
 // TestSomethingThatMovesIntoRangeIsAskedAbout: the simulator describes
 // an object once and then only moves it, so anything dropped for
 // distance and later brought close arrives as a terse update naming a

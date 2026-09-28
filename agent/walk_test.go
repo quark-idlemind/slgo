@@ -106,7 +106,7 @@ func (l *legs) run() {
 			pos := l.pos
 			l.mu.Unlock()
 			l.a.Objects().moved(&msg.Terse{LocalID: legsLocal, Avatar: true,
-				Position: pos, Velocity: vel, Rotation: acting.body})
+				Position: pos, Velocity: vel, Rotation: acting.body}, nil)
 		}
 	}
 }
