@@ -53,6 +53,7 @@ case.
     sl/parcel.go        the land under the avatar
     sl/sit.go           sitting on a thing, or on the ground
     sl/animation.go     playing and stopping an animation, built in or from inventory
+    sl/groupchat.go     a group's chat: join, hear, speak, leave; an invitation is surfaced, never answered
     sl/neighbour.go     the circuits held to the regions around this one
     sl/script.go        run a script and wait for what it said
     sl/image.go         textures as pictures: jpeg 2000 in, png out

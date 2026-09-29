@@ -47,6 +47,12 @@ var Subscriptions = []string{
 	"TeleportLocal", "TeleportFailed", "TeleportFinish",
 	"AgentMovementComplete", "ParcelProperties", "ParcelDwellReply",
 	"MapBlockReply", "MoneyBalanceReply",
+
+	// A group's chat, which is joined and spoken to over the circuit but
+	// answered here.  See groupchat.go.
+	"ChatterBoxInvitation", "ChatterBoxSessionStartReply",
+	"ChatterBoxSessionEventReply", "ChatterBoxSessionAgentListUpdates",
+	"ForceCloseChatterBoxSession",
 }
 
 // Session is a connection to a hosted agent, with the bookkeeping needed
@@ -137,8 +143,13 @@ type Session struct {
 	imSubs     map[<-chan *IM]*imSub
 	regionSubs map[<-chan *RegionChange]*regionSub
 	moneySubs  map[<-chan *Money]*moneySub
-	chatCtl    chan chatCmd
-	readDone   chan struct{}
+	gchatSubs  map[<-chan *GroupChat]*groupChatSub
+
+	// gchat is what is known of each group's chat, by group.  See
+	// groupchat.go.
+	gchat    map[msg.UUID]*groupChatState
+	chatCtl  chan chatCmd
+	readDone chan struct{}
 
 	// subsClosed says closeChat has been, so that a subscription asked
 	// for after the session ended is handed back closed rather than
@@ -361,6 +372,7 @@ func New(b Backend) (*Session, error) {
 		imSubs:      map[<-chan *IM]*imSub{},
 		regionSubs:  map[<-chan *RegionChange]*regionSub{},
 		moneySubs:   map[<-chan *Money]*moneySub{},
+		gchatSubs:   map[<-chan *GroupChat]*groupChatSub{},
 		names:       map[msg.UUID]string{},
 		asking:      map[msg.UUID]bool{},
 		offers:      map[msg.UUID]*Offer{},
@@ -611,6 +623,15 @@ var eventHandlers = map[string]func(*Session, map[string]any){
 	// The land under the avatar, which arrives here whether it was
 	// asked for or not.  See parcel.go.
 	"ParcelProperties": (*Session).parcelEvent,
+
+	// A group's chat: an invitation, the answer to joining, a refusal, who
+	// came and went, and being put out.  Their shapes are the viewer's
+	// handlers' and have not been seen on a grid; see doc/group-chat.md.
+	"ChatterBoxInvitation":              (*Session).chatInvitationEvent,
+	"ChatterBoxSessionStartReply":       (*Session).chatStartReplyEvent,
+	"ChatterBoxSessionEventReply":       (*Session).chatEventReplyEvent,
+	"ChatterBoxSessionAgentListUpdates": (*Session).chatAgentListEvent,
+	"ForceCloseChatterBoxSession":       (*Session).chatForceCloseEvent,
 }
 
 // event dispatches one entry from the event queue.

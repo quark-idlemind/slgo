@@ -212,6 +212,9 @@ func (sh *Shell) watch(ctx context.Context) {
 	// Money: a payment made to this avatar is said, as an instant
 	// message is.
 	money := sh.s.Money(0)
+	// What is said in the group chats this avatar is in, with the
+	// invitations to the ones it is not.
+	gchats := sh.s.GroupChats(0)
 	// The group names a notice is announced with, asked for now so that
 	// the first notice need not wait for them.  See heardNotice.
 	sh.groups.kick()
@@ -298,6 +301,11 @@ func (sh *Shell) watch(ctx context.Context) {
 				return
 			}
 			sh.heardMoney(ctx, m)
+		case g, ok := <-gchats:
+			if !ok {
+				return
+			}
+			sh.heardGroupChat(g)
 		}
 	}
 }
@@ -362,6 +370,9 @@ func (sh *Shell) heard(m *sl.IM) {
 		sh.heardNotice(m)
 	case m.Dialog == sl.DialogTypingStart, m.Dialog == sl.DialogTypingStop:
 		// A line per keystroke is not worth showing.
+	case m.Dialog == sl.DialogSessionSend:
+		// A group's chat, which arrives again as a group chat event that
+		// says which group; see heardGroupChat.
 	default:
 		sh.noticef("%s from %s: %s", sl.DialogName(m.Dialog), who, m.Text)
 	}

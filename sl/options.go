@@ -23,6 +23,11 @@ type Options struct {
 	// answer does not come.
 	// Why: doc/money.md#how-long-to-wait
 	MoneyTimeout time.Duration
+
+	// GroupChatTimeout bounds the wait for the grid to say a group's
+	// chat has started.
+	// Why: doc/group-chat.md#joining-a-groups-chat-when-the-user-asks
+	GroupChatTimeout time.Duration
 }
 
 // The defaults for Options.  None of them is a measurement; each is a
@@ -32,6 +37,9 @@ const (
 	DefaultPermissionsTimeout = 15 * time.Second
 	DefaultDeleteTimeout      = 10 * time.Second
 	DefaultMoneyTimeout       = 15 * time.Second
+
+	// DefaultGroupChatTimeout is the viewer's own, SESSION_INITIALIZATION_TIMEOUT.
+	DefaultGroupChatTimeout = 30 * time.Second
 )
 
 // SetOptions replaces the session's Options.  A call already waiting

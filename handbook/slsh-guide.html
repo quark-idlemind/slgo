@@ -883,6 +883,28 @@ nothing answers an invitation, so this says what was sent and not what became of
           from this side at all; their answer goes to the group.
         </p>
 
+        <h3>A group's chat</h3>
+        <p>
+          A group has a chat of its own, apart from being in it, and three
+          words after <code>group</code> take part in it:
+          <code>group chat NAME</code> joins it, <code>group say NAME TEXT</code>
+          speaks in it and <code>group leave-chat NAME</code> leaves it. The
+          group is named as elsewhere on this page, by name or by key, and the
+          longest run of words that is a whole group name is the group, so
+          neither it nor the text needs quoting. What the group says is printed
+          as it arrives, with the speaker first and the group after it, the
+          group behind a <code>[Group]</code> label because a group can be
+          called anything, a person's name included.
+        </p>
+        <p>
+          Nothing joins by itself. Somebody speaking in a group whose chat this
+          shell has not joined is printed once, with a notice saying how to join
+          it, and a busy group is not allowed to fill the screen by being
+          announced again. All of this was written from the viewer's source and
+          has not yet been seen on a grid; <code>doc/group-chat.md</code> says
+          which parts are which.
+        </p>
+
         <h3>The land you are allowed to see</h3>
         <p>
           Land is rated general, moderate or adult, and an avatar refused entry
@@ -2408,13 +2430,14 @@ how_extra   = {"reasoning_effort": "none"}</span></pre>
               <tr><td class="cmd">who · lookup · profile · friends</td><td class="what">who is about, who they are</td></tr>
               <tr><td class="cmd">say · chat · im · talk</td><td class="what">talking, and the conversations you have open</td></tr>
               <tr><td class="cmd">offer · invite</td><td class="what">friendship; and asking somebody into a group</td></tr>
+              <tr><td class="cmd">group chat · say · leave-chat</td><td class="what">join a group's chat, speak in it, leave it</td></tr>
 
               <tr><td class="group-title" colspan="2">Region</td></tr>
               <tr><td class="cmd">where · parcel · look · map</td><td class="what">the region, the land under you, what it says of itself, and who is about</td></tr>
               <tr><td class="cmd">tp · regions · landmark</td><td class="what">going to a position, finding a region by name, going to a place kept</td></tr>
               <tr><td class="cmd">neighbours · sit · stand</td><td class="what">walking over a border; onto a seat and off it again</td></tr>
               <tr><td class="cmd">animate</td><td class="what">play an animation, built in or from inventory, and stop it</td></tr>
-              <tr><td class="cmd">group · invite</td><td class="what">who you act as, which is what land rights hang on; and asking somebody into one</td></tr>
+              <tr><td class="cmd">group · invite</td><td class="what">who you act as, which is what land rights hang on; asking somebody into one; and joining, speaking in and leaving its chat</td></tr>
               <tr><td class="cmd">maturity</td><td class="what">the rating of land this avatar is willing to be shown, which decides where it may go</td></tr>
               <tr><td class="cmd">objects · dump · rez · reform</td><td class="what">what is here, described, built and changed</td></tr>
               <tr><td class="cmd">worn · wear · detach</td><td class="what">attachments</td></tr>

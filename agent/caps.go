@@ -59,6 +59,8 @@ var DefaultCaps = []string{
 	// object gets worn: the folder is the record, and this is what
 	// tells the baking service to read it again.  See sl.WearWearable.
 	"UpdateAvatarAppearance",
+	// Answering an invitation to a group's chat.  See sl.GroupChat.Accept.
+	"ChatSessionRequest",
 }
 
 // Caps maps a capability name to the URL that serves it.

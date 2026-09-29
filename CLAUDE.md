@@ -273,7 +273,8 @@ here when another is shared the same way.
   long a move, a permission change and a delete are read back before
   they are reported not confirmed, 15, 15 and 10 s by default, and how
   long each wait for the grid about L$ -- `Balance`, a payment's answer,
-  the balance read after that answer did not come -- lasts, 15 s. A
+  the balance read after that answer did not come -- lasts, 15 s, and how
+  long a group chat's start is waited for, 30 s. A
   test that proves one of them runs out sets it short rather than
   waiting the default out, as `sl`'s do and `shortReadBacks` does for
   `cmd/slsh`'s.

@@ -183,6 +183,9 @@ func (w *Session) regionChanged(c *RegionChange) {
 //     region's.  Some of them were never asked for -- an instant
 //     message carries the sender's name -- so one dropped here may
 //     never be offered again.
+//   - gchat: which group chats the avatar has joined, which the grid's
+//     chat service keeps and no region does.  Read from the viewer's
+//     source, which keeps its sessions across a move; not measured.
 //   - offers, invOffers, lures, tpRequests, invites, asked, dialogs:
 //     what people and their scripts have said to this avatar and is
 //     still waiting for an answer.  A person who offered friendship, or
@@ -200,7 +203,7 @@ func (w *Session) regionChanged(c *RegionChange) {
 //     a refusal silently unquotable, and a chat collector is the
 //     caller's window rather than the region's.
 //   - the subscriptions and the waiters: chatSubs, imSubs, permSubs,
-//     regionSubs, moneySubs, the pickers, the payWaits, and the
+//     regionSubs, moneySubs, gchatSubs, the pickers, the payWaits, and the
 //     propsFns, mapFns, teleportFns, profileFns, scriptFns, parcelFns
 //     and dwellFns beside them.  These
 //     are not state at all, they are callers waiting, and the teleport

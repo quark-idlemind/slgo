@@ -214,6 +214,8 @@ func TestNoInventoryNameIsMatchedIgnoringCase(t *testing.T) {
 	matching := map[string]string{
 		"sl.InventoryOffersFor": "an offered item's whole name in another case, which its part-name search leaves out",
 		"slsh.chooseGroup":      "a group's name",
+		"slsh.namesAGroup":      "a group's name, as chooseGroup matches it",
+		"slsh.groupAndRest":     "a group's name, as chooseGroup matches it",
 		"slsh.regionNamed":      "a region's name, which the map matches ignoring case",
 		"slsh.printFound":       "a person's display name against their name",
 		"slsh.whoOrSearch":      "a person's name or username",
