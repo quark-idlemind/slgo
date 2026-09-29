@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -176,9 +177,13 @@ func TestARefusedStartSaysWhy(t *testing.T) {
 func TestAStartNobodyAnswersTimesOut(t *testing.T) {
 	w, _ := newFakeSession(t)
 	w.SetOptions(Options{GroupChatTimeout: 50 * time.Millisecond})
+	begun := time.Now()
 	err := w.JoinGroupChat(context.Background(), chatGroup)
 	if !errors.Is(err, ErrTimeout) {
 		t.Fatalf("error %v, want a timeout", err)
+	}
+	if took := time.Since(begun); took > 5*time.Second {
+		t.Errorf("gave up after %s, want the option's 50ms and not the default", took)
 	}
 	if w.InGroupChat(chatGroup) {
 		t.Error("in a chat nobody answered")
@@ -516,9 +521,21 @@ func TestAcceptingAnEndedSessionSaysSo(t *testing.T) {
 func TestOnlyAnInvitationCanBeAccepted(t *testing.T) {
 	w, f := newFakeSession(t)
 	subs := w.GroupChats(8)
+	var mu sync.Mutex
+	var posts int
+	f.ServeCap(t, ChatSessionCap, func(rw http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		posts++
+		mu.Unlock()
+	})
 	f.Relay(t, arrivingIM(chatSpeaker, "Example Resident", DialogSessionSend, chatGroup, "hi"))
 	if err := nextChat(t, subs).Accept(context.Background()); err == nil {
 		t.Error("a message was accepted")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if posts != 0 || w.InGroupChat(chatGroup) {
+		t.Errorf("accepting a message posted %d times and joined %v", posts, w.InGroupChat(chatGroup))
 	}
 }
 
@@ -667,4 +684,15 @@ func TestAGroupChatIsKeptAcrossARegionChange(t *testing.T) {
 	if !w.InGroupChat(chatGroup) {
 		t.Error("a region change ended the chat")
 	}
+}
+
+// TestTheChatCapabilityIsAskedFor: accepting an invitation posts to it, and
+// a region only offers what the seed was asked for.
+func TestTheChatCapabilityIsAskedFor(t *testing.T) {
+	for _, c := range agent.DefaultCaps {
+		if c == ChatSessionCap {
+			return
+		}
+	}
+	t.Errorf("%s is not in agent.DefaultCaps", ChatSessionCap)
 }

@@ -108,14 +108,18 @@ func TestGroupChatSaysWhyTheGridRefused(t *testing.T) {
 // or with "none", or with nothing to say.
 func TestGroupChatWordsNeedAGroup(t *testing.T) {
 	x := chatShell(t)
-	for _, line := range []string{
-		"group chat", "group say", "group leave-chat",
-		"group chat none", "group chat Nowhere At All",
-		"group say Example Builders",
+	for line, want := range map[string]string{
+		"group chat":                 "which group to join the chat of",
+		"group say":                  "which group to speak to",
+		"group leave-chat":           "which group to leave the chat of",
+		"group chat none":            "acting as nobody",
+		"group leave-chat none":      "acting as nobody",
+		"group chat Nowhere At All":  "joined no group called",
+		"group say Example Builders": "what to say in it",
 	} {
 		got := x.do(t, line)
-		if !strings.Contains(got, "usage") && !strings.Contains(got, "no group") && !strings.Contains(got, "joined no group") {
-			t.Errorf("%q printed %q, want a refusal", line, got)
+		if !strings.Contains(got, want) {
+			t.Errorf("%q printed %q, want it to say %q", line, got, want)
 		}
 	}
 	if ims := groupIMs(x); len(ims) != 0 {
@@ -127,11 +131,11 @@ func TestGroupChatWordsNeedAGroup(t *testing.T) {
 // name of a group keeps meaning it.
 func TestAGroupNamedLikeTheWordsStillActivates(t *testing.T) {
 	x := newTestShell(t)
-	joined(x, sl.Group{ID: testExplorers, Name: "Chat Lounge"})
+	joined(x, sl.Group{ID: testExplorers, Name: "chat lounge"})
 	x.grid.AnswerActivateGroup()
 
-	got := x.do(t, "group Chat Lounge")
-	if !strings.Contains(got, "acting as Chat Lounge") {
+	got := x.do(t, "group chat lounge")
+	if !strings.Contains(got, "acting as chat lounge") {
 		t.Errorf("printed %q", got)
 	}
 	if a := activations(x); len(a) != 1 || a[0] != testExplorers {
