@@ -147,9 +147,15 @@ type Session struct {
 
 	// gchat is what is known of each group's chat, by group.  See
 	// groupchat.go.
-	gchat    map[msg.UUID]*groupChatState
-	chatCtl  chan chatCmd
-	readDone chan struct{}
+	gchat   map[msg.UUID]*groupChatState
+	chatSeq int // how many sessions gchat has held, for their order
+
+	// confStarts are the conferences being started, by the temporary id
+	// the start was made with, until the grid's reply names the session.
+	// See conference.go.
+	confStarts map[msg.UUID]*confStart
+	chatCtl    chan chatCmd
+	readDone   chan struct{}
 
 	// subsClosed says closeChat has been, so that a subscription asked
 	// for after the session ended is handed back closed rather than
@@ -373,6 +379,7 @@ func New(b Backend) (*Session, error) {
 		regionSubs:  map[<-chan *RegionChange]*regionSub{},
 		moneySubs:   map[<-chan *Money]*moneySub{},
 		gchatSubs:   map[<-chan *GroupChat]*groupChatSub{},
+		confStarts:  map[msg.UUID]*confStart{},
 		names:       map[msg.UUID]string{},
 		asking:      map[msg.UUID]bool{},
 		offers:      map[msg.UUID]*Offer{},

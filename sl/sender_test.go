@@ -57,10 +57,11 @@ func TestSenderIsWhatTheNameNames(t *testing.T) {
 func TestLabelPutsTheKindInFront(t *testing.T) {
 	t.Parallel()
 	for k, want := range map[Sender]string{
-		SenderPerson: "Some Body",
-		SenderObject: "[Object] Some Body",
-		SenderGroup:  "[Group] Some Body",
-		SenderGrid:   "[Grid] Some Body",
+		SenderPerson:     "Some Body",
+		SenderObject:     "[Object] Some Body",
+		SenderGroup:      "[Group] Some Body",
+		SenderGrid:       "[Grid] Some Body",
+		SenderConference: "[Conference] Some Body",
 	} {
 		if got := k.Label("Some Body"); got != want {
 			t.Errorf("Label = %q, want %q", got, want)

@@ -264,7 +264,7 @@ here when another is shared the same way.
   `TestTheAgentIsReadOnlyUnderTheLock` refuses a read of `c.agent`
   anywhere else in `client`.
 - `Sender.Label`, in `sl/sender.go`: a name as a line prints it, with
-  what it names in front -- `[Object]`, `[Group]`, `[Grid]` -- and a
+  what it names in front -- `[Object]`, `[Group]`, `[Conference]`, `[Grid]` -- and a
   person's bare; the kind comes from `IM.Sender` or `Line.Sender`. An
   object's name can be anybody's, so slsh and slbotd print no sender
   any other way. `TestNoObjectNameIsPrintedBare` refuses an
@@ -274,7 +274,7 @@ here when another is shared the same way.
   they are reported not confirmed, 15, 15 and 10 s by default, and how
   long each wait for the grid about L$ -- `Balance`, a payment's answer,
   the balance read after that answer did not come -- lasts, 15 s, and how
-  long a group chat's start is waited for, 30 s. A
+  long a group chat's or conference's start is waited for, 30 s. A
   test that proves one of them runs out sets it short rather than
   waiting the default out, as `sl`'s do and `shortReadBacks` does for
   `cmd/slsh`'s.

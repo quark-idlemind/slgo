@@ -923,6 +923,32 @@ nothing answers an invitation, so this says what was sent and not what became of
           which parts are which.
         </p>
 
+        <h3>A conference</h3>
+        <p>
+          An instant message with several people in it is a conference, and
+          <code>conference</code> takes part in one. People are separated by
+          commas, each read as <code>im</code> reads a person:
+          <code>conference start Example Resident, Another Resident</code>
+          starts one, <code>conference from-im</code> does what adding
+          somebody to an open instant message does, and
+          <code>conference add 1 Third Resident</code>,
+          <code>conference say 1 TEXT</code> and <code>conference leave 1</code>
+          work on the one numbered 1 in the bare <code>conference</code>
+          listing. A conference is picked by number because every one this
+          avatar starts is called "Multi-person chat", as the viewer calls
+          it. What is said in one is printed with the speaker first and the
+          conference after it behind a <code>[Conference]</code> label, with
+          its number, and who comes and goes is said.
+        </p>
+        <p>
+          Nothing joins by itself: an invitation is printed once, with the
+          words that join or refuse it. There is no way to remove somebody
+          from a conference, because the viewer has none; what it calls
+          ejecting is ejecting from the group. All of this was written from
+          the viewer's source and has not yet been seen on a grid;
+          <code>doc/conference.md</code> says which parts are which.
+        </p>
+
         <h3>The land you are allowed to see</h3>
         <p>
           Land is rated general, moderate or adult, and an avatar refused entry
@@ -2449,6 +2475,7 @@ how_extra   = {"reasoning_effort": "none"}</span></pre>
               <tr><td class="cmd">say · chat · im · talk</td><td class="what">talking, and the conversations you have open</td></tr>
               <tr><td class="cmd">offer · invite</td><td class="what">friendship; and asking somebody into a group</td></tr>
               <tr><td class="cmd">group chat · say · leave-chat</td><td class="what">join a group's chat, speak in it, leave it</td></tr>
+              <tr><td class="cmd">conference</td><td class="what">an instant message with several people: start one, add to it, speak, leave</td></tr>
 
               <tr><td class="group-title" colspan="2">Region</td></tr>
               <tr><td class="cmd">where · parcel · look · map</td><td class="what">the region, the land under you, what it says of itself, and who is about</td></tr>
