@@ -434,19 +434,21 @@ For one command:       COMMAND --help, or man COMMAND
         </p>
 
         <p>
-          <strong>Taken again, on a harder set.</strong> On 2026-09-26
-          <code>how</code> was measured on 250 questions written by a
-          model that had never seen slsh or its manual, 176 of them
-          answerable, labelled separately and never shown to anything that
-          tunes <code>how</code>. The models ran under llama-server rather
-          than Ollama, <code>Qwen3.5-4B</code> with an 8k context and
-          thinking off, beside <code>Dolphin 3.0 8B</code>, on the machine
-          the daemons run on. Qwen3.5-4B: 61% right, 89% not found, 16%
-          wrong kept, 2.8 s. Dolphin 3.0 8B: 59% right, 39% not found, 36%
-          wrong kept. Right is lower than the table's 76%, most likely
-          because these questions are phrased further from the manual (an
+          <strong>Taken again, on a harder set.</strong> On 2026-09-29
+          <code>how</code> was measured on 250 questions written by a model
+          that had never seen slsh or its manual, 176 of them answerable,
+          labelled separately and never shown to anything that tunes
+          <code>how</code>. Both models ran under llama-server rather than
+          Ollama, at Q4_K_M with an 8k context and thinking off, on the
+          machine the daemons run on. <code>Qwen3.5-4B</code>: 61% right,
+          81% not found, 19% wrong kept, 2.9 s. <code>Qwen3.5-9B</code>: 64%
+          right, 80% not found, 20% wrong kept, 5.9 s. The larger model gets
+          three points more right for twice the time, and keeps a wrong
+          command as often, so the recommendation stays with the smaller
+          one. Right is lower than the table's 76%, most likely because
+          these questions are phrased further from the manual (an
           inference; the two sets were not compared question by question),
-          and it is the number to raise next. The recommendation stands.
+          and it is the number to raise next.
         </p>
 
         <h3>Your own words for things</h3>
