@@ -323,7 +323,8 @@ func joinItem(w Prices, group, txn msg.UUID) Item {
 
 // CheckPurchase decides whether a purchase may go out, and records what
 // it costs against the daily total when it may.  Nothing is spent
-// without pay = on; nothing whose price or payee is not known is let
+// without pay = on, though a purchase known to cost L$0 goes out
+// without it; nothing whose price or payee is not known is let
 // through; each item is held to pay_max, every payee to pay_to, and the
 // sum to pay_daily.
 func (g *Gate) CheckPurchase(ctx context.Context, w World, p *Purchase) Verdict {
@@ -345,7 +346,14 @@ func (g *Gate) CheckPurchase(ctx context.Context, w World, p *Purchase) Verdict 
 
 	r := g.rules
 	if !r.On {
-		return refuse("paying is off for this profile, and so is buying; pay = on in the profile turns both on")
+		// Something known to cost nothing spends nothing, so joining a
+		// free group needs no pay = on.  An unknown price is not free.
+		for _, it := range p.Items {
+			if it.Unknown != "" || it.Amount != 0 {
+				return refuse("paying is off for this profile, and so is buying; pay = on in the profile turns both on")
+			}
+		}
+		return v
 	}
 	var cs []charge
 	for _, it := range p.Items {

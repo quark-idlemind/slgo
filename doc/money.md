@@ -348,10 +348,13 @@ is not known, and is refused rather than passed as nothing:
   no price is known. Answering a script's other questions is not a
   purchase and is not looked at.
 
-Every one is refused unless `pay = on`, a price of nothing included. A
-free group is joined by a program only under a profile that turns paying
-on: what a purchase turns out to cost is not known until the grid
-charges it, and the rules are about that.
+Every one is refused unless `pay = on`, except one known to cost
+nothing: joining a group whose fee was last said to be L$0, or buying
+something for sale at L$0, goes out with paying off and is not recorded
+(the owner's decision, 2026-09-28). The grid charges a group's fee as it
+is when the join arrives, so a fee changed in between would be charged
+unchecked; that window was judged small next to refusing every free
+group to every profile. A price nobody has said is still refused.
 
 The transaction type a refusal reports is the viewer's: `TRANS_OBJECT_SALE`
 5000 for an object, `TRANS_LAND_SALE` 5002 for a parcel,

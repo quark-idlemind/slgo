@@ -93,6 +93,27 @@ func TestEveryPurchaseIsRefusedWhenPayingIsOff(t *testing.T) {
 	}
 }
 
+// A purchase known to cost nothing -- joining a free group, above all --
+// goes out with pay off, and is not recorded; one whose price is not
+// known is still refused.
+func TestSomethingKnownToBeFreeNeedsNoPay(t *testing.T) {
+	for _, b := range buyings() {
+		m, w := b.make(0)
+		g := NewGate(Rules{}, "")
+		if v, _ := g.CheckMessage(context.Background(), w, me, m); v.Refused != "" {
+			t.Errorf("%s at L$0 with pay off was refused: %s", b.name, v.Refused)
+		}
+		if got, _ := g.read(); len(got) != 0 {
+			t.Errorf("%s at L$0 was recorded: %v", b.name, got)
+		}
+	}
+	m := &msg.JoinGroupRequest{}
+	m.GroupData.GroupID = someGroup
+	if v, _ := NewGate(Rules{}, "").CheckMessage(context.Background(), &world{}, me, m); v.Refused == "" {
+		t.Error("joining a group whose fee is not known went out with pay off")
+	}
+}
+
 // What a purchase costs is held to pay_max one at a time and to pay_daily
 // all together, with payments, and is written to the same record.
 func TestAPurchaseCountsAgainstTheCaps(t *testing.T) {
