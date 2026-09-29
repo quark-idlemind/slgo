@@ -1068,8 +1068,9 @@ can be asked, and a payment made to this avatar is printed as it
 arrives. Paying is off unless the avatar's profile turns it on, and
 slgod checks every payment a program sends against what the profile
 allows: `pay = on`, `pay_max`, `pay_daily` and one `pay_to` line for
-each avatar that may be paid. A viewer attached through slgod is not
-checked. What was measured and why it is built this way are in
+each avatar that may be paid. What a program buys -- an object, land,
+joining a group, a classified -- is held to the same rules. A viewer
+attached through slgod is not checked. What was measured and why it is built this way are in
 [doc/money.md](doc/money.md).
 
 `agents`, `status`, `login`, `logout` and `viewer` are about the daemon

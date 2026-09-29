@@ -25,6 +25,50 @@ type world struct {
 	names   map[string]msg.UUID
 	asked   []string
 	failing error
+
+	// who names an avatar by its key, for a refusal to say.
+	who map[msg.UUID]string
+
+	// What a purchase is worth: objects by local id, parcels by local
+	// id, and a group's fee, and an invitation's, by group.
+	objects     map[uint32]sale
+	parcels     map[int32]land
+	groupFees   map[msg.UUID]int
+	inviteFees  map[msg.UUID]int
+	inviteAsked []msg.UUID
+}
+
+type sale struct {
+	owner msg.UUID
+	price int
+}
+
+type land struct {
+	owner      msg.UUID
+	sale, pass int
+}
+
+func (w *world) NameOf(_ context.Context, id msg.UUID) string { return w.who[id] }
+
+func (w *world) ObjectSale(local uint32) (msg.UUID, int, bool) {
+	o, ok := w.objects[local]
+	return o.owner, o.price, ok
+}
+
+func (w *world) ParcelSale(local int32) (msg.UUID, int, int, bool) {
+	p, ok := w.parcels[local]
+	return p.owner, p.sale, p.pass, ok
+}
+
+func (w *world) GroupFee(g msg.UUID) (int, bool) {
+	f, ok := w.groupFees[g]
+	return f, ok
+}
+
+func (w *world) InvitationFee(g, txn msg.UUID) (int, bool) {
+	w.inviteAsked = append(w.inviteAsked, txn)
+	f, ok := w.inviteFees[g]
+	return f, ok
 }
 
 func (w *world) ObjectOwner(id msg.UUID) (msg.UUID, bool) {

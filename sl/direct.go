@@ -258,22 +258,29 @@ func (d *Direct) Close() error {
 }
 
 func (d *Direct) Send(ctx context.Context, m msg.Message, reliable bool) error {
-	// A payment goes out only if the profile's rules let it, checked
-	// here as slgod checks a client's.
+	// A payment or a purchase goes out only if the profile's rules let
+	// it, checked here as slgod checks a client's.
 	// Why: doc/money.md#where-the-rules-are-checked
-	if t, ok := m.(*msg.MoneyTransferRequest); ok {
+	if pay.Spends(msg.IDOf(m)) {
 		g := d.pay
 		if g == nil {
 			g = pay.NewGate(pay.Rules{}, "")
 		}
-		if dec := g.Check(ctx, d.a, t); dec.Refused != "" {
-			return &PayRefused{By: "this profile's rules", Reason: dec.Refused}
+		if v, spends := g.CheckMessage(ctx, d.a, d.self(), m); spends && v.Refused != "" {
+			return &PayRefused{By: "this profile's rules", Reason: v.Refused}
 		}
 	}
 	if reliable {
 		return d.a.Send.SendReliable(ctx, m)
 	}
 	return d.a.Send.Send(ctx, m)
+}
+
+// self is this avatar's id.
+func (d *Direct) self() msg.UUID {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.info.AgentID
 }
 
 // Control sends one AgentUpdate carrying these flags and forgets them.
@@ -288,6 +295,16 @@ func (d *Direct) Control(ctx context.Context, flags uint32) error {
 }
 
 func (d *Direct) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
+	// The one capability that spends L$ is checked as slgod checks it.
+	if p := pay.ReadCapPurchase(d.a, d.self(), d.a.CapOf(r), r.Body); p != nil {
+		g := d.pay
+		if g == nil {
+			g = pay.NewGate(pay.Rules{}, "")
+		}
+		if v := g.CheckPurchase(ctx, d.a, p); v.Refused != "" {
+			return nil, &PayRefused{By: "this profile's rules", Reason: v.Refused}
+		}
+	}
 	return d.a.DoCap(ctx, r)
 }
 

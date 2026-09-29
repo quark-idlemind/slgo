@@ -133,6 +133,9 @@ func (a *Agent) keepOffers() {
 		a.Disp.MustHandle(name, func(p *msg.Packet) {
 			if p.Message != nil {
 				a.offers.note(p.Message, p.At)
+				if im, ok := p.Message.(*msg.ImprovedInstantMessage); ok {
+					a.prices.noteInvitation(im)
+				}
 			}
 		}, msg.Inline())
 	}

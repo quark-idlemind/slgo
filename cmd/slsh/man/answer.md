@@ -68,6 +68,12 @@ reply says plainly that the group will charge its fee whatever was
 typed.  An invitation that said there is no fee is the one that takes
 a bare `answer N`.
 
+The profile has to allow it: accepting an invitation is a purchase to
+the rules `pay` describes, refused unless `pay = on`, with the fee held
+to `pay_max` and `pay_daily` and the group in `pay_to`, whether the
+group charges or not.  Through slgod the refusal reaches slsh as a
+message it does not wait for, so nothing is printed for it.
+
 Nothing answers a join, so `group` is what says whether it worked.
 
 ## Accepting a teleport waits for the avatar to arrive

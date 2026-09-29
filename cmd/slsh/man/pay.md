@@ -60,6 +60,18 @@ names an avatar that may be paid, one line each, by name or key, and
 `pay_to = *` is anybody.  With no `pay_to` at all nobody is paid, so
 `pay = on` alone pays nobody and the refusal says to add one.
 
+The same rules hold what a program buys.  Buying an object, a parcel
+or a pass to one, joining a group -- by request or by accepting its
+invitation -- and publishing a classified are checked as payments are:
+refused unless `pay = on`, each held to `pay_max`, all of them counted
+with payments in `pay_daily`, and whoever is paid -- the object's
+owner, the parcel's, the group -- in `pay_to`.  A price nobody told the
+session is not guessed: it refuses, and says what was not known.
+Creating a group, claiming land, and letting a script take L$
+(`PERMISSION_DEBIT`) are refused whatever the profile says, having no
+figure to check.  Uploads are not checked.  A refusal for somebody not
+in `pay_to` names them, with their name when it is known.
+
 A viewer attached through slgod is not held to any of this: that is a
 person at the viewer's own pay dialog, and the rules are about
 programs.  A shell started with `--direct` checks the same rules

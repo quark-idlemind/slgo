@@ -20,6 +20,15 @@ type World interface {
 	// FindAvatar is the avatar whose whole name this is, or the zero id
 	// when nobody has it.
 	FindAvatar(ctx context.Context, name string) (msg.UUID, error)
+
+	// NameOf is the name of an avatar, when the session has it or the
+	// grid says it soon enough, and "" when not.  A refusal names who
+	// was refused with it.
+	NameOf(ctx context.Context, id msg.UUID) string
+
+	// What a purchase is worth, from what the session has been told.
+	// See ReadPurchase.
+	Prices
 }
 
 // lookupFor bounds the asking of the grid who a pay_to name is.
@@ -97,27 +106,61 @@ func (g *Gate) Check(ctx context.Context, w World, m *msg.MoneyTransferRequest) 
 		}
 		d.Payee = owner
 	}
-	by, why := g.allows(ctx, w, d.Payee)
+	by, spent, why := g.admit(ctx, w, []charge{{amount: d.Amount, payee: d.Payee}})
+	d.Spent = spent
 	if why != "" {
 		return refuse("%s", why)
 	}
-	d.AllowedBy = by
+	d.AllowedBy = by[0]
+	return d
+}
+
+// charge is one amount to let through: to whom, or to the grid itself.
+type charge struct {
+	amount int
+	payee  msg.UUID
+	grid   bool // a fee the grid takes, which no pay_to line covers
+}
+
+// admit is what a payment and a purchase share once the amounts are
+// found to be ones that may be spent: who may be paid, the daily total,
+// and the record.  It answers the pay_to line that let each charge
+// through, what the last day held before them, and why not when they
+// may not go.  g.mu is held.
+func (g *Gate) admit(ctx context.Context, w World, cs []charge) (by []string, spent int, why string) {
+	by = make([]string, len(cs))
+	sum := 0
+	for i, c := range cs {
+		sum += c.amount
+		if c.grid || c.amount == 0 {
+			continue // nobody to be in pay_to
+		}
+		var why string
+		if by[i], why = g.allows(ctx, w, c.payee); why != "" {
+			return nil, 0, why
+		}
+	}
 
 	past, err := g.read()
 	if err != nil {
-		return refuse("the record of what this profile has paid cannot be read: %v", err)
+		return nil, 0, fmt.Sprintf("the record of what this profile has paid cannot be read: %v", err)
 	}
 	now := g.now()
 	past = recent(past, now)
-	d.Spent = total(past)
-	if limit := r.DailyLimit(); d.Spent+d.Amount > limit {
-		return refuse("L$%d more would make L$%d paid in the last 24 hours, over this profile's pay_daily of L$%d",
-			d.Amount, d.Spent+d.Amount, limit)
+	spent = total(past)
+	if limit := g.rules.DailyLimit(); spent+sum > limit {
+		return nil, spent, fmt.Sprintf("L$%d more would make L$%d paid in the last 24 hours, over this profile's pay_daily of L$%d",
+			sum, spent+sum, limit)
 	}
-	if err := g.write(append(past, Entry{At: now, Amount: d.Amount, To: d.Payee})); err != nil {
-		return refuse("the payment could not be recorded, so it is not made: %v", err)
+	for _, c := range cs {
+		if c.amount > 0 {
+			past = append(past, Entry{At: now, Amount: c.amount, To: c.payee})
+		}
 	}
-	return d
+	if err := g.write(past); err != nil {
+		return nil, spent, fmt.Sprintf("the payment could not be recorded, so it is not made: %v", err)
+	}
+	return by, spent, ""
 }
 
 // allows says which pay_to line lets payee be paid, or why none does.
@@ -153,7 +196,19 @@ func (g *Gate) allows(ctx context.Context, w World, payee msg.UUID) (string, str
 			return name, ""
 		}
 	}
-	return "", fmt.Sprintf("%s is not in this profile's pay_to", payee)
+	return "", fmt.Sprintf("%s is not in this profile's pay_to", who(ctx, w, payee))
+}
+
+// who is an avatar as a refusal names it: the name when it is known,
+// then the key.
+func who(ctx context.Context, w World, id msg.UUID) string {
+	if id.IsZero() {
+		return id.String()
+	}
+	if name := w.NameOf(ctx, id); name != "" {
+		return fmt.Sprintf("%s (%s)", name, id)
+	}
+	return id.String()
 }
 
 func (g *Gate) read() ([]Entry, error) {
