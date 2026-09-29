@@ -250,6 +250,7 @@ func newSessionWith(t *testing.T, caps agent.Caps, idle time.Duration) *rig {
 		Idle:     idle,
 		Recv:     []msg.ReceiverOption{msg.KeepBody()},
 		Tap:      func(p *msg.Packet) { h.relay(p) },
+		OnMoney:  func(m *agent.Money) { h.noteMoney(m) },
 	})
 	if err != nil {
 		t.Fatalf("connect: %v", err)

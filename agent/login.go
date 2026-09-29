@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/pay"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -80,6 +81,18 @@ type Login struct {
 	// package acts on it; see cmd/slgod, and agent.Options.Neighbours
 	// for what it becomes.
 	Neighbours *bool
+
+	// Pay is what this avatar may pay, and whom: the profile's pay,
+	// pay_max, pay_daily and pay_to.  The zero value pays nobody.
+	// Nothing in this package acts on it; slgod checks what its clients
+	// send against it, and sl what a session it holds itself sends.
+	// Why: doc/money.md#the-rules
+	Pay pay.Rules
+
+	// Profile is the name of the profile this was loaded from, and empty
+	// for a login that was not.  A direct session files what it has paid
+	// under it.
+	Profile string
 
 	// Channel and Version identify the client to Linden Lab.
 	Channel string

@@ -652,3 +652,63 @@ func TestNoViewerPasswordIsTheDefault(t *testing.T) {
 		t.Errorf("viewer password = %q, want none", out.ViewerPassword)
 	}
 }
+
+// TestAProfileSaysWhatItMayPay: the pay keys are read by package pay and
+// kept with the login, a profile knows its own name, and saving one
+// keeps what it says about paying -- one saved without it would stop the
+// avatar paying with nothing to say why.
+func TestAProfileSaysWhatItMayPay(t *testing.T) {
+	dir := tempConfig(t)
+	writeProfile(t, dir, "payer", `
+first     = Example
+last      = Resident
+password  = `+testDigest+`
+pay       = on
+pay_max   = 5
+pay_daily = 20
+pay_to    = Another Resident
+pay_to    = 92f67e57-7e57-c0de-24de-53f27a898992
+`, 0o600)
+
+	l, err := LoadProfile("payer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !l.Pay.On || l.Pay.Max != 5 || l.Pay.Daily != 20 || len(l.Pay.To) != 2 || l.Pay.To[0] != "Another Resident" {
+		t.Errorf("pay = %+v", l.Pay)
+	}
+	if l.Profile != "payer" {
+		t.Errorf("profile = %q", l.Profile)
+	}
+
+	if err := SaveProfile("again", l); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadProfile("again")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Pay.On || got.Pay.Max != 5 || got.Pay.Daily != 20 || strings.Join(got.Pay.To, "|") != strings.Join(l.Pay.To, "|") {
+		t.Errorf("saved %+v, read back %+v", l.Pay, got.Pay)
+	}
+
+	writeProfile(t, dir, "bad", "first = A\nlast = B\npassword = x\npay_max = lots\n", 0o600)
+	if _, err := LoadProfile("bad"); err == nil || !strings.Contains(err.Error(), "line 4") {
+		t.Errorf("err = %v, should name the line", err)
+	}
+}
+
+// TestSlgodsOwnDirectory: what slgod keeps rather than is told lives
+// apart from the profiles, and a direct session finds it by the same
+// rule.
+func TestSlgodsOwnDirectory(t *testing.T) {
+	t.Setenv("SLGOD_CONFIG_DIR", "/somewhere/slgod.dev")
+	if d, _ := DaemonConfigDir(); d != "/somewhere/slgod.dev" {
+		t.Errorf("SLGOD_CONFIG_DIR gave %q", d)
+	}
+	t.Setenv("SLGOD_CONFIG_DIR", "")
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+	if d, _ := DaemonConfigDir(); d != filepath.Join("/xdg", "slgod") {
+		t.Errorf("XDG_CONFIG_HOME gave %q", d)
+	}
+}

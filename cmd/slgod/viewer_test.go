@@ -867,6 +867,7 @@ type homingRig struct {
 	srv   *server.Server
 	ctx   context.Context
 	login agent.Login
+	sim   *fakeSim
 }
 
 func newHomingRig(t *testing.T, handle uint64) *homingRig {
@@ -885,7 +886,7 @@ func newHomingRig(t *testing.T, handle uint64) *homingRig {
 		srv.Close(stop)
 		cancel()
 	})
-	return &homingRig{srv: srv, ctx: ctx,
+	return &homingRig{srv: srv, ctx: ctx, sim: sim,
 		login: agent.Login{First: "Example", Last: "Resident", Password: "secret", URL: hs.URL, Start: "home"}}
 }
 

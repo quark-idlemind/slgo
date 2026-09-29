@@ -28,6 +28,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/quark-idlemind/slgo/agent"
 )
 
 // machineID is the computer slgod claims to be.
@@ -40,20 +42,9 @@ type machineID struct {
 //
 // This is slgod, not slgo: the profiles under ~/.config/slgo belong to
 // accounts and are portable between machines, while this describes the
-// machine and should not travel with them.
-func machineConfigDir() (string, error) {
-	if d := os.Getenv("SLGOD_CONFIG_DIR"); d != "" {
-		return d, nil
-	}
-	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
-		return filepath.Join(d, "slgod"), nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("slgod: no home directory: %w", err)
-	}
-	return filepath.Join(home, ".config", "slgod"), nil
-}
+// machine and should not travel with them.  The rule is agent's, since a
+// direct session keeps what it has paid here too.
+func machineConfigDir() (string, error) { return agent.DaemonConfigDir() }
 
 // useConfigDir makes dir the one directory this daemon keeps
 // everything in: the profiles it logs in, which are otherwise

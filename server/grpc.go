@@ -567,7 +567,8 @@ func attachItemString(id msg.UUID) string {
 
 // sendMessage puts a client's message on the circuit.  The client
 // supplies the number and the body; the sequence number and
-// reliability are the server's, because they are circuit state.
+// reliability are the server's, because they are circuit state.  The
+// body is not read, but for a payment's, which is checked first.
 func sendMessage(ctx context.Context, h *Hosted, c *Client, sentBy string, m *pb.OutboundMessage) error {
 	if m == nil {
 		return status.Error(codes.InvalidArgument, "empty message")
@@ -582,6 +583,17 @@ func sendMessage(ctx context.Context, h *Hosted, c *Client, sentBy string, m *pb
 	}
 	if id == 0 {
 		return status.Error(codes.InvalidArgument, "message needs an id or a name")
+	}
+
+	// A payment goes out only if the profile's rules let it, and is
+	// said where it was asked for when they do not.  See pay.go.
+	if id == moneyTransferRequest {
+		if why := h.checkPayment(ctx, c, sentBy, m.Body); why != "" {
+			if c == nil {
+				return status.Errorf(codes.PermissionDenied, "slgod refused the payment: %s", why)
+			}
+			return nil
+		}
 	}
 
 	// A client moving the avatar takes the wheel, and a client setting
