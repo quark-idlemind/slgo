@@ -1870,6 +1870,40 @@ the next owner may now copy, modify, transfer</span>
             at all.
           </p>
         </div>
+
+        <h3 id="money">Paying somebody</h3>
+        <p>
+          <code>balance</code> asks the grid for this avatar&rsquo;s L$.
+          <code>pay WHO AMOUNT [REASON]</code> pays an avatar, and asks first:
+          only <code>y</code> or <code>yes</code> pays. Where nobody is at a
+          prompt to answer — <code>slsh -c</code>, <code>slsh -f</code>, a
+          file run with <code>.</code>, a session read from a pipe — it pays
+          only with <code>--yes</code>, and refuses without it.
+        </p>
+
+        <div class="term">
+          <pre><span class="p">/$</span> <span class="k">balance</span>
+<span class="o">L$120</span>
+<span class="p">/$</span> <span class="k">pay Example Resident 5 thanks for the lamp</span>
+<span class="p">pay Example Resident L$5? [y/N]</span> <span class="k">y</span>
+<span class="o">paid Example Resident L$5; L$115 left (transaction c14e7e57-…)</span></pre>
+        </div>
+
+        <p>
+          A payment is never sent twice. When the grid&rsquo;s answer does not
+          come, the balance is read again: down by the amount is paid, the
+          same is not paid, and anything else is said with both balances.
+          Somebody paying this avatar is printed as it happens, like an
+          instant message: <code>* Example Resident paid you L$5; L$120 now</code>.
+        </p>
+
+        <p>
+          Paying is off unless the avatar&rsquo;s profile turns it on, and
+          slgod checks what every program pays against it; see
+          <a href="reference.html#pay">the profile keys</a>. A refusal is
+          printed with its reason. A viewer attached through slgod is a person
+          at the viewer&rsquo;s own pay dialog and is not checked.
+        </p>
       </section>
 
       <!-- --------------------------------------------------- waiting -->
@@ -2353,6 +2387,9 @@ how_extra   = {"reasoning_effort": "none"}</span></pre>
               <tr><td class="cmd">give · cp</td><td class="what">hand somebody an item; copy one into an object</td></tr>
               <tr><td class="cmd">offers · accept · decline</td><td class="what">what has been offered to you, and taking or refusing it</td></tr>
               <tr><td class="cmd">perms</td><td class="what">what an object is asking to be allowed to do</td></tr>
+
+              <tr><td class="group-title" colspan="2">Money</td></tr>
+              <tr><td class="cmd">balance · pay</td><td class="what">this avatar&rsquo;s L$, and paying an avatar some</td></tr>
 
               <tr><td class="group-title" colspan="2">Inventory</td></tr>
               <tr><td class="cmd">pwd · cd · ls · find</td><td class="what">where you are, moving about, and looking</td></tr>

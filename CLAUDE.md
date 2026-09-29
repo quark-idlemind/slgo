@@ -282,7 +282,8 @@ here when another is shared the same way.
   record of what it has paid. slgod runs it where it forwards a client's
   message (`server/pay.go`) and `sl.Direct.Send` for a session held
   without a daemon, so every payment a program sends passes one of the
-  two; a viewer's does not, on purpose.
+  two; a viewer's does not, on purpose. slbotd pays nothing, and
+  `TestNothingHerePays` refuses a payment anywhere in it.
 - `WatchSilence`, in `agent/agent.go` (`watchSilence` inside the
   package): calls a function once when a circuit has heard nothing for
   longer than a timeout, by a last-heard time it is given, looking a

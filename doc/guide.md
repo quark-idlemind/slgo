@@ -141,7 +141,9 @@ border needs and what a benchmark has no use for; it wins over `slgod
 -neighbours`, which is what profiles that say nothing get, and `slsh
 neighbours` turns it over on a session that is already up.
 `viewer_password` is what makes a session handable to a real viewer, and
-is described with `-viewer`.
+is described with `-viewer`. `pay`, `pay_max`, `pay_daily` and `pay_to`
+are what this avatar's programs may pay, and whom; paying is off
+without them, and they are in [money.md](money.md#the-rules).
 
 Storing the `$1$...` digest rather than the plain password is worth
 doing. It is the only form that ever goes over the wire, so it loses

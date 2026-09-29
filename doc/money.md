@@ -2,8 +2,9 @@
 
 What the grid says about an avatar's L$, what paying looks like on the
 wire, and the rules a profile puts on the programs that pay with it.
-The comments in `agent/money.go`, `internal/pay`, `server/pay.go` and
-`sl/money.go` say what the code does. This page is why.
+The comments in `agent/money.go`, `internal/pay`, `server/pay.go`,
+`sl/money.go` and `cmd/slsh/money.go` say what the code does. This
+page is why.
 
 ## What the grid says
 
@@ -105,7 +106,7 @@ waited for as long as it will be. The difference is what the balance
 check goes by:
 
 - down by exactly the amount: paid, and the answer was lost.
-  `PayUnconfirmed` says `PaidUnconfirmed`.
+  `PayUnconfirmed` says `PaidUnconfirmed`, and slsh reports it as paid.
 - the same: not paid.
 - anything else: not known, with both balances named, so that a person
   can work it out.
@@ -244,3 +245,22 @@ object that is for sale, buying land, joining a group with a fee -- and
 none of them is checked here. That is inferred from what the messages
 are for, not measured.
 
+## slsh
+
+`balance` asks every time. `pay NAME AMOUNT [REASON]` asks at the
+prompt before it pays -- `pay Example Resident L$5? [y/N]` -- and pays
+on `y` or `yes`. Where nobody is at a prompt -- `-c`, `-f`, a file run
+with `.`, a session read from a pipe -- it refuses without `--yes`: the
+next line of a script is not an answer to a question it never saw, and
+a script that meant to pay says so on the line that pays.
+
+A payment made to this avatar is printed as a line, like an instant
+message, with the payer labelled as `Sender.Label` labels anybody.
+
+## slbotd
+
+slbotd does not pay, and paying is not among what its model can ask
+for. A daemon that answers strangers through a language model is the
+last program that should be able to move money on its own, and nothing
+it does needs to. `TestNothingHerePays` refuses a payment anywhere in
+it.

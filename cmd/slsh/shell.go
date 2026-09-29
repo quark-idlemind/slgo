@@ -39,6 +39,10 @@ const (
 	// modeText collects a multi-line answer for a text box.  See
 	// entry.go.
 	modeText
+
+	// modeAsk takes the answer to a yes or no question, which is how
+	// pay asks before it pays.  See money.go.
+	modeAsk
 )
 
 // Shell is one running slsh.
@@ -89,6 +93,9 @@ type Shell struct {
 
 	// entry is the multi-line answer being typed, if one is.
 	entry *entry
+
+	// question is the yes or no being asked, if one is.
+	question *question
 
 	// history is what has been typed at a command prompt, and said is
 	// what has been typed at a chat one.  Two rings rather than one,
@@ -226,6 +233,12 @@ func (sh *Shell) key(ctx context.Context, r rune) {
 		}
 		return
 	case 3: // Ctrl-C
+		if sh.asking() {
+			sh.term.Take()
+			sh.answered(ctx, "")
+			sh.prompt()
+			return
+		}
 		if sh.term.Line() != "" {
 			sh.term.Take()
 			return
@@ -263,6 +276,12 @@ func (sh *Shell) key(ctx context.Context, r rune) {
 	// otherwise means end of input: of the answer being typed, or of
 	// the shell.
 	if !sh.term.Key(r) && r == 4 {
+		if sh.asking() {
+			sh.term.Take()
+			sh.answered(ctx, "")
+			sh.prompt()
+			return
+		}
 		if sh.typing() {
 			sh.finish(ctx)
 			return
@@ -274,6 +293,21 @@ func (sh *Shell) key(ctx context.Context, r rune) {
 }
 
 func (sh *Shell) enter(ctx context.Context) {
+	if sh.asking() {
+		// Echoed and kept, like a command: what was answered is what
+		// happened.  Busy while the answer is acted on, for the reason a
+		// command is.
+		sh.term.Echo()
+		answer := sh.term.Take()
+		sh.log.line("? " + answer)
+		sh.term.SetBusy(true)
+		defer func() {
+			sh.term.SetBusy(false)
+			sh.prompt()
+		}()
+		sh.answered(ctx, answer)
+		return
+	}
 	if sh.typing() {
 		// Echoed like a command rather than swallowed like chat: what
 		// was typed is the answer, and a person needs to see it to
@@ -323,7 +357,7 @@ func (sh *Shell) enter(ctx context.Context) {
 		return
 	}
 	sh.remember(line)
-	sh.Do(ctx, line)
+	sh.Do(context.WithValue(ctx, atPromptKey{}, true), line)
 }
 
 // ring is one history: the lines that were entered, oldest first, and
@@ -461,6 +495,12 @@ func (sh *Shell) promptText() string {
 		}
 		sh.mu.Unlock()
 		return fmt.Sprintf("%d text> ", n+1)
+	}
+	sh.mu.Lock()
+	q := sh.question
+	sh.mu.Unlock()
+	if q != nil {
+		return q.prompt
 	}
 	if sh.chatting() {
 		return mark + sh.talk.Current().Label() + "> "
@@ -980,7 +1020,7 @@ func commandNames() []string {
 
 func init() {
 	commands = map[string]*command{}
-	for _, set := range []map[string]*command{inventoryCommands, textureCommands, objectFileCommands, carryCommands, wearCommands, linkCommands, insideCommands, waitingCommands, noticeCommands, worldCommands, groupCommands, maturityCommands, socialCommands, objectCommands, postureCommands, walkCommands, sessionCommands, viewerCommands, setCommands, manCommands, askCommandTable} {
+	for _, set := range []map[string]*command{inventoryCommands, textureCommands, objectFileCommands, carryCommands, wearCommands, linkCommands, insideCommands, waitingCommands, noticeCommands, moneyCommands, worldCommands, groupCommands, maturityCommands, socialCommands, objectCommands, postureCommands, walkCommands, sessionCommands, viewerCommands, setCommands, manCommands, askCommandTable} {
 		for n, c := range set {
 			commands[n] = c
 		}

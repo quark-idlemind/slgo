@@ -175,7 +175,7 @@ viewer_running = pgrep -f /opt/firestorm-os/</pre></div>
             <tr><td><code>~/.config/slgo/</code> (profiles, slbotd.conf)</td><td><code>700</code></td><td class="what">refused, by slgod and slbotd</td></tr>
             <tr><td><code>~/.config/slgo/&lt;profile&gt;</code></td><td><code>600</code></td><td class="what">refused</td></tr>
             <tr><td><code>~/.config/slgod/</code></td><td><code>700</code></td><td class="what">created that way by slgod</td></tr>
-            <tr><td><code>~/.config/slgod/config</code>, <code>seats</code>, <code>viewer-key.pem</code></td><td><code>600</code></td><td class="what">written that way by slgod</td></tr>
+            <tr><td><code>~/.config/slgod/config</code>, <code>seats</code>, <code>pay-*</code>, <code>viewer-key.pem</code></td><td><code>600</code></td><td class="what">written that way by slgod</td></tr>
             <tr><td><code>~/.config/slgod/viewer-cert.pem</code></td><td><code>644</code></td><td class="what">public; fine as it is</td></tr>
             <tr><td>the <code>-log</code> directory, e.g. <code>~/.local/log</code></td><td><code>700</code></td><td class="what">refused if it already exists wider</td></tr>
             <tr><td>the <code>-log</code> and <code>-trace</code> files</td><td><code>600</code></td><td class="what">narrowed to 600 when opened</td></tr>
@@ -247,7 +247,7 @@ set path = ( $path ~/go/bin )
             <tr><td>run as a service, without <code>-log</code></td><td class="what" data-os-side="linux">the journal: <code>journalctl --user -u slgod</code></td><td class="what" data-os-side="mac">the file named by <code>StandardErrorPath</code></td></tr>
             <tr><td>slsh transcript</td><td class="what" colspan="2"><code>~/.local/share/slgo/&lt;avatar&gt;.log</code>, or <code>$XDG_DATA_HOME/slgo</code>, or slsh's <code>log_dir</code></td></tr>
             <tr><td>slbotd conversations</td><td class="what" colspan="2"><code>~/.local/state/slbotd/</code>, or <code>$XDG_STATE_HOME/slbotd</code>, or <code>chat-dir</code></td></tr>
-            <tr><td>slgod's identity, seats, viewer certificate</td><td class="what" colspan="2"><code>~/.config/slgod/</code></td></tr>
+            <tr><td>slgod's identity, seats, payment records, viewer certificate</td><td class="what" colspan="2"><code>~/.config/slgod/</code></td></tr>
           </tbody>
         </table></div>
         <p>slgod's log lines carry the time of day and no date. Neither daemon rotates its log. See <a href="setups.html#logs">Logs and rotating them</a>.</p>

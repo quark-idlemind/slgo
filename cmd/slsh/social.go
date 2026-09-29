@@ -209,6 +209,9 @@ func (sh *Shell) watch(ctx context.Context) {
 	// own and prints its own line as well -- see cmdTP for why both are
 	// wanted.
 	regions := sh.s.RegionChanges(0)
+	// Money: a payment made to this avatar is said, as an instant
+	// message is.
+	money := sh.s.Money(0)
 	// The group names a notice is announced with, asked for now so that
 	// the first notice need not wait for them.  See heardNotice.
 	sh.groups.kick()
@@ -290,6 +293,11 @@ func (sh *Shell) watch(ctx context.Context) {
 			// something the new region has never heard of.
 			sh.noticef("the avatar is now in %s -- what the last region "+
 				"described is gone", c.Region)
+		case m, ok := <-money:
+			if !ok {
+				return
+			}
+			sh.heardMoney(ctx, m)
 		}
 	}
 }
