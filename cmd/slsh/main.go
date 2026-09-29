@@ -23,13 +23,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/pborman/getopt/v2"
 	"github.com/pborman/options"
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/internal/creds"
 	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/internal/slhost"
@@ -43,6 +46,8 @@ type opts struct {
 	Direct  bool   `getopt:"--direct -d        log in to Second Life directly, without slgod"`
 	Addr    string `getopt:"--addr=HOSTPORT    the slgod to attach to; default sl-host, or this machine"`
 	Agent   string `getopt:"--agent=NAME -a    the profile to use; $SLGO_AGENT, or the daemon's default"`
+	Login   string `getopt:"--login=NAME       log NAME in through slgod unless it is up, and use it"`
+	Logout  string `getopt:"--logout=NAME      log NAME out through slgod, and exit"`
 	First   string `getopt:"--first=NAME       the avatar's first name, for --direct"`
 	Last    string `getopt:"--last=NAME        the avatar's last name, for --direct"`
 	Start   string `getopt:"--start=WHERE      where to arrive: last, home, or a region, for --direct"`
@@ -98,6 +103,15 @@ func run() error {
 		return nil
 	}
 
+	if o.Login != "" {
+		if o.Direct {
+			return fmt.Errorf("--login asks slgod to log an avatar in; --direct logs in by itself")
+		}
+		if getopt.IsSet("agent") && o.Agent != o.Login {
+			return fmt.Errorf("--login %s and --agent %s name two avatars", o.Login, o.Agent)
+		}
+		o.Agent = o.Login
+	}
 	cfg.Addr, cfg.Agent, cfg.Chat = o.Addr, o.Agent, o.Chat
 	if o.Escape != "" {
 		r, err := ParseKey(o.Escape)
@@ -109,6 +123,17 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	if o.Logout != "" {
+		if o.Direct || o.Login != "" || o.Command != "" || o.File != "" {
+			return fmt.Errorf("--logout logs an avatar out and exits; it takes nothing to do after")
+		}
+		addr, err := slhost.ResolveFor(cfg.Addr, o.Logout)
+		if err != nil {
+			return err
+		}
+		return logoutOnly(ctx, addr, o.Logout, os.Stdout)
+	}
 
 	// Connect, one way or the other.  Everything after this is the
 	// same either way.
@@ -140,11 +165,22 @@ func run() error {
 		}
 		dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		if s, err = sl.Dial(dialCtx, cfg.Addr, cfg.Agent); err != nil {
-			// A session down for good cannot be attached to, so the
-			// way back is to ask for it through another one.
-			if status.Code(err) == codes.FailedPrecondition && cfg.Agent != "" {
-				return fmt.Errorf("%w\n        slsh -a OTHER -c 'login %s' brings it back", err, cfg.Agent)
+		if o.Login != "" {
+			s, err = loginAndDial(ctx, dialCtx, cfg.Addr, o.Login, os.Stderr)
+		} else {
+			s, err = sl.Dial(dialCtx, cfg.Addr, cfg.Agent)
+		}
+		if err != nil {
+			// A session down for good cannot be attached to, and a
+			// daemon holding none has no default: --login is the way
+			// in for both, and needs no session up to ask through.
+			if o.Login == "" {
+				switch code := status.Code(err); {
+				case code == codes.FailedPrecondition && cfg.Agent != "":
+					return fmt.Errorf("%w\n        slsh --login %s brings it back", err, cfg.Agent)
+				case code == codes.NotFound && cfg.Agent == "":
+					return fmt.Errorf("%w\n        slsh --login NAME logs one in", err)
+				}
 			}
 			return fmt.Errorf("%w\n        --direct logs in without slgod", err)
 		}
@@ -233,4 +269,61 @@ func (sh *Shell) watchQuietly(ctx context.Context, lines <-chan sl.Line) {
 			}
 		}
 	}
+}
+
+// loginAndDial asks slgod to bring a session up, as the login command
+// does, and attaches to it on the same connection: one that is already
+// up is left as it is, and one that was down is logged in and said so
+// on note.  A session down on purpose is started too, since naming it
+// here is the deliberate act login's comment describes.
+//
+// The dial and the attach are bounded by dialCtx; the login is bounded
+// by the daemon, which is what knows how long one takes.
+func loginAndDial(ctx, dialCtx context.Context, addr, name string, note io.Writer) (*sl.Session, error) {
+	conn, err := client.Dial(dialCtx, addr)
+	if err != nil {
+		return nil, fmt.Errorf("sl: cannot reach slgod at %s: %w", addr, err)
+	}
+	r, err := conn.Host(ctx, name, true)
+	if err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("logging %s in: %w", name, err)
+	}
+	if !r.GetAlready() {
+		fmt.Fprintf(note, "%s: %s in %s\n", name, r.GetAgent().GetAvatarName(), r.GetAgent().GetRegion())
+	}
+	h, err := sl.AttachConn(dialCtx, conn, name)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	s, err := sl.New(h)
+	if err != nil {
+		h.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// logoutOnly logs a session out without attaching to it, so the shell
+// asking is never one of the clients the logout is refused for, and the
+// last avatar up can be put down.  It is not forced: a client using the
+// session still stops it, and is named.
+func logoutOnly(ctx context.Context, addr, name string, out io.Writer) error {
+	dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	conn, err := client.Dial(dialCtx, addr)
+	if err != nil {
+		return fmt.Errorf("sl: cannot reach slgod at %s: %w", addr, err)
+	}
+	defer conn.Close()
+	r, err := conn.Logout(ctx, name, false)
+	if err != nil {
+		if cs := r.GetClients(); len(cs) > 0 {
+			return fmt.Errorf("%w\n        attached: %s", err, strings.Join(cs, ", "))
+		}
+		return err
+	}
+	fmt.Fprintf(out, "%s logged out; slsh --login %s brings it back\n", name, name)
+	return nil
 }

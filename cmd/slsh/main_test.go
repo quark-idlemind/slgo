@@ -15,6 +15,7 @@ package main
 // more than one of them.
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -25,6 +26,7 @@ import (
 	"time"
 
 	"github.com/pborman/getopt/v2"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 	"github.com/quark-idlemind/slgo/sl"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -149,8 +151,7 @@ func TestADaemonThatIsNotThereSaysWhatElseThereIs(t *testing.T) {
 }
 
 // TestASessionDownForGoodSaysHowToBringItBack: attaching to it is
-// refused, so --direct is the wrong advice; login through another
-// profile is the way back.
+// refused, so --direct is the wrong advice; --login is the way back.
 func TestASessionDownForGoodSaysHowToBringItBack(t *testing.T) {
 	d, addr := newAuthDaemon(t)
 	d.attachFail = status.Error(codes.FailedPrecondition,
@@ -159,9 +160,135 @@ func TestASessionDownForGoodSaysHowToBringItBack(t *testing.T) {
 	if err == nil {
 		t.Fatal("attaching to a session down for good should fail")
 	}
-	if !strings.Contains(err.Error(), "slsh -a OTHER -c 'login fake' brings it back") ||
+	if !strings.Contains(err.Error(), "slsh --login fake brings it back") ||
 		strings.Contains(err.Error(), "--direct") {
 		t.Errorf("run = %v", err)
+	}
+}
+
+// TestADaemonHoldingNoSessionsPointsAtLogin: with nothing up there is
+// no default to attach to, and --login is how to bring one up.
+func TestADaemonHoldingNoSessionsPointsAtLogin(t *testing.T) {
+	d, addr := newAuthDaemon(t)
+	d.attachFail = status.Error(codes.NotFound, "this server holds no sessions")
+	err := runWith(t, t.TempDir(), "--addr", addr, "-c", "echo hi")
+	if err == nil || !strings.Contains(err.Error(), "slsh --login NAME logs one in") {
+		t.Errorf("run = %v", err)
+	}
+}
+
+// TestLoginBringsTheAvatarUpAndUsesIt: --login asks the daemon to host
+// the one named, forced as the login command is, and the run is then
+// that avatar's -- not the daemon's default.
+func TestLoginBringsTheAvatarUpAndUsesIt(t *testing.T) {
+	d, addr := newAuthDaemon(t)
+	d.host = &pb.HostResponse{Agent: d.info}
+
+	var err error
+	got := capturingStdout(t, func() {
+		err = runWith(t, t.TempDir(), "--addr", addr, "--login", "fake", "-c", "echo as whoever")
+	})
+	if err != nil {
+		t.Fatalf("run = %v", err)
+	}
+	if !strings.Contains(got, "as whoever") {
+		t.Errorf("the command did not run:\n%s", got)
+	}
+	if len(d.hosts) != 1 || d.hosts[0].GetAgent() != "fake" || !d.hosts[0].GetForce() {
+		t.Errorf("Host was asked %v, want once for fake, forced", d.hosts)
+	}
+}
+
+// TestLoginSaysSoOnlyWhenItLoggedIn: an avatar already up is used
+// without a word; one that had to be logged in is named with where it
+// arrived.
+func TestLoginSaysSoOnlyWhenItLoggedIn(t *testing.T) {
+	for _, already := range []bool{false, true} {
+		d, addr := newAuthDaemon(t)
+		d.host = &pb.HostResponse{Agent: d.info, Already: already}
+		var note bytes.Buffer
+		s, err := loginAndDial(context.Background(), context.Background(), addr, "fake", &note)
+		if err != nil {
+			t.Fatalf("already=%v: %v", already, err)
+		}
+		s.Close()
+		want := ""
+		if !already {
+			want = "fake: Quark Idlemind in Test Region\n"
+		}
+		if note.String() != want {
+			t.Errorf("already=%v: said %q, want %q", already, note.String(), want)
+		}
+	}
+}
+
+// TestLoginRefusesWhatCannotMeanIt: --login is slgod's, so --direct
+// with it is a contradiction, and so is --agent naming somebody else.
+// Both are refused before anything is dialled.
+func TestLoginRefusesWhatCannotMeanIt(t *testing.T) {
+	for _, c := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--login", "fake", "--direct"}, "--direct logs in by itself"},
+		{[]string{"--login", "fake", "--agent", "other"}, "name two avatars"},
+	} {
+		err := runWith(t, t.TempDir(), append([]string{"--addr", "127.0.0.1:1"}, c.args...)...)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%v: run = %v, want %q", c.args, err, c.want)
+		}
+	}
+}
+
+// TestLogoutPutsTheAvatarDownWithoutAttaching: --logout asks the
+// daemon to log the one named out, unforced, and attaches to nothing --
+// so no shell of its own is a client the logout is refused for.
+func TestLogoutPutsTheAvatarDownWithoutAttaching(t *testing.T) {
+	d, addr := newAuthDaemon(t)
+	d.logout = &pb.LogoutResponse{}
+
+	var err error
+	got := capturingStdout(t, func() {
+		err = runWith(t, t.TempDir(), "--addr", addr, "--logout", "fake")
+	})
+	if err != nil {
+		t.Fatalf("run = %v", err)
+	}
+	if !strings.Contains(got, "fake logged out; slsh --login fake brings it back") {
+		t.Errorf("said %q", got)
+	}
+	if len(d.logouts) != 1 || d.logouts[0].GetAgent() != "fake" || d.logouts[0].GetForce() {
+		t.Errorf("Logout was asked %v, want once for fake, unforced", d.logouts)
+	}
+	select {
+	case <-d.ended:
+		t.Error("--logout attached to a session")
+	default:
+	}
+}
+
+// TestLogoutNamesWhoIsUsingIt when the daemon refuses because a client
+// is attached.
+func TestLogoutNamesWhoIsUsingIt(t *testing.T) {
+	d, addr := newAuthDaemon(t)
+	d.fail = errors.New("fake is in use")
+	d.logout = &pb.LogoutResponse{Clients: []string{"slbench[42]@127.0.0.1"}}
+	err := runWith(t, t.TempDir(), "--addr", addr, "--logout", "fake")
+	if err == nil || !strings.Contains(err.Error(), "attached: slbench[42]@127.0.0.1") {
+		t.Errorf("run = %v", err)
+	}
+}
+
+// TestLogoutTakesNothingElseToDo: it logs out and exits, so a command,
+// a file, a login or --direct beside it is refused before any dial.
+func TestLogoutTakesNothingElseToDo(t *testing.T) {
+	for _, extra := range [][]string{
+		{"-c", "where"}, {"--file", "x"}, {"--login", "fake"}, {"--direct"},
+	} {
+		err := runWith(t, t.TempDir(), append([]string{"--addr", "127.0.0.1:1", "--logout", "fake"}, extra...)...)
+		if err == nil || !strings.Contains(err.Error(), "takes nothing to do after") {
+			t.Errorf("%v: run = %v", extra, err)
+		}
 	}
 }
 
