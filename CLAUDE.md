@@ -271,10 +271,18 @@ here when another is shared the same way.
   `ObjectName` used outside `Label` in `sl`, slsh or slbotd.
 - `sl.Options`, in `sl/options.go`, set with `Session.SetOptions`: how
   long a move, a permission change and a delete are read back before
-  they are reported not confirmed, 15, 15 and 10 s by default. A test
-  that proves one of them runs out sets it short rather than waiting
-  the default out, as `sl`'s do and `shortReadBacks` does for
+  they are reported not confirmed, 15, 15 and 10 s by default, and how
+  long each wait for the grid about L$ -- `Balance`, a payment's answer,
+  the balance read after that answer did not come -- lasts, 15 s. A
+  test that proves one of them runs out sets it short rather than
+  waiting the default out, as `sl`'s do and `shortReadBacks` does for
   `cmd/slsh`'s.
+- `pay.Gate`, in `internal/pay`: the one check of a
+  `MoneyTransferRequest` against a profile's rules for paying, and the
+  record of what it has paid. slgod runs it where it forwards a client's
+  message (`server/pay.go`) and `sl.Direct.Send` for a session held
+  without a daemon, so every payment a program sends passes one of the
+  two; a viewer's does not, on purpose.
 - `WatchSilence`, in `agent/agent.go` (`watchSilence` inside the
   package): calls a function once when a circuit has heard nothing for
   longer than a timeout, by a last-heard time it is given, looking a

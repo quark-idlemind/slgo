@@ -355,12 +355,12 @@ type chatSub struct {
 // chatCmd is work to run on the reader goroutine.
 //
 // Every subscription -- chat, permissions, instant messages, region
-// changes -- is added and removed this way, so that the reader stays the
+// changes, money -- is added and removed this way, so that the reader stays the
 // only thing that ever touches a subscription's channel: the only
 // writer and the only closer.  Closing from anywhere else races with a
 // send no matter how it is locked.
 //
-// A closure rather than a field per kind, because there are four kinds
+// A closure rather than a field per kind, because there are five kinds
 // now and the next one should cost nothing.
 type chatCmd struct {
 	apply func()
@@ -500,8 +500,8 @@ func (w *Session) onReader(fn func()) {
 // closeChat shuts every subscription down, which is what tells a
 // caller ranging over one that there will be no more.
 //
-// Every kind: chat, permissions, instant messages and region changes
-// alike.  Missing one of them is not a smaller version of the same bug:
+// Every kind: chat, permissions, instant messages, region changes and
+// money alike.  Missing one of them is not a smaller version of the same bug:
 // a caller ranging over the one that was missed waits for ever, which is
 // the worst way for a session to end.
 func (w *Session) closeChat() {
@@ -521,6 +521,10 @@ func (w *Session) closeChat() {
 	}
 	for ch, s := range w.regionSubs {
 		delete(w.regionSubs, ch)
+		close(s.ch)
+	}
+	for ch, s := range w.moneySubs {
+		delete(w.moneySubs, ch)
 		close(s.ch)
 	}
 	w.mu.Unlock()

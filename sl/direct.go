@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/internal/pay"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -37,6 +38,10 @@ type Direct struct {
 	// moved by the daemon that moved it; here the agent in this
 	// process is the daemon, and it says so through a callback.
 	regions chan *RegionChange
+
+	// pay is the profile's rules for paying, which slgod would check;
+	// here nothing else will.  Nil pays nobody.  See Send.
+	pay *pay.Gate
 }
 
 var _ Backend = (*Direct)(nil)
@@ -90,6 +95,7 @@ func Login(ctx context.Context, l agent.Login) (*Direct, error) {
 	if d.a, err = agent.Connect(ctx, acct, opts); err != nil {
 		return nil, err
 	}
+	d.pay = pay.NewGate(l.Pay, ledgerFor(l.Profile))
 	d.info = &Info{
 		Name:          "direct",
 		AgentID:       acct.AgentID,
@@ -101,6 +107,21 @@ func Login(ctx context.Context, l agent.Login) (*Direct, error) {
 		Caps:          d.a.Caps().Names(),
 	}
 	return d, nil
+}
+
+// ledgerFor is where a direct session of this profile keeps what it has
+// paid: beside slgod's record for the same profile, so that the daily
+// limit is one limit however the avatar is logged in.  A login that was
+// not loaded from a profile keeps it in memory.
+func ledgerFor(profile string) string {
+	if profile == "" {
+		return ""
+	}
+	dir, err := agent.DaemonConfigDir()
+	if err != nil {
+		return ""
+	}
+	return pay.LedgerPath(dir, profile)
 }
 
 // Agent is the session underneath, for anything this package does not
@@ -237,6 +258,18 @@ func (d *Direct) Close() error {
 }
 
 func (d *Direct) Send(ctx context.Context, m msg.Message, reliable bool) error {
+	// A payment goes out only if the profile's rules let it, checked
+	// here as slgod checks a client's.
+	// Why: doc/money.md#where-the-rules-are-checked
+	if t, ok := m.(*msg.MoneyTransferRequest); ok {
+		g := d.pay
+		if g == nil {
+			g = pay.NewGate(pay.Rules{}, "")
+		}
+		if dec := g.Check(ctx, d.a, t); dec.Refused != "" {
+			return &PayRefused{By: "this profile's rules", Reason: dec.Refused}
+		}
+	}
 	if reliable {
 		return d.a.Send.SendReliable(ctx, m)
 	}

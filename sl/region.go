@@ -200,8 +200,9 @@ func (w *Session) regionChanged(c *RegionChange) {
 //     a refusal silently unquotable, and a chat collector is the
 //     caller's window rather than the region's.
 //   - the subscriptions and the waiters: chatSubs, imSubs, permSubs,
-//     regionSubs, the pickers, and the propsFns, mapFns, teleportFns,
-//     profileFns, scriptFns, parcelFns and dwellFns beside them.  These
+//     regionSubs, moneySubs, the pickers, the payWaits, and the
+//     propsFns, mapFns, teleportFns, profileFns, scriptFns, parcelFns
+//     and dwellFns beside them.  These
 //     are not state at all, they are callers waiting, and the teleport
 //     that caused this is very probably one of them.  Emptying them
 //     would strand every one.

@@ -17,6 +17,12 @@ type Options struct {
 	MoveTimeout        time.Duration
 	PermissionsTimeout time.Duration
 	DeleteTimeout      time.Duration
+
+	// MoneyTimeout bounds each wait for the grid to answer about L$:
+	// Balance, a payment's answer, and the balance read when that
+	// answer does not come.
+	// Why: doc/money.md#how-long-to-wait
+	MoneyTimeout time.Duration
 }
 
 // The defaults for Options.  None of them is a measurement; each is a
@@ -25,6 +31,7 @@ const (
 	DefaultMoveTimeout        = 15 * time.Second
 	DefaultPermissionsTimeout = 15 * time.Second
 	DefaultDeleteTimeout      = 10 * time.Second
+	DefaultMoneyTimeout       = 15 * time.Second
 )
 
 // SetOptions replaces the session's Options.  A call already waiting
@@ -40,7 +47,8 @@ func (w *Session) Options() Options {
 	return Options{}
 }
 
-// moveWait, permissionsWait and deleteWait are the bounds in force.
+// moveWait, permissionsWait, deleteWait and moneyWait are the bounds in
+// force.
 func (w *Session) moveWait() time.Duration {
 	return orDefault(w.Options().MoveTimeout, DefaultMoveTimeout)
 }
@@ -51,6 +59,10 @@ func (w *Session) permissionsWait() time.Duration {
 
 func (w *Session) deleteWait() time.Duration {
 	return orDefault(w.Options().DeleteTimeout, DefaultDeleteTimeout)
+}
+
+func (w *Session) moneyWait() time.Duration {
+	return orDefault(w.Options().MoneyTimeout, DefaultMoneyTimeout)
 }
 
 func orDefault(d, def time.Duration) time.Duration {

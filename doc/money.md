@@ -2,8 +2,8 @@
 
 What the grid says about an avatar's L$, what paying looks like on the
 wire, and the rules a profile puts on the programs that pay with it.
-The comments in `agent/money.go`, `internal/pay` and `server/pay.go`
-say what the code does. This page is why.
+The comments in `agent/money.go`, `internal/pay`, `server/pay.go` and
+`sl/money.go` say what the code does. This page is why.
 
 ## What the grid says
 
@@ -60,9 +60,77 @@ It sends nothing for an amount of 0, takes the absolute value of any
 other, refuses a null id, and sends nothing it cannot afford by the
 balance it last heard, opening the buy-currency window instead
 (`llviewermessage.cpp:461-470, 488-493`; `can_afford_transaction`,
-`newview/llstatusbar.cpp:1228-1231`).
+`newview/llstatusbar.cpp:1228-1231`). `sl` does the same, but refuses a
+negative amount rather than turn it round, and reads the balance just
+before paying rather than trust an old one.
 
 For an object, `DestID` is the object and not its owner.
+
+## Finding a payment's answer
+
+Nothing in a `MoneyTransferRequest` is the sender's to choose and comes
+back in the reply: the transaction id is the grid's. So `sl` finds a
+payment's answer by what the answer describes -- the type, this avatar
+as the source, the destination, the amount, and the reason echoed back
+-- and a payment waiting takes the first answer that matches it, the
+oldest waiting first, so that two payments alike are answered one each.
+
+A payment received in the meantime has somebody else as its source and
+is never taken for the one sent. A plain balance has no source at all.
+
+Two things are read from the viewer's source rather than seen:
+
+- The viewer takes an echoed "Payment" to mean no reason was given --
+  "Simulator returns "Payment" if no custom description has been
+  entered" (`llviewermessage.cpp:5846-5847`) -- so a payment sent with
+  no reason also takes an answer echoing "Payment".
+- Which id the grid puts in `DestID` when an object is paid, the object
+  or its owner, has not been measured, so `PayObject` takes either.
+
+An answer that matches nothing is not lost: it is delivered, and it
+counts in the balance check below.
+
+## Never twice
+
+`Pay` never sends a payment again. A reply that does not come is not a
+payment that did not happen -- the one measured came 0.2 s later, over
+UDP, and either leg can be lost -- and nothing in the request lets the
+grid tell a second one from a first. Sending again is how a lost reply
+becomes two payments.
+
+## After an answer that did not come
+
+The balance is read before paying, and again when the answer has been
+waited for as long as it will be. The difference is what the balance
+check goes by:
+
+- down by exactly the amount: paid, and the answer was lost.
+  `PayUnconfirmed` says `PaidUnconfirmed`.
+- the same: not paid.
+- anything else: not known, with both balances named, so that a person
+  can work it out.
+
+What else moved the balance in between is allowed for, as far as it can
+be told apart: a payment received arrives as its own reply and is
+added, and a payment another call took as its answer is taken off.
+A payment of this avatar's that no call took as its answer -- another
+client's, a viewer's, or this one's with an echo that did not match --
+could be anything, so with one of those in between an unchanged balance
+is not known rather than not paid. So is one with more answers in
+between than the session keeps, sixty-four.
+
+A caller that gives up is owed the same answer, so the balance is read
+on a context the cancel does not reach.
+
+## How long to wait
+
+0.2 s was measured on a quiet region. A busy one can take much longer,
+and a bound too near the measurement turns a slow success into a
+payment reported not confirmed. So every wait for the grid about L$ --
+`Balance`, a payment's answer, and the balance read after an answer that
+did not come -- is bounded at 15 s, the figure the other read-backs
+use, and `sl.Options.MoneyTimeout` changes it. A test that proves one
+runs out sets it short.
 
 ## The rules
 
@@ -97,9 +165,10 @@ again next time.
 
 An object is paid only when its owner may be, and the owner is what the
 region said in the object's properties. An object nobody has said an
-owner for is refused.
+owner for is refused; `sl.PayObject` asks for the owner before it pays,
+which is what puts it where slgod looks.
 
-All of this is in `internal/pay`.
+All of this is in `internal/pay`, which slgod and `sl` both use.
 
 ## Where the rules are checked
 
@@ -116,6 +185,10 @@ using the viewer's own pay dialog, with its own confirmation, and the
 rules are about programs. Nothing needs doing to exempt it: a viewer's
 messages go down its own circuit, straight to the session, and never
 pass through `sendMessage`.
+
+A session held with `--direct` has no daemon, so `sl`'s `Direct`
+checks the same rules itself, in `Send`, from the profile it logged in
+with.
 
 Every payment let through and every refusal is logged by slgod: who
 asked, whom it was for, how much, and why it was refused or which
@@ -139,7 +212,8 @@ program that matches nothing is still sent the message it would have
 been sent for a refusal. A new kind of notice would have needed a new
 field on the wire and a new case in every client. The signature is
 what tells it from the grid's: a `MoneyBalanceReply` with any other
-`from_client` is an echo of something a client sent.
+`from_client` is an echo of something a client sent, and `sl` believes
+neither kind as a balance.
 
 The unary `Send` has no stream to answer on, so its refusal is its
 error, `PERMISSION_DENIED` with the reason.
@@ -151,7 +225,9 @@ kept one file per profile, `pay-PROFILE`, mode 600, in slgod's own
 directory (`~/.config/slgod`, or the `-config` directory), beside the
 seats. A payment is dropped from it a day after it was made. It is read
 again before every payment and written whole after one, so the total
-outlives a restart of slgod.
+outlives a restart of slgod, and a `--direct` session of the same
+profile, which keeps its record in the same place, counts against the
+same total.
 
 It counts what was let through, not what the grid confirmed. A payment
 the grid then refused still counts until it is a day old, and so does
