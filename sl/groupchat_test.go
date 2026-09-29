@@ -539,16 +539,16 @@ func TestOnlyAnInvitationCanBeAccepted(t *testing.T) {
 	}
 }
 
-// TestInvitationsThatAreNotAGroupsAreIgnored: the viewer's other two shapes
-// are voice and conference calls, and its own invitation is dropped.
+// TestInvitationsThatAreNotAGroupsAreIgnored: the voice shape is a call,
+// and this avatar's own invitations, in either shape, are dropped.  The
+// immediate shape is a conference's; see conference_test.go.
 func TestInvitationsThatAreNotAGroupsAreIgnored(t *testing.T) {
 	w, f := newFakeSession(t)
 	subs := w.GroupChats(8)
 
 	f.RelayEvent(t, "ChatterBoxInvitation", llsdEvent(fmt.Sprintf(
 		`<key>session_id</key><uuid>%s</uuid><key>voice</key><map/>`, chatGroup)))
-	f.RelayEvent(t, "ChatterBoxInvitation", llsdEvent(fmt.Sprintf(
-		`<key>session_id</key><uuid>%s</uuid><key>immediate</key><boolean>1</boolean>`, chatGroup)))
+	f.RelayEvent(t, "ChatterBoxInvitation", immediateBody(confSession, testAgentID, "Quark Idlemind", "mine"))
 	f.RelayEvent(t, "ChatterBoxInvitation", invitationBody(chatGroup, testAgentID, "Quark Idlemind", "me", chatName))
 	noChat(t, subs, "an invitation that is not for this avatar to hear")
 }

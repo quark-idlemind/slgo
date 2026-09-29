@@ -25,7 +25,7 @@ type Options struct {
 	MoneyTimeout time.Duration
 
 	// GroupChatTimeout bounds the wait for the grid to say a group's
-	// chat has started.
+	// chat, or a conference, has started.
 	// Why: doc/group-chat.md#joining-a-groups-chat-when-the-user-asks
 	GroupChatTimeout time.Duration
 }

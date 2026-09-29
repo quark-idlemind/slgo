@@ -41,11 +41,14 @@ const (
 
 	// The dialogs of a group's chat session: the invitation, the start
 	// a viewer sends to join, the message, and the leave.  The session is
-	// the group.  See groupchat.go.
-	DialogSessionInvite     = 13
-	DialogSessionGroupStart = 15
-	DialogSessionSend       = 17
-	DialogSessionLeave      = 18
+	// the group.  A conference's are the same but for its start, which is
+	// 16 and is sent only where the capability refuses.  See
+	// groupchat.go and conference.go.
+	DialogSessionInvite          = 13
+	DialogSessionGroupStart      = 15
+	DialogSessionConferenceStart = 16
+	DialogSessionSend            = 17
+	DialogSessionLeave           = 18
 
 	// DialogFromTask is a script's llInstantMessage.  From is the
 	// object's OWNER, ID is the object, and FromName is whatever the
@@ -866,6 +869,8 @@ func DialogName(d uint8) string {
 		return "group chat invitation"
 	case DialogSessionGroupStart:
 		return "group chat start"
+	case DialogSessionConferenceStart:
+		return "conference start"
 	case DialogSessionSend:
 		return "group message"
 	case DialogSessionLeave:

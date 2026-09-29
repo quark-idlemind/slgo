@@ -64,7 +64,8 @@ When somebody speaks in a group's chat and this avatar has no session
 in it, the grid sends `ChatterBoxInvitation` on the event queue.  The
 viewer's handler (`LLViewerChatterBoxInvitation`, `llimview.cpp:5036`)
 does the following, for the body that has `instantmessage` (the other
-two shapes, `voice` and `immediate`, are voice and conference calls):
+two shapes, `voice`, a call, and `immediate`, a conference's invitation,
+are read in [conference.md](conference.md)):
 
 1. Reads `message_params` out of it: `message`, `from_name`, `from_id`,
    `id` (the session, which for a group is the group), `data.binary_bucket`
@@ -291,8 +292,9 @@ invitation at once (above) and that is the one place this departs from
 it, on the owner's instruction: a bot in a busy group would be flooded.
 `GroupChat.Accept` posts what the viewer posts, and `JoinGroupChat`
 starts the chat by the viewer's other route.  An invitation from this
-avatar, and the voice and conference shapes, are ignored as the viewer
-ignores them; Do Not Disturb has no counterpart here.
+avatar, and the voice shape, are ignored as the viewer ignores them; the
+`immediate` shape is a conference's and is surfaced as one
+([conference.md](conference.md)); Do Not Disturb has no counterpart here.
 
 Not known, and what the first live run should look at: whether the grid
 goes on inviting for every message while nothing answers, whether it

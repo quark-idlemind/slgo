@@ -1,7 +1,8 @@
 package sl
 
 // Group chat: joining a group's chat, hearing it, speaking in it and
-// leaving it.
+// leaving it.  A conference (conference.go) is the same machinery under
+// another kind of session, and its events arrive here.
 //
 // Nothing here joins on its own.  The viewer answers every invitation it
 // does not drop, so it is in a group's chat from the moment somebody
@@ -38,10 +39,15 @@ var ErrNotInGroup = errors.New("sl: this avatar is not a member of that group")
 // for.
 var ErrNotInGroupChat = errors.New("sl: this session has not joined that group's chat")
 
-// GroupChatError is the grid refusing to start a group's chat or to let
-// this avatar go on in it.
+// GroupChatError is the grid refusing to start a group's chat or a
+// conference, or to let this avatar go on in it.
 type GroupChatError struct {
+	// Group is the group, or for a refused conference start the
+	// temporary id the start was made with.
 	Group msg.UUID
+
+	// Conference says it was a conference the grid refused.
+	Conference bool
 
 	// Key is the name of the string the grid answered with, and Reason
 	// what the viewer says for it, or Key again when it has no words.
@@ -49,6 +55,9 @@ type GroupChatError struct {
 }
 
 func (e *GroupChatError) Error() string {
+	if e.Conference {
+		return fmt.Sprintf("sl: the grid refused the conference: %s", e.Reason)
+	}
 	return fmt.Sprintf("sl: the grid refused group %s's chat: %s", e.Group, e.Reason)
 }
 
@@ -133,21 +142,29 @@ func (k GroupChatKind) String() string {
 	return fmt.Sprintf("kind %d", uint8(k))
 }
 
-// GroupChat is one thing that happened in a group's chat.
+// GroupChat is one thing that happened in a group's chat, or in a
+// conference when Conference is set.
 //
-// Group is the group and From who spoke, invited or came; GroupName is
-// what the event itself said the group was called, which only an
-// invitation does, so a caller that prints it names the group from its
-// own list first.  Both names are printed through Sender.Label and never
-// bare: a group's name is whatever its founder chose.
+// Group is the group -- for a conference, the session -- and From who
+// spoke, invited or came; GroupName is what the event itself said the
+// group was called, which only an invitation does, so a caller that
+// prints it names the group from its own list first.  For a conference
+// it is the conference's name, which is the session's and not a group's
+// to be looked up.  Both names are printed through Sender.Label and never
+// bare: a group's name is whatever its founder chose, and a conference's
+// whoever started it.
 type GroupChat struct {
 	At        time.Time
 	Kind      GroupChatKind
 	Group     msg.UUID
 	GroupName string
-	From      msg.UUID
-	FromName  string
-	Text      string
+
+	// Conference says Group is a conference's session and not a group.
+	// Why: doc/conference.md#hearing
+	Conference bool
+	From       msg.UUID
+	FromName   string
+	Text       string
 
 	// Mine says this avatar spoke, through another client of the same
 	// session, and Via names it; see IM.Mine.
@@ -175,8 +192,16 @@ func (g *GroupChat) Accept(ctx context.Context) error {
 type groupChatState struct {
 	joined  bool
 	name    string
+	kind    sessionKind
+	seq     int             // the order sessions were first heard of in
 	reply   *groupChatReply // the answer to the last start; nil while waiting
 	members map[msg.UUID]bool
+
+	// The rest is a conference's; see conference.go.
+	invited bool              // an invitation is waiting for an answer
+	other   msg.UUID          // where its messages are addressed
+	initial []msg.UUID        // who it was started with, in order
+	guests  map[msg.UUID]bool // everybody this session has invited into it
 }
 
 type groupChatReply struct {
@@ -252,7 +277,8 @@ func (w *Session) chatState(group msg.UUID) *groupChatState {
 	}
 	st := w.gchat[group]
 	if st == nil {
-		st = &groupChatState{members: map[msg.UUID]bool{}}
+		w.chatSeq++
+		st = &groupChatState{members: map[msg.UUID]bool{}, seq: w.chatSeq}
 		w.gchat[group] = st
 	}
 	return st
@@ -307,13 +333,20 @@ func (w *Session) mayChat(ctx context.Context, group msg.UUID) error {
 // empty one-byte bucket.
 // Why: doc/group-chat.md#speaking
 func (w *Session) groupIM(group msg.UUID, dialog uint8, text string) *msg.ImprovedInstantMessage {
+	return w.sessionIM(group, group, dialog, text)
+}
+
+// sessionIM is groupIM for a session addressed to somebody other than
+// itself, which a conference's is: its other participant.
+// Why: doc/conference.md#what-is-heard-and-said
+func (w *Session) sessionIM(to, session msg.UUID, dialog uint8, text string) *msg.ImprovedInstantMessage {
 	m := &msg.ImprovedInstantMessage{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	b := &m.MessageBlock
-	b.ToAgentID = group
+	b.ToAgentID = to
 	b.Dialog = dialog
 	b.Offline = 0 // IM_ONLINE
-	b.ID = group
+	b.ID = session
 	b.FromAgentName = append([]byte(w.Info().AvatarName), 0)
 	b.Message = append([]byte(text), 0)
 	b.BinaryBucket = []byte{0}
@@ -344,6 +377,7 @@ func (w *Session) JoinGroupChat(ctx context.Context, group msg.UUID) error {
 	w.mu.Lock()
 	st := w.chatState(group)
 	st.reply = nil
+	st.kind = sessionGroup
 	w.mu.Unlock()
 
 	if err := w.Send(ctx, m); err != nil {
@@ -464,11 +498,14 @@ func (w *Session) acceptGroupChat(ctx context.Context, group msg.UUID) error {
 	w.mu.Lock()
 	st := w.chatState(group)
 	st.joined = true
+	st.invited = false
+	conf, name := st.kind == sessionConference, st.name
 	w.mu.Unlock()
 	if v, err := llsd.Decode(bytes.NewReader(out)); err == nil {
 		w.noteChatMembers(group, llsd.Map(v))
 	}
-	w.deliverGroupChat(&GroupChat{At: time.Now(), Kind: GroupChatJoined, Group: group})
+	w.deliverGroupChat(&GroupChat{At: time.Now(), Kind: GroupChatJoined, Group: group,
+		GroupName: name, Conference: conf})
 	return nil
 }
 
@@ -504,21 +541,27 @@ func (w *Session) heardGroupChat(im *IM) {
 	if im.ID.IsZero() {
 		return
 	}
+	conf := w.classify(im.ID) == sessionConference
 	w.mu.Lock()
 	name := w.chatState(im.ID).name
 	w.mu.Unlock()
 	w.deliverGroupChat(&GroupChat{
-		At: im.At, Kind: GroupChatSaid, Group: im.ID, GroupName: name,
+		At: im.At, Kind: GroupChatSaid, Group: im.ID, GroupName: name, Conference: conf,
 		From: im.From, FromName: im.FromName, Text: im.Text,
 		Mine: im.Mine, Via: im.Via, speaker: im.Sender(), w: w,
 	})
 }
 
-// chatInvitationEvent reads a ChatterBoxInvitation.  Only the form with
-// an instantmessage in it is a group's; the others are voice.
+// chatInvitationEvent reads a ChatterBoxInvitation.  A group's has an
+// instantmessage in it, and so may a conference's; a conference is also
+// invited to with an "immediate" body.  The rest are voice.
+// Why: doc/conference.md#how-an-invitation-reaches-an-avatar-that-is-not-in-it
 func (w *Session) chatInvitationEvent(m map[string]any) {
 	p := llsd.Map(llsd.Map(m["instantmessage"])["message_params"])
 	if p == nil {
+		if _, ok := m["immediate"]; ok {
+			w.conferenceInvitedEvent(m)
+		}
 		return
 	}
 	group := parseUUIDOrZero(llsd.String(p, "id"))
@@ -533,13 +576,18 @@ func (w *Session) chatInvitationEvent(m map[string]any) {
 	fromName := llsd.String(p, "from_name")
 	w.learn(from, fromName)
 
+	conf := w.classify(group) == sessionConference
+	if conf {
+		name = conferenceTitle(name, fromName)
+		w.noteConferenceInvitation(group, name)
+	}
 	w.mu.Lock()
 	if name != "" {
 		w.chatState(group).name = name
 	}
 	w.mu.Unlock()
 	g := &GroupChat{
-		At: time.Now(), Kind: GroupChatInvited, Group: group, GroupName: name,
+		At: time.Now(), Kind: GroupChatInvited, Group: group, GroupName: name, Conference: conf,
 		From: from, FromName: fromName, Text: llsd.String(p, "message"), w: w,
 	}
 	g.speaker = (&IM{Dialog: DialogSessionSend, From: from, FromName: fromName}).Sender()
@@ -549,6 +597,9 @@ func (w *Session) chatInvitationEvent(m map[string]any) {
 // chatStartReplyEvent reads a ChatterBoxSessionStartReply, which is the
 // answer to a start.
 func (w *Session) chatStartReplyEvent(m map[string]any) {
+	if w.conferenceStartReply(m) {
+		return
+	}
 	group := parseUUIDOrZero(llsd.String(m, "temp_session_id"))
 	if group.IsZero() {
 		group = parseUUIDOrZero(llsd.String(m, "session_id"))
@@ -591,7 +642,8 @@ func (w *Session) chatEventReplyEvent(m map[string]any) {
 	if key == "" {
 		key = llsd.String(m, "event")
 	}
-	w.deliverGroupChat(&GroupChat{At: time.Now(), Kind: GroupChatRefused, Group: group, Text: chatReason(key)})
+	w.deliverGroupChat(&GroupChat{At: time.Now(), Kind: GroupChatRefused, Group: group,
+		Conference: w.isConference(group), Text: chatReason(key)})
 }
 
 // chatAgentListEvent reads a ChatterBoxSessionAgentListUpdates: who came
@@ -637,8 +689,10 @@ func (w *Session) chatAgentListEvent(m map[string]any) {
 		} else {
 			delete(st.members, id)
 		}
+		conf, name := st.kind == sessionConference, st.name
 		w.mu.Unlock()
-		w.deliverGroupChat(&GroupChat{At: time.Now(), Kind: kind, Group: group, From: id, FromName: w.Name(id)})
+		w.deliverGroupChat(&GroupChat{At: time.Now(), Kind: kind, Group: group, GroupName: name,
+			Conference: conf, From: id, FromName: w.Name(id)})
 	}
 }
 
@@ -649,12 +703,15 @@ func (w *Session) chatForceCloseEvent(m map[string]any) {
 	if group.IsZero() {
 		return
 	}
+	var conf bool
 	w.mu.Lock()
 	if st := w.gchat[group]; st != nil {
 		st.joined = false
+		st.invited = false
+		conf = st.kind == sessionConference
 		clear(st.members)
 	}
 	w.mu.Unlock()
 	w.deliverGroupChat(&GroupChat{At: time.Now(), Kind: GroupChatClosed, Group: group,
-		Text: chatReason(llsd.String(m, "reason"))})
+		Conference: conf, Text: chatReason(llsd.String(m, "reason"))})
 }

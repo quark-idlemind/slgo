@@ -19,6 +19,7 @@ const (
 	SenderObject
 	SenderGroup
 	SenderGrid
+	SenderConference
 )
 
 // SystemName is the name the grid signs its own messages with
@@ -26,7 +27,9 @@ const (
 const SystemName = "Second Life"
 
 // Label is name as a line should print it: a person's as it is, and
-// anything else with its kind in front, as in "[Object] a lamp".
+// anything else with its kind in front, as in "[Object] a lamp".  A
+// conference is named by whoever started it, so it is labelled as a
+// group is.
 func (k Sender) Label(name string) string {
 	switch k {
 	case SenderObject:
@@ -35,6 +38,8 @@ func (k Sender) Label(name string) string {
 		return "[Group] " + name
 	case SenderGrid:
 		return "[Grid] " + name
+	case SenderConference:
+		return "[Conference] " + name
 	}
 	return name
 }
