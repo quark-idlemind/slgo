@@ -35,6 +35,7 @@ import (
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/auth"
 	"github.com/quark-idlemind/slgo/internal/logfile"
+	"github.com/quark-idlemind/slgo/internal/pay"
 	"github.com/quark-idlemind/slgo/internal/redact"
 	"github.com/quark-idlemind/slgo/internal/version"
 	"github.com/quark-idlemind/slgo/msg"
@@ -212,6 +213,14 @@ func main() {
 		log.Fatalf("cannot start: %v", err)
 	} else {
 		srv.SetSeats(seats)
+	}
+
+	// What each profile has paid, kept beside the seats so that its
+	// daily limit outlives a restart.  See server/pay.go.
+	if dir, err := machineConfigDir(); err != nil {
+		log.Printf("keeping what is paid in memory only: %v", err)
+	} else {
+		srv.SetPayLedger(func(profile string) string { return pay.LedgerPath(dir, profile) })
 	}
 
 	// The logins that came up, so that the group loop below knows which

@@ -7,7 +7,9 @@ syntax = "proto3";
 // restarts -- the circuit, its sequence numbers, retransmission,
 // acknowledgements, the login and the capability URLs -- and nothing
 // else.  It does not decode message bodies, hold an inventory,
-// understand chat or know what a script is.
+// understand chat or know what a script is.  The one body it reads is a
+// MoneyTransferRequest a client sends, which it checks against the
+// profile's rules for paying before it goes.
 //
 // A grid message crosses as its number and its undecoded bytes, so the
 // server relays a message type it has never heard of and a client can
@@ -152,7 +154,9 @@ service Grid {
   rpc Cap(CapRequest) returns (CapResponse);
 
   // Send puts one message on the circuit without opening a stream, for
-  // a client that only wants to say one thing.
+  // a client that only wants to say one thing.  A payment the profile's
+  // rules refuse is not sent, and is answered PERMISSION_DENIED with the
+  // reason.
   rpc Send(SendRequest) returns (SendResponse);
 
   // Control sends one AgentUpdate carrying control flags, and forgets
@@ -774,6 +778,11 @@ message InboundMessage {
   // handed, to the same subscriptions, with one more string attached;
   // which messages are worth echoing is decided by what clients ask for
   // and not by anything here knowing what an instant message is.
+  //
+  // "slgod" is the server itself, on a MoneyBalanceReply it made up to
+  // refuse a payment the client sent: success false, the transaction as
+  // it was asked for, and the reason as its description.  It goes to
+  // that client alone, whatever it subscribed to.
   string from_client = 7;
 
   // Offer is the server's name for an offer it is keeping, when this

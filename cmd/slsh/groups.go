@@ -132,6 +132,11 @@ var groups = []group{
 			"take", "place", "perms", "drop", "fetch", "start", "stop", "link", "unlink"},
 	},
 	{
+		name:    "money",
+		brief:   "L$: the balance, and paying somebody",
+		members: []string{"balance", "pay"},
+	},
+	{
 		name:  "giving",
 		brief: "handing items to somebody, and taking what is offered",
 		// Every one of these is in another group too.  It earns its

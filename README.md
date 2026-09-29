@@ -1062,6 +1062,16 @@ permission request, a group invitation -- is counted at the prompt and
 listed by `waiting`, and answered with `answer`, `accept`, `decline`,
 `no` or `ignore`.
 
+Money is `balance` and `pay`. `pay NAME AMOUNT [REASON]` pays an
+avatar, asking first at a prompt and needing `--yes` anywhere nobody
+can be asked, and a payment made to this avatar is printed as it
+arrives. Paying is off unless the avatar's profile turns it on, and
+slgod checks every payment a program sends against what the profile
+allows: `pay = on`, `pay_max`, `pay_daily` and one `pay_to` line for
+each avatar that may be paid. A viewer attached through slgod is not
+checked. What was measured and why it is built this way are in
+[doc/money.md](doc/money.md).
+
 `agents`, `status`, `login`, `logout` and `viewer` are about the daemon
 rather than the grid: which avatars it holds, how each circuit is
 doing, and where a real viewer can take one over. `watch` prints grid

@@ -11,7 +11,9 @@
 // restarts -- the circuit, its sequence numbers, retransmission,
 // acknowledgements, the login and the capability URLs -- and nothing
 // else.  It does not decode message bodies, hold an inventory,
-// understand chat or know what a script is.
+// understand chat or know what a script is.  The one body it reads is a
+// MoneyTransferRequest a client sends, which it checks against the
+// profile's rules for paying before it goes.
 //
 // A grid message crosses as its number and its undecoded bytes, so the
 // server relays a message type it has never heard of and a client can
@@ -182,7 +184,9 @@ type GridClient interface {
 	// asset upload and script compilation out of the server.
 	Cap(ctx context.Context, in *CapRequest, opts ...grpc.CallOption) (*CapResponse, error)
 	// Send puts one message on the circuit without opening a stream, for
-	// a client that only wants to say one thing.
+	// a client that only wants to say one thing.  A payment the profile's
+	// rules refuse is not sent, and is answered PERMISSION_DENIED with the
+	// reason.
 	Send(ctx context.Context, in *SendRequest, opts ...grpc.CallOption) (*SendResponse, error)
 	// Control sends one AgentUpdate carrying control flags, and forgets
 	// them.  Sitting on the ground and standing up are nothing but this.
@@ -696,7 +700,9 @@ type GridServer interface {
 	// asset upload and script compilation out of the server.
 	Cap(context.Context, *CapRequest) (*CapResponse, error)
 	// Send puts one message on the circuit without opening a stream, for
-	// a client that only wants to say one thing.
+	// a client that only wants to say one thing.  A payment the profile's
+	// rules refuse is not sent, and is answered PERMISSION_DENIED with the
+	// reason.
 	Send(context.Context, *SendRequest) (*SendResponse, error)
 	// Control sends one AgentUpdate carrying control flags, and forgets
 	// them.  Sitting on the ground and standing up are nothing but this.

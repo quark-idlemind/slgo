@@ -26,6 +26,8 @@ import (
 //	start      = last
 //	group      = Builders
 //	neighbours = yes
+//	pay        = on
+//	pay_to     = Example Resident
 //
 // Not every key is part of the login request.  "group" is which group
 // this avatar acts as and "neighbours" is whether it holds a circuit to
@@ -33,7 +35,8 @@ import (
 // one login, which is why they live here with the credentials.  A
 // profile that says nothing about neighbours leaves the answer to
 // whoever starts the session -- slgod's -neighbours flag -- and one
-// that says either wins over that.
+// that says either wins over that.  The pay keys are what a program may
+// pay, and whom; see package pay.
 //
 // Storing the "$1$" digest rather than the plain password is worth
 // doing.  It is the only form that ever goes over the wire, so it loses
@@ -58,6 +61,26 @@ func ConfigDir() (string, error) {
 		return "", fmt.Errorf("agent: no home directory: %w", err)
 	}
 	return filepath.Join(home, ".config", "slgo"), nil
+}
+
+// DaemonConfigDir returns slgod's own directory, where it keeps what it
+// writes rather than what it is told: the machine identity, the seats,
+// and the record of what each profile has paid.
+//
+// SLGOD_CONFIG_DIR names it outright.  Otherwise it is slgod under
+// XDG_CONFIG_HOME, or under ~/.config when that is unset.
+func DaemonConfigDir() (string, error) {
+	if d := os.Getenv("SLGOD_CONFIG_DIR"); d != "" {
+		return d, nil
+	}
+	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
+		return filepath.Join(d, "slgod"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("agent: no home directory: %w", err)
+	}
+	return filepath.Join(home, ".config", "slgod"), nil
 }
 
 // ProfilePath is where the named profile lives.
@@ -114,6 +137,7 @@ func LoadProfile(name string) (Login, error) {
 	if err != nil {
 		return Login{}, fmt.Errorf("agent: %s: %w", path, err)
 	}
+	l.Profile = name
 	if l.First == "" || l.Last == "" {
 		return Login{}, fmt.Errorf("agent: %s: needs first and last", path)
 	}
@@ -182,6 +206,10 @@ func parseProfile(r *os.File) (Login, error) {
 			l.PlatformVersion = value
 		case "platform_string":
 			l.PlatformString = value
+		case "pay", "pay_max", "pay_daily", "pay_to":
+			if err := l.Pay.Set(key, value); err != nil {
+				return l, fmt.Errorf("line %d: %s: %w", n, key, err)
+			}
 		case "options":
 			for _, o := range strings.Split(value, ",") {
 				if o = strings.TrimSpace(o); o != "" {
@@ -276,6 +304,9 @@ func SaveProfile(name string, l Login) error {
 	write("platform_string", l.PlatformString)
 	if len(l.Options) > 0 {
 		write("options", strings.Join(l.Options, ", "))
+	}
+	for _, kv := range l.Pay.Lines() {
+		write(kv[0], kv[1])
 	}
 
 	// Write through a temporary file so a failure cannot leave a

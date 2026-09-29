@@ -102,6 +102,11 @@ type Agent struct {
 	// to show it.
 	offers Offers
 
+	// money is the L$ balance last reported, and pickers the name
+	// searches waiting for an answer, by query id.  See money.go.
+	money   money
+	pickers sync.Map
+
 	// asked remembers which local ids were recently asked about, so
 	// that something moving on the edge of the draw distance is not
 	// asked for several times a second.  Forgotten on entering another
@@ -352,6 +357,11 @@ type Options struct {
 	// quick and do not block in it: a slow one stops this session
 	// reading anything at all.
 	OnRegionChange RegionChangeHandler
+
+	// OnMoney is told of every MoneyBalanceReply: the balance, and the
+	// payment it reports when it reports one, sent or received.  It runs
+	// on the dispatch goroutine, like Relay.  See money.go.
+	OnMoney MoneyHandler
 
 	// Presence is how often AgentUpdate is sent.  Default one
 	// second; a negative value stops it, which also stops the
@@ -719,6 +729,8 @@ func (a *Agent) register() {
 	a.trackObjects()
 	a.trackPosture()
 	a.keepOffers()
+	a.keepMoney()
+	a.keepPickers()
 	a.followCrossings()
 	a.followNeighbours()
 

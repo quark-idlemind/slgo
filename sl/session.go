@@ -46,7 +46,7 @@ var Subscriptions = []string{
 	"ScriptRunningReply", "ScriptQuestion", "ScriptDialog",
 	"TeleportLocal", "TeleportFailed", "TeleportFinish",
 	"AgentMovementComplete", "ParcelProperties", "ParcelDwellReply",
-	"MapBlockReply",
+	"MapBlockReply", "MoneyBalanceReply",
 }
 
 // Session is a connection to a hosted agent, with the bookkeeping needed
@@ -136,6 +136,7 @@ type Session struct {
 	permSubs   map[<-chan *Permission]*permSub
 	imSubs     map[<-chan *IM]*imSub
 	regionSubs map[<-chan *RegionChange]*regionSub
+	moneySubs  map[<-chan *Money]*moneySub
 	chatCtl    chan chatCmd
 	readDone   chan struct{}
 
@@ -182,6 +183,13 @@ type Session struct {
 	// else pairs it with its question.
 	parcelFns []func(*agent.Parcel)
 	dwellFns  []func(local int32, id msg.UUID, dwell float32)
+
+	// moneySeq numbers the grid's answers about L$, moneyLog is the last
+	// few of them, and payWaits the payments waiting for theirs, oldest
+	// first.  See money.go.
+	moneySeq uint64
+	moneyLog []*Money
+	payWaits []*payWait
 
 	// Permission requests waiting for an answer, in arrival order.
 	// See waiting.go for how long one is kept.
@@ -352,6 +360,7 @@ func New(b Backend) (*Session, error) {
 		permSubs:    map[<-chan *Permission]*permSub{},
 		imSubs:      map[<-chan *IM]*imSub{},
 		regionSubs:  map[<-chan *RegionChange]*regionSub{},
+		moneySubs:   map[<-chan *Money]*moneySub{},
 		names:       map[msg.UUID]string{},
 		asking:      map[msg.UUID]bool{},
 		offers:      map[msg.UUID]*Offer{},
@@ -829,6 +838,9 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 
 	case *msg.ImprovedInstantMessage:
 		w.instantMessage(raw, t)
+
+	case *msg.MoneyBalanceReply:
+		w.moneyReply(raw, t)
 
 	case *msg.UUIDNameReply:
 		w.nameReply(t)

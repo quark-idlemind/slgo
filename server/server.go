@@ -15,7 +15,9 @@
 // chat, or know what a script is.  A message is relayed as its number
 // and its undecoded bytes, so a client can handle a message type the
 // server has never heard of, and can be restarted as often as you like
-// without touching the grid session.
+// without touching the grid session.  The one body it reads is a
+// payment a client sends, which it checks against the profile's rules
+// before it goes; see pay.go.
 //
 // With no client attached, inbound messages are acknowledged and
 // dropped -- all but the offers that wait on a person, which are kept
@@ -38,6 +40,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/internal/pay"
 	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
@@ -66,6 +69,10 @@ type Server struct {
 	// seats is where a session's seat is remembered across a login;
 	// see seat.go.  Nil remembers nothing, which is the old behaviour.
 	seats Seats
+
+	// payLedger is where each profile's record of what it has paid is
+	// kept; see pay.go.  Nil keeps it in memory.
+	payLedger PayLedger
 
 	// starts covers starting agents on demand: what did not work, and
 	// what is already being tried.
@@ -171,6 +178,11 @@ type Hosted struct {
 	// rank is the order this session came up in, lowest first.  It is
 	// what makes the default deterministic; see Server.Default.
 	rank uint64
+
+	// pay checks what this avatar's clients pay against its profile's
+	// rules, and keeps what they have paid.  Guarded by mu, and made on
+	// first use for a Hosted built by hand.  See pay.go.
+	pay *pay.Gate
 
 	// offers is what has been offered to this avatar and not yet dealt
 	// with, kept whether or not anybody is attached.  It belongs to the
@@ -284,7 +296,8 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 	}
 
 	h := &Hosted{Name: name, login: login, clients: map[*Client]bool{}, seats: s.Seats(),
-		offers: newOfferLog(time.Now()), viewerOn: func() bool { return s.viewerAttached(name) }}
+		offers: newOfferLog(time.Now()), viewerOn: func() bool { return s.viewerAttached(name) },
+		pay: s.payGateFor(name, login.Pay)}
 
 	// Keeping the undecoded body is what lets the relay pass on a
 	// message it does not understand.
@@ -337,6 +350,16 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 		}
 	} else {
 		opts.SendTap = func(p *msg.Packet) { h.noteSent(p) }
+	}
+	// What the grid says of a payment, for the log.  Chained for the
+	// others' reason.  See pay.go.
+	if caller := opts.OnMoney; caller != nil {
+		opts.OnMoney = func(m *agent.Money) {
+			caller(m)
+			h.noteMoney(m)
+		}
+	} else {
+		opts.OnMoney = h.noteMoney
 	}
 	h.opts = opts
 

@@ -199,6 +199,7 @@ func (f *fakeSim) sendRaw(id msg.ID, body []byte, flags uint8) {
 type rig struct {
 	sim  *fakeSim
 	srv  *Server
+	said *said // what the session logged
 	ln   net.Listener
 	stop context.CancelFunc
 	done chan struct{}
@@ -243,13 +244,17 @@ func newSessionWith(t *testing.T, caps agent.Caps, idle time.Duration) *rig {
 	}
 
 	srv := New()
-	h := &Hosted{Name: "example", clients: map[*Client]bool{}}
+	// Logging from before the session is up, so that nothing the
+	// session logs races a test setting it afterwards.
+	log := &said{}
+	h := &Hosted{Name: "example", clients: map[*Client]bool{}, Log: log.printf}
 	a, err := agent.Connect(context.Background(), acct, agent.Options{
 		Timeout:  10 * time.Second,
 		SkipCaps: true,
 		Idle:     idle,
 		Recv:     []msg.ReceiverOption{msg.KeepBody()},
 		Tap:      func(p *msg.Packet) { h.relay(p) },
+		OnMoney:  func(m *agent.Money) { h.noteMoney(m) },
 	})
 	if err != nil {
 		t.Fatalf("connect: %v", err)
@@ -266,7 +271,7 @@ func newSessionWith(t *testing.T, caps agent.Caps, idle time.Duration) *rig {
 		a.Close()
 		sim.close()
 	})
-	return &rig{sim: sim, srv: srv}
+	return &rig{sim: sim, srv: srv, said: log}
 }
 
 // serve puts the session's server on loopback and takes it down again

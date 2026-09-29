@@ -11,7 +11,9 @@
 // restarts -- the circuit, its sequence numbers, retransmission,
 // acknowledgements, the login and the capability URLs -- and nothing
 // else.  It does not decode message bodies, hold an inventory,
-// understand chat or know what a script is.
+// understand chat or know what a script is.  The one body it reads is a
+// MoneyTransferRequest a client sends, which it checks against the
+// profile's rules for paying before it goes.
 //
 // A grid message crosses as its number and its undecoded bytes, so the
 // server relays a message type it has never heard of and a client can
@@ -2116,6 +2118,11 @@ type InboundMessage struct {
 	// handed, to the same subscriptions, with one more string attached;
 	// which messages are worth echoing is decided by what clients ask for
 	// and not by anything here knowing what an instant message is.
+	//
+	// "slgod" is the server itself, on a MoneyBalanceReply it made up to
+	// refuse a payment the client sent: success false, the transaction as
+	// it was asked for, and the reason as its description.  It goes to
+	// that client alone, whatever it subscribed to.
 	FromClient string `protobuf:"bytes,7,opt,name=from_client,json=fromClient,proto3" json:"from_client,omitempty"`
 	// Offer is the server's name for an offer it is keeping, when this
 	// message is one; empty for everything else.  A client quotes it to
