@@ -91,6 +91,9 @@ type Shell struct {
 	notices noticeBoard
 	groups  groupNameCache
 
+	// invites is the groups whose chat has been announced; see groupchat.go.
+	invites chatInvites
+
 	// entry is the multi-line answer being typed, if one is.
 	entry *entry
 

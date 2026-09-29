@@ -1223,6 +1223,29 @@ func (f *fakeGrid) AnswerActivateGroup() {
 	}
 }
 
+// AnswerGroupChat makes the fake answer the start of a group's chat as the
+// grid does, on the event queue: a ChatterBoxSessionStartReply, successful
+// or, when reason is set, refused with that reason.  Nothing answers a
+// leave or a message.  The shape is the viewer's handler's, not one seen.
+func (f *fakeGrid) AnswerGroupChat(t *testing.T, reason string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.onSend = func(m msg.Message) {
+		im, ok := m.(*msg.ImprovedInstantMessage)
+		if !ok || im.MessageBlock.Dialog != sl.DialogSessionGroupStart {
+			return
+		}
+		group := im.MessageBlock.ID
+		body := fmt.Sprintf(`<?xml version="1.0" ?><llsd><map><key>success</key><boolean>1</boolean>`+
+			`<key>temp_session_id</key><uuid>%s</uuid><key>session_id</key><uuid>%s</uuid></map></llsd>`, group, group)
+		if reason != "" {
+			body = fmt.Sprintf(`<?xml version="1.0" ?><llsd><map><key>success</key><boolean>0</boolean>`+
+				`<key>temp_session_id</key><uuid>%s</uuid><key>error</key><string>%s</string></map></llsd>`, group, reason)
+		}
+		f.RelayEvent(t, "ChatterBoxSessionStartReply", body)
+	}
+}
+
 // AnswerLinking makes the fake join and take apart what it is asked to.
 //
 // Neither message is replied to.  What says a link happened is the

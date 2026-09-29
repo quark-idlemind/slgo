@@ -5,6 +5,8 @@ package main
 //
 //	group            the active group and the ones joined
 //	group NAME|UUID  act as that one
+//	group chat NAME, say NAME TEXT, leave-chat NAME
+//	                 join a group's chat, speak in it, leave it
 //	invite WHO GROUP ask somebody into one of them
 //
 // invite is here rather than in a file of its own because it is the
@@ -97,10 +99,10 @@ import (
 
 var groupCommands = map[string]*command{
 	"group": {
-		params:   "[NAME|UUID|none]",
+		params:   "[NAME|UUID|none | chat NAME | say NAME TEXT | leave-chat NAME]",
 		flags:    func() any { return new(helpOnly) },
-		brief:    "what this avatar is acting as, and what it could act as; land rights hang on it",
-		keywords: "active group title tag land rights acting as switch groups joined list which",
+		brief:    "what this avatar is acting as, and what it could act as; chat joins, speaks in and leaves a group's chat",
+		keywords: "active group title tag land rights acting as switch groups joined list which chat say speak talk join leave group chat conversation",
 		man:      "group",
 		run:      cmdGroup,
 	},
@@ -114,7 +116,8 @@ var groupCommands = map[string]*command{
 	},
 }
 
-// cmdGroup lists the groups or activates one.
+// cmdGroup lists the groups or activates one, or hands a line that starts
+// with chat, say or leave-chat to cmdGroupChat.
 //
 // Both halves start from the same presence, so naming a group and
 // listing them cost one call each: the list is what a name is resolved
@@ -137,6 +140,9 @@ func cmdGroup(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	}
 
 	want := strings.Join(args, " ")
+	if groupChatWord(args[0]) && !namesAGroup(p, want) {
+		return cmdGroupChat(ctx, sh, out, p, args)
+	}
 	id, name, err := chooseGroup(p, want)
 	if err != nil {
 		return err
