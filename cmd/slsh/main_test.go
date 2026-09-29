@@ -292,6 +292,49 @@ func TestLogoutTakesNothingElseToDo(t *testing.T) {
 	}
 }
 
+// TestAgentsListsWithoutAttaching: --agents asks the daemon for its
+// list and attaches to nobody, so it answers with nobody up -- here,
+// both avatars down -- and no line is marked as this shell's.
+func TestAgentsListsWithoutAttaching(t *testing.T) {
+	d, addr := newAuthDaemon(t)
+	d.agents = []*pb.AgentInfo{
+		{Name: "fake", AvatarName: "Quark Idlemind", State: pb.AgentInfo_STOPPED, Detail: "logged out"},
+		{Name: "other", AvatarName: "Example Resident", State: pb.AgentInfo_CONFIGURED},
+	}
+	var err error
+	got := capturingStdout(t, func() {
+		err = runWith(t, t.TempDir(), "--addr", addr, "--agents")
+	})
+	if err != nil {
+		t.Fatalf("run = %v", err)
+	}
+	for _, want := range []string{"fake", "stopped: logged out", "other", "configured"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("listing lacks %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "this shell") {
+		t.Errorf("a listing with no shell marked one:\n%s", got)
+	}
+	select {
+	case <-d.ended:
+		t.Error("--agents attached to a session")
+	default:
+	}
+}
+
+// TestAgentsTakesNothingElseToDo, as --logout does not.
+func TestAgentsTakesNothingElseToDo(t *testing.T) {
+	for _, extra := range [][]string{
+		{"-c", "where"}, {"--file", "x"}, {"--login", "fake"}, {"--logout", "fake"}, {"--direct"},
+	} {
+		err := runWith(t, t.TempDir(), append([]string{"--addr", "127.0.0.1:1", "--agents"}, extra...)...)
+		if err == nil || !strings.Contains(err.Error(), "--agents lists slgod's avatars and exits") {
+			t.Errorf("%v: run = %v", extra, err)
+		}
+	}
+}
+
 // TestDirectNeedsSomebodyToLogInAs, and says which profile it looked
 // for rather than asking for a password it has nowhere to send.
 func TestDirectNeedsSomebodyToLogInAs(t *testing.T) {

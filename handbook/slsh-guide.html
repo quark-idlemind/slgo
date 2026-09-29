@@ -122,7 +122,8 @@ acting as group Example Builders (87f07e57-…)</span>
           <code>-c "login NAME"</code> cannot: that has to attach to
           somebody before it can ask. <code>slsh --logout NAME</code> is the
           other direction: it logs the avatar out without attaching to it, so
-          it can put down the last one the daemon has up.
+          it can put down the last one the daemon has up, and
+          <code>slsh --agents</code> lists them all the same way.
         </p>
 
         <p>
@@ -144,6 +145,7 @@ acting as group Example Builders (87f07e57-…)</span>
 <span class="p">$</span> <span class="k">slsh -f tidy-up.slsh</span>
 <span class="p">$</span> <span class="k">slsh --login example -c where</span>     <span class="c">bring example up if it is down, then ask</span>
 <span class="p">$</span> <span class="k">slsh --logout example</span>             <span class="c">put example down, and exit</span>
+<span class="p">$</span> <span class="k">slsh --agents</span>                     <span class="c">who the daemon holds, up or not</span>
 <span class="p">$</span> <span class="k">slsh --direct -c where</span>            <span class="c">log in, ask, log out</span></pre>
         </div>
 

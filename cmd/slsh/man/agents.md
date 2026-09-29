@@ -4,6 +4,11 @@ avatar's own name beside it.
 
     agents
 
+From outside the shell, `slsh --agents` prints the same list without
+attaching to anybody, so it answers when the daemon has nobody up --
+which is when `slsh -c agents` cannot, since it attaches to the
+default avatar first.
+
 Sessions the daemon holds come first, oldest first.  A session that
 was logged out, or that the grid ended, sits at the end of that group
 rather than keeping its place.  Profiles the daemon knows of but is
