@@ -2,11 +2,10 @@
 
 `Session.StartAnimation` and `StopAnimation` (`sl/animation.go`) play
 and stop an animation on this avatar, and `animate` is the shell's
-command for them.  **Everything here is read from the viewer's source
-(Firestorm, `indra/`), not measured.**  Nothing in this page was run
-against a grid; where it says what the simulator does, it says what the
-viewer expects.  The first live run should replace this sentence with
-what it saw.
+command for them.  What is sent is read from the viewer's source
+(Firestorm, `indra/`).  What the simulator does with it is measured only
+as far as [Measured](#measured) says; anywhere else, a sentence about the
+simulator says what the viewer expects.
 
 ## What is sent
 
@@ -78,3 +77,16 @@ A name that several inventory items share is refused with their ids
 whatever a built-in is called, as everywhere.  An inventory item that is
 not an animation does not count: a notecard called `bow` does not hide
 the built-in `bow`.  This is a decision, not a measurement.
+
+## Measured
+
+On Agni on 2026-09-29, with Quark Idlemind through the everyday slgod
+and a slsh built from this code, while a second client listened for the
+`AvatarAnimation` messages the simulator sends about that avatar:
+
+- `animate dance1` put the built-in's id, `b68a3d7c-…`, in the list of
+  animations the simulator said the avatar was playing, in the next
+  message about it.
+- `animate --stop dance1` took it out of the next list.
+
+An animation from inventory has not been tried.

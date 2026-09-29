@@ -10,8 +10,10 @@ of the built-ins every viewer carries, or one in inventory.
 Nothing answers.  What this prints is what was asked for, in the form
 "asked for NAME (ASSET)", and never that the animation is playing: the
 simulator sends no reply to the request, so a refusal, if there is one,
-would be silent too.  Nothing here has been measured against the grid
-yet: this is what the viewer sends.
+would be silent too.  What does show is the list of animations the
+simulator says the avatar is playing: on Agni, `animate dance1` put the
+dance in that list and `animate --stop dance1` took it out.  An
+animation from inventory has not been tried on the grid.
 
 ## Naming one
 

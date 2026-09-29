@@ -1525,6 +1525,13 @@ Orrick Gate                      43648, 43647 203.0.113.28:12035    100 heard</s
         </p>
 
         <p>
+          Some borders hold an avatar at the line with neighbours on and the
+          land open on both sides. That is not slsh: measured on 2026-09-28,
+          a viewer on its own was held at one such border four times in five,
+          stopping at the line exactly as slsh did.
+        </p>
+
+        <p>
           It belongs to the session and not to this shell. Turning neighbours on
           turns them on for the avatar, in whatever is holding the session, and
           it stays on after this shell exits; another client attached to the
@@ -1638,6 +1645,31 @@ Pelmar Reach at 28, 72, 2001</span></pre>
           reported as itself in different words again, because a sit is answered
           one way or the other in about a tenth of a second and silence is
           neither a yes nor a no.
+        </p>
+
+        <h3>Animations</h3>
+        <p>
+          <code>animate NAME</code> plays an animation on the avatar: one of
+          the built-ins every viewer carries, or one in inventory, looked for
+          there first. <code>animate --stop NAME</code> stops it, and
+          <code>animate --list</code> names the built-ins. A name that is both
+          in inventory and a built-in plays the inventory one and says so;
+          <code>--builtin</code> picks the other.
+        </p>
+
+        <div class="term">
+          <pre><span class="p">/$</span> <span class="k">animate dance1</span>
+<span class="o">asked for dance1 (b68a3d7c-de9e-fc87-eec8-543d787e5b0d)</span>
+<span class="p">/$</span> <span class="k">animate --stop dance1</span>
+<span class="o">asked dance1 (b68a3d7c-de9e-fc87-eec8-543d787e5b0d) to stop</span></pre>
+        </div>
+
+        <p>
+          It says "asked for", and never that the animation is playing,
+          because the simulator answers nothing. What it does do is tell every
+          viewer nearby which animations the avatar is playing, and on the
+          grid <code>animate dance1</code> put the dance in that list and
+          <code>--stop</code> took it out again.
         </p>
       </section>
 
