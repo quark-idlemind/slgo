@@ -52,6 +52,7 @@ case.
     sl/landmark.go      a remembered place: read one, make one, go to one
     sl/parcel.go        the land under the avatar
     sl/sit.go           sitting on a thing, or on the ground
+    sl/animation.go     playing and stopping an animation, built in or from inventory
     sl/neighbour.go     the circuits held to the regions around this one
     sl/script.go        run a script and wait for what it said
     sl/image.go         textures as pictures: jpeg 2000 in, png out
@@ -84,6 +85,7 @@ case.
     agent/neighbour.go  child circuits, which a border crossing needs
     agent/parcel.go     what the simulator says about the land
     agent/posture.go    seated or standing, and on what
+    agent/animations.go the viewer's built-in animations, by name
     agent/appearance.go what each avatar nearby looks like, said once and kept
 
     client/             attaching to slgod over gRPC, and holding no grid state
