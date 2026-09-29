@@ -3,13 +3,11 @@
 `Session.JoinGroupChat`, `SayToGroup` and `LeaveGroupChat`
 (`sl/groupchat.go`) take part in a group's chat, `Session.GroupChats`
 delivers what is heard, and `group chat`, `group say` and
-`group leave-chat` are the shell's commands for them.  **Everything on
-this page about what the viewer does, and what the grid answers, is read
-from the viewer's source (Firestorm, `indra/`), not measured.**  Nothing
-here was run against a grid.  Where a sentence says what the grid does
-it says what the viewer expects of it; where it says something was
-inferred, it was.  The first live run should replace this paragraph with
-what it saw.
+`group leave-chat` are the shell's commands for them.  What the viewer
+does is read from its source (Firestorm, `indra/`).  What the grid does
+is measured where [Measured](#measured) says so; anything else on this
+page about the grid is what the viewer expects of it, and a sentence
+that says something was inferred means it.
 
 Paths below are under `indra/newview/` unless they say otherwise.
 
@@ -334,3 +332,29 @@ activated before cannot be now.  Lines are printed
 chat is joined or left, a notice saying how to join it.  Entering and
 leaving are not printed, since a busy group would fill the screen.
 slbotd does not join group chat and reads none of this.
+
+## Measured
+
+On Agni on 2026-09-28, with two of this repository's avatars in one
+group with other members: Quark Idlemind, attached through the everyday
+slgod with a slsh built from this branch, and Mirkwin Resident on a
+second slgod built from it.
+
+- **Joining and speaking.** Each joined with `group chat`, and each
+  said one line with `group say`. Each heard the other's line within a
+  second, printed with the group and the speaker. Each was told it had
+  joined.
+- **The start reply lists nobody.** `ChatterBoxSessionStartReply`
+  listed no members, so no member count is printed on joining.
+- **An avatar not in the chat is invited.** Mirkwin Resident, just
+  logged in and not in the chat, was sent a `ChatterBoxInvitation` when
+  Quark Idlemind spoke. The invitation carried the line. A second line
+  arrived the same way. The shell printed both lines and the note, once,
+  that the group is talking and how to join; it joined nothing.
+- **Leaving stops the invitations, for a while at least.** An avatar
+  that had left the chat earlier in the same login got nothing -- no
+  invitation, no message -- when the group was spoken in a few minutes
+  later. This held for both avatars, one on each slgod. How long that
+  lasts, and whether it ends before the next login, was not measured.
+- **Not seen.** A refusal to join, a chat the avatar was put out of,
+  and whether the grid sends a speaker's own words back.

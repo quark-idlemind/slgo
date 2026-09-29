@@ -96,7 +96,10 @@ func cmdGroupChat(ctx context.Context, sh *Shell, out io.Writer, p *sl.Presence,
 		return err
 	}
 	sh.invites.clear(id)
-	fmt.Fprintf(out, "joined the chat of %s; the grid lists %d in it\n", label, len(sh.s.GroupChatMembers(id)))
+	// The start reply was measured listing nobody, members or not, so
+	// no count is printed from it.
+	// Why: doc/group-chat.md#measured
+	fmt.Fprintf(out, "joined the chat of %s\n", label)
 	return nil
 }
 
