@@ -895,12 +895,13 @@ func newHomingRig(t *testing.T, handle uint64) *homingRig {
 // is still running when a test acts on it.
 func (r *homingRig) host(t *testing.T) (*server.Hosted, *logCapture) {
 	t.Helper()
+	// Given before the session is up, which is when it starts to log.
+	said := &logCapture{}
+	r.srv.SetLog(func(format string, v ...any) { fmt.Fprintf(said, format+"\n", v...) })
 	h, err := r.srv.StartAgent(r.ctx, "example", r.login, agent.Options{Idle: -1})
 	if err != nil {
 		t.Fatalf("hosting a session: %v", err)
 	}
-	said := &logCapture{}
-	h.Log = func(format string, v ...any) { fmt.Fprintf(said, format+"\n", v...) }
 	return h, said
 }
 

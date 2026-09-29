@@ -245,6 +245,21 @@ object that is for sale, buying land, joining a group with a fee -- and
 none of them is checked here. That is inferred from what the messages
 are for, not measured.
 
+## A log that is there before the first reply
+
+slgod's log was set on a session after `StartAgent` had returned, and the
+circuit is up before that: the grid can answer a payment as soon as the
+avatar arrives, and the handler that logs the answer runs on the
+dispatch goroutine then. So a `Log` written after the return raced the
+read, under `-race`, and a reply that came first found none to write to.
+The log is now given to the session when it is made -- `Server.SetLog`,
+called before the first login, or `SetBase` -- and the avatar's own id
+with it, so that the reply is recognised as this avatar's before the
+session says which avatar it is. `TestASessionLogsFromTheFirstMessageItHears`
+sends a `MoneyBalanceReply` the moment the avatar arrives and fails
+for a log assigned afterwards. Nothing in slgod assigns `Hosted.Log`
+after `StartAgent` now.
+
 ## slsh
 
 `balance` asks every time. `pay NAME AMOUNT [REASON]` asks at the

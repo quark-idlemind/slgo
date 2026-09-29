@@ -120,8 +120,13 @@ func (c *Client) refusePayment(r *msg.MoneyBalanceReply) {
 // noteMoney logs what the grid says of a payment this avatar made,
 // whoever asked for it.
 func (h *Hosted) noteMoney(m *agent.Money) {
-	a := h.Agent()
-	if a == nil || !m.Transfer() || m.Source != a.Account.AgentID {
+	me := h.self
+	if me.IsZero() { // built by hand, as a test builds one
+		if a := h.Agent(); a != nil {
+			me = a.Account.AgentID
+		}
+	}
+	if me.IsZero() || !m.Transfer() || m.Source != me {
 		return
 	}
 	if m.Success {

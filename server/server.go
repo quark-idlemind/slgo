@@ -184,6 +184,11 @@ type Hosted struct {
 	// first use for a Hosted built by hand.  See pay.go.
 	pay *pay.Gate
 
+	// self is the avatar's id, known from the login, before the circuit
+	// is: the grid can answer a payment as soon as it is up, when Agent
+	// still says none.  Set when the Hosted is made and never changed.
+	self msg.UUID
+
 	// offers is what has been offered to this avatar and not yet dealt
 	// with, kept whether or not anybody is attached.  It belongs to the
 	// Hosted rather than to the agent under it, so a session that is
@@ -191,7 +196,10 @@ type Hosted struct {
 	offers *offerLog
 
 	// Log is where anything worth a person's attention goes.  Nil is
-	// silence, which is what a test wants; cmd/slgod sets it.
+	// silence, which is what a test wants.  StartAgent gives it what
+	// SetLog or SetBase said, before the circuit is up: handlers read it
+	// from then on, so it is not assigned afterwards.
+	// Why: doc/money.md#a-log-that-is-there-before-the-first-reply
 	Log func(format string, v ...any)
 
 	// over is closed once, when this Hosted will carry no session
@@ -242,6 +250,24 @@ func New() *Server {
 		regions: agent.NewCache(),
 		ctx:     context.Background(),
 	}
+}
+
+// SetLog says where a session started from now on logs, from the moment
+// it exists.  A session's Log is read by handlers that run as soon as
+// its circuit is up, so it is given at the start and never assigned
+// afterwards.  SetBase sets the same thing; this is for a caller that
+// starts sessions before it has the rest to give.
+func (s *Server) SetLog(log func(string, ...any)) {
+	s.mu.Lock()
+	s.log = log
+	s.mu.Unlock()
+}
+
+// logger is what a session started now is given to log with.
+func (s *Server) logger() func(string, ...any) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.log
 }
 
 // SetBase gives the server the lifetime its sessions should have, and
@@ -297,7 +323,7 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 
 	h := &Hosted{Name: name, login: login, clients: map[*Client]bool{}, seats: s.Seats(),
 		offers: newOfferLog(time.Now()), viewerOn: func() bool { return s.viewerAttached(name) },
-		pay: s.payGateFor(name, login.Pay)}
+		pay: s.payGateFor(name, login.Pay), Log: s.logger(), self: acct.AgentID}
 
 	// Keeping the undecoded body is what lets the relay pass on a
 	// message it does not understand.
@@ -673,8 +699,12 @@ func (s *Server) Add(name string, a *agent.Agent) (*Hosted, error) {
 		return nil, fmt.Errorf("server: %q is already hosted", name)
 	}
 	s.ranked++
+	var self msg.UUID
+	if a != nil && a.Account != nil {
+		self = a.Account.AgentID
+	}
 	h := &Hosted{Name: name, agent: a, clients: map[*Client]bool{}, rank: s.ranked, seats: s.seats,
-		offers: newOfferLog(time.Now()), viewerOn: func() bool { return s.viewerAttached(name) }}
+		offers: newOfferLog(time.Now()), viewerOn: func() bool { return s.viewerAttached(name) }, Log: s.log, self: self}
 	s.agents[name] = h
 	sp := s.slots
 	s.mu.Unlock()

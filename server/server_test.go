@@ -38,6 +38,18 @@ type fakeSim struct {
 	// one went out.  Copied rather than kept, since the read buffer
 	// is reused for the next packet.
 	bodies map[string][][]byte
+
+	// onArrive is called once the avatar has arrived, on the sim's own
+	// goroutine, so a test can send something at that instant.  Set with
+	// whenArrived.
+	onArrive func()
+}
+
+// whenArrived sets what the sim does the moment the avatar arrives.
+func (f *fakeSim) whenArrived(fn func()) {
+	f.mu.Lock()
+	f.onArrive = fn
+	f.mu.Unlock()
 }
 
 // sawBody is every body this sim received of that message, in order.
@@ -152,6 +164,12 @@ func (f *fakeSim) run() {
 			amc.Data.RegionHandle = testvilleHandle
 			amc.SimData.ChannelVersion = []byte("Fake Server\x00")
 			f.send(amc, msg.FlagReliable)
+			f.mu.Lock()
+			arrived := f.onArrive
+			f.mu.Unlock()
+			if arrived != nil {
+				arrived()
+			}
 		case "LogoutRequest":
 			f.send(&msg.LogoutReply{}, msg.FlagReliable)
 		}

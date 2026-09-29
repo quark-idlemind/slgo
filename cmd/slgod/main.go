@@ -189,6 +189,9 @@ func main() {
 	}
 
 	srv := server.New()
+	// Before the first login, so that a session logs from its first
+	// message: a MoneyBalanceReply can arrive as soon as it is up.
+	srv.SetLog(log.Printf)
 
 	// Which computer the login server is told this is.  Made up once
 	// and kept, so every login comes from the same machine; see
@@ -370,7 +373,6 @@ func main() {
 	// came up from -- the command line, or a retry minutes later.  One
 	// place, so that a session started the slow way is not half set up.
 	up := func(name string, login agent.Login, h *server.Hosted) {
-		h.Log = log.Printf
 		hostMu.Lock()
 		hosted[name] = login
 		hostMu.Unlock()

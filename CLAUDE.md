@@ -284,6 +284,11 @@ here when another is shared the same way.
   without a daemon, so every payment a program sends passes one of the
   two; a viewer's does not, on purpose. slbotd pays nothing, and
   `TestNothingHerePays` refuses a payment anywhere in it.
+- `Server.SetLog` (and `SetBase`), in `server/server.go`: a session's
+  `Log` is given when `StartAgent` makes it, before its circuit is up,
+  and is never assigned afterwards; a handler reads it from the first
+  message. `TestASessionLogsFromTheFirstMessageItHears` fails for one
+  assigned after.
 - `WatchSilence`, in `agent/agent.go` (`watchSilence` inside the
   package): calls a function once when a circuit has heard nothing for
   longer than a timeout, by a last-heard time it is given, looking a
