@@ -55,21 +55,22 @@ type said struct {
 	b  strings.Builder
 }
 
+func (s *said) printf(format string, v ...any) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	fmt.Fprintf(&s.b, format+"\n", v...)
+}
+
 func (s *said) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
 }
 
+// logTo is what the rig's session has logged.
 func (r *rig) logTo(t *testing.T) *said {
 	t.Helper()
-	s := &said{}
-	r.hosted(t).Log = func(format string, v ...any) {
-		s.mu.Lock()
-		fmt.Fprintf(&s.b, format+"\n", v...)
-		s.mu.Unlock()
-	}
-	return s
+	return r.said
 }
 
 func giving(from, to msg.UUID, amount int, typ int32) *msg.MoneyTransferRequest {
