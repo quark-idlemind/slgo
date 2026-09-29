@@ -203,7 +203,7 @@ acting as group Example Builders (87f07e57-…)</span>
         <h2><span class="num">2</span>Finding your way about</h2>
 
         <p>
-          There are seventy-odd commands, and four ways to ask about them. They
+          There are about a hundred commands, and four ways to ask about them. They
           answer different questions and it is worth knowing which is which.
         </p>
 
@@ -219,7 +219,7 @@ acting as group Example Builders (87f07e57-…)</span>
         </div>
 
         <p>
-          <code>help</code> is grouped because one list of seventy is a wall
+          <code>help</code> is grouped because one list of a hundred is a wall
           rather than an answer. A command can be in more than one group where
           it belongs in both.
         </p>
@@ -431,6 +431,22 @@ For one command:       COMMAND --help, or man COMMAND
           the checks cannot catch. The Qwen models were asked with
           <code>reasoning_effort</code> set to none. The times are for that
           machine, and a smaller one will be slower.
+        </p>
+
+        <p>
+          <strong>Taken again, on a harder set.</strong> On 2026-09-26
+          <code>how</code> was measured on 250 questions written by a
+          model that had never seen slsh or its manual, 176 of them
+          answerable, labelled separately and never shown to anything that
+          tunes <code>how</code>. The models ran under llama-server rather
+          than Ollama, <code>Qwen3.5-4B</code> with an 8k context and
+          thinking off, beside <code>Dolphin 3.0 8B</code>, on the machine
+          the daemons run on. Qwen3.5-4B: 61% right, 89% not found, 16%
+          wrong kept, 2.8 s. Dolphin 3.0 8B: 59% right, 39% not found, 36%
+          wrong kept. Right is lower than the table's 76%, most likely
+          because these questions are phrased further from the manual (an
+          inference; the two sets were not compared question by question),
+          and it is the number to raise next. The recommendation stands.
         </p>
 
         <h3>Your own words for things</h3>
