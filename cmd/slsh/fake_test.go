@@ -2084,8 +2084,10 @@ type fakeDaemon struct {
 	host   *pb.HostResponse
 	logout *pb.LogoutResponse
 
-	// hosts is every Host request, in the order they came.
-	hosts []*pb.HostRequest
+	// hosts is every Host request, in the order they came, and logouts
+	// every Logout request.
+	hosts   []*pb.HostRequest
+	logouts []*pb.LogoutRequest
 
 	// auth answers the login handshake, for a daemon that is dialled
 	// rather than handed a connection, and relay is what to push down
@@ -2202,7 +2204,8 @@ func (d *fakeDaemon) Host(_ context.Context, req *pb.HostRequest) (*pb.HostRespo
 // Logout answers the way slgod does: a refusal is a status, and who is
 // holding the session travels in its details, since a unary call gives
 // back a message or a status and never both.
-func (d *fakeDaemon) Logout(context.Context, *pb.LogoutRequest) (*pb.LogoutResponse, error) {
+func (d *fakeDaemon) Logout(_ context.Context, req *pb.LogoutRequest) (*pb.LogoutResponse, error) {
+	d.logouts = append(d.logouts, req)
 	if d.fail != nil {
 		st := status.New(codes.FailedPrecondition, d.fail.Error())
 		if len(d.logout.GetClients()) > 0 {

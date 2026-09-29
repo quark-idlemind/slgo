@@ -997,9 +997,17 @@ Four things that cost time here:
 A shell for Second Life, on the sl package, against either backend:
 
     slsh [--addr localhost:7807] [--agent example]
+    slsh --login example
+    slsh --logout example
     slsh --direct [--first Quark] [--last Idlemind]
     slsh -c "ls -l Objects"
     slsh --version
+
+`--login NAME` asks slgod to log NAME in unless it is already up, and
+then attaches to it, so it works when that avatar has been logged out
+and when the daemon has nobody up at all.  `-c "login NAME"` instead
+attaches to the daemon's default first and runs as that avatar.
+`--logout NAME` logs NAME out without attaching to anything, and exits.
 
 `--version` says which build this is: the release it was tagged as, or
 that it is a development build after one, with the date and hash of

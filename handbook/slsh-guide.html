@@ -114,6 +114,18 @@ acting as group Example Builders (87f07e57-…)</span>
         </p>
 
         <p>
+          An avatar the daemon holds but has logged out — because somebody
+          took it into a viewer, or asked for it with <code>logout</code> —
+          cannot be attached to. <code>slsh --login NAME</code> asks the daemon
+          to log it in first and then attaches to it, and does nothing extra
+          when it is already up. It works with nobody up at all, which is where
+          <code>-c "login NAME"</code> cannot: that has to attach to
+          somebody before it can ask. <code>slsh --logout NAME</code> is the
+          other direction: it logs the avatar out without attaching to it, so
+          it can put down the last one the daemon has up.
+        </p>
+
+        <p>
           The other way is <code>--direct</code>, where the shell logs in
           itself and holds the session for as long as it runs. It needs no
           daemon, but every start pays for a fresh login and quitting logs the
@@ -130,6 +142,8 @@ acting as group Example Builders (87f07e57-…)</span>
         <div class="term">
           <pre><span class="p">$</span> <span class="k">slsh -c "ls -l Objects"</span>
 <span class="p">$</span> <span class="k">slsh -f tidy-up.slsh</span>
+<span class="p">$</span> <span class="k">slsh --login example -c where</span>     <span class="c">bring example up if it is down, then ask</span>
+<span class="p">$</span> <span class="k">slsh --logout example</span>             <span class="c">put example down, and exit</span>
 <span class="p">$</span> <span class="k">slsh --direct -c where</span>            <span class="c">log in, ask, log out</span></pre>
         </div>
 

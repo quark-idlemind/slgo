@@ -39,6 +39,12 @@ A session with clients attached is left alone and the refusal names
 them: the programs that attached, under the names they authenticated
 with, rather than a count of them.
 
+A shell attached to the avatar it logs out is one of those clients, so
+`slsh -a example -c 'logout example'` is refused by itself.  From
+outside the shell, `slsh --logout example` attaches to nothing and is
+refused only for somebody else; it is also how to put down the last
+avatar the daemon has up.  `slsh --login example` brings it back.
+
 ## What happens to whoever is attached
 
 With `-f`, every program attached to that avatar is let go, and told
