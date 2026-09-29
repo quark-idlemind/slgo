@@ -48,6 +48,7 @@ type opts struct {
 	Agent   string `getopt:"--agent=NAME -a    the profile to use; $SLGO_AGENT, or the daemon's default"`
 	Login   string `getopt:"--login=NAME       log NAME in through slgod unless it is up, and use it"`
 	Logout  string `getopt:"--logout=NAME      log NAME out through slgod, and exit"`
+	Agents  bool   `getopt:"--agents          list the avatars slgod holds, and exit"`
 	First   string `getopt:"--first=NAME       the avatar's first name, for --direct"`
 	Last    string `getopt:"--last=NAME        the avatar's last name, for --direct"`
 	Start   string `getopt:"--start=WHERE      where to arrive: last, home, or a region, for --direct"`
@@ -124,6 +125,16 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if o.Agents {
+		if o.Direct || o.Login != "" || o.Logout != "" || o.Command != "" || o.File != "" {
+			return fmt.Errorf("--agents lists slgod's avatars and exits; it takes nothing to do after")
+		}
+		addr, err := slhost.ResolveFor(cfg.Addr, cfg.Agent)
+		if err != nil {
+			return err
+		}
+		return agentsOnly(ctx, addr, os.Stdout)
+	}
 	if o.Logout != "" {
 		if o.Direct || o.Login != "" || o.Command != "" || o.File != "" {
 			return fmt.Errorf("--logout logs an avatar out and exits; it takes nothing to do after")
@@ -325,5 +336,23 @@ func logoutOnly(ctx context.Context, addr, name string, out io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(out, "%s logged out; slsh --login %s brings it back\n", name, name)
+	return nil
+}
+
+// agentsOnly lists the daemon's avatars without attaching to one, so it
+// answers with nobody up, which is when the list is most wanted.
+func agentsOnly(ctx context.Context, addr string, out io.Writer) error {
+	dialCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	conn, err := client.Dial(dialCtx, addr)
+	if err != nil {
+		return fmt.Errorf("sl: cannot reach slgod at %s: %w", addr, err)
+	}
+	defer conn.Close()
+	agents, err := conn.ListAgents(ctx)
+	if err != nil {
+		return err
+	}
+	printAgents(out, agents, "")
 	return nil
 }

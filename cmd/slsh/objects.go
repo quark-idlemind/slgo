@@ -752,8 +752,13 @@ func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	if err != nil {
 		return err
 	}
+	printAgents(out, agents, sh.s.Info().Name)
+	return nil
+}
 
-	here := sh.s.Info().Name
+// printAgents writes the daemon's list, starring its first choice and
+// marking the session named here, if any, as this shell's.
+func printAgents(out io.Writer, agents []*pb.AgentInfo, here string) {
 	first := true
 	for _, a := range agents {
 		// The mark is the daemon's first choice, and it has to be the
@@ -763,7 +768,7 @@ func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 			mark, first = "*", false
 		}
 		note := ""
-		if a.GetName() == here {
+		if here != "" && a.GetName() == here {
 			note = "   <- this shell"
 		}
 
@@ -777,7 +782,6 @@ func cmdAgents(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		fmt.Fprintf(out, "%s %-10s  %-24s  %s%s\n",
 			mark, a.GetName(), a.GetAvatarName(), where, note)
 	}
-	return nil
 }
 
 // canBeTheDefault says whether a listed agent is one a command that
