@@ -500,8 +500,8 @@ func (w *Session) onReader(fn func()) {
 // closeChat shuts every subscription down, which is what tells a
 // caller ranging over one that there will be no more.
 //
-// Every kind: chat, permissions, instant messages, region changes and
-// money alike.  Missing one of them is not a smaller version of the same bug:
+// Every kind: chat, permissions, instant messages, region changes, money
+// and group chat alike.  Missing one of them is not a smaller version of the same bug:
 // a caller ranging over the one that was missed waits for ever, which is
 // the worst way for a session to end.
 func (w *Session) closeChat() {
@@ -525,6 +525,10 @@ func (w *Session) closeChat() {
 	}
 	for ch, s := range w.moneySubs {
 		delete(w.moneySubs, ch)
+		close(s.ch)
+	}
+	for ch, s := range w.gchatSubs {
+		delete(w.gchatSubs, ch)
 		close(s.ch)
 	}
 	w.mu.Unlock()

@@ -246,3 +246,91 @@ dropped by the server.").
 
 The rest of this page is what `sl/groupchat.go` and `cmd/slsh` do with
 the above, and where they depart from it.
+
+### Join
+
+`JoinGroupChat` sends the start above and waits, up to
+`Options.GroupChatTimeout` (30 seconds, the viewer's own number), for a
+`ChatterBoxSessionStartReply` naming the group.  A success is the chat
+joined and its `agent_info` or `agents` the members; a failure is a
+`*GroupChatError` carrying the viewer's words for the reason.  The
+position is the avatar's; the region is null and the bucket is the one
+empty byte, as above.  A group not in the avatar's list is refused
+before anything is sent, as the viewer refuses it; an empty list is not
+read as "belongs to none", since the list arrives unasked.
+
+A join is sent even when this session thinks it already joined, because
+what the grid makes of a second start is not in the source, and a
+session whose avatar was re-established underneath it would otherwise
+believe in a chat that is gone.  What the grid does with a second start
+has not been looked at.
+
+### Hear
+
+A dialog 17 message is delivered on `Session.GroupChats` as a
+`GroupChatSaid` event carrying the group (the message's `ID`), the
+speaker and the text, and stays an instant message on `Session.IMs` as
+it was, so a caller of that one sees no change.  The speaker is a person
+unless the name is the grid's own (`IM.Sender`); the group has no name
+in the message, so a caller names it from the list of groups and prints
+it through `Sender.Label` as `[Group] name`.  Nothing gates a message on
+having joined: the viewer's own gate (`hasSession`) is a display rule,
+and that the grid sends only to a member is inferred.
+
+Who came and who went (`ChatterBoxSessionAgentListUpdates`, both forms)
+and being put out (`ForceCloseChatterBoxSession`) are events too, and
+keep `GroupChatMembers` and `InGroupChat` right.  A message the grid
+refuses (`ChatterBoxSessionEventReply` with `success` false) is a
+`GroupChatRefused`; a refused start is not an event, since the call that
+started it returns it.
+
+### The invitation
+
+`ChatterBoxInvitation` with an `instantmessage` in it is a
+`GroupChatInvited` event: the group, the name in the bucket, who spoke
+and what was said.  **It is not answered.**  The viewer answers every
+invitation at once (above) and that is the one place this departs from
+it, on the owner's instruction: a bot in a busy group would be flooded.
+`GroupChat.Accept` posts what the viewer posts, and `JoinGroupChat`
+starts the chat by the viewer's other route.  An invitation from this
+avatar, and the voice and conference shapes, are ignored as the viewer
+ignores them; Do Not Disturb has no counterpart here.
+
+Not known, and what the first live run should look at: whether the grid
+goes on inviting for every message while nothing answers, whether it
+drops the messages or stops sending them to a member that never
+answered, and whether it sends a speaker's own words back to them.
+
+### Speak
+
+`SayToGroup` refuses a chat this session has not joined
+(`ErrNotInGroupChat`), splits text as the viewer does and sends each
+piece as above, reliably.  The line the shell prints when it sends is
+its own, and a message of this avatar's own that the grid sends back is
+not printed again, as with local chat.
+
+### Leave
+
+`LeaveGroupChat` sends the leave above, always, whether or not this
+session thinks it joined, and forgets the chat.  Nothing answers it.  It
+is the whole of what closing a group's window does in Linden's viewer.
+
+### A group whose chat is off
+
+There is no such setting here, and no group is left or muted on
+arrival.  A group's chat is heard only once joined, so the equivalent
+of Firestorm's mute is to leave it (`group leave-chat`) and not to
+join.  Whether the grid then stops inviting is one of the things not
+known.
+
+### The shell
+
+`group chat NAME`, `group say NAME TEXT` and `group leave-chat NAME`
+(`cmd/slsh/groupchat.go`) are words after `group` and are read only when
+the line is not the whole name of a group, so no group that could be
+activated before cannot be now.  Lines are printed
+`< SPEAKER in [Group] NAME: TEXT`, with the speaker's label from
+`Sender.Label`; an invitation prints the same line and, once until the
+chat is joined or left, a notice saying how to join it.  Entering and
+leaving are not printed, since a busy group would fill the screen.
+slbotd does not join group chat and reads none of this.

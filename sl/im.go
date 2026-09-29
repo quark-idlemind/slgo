@@ -39,7 +39,13 @@ const (
 	// from the viewer's source, not measured.  See doc/im-senders.md.
 	DialogTaskInventoryOffered = 9
 
-	DialogSessionSend = 17
+	// The dialogs of a group's chat session: the invitation, the start
+	// a viewer sends to join, the message, and the leave.  The session is
+	// the group.  See groupchat.go.
+	DialogSessionInvite     = 13
+	DialogSessionGroupStart = 15
+	DialogSessionSend       = 17
+	DialogSessionLeave      = 18
 
 	// DialogFromTask is a script's llInstantMessage.  From is the
 	// object's OWNER, ID is the object, and FromName is whatever the
@@ -711,6 +717,9 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 	// from one would have a session hold, and be able to accept, an
 	// offer it had itself made to somebody else.
 	if im.Mine {
+		if b.Dialog == DialogSessionSend {
+			w.heardGroupChat(im)
+		}
 		w.deliverIM(im)
 		return
 	}
@@ -803,6 +812,12 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 		return
 	}
 
+	// A group's chat is delivered as an event of its own as well, which
+	// says which group and carries the speaker: see groupchat.go.
+	if b.Dialog == DialogSessionSend {
+		w.heardGroupChat(im)
+	}
+
 	// Being told an offer of ours was taken up is the only notice
 	// that side gets in time to be useful.
 	if b.Dialog == DialogFriendshipAccepted {
@@ -847,8 +862,14 @@ func DialogName(d uint8) string {
 		return "inventory declined"
 	case DialogTaskInventoryOffered:
 		return "object inventory offer"
+	case DialogSessionInvite:
+		return "group chat invitation"
+	case DialogSessionGroupStart:
+		return "group chat start"
 	case DialogSessionSend:
 		return "group message"
+	case DialogSessionLeave:
+		return "group chat leave"
 	case DialogFromTask:
 		return "object message"
 	case DialogDoNotDisturbAutoResponse:
