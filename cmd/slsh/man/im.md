@@ -75,5 +75,5 @@ Open the conversation and go on talking in chat mode:
 
     im Another Resident
 
-See also: `chat`, `talk`, `say`, and `lookup` or `who` for finding
-whoever is meant.
+See also: `chat`, `talk`, `say`, `conference` for an instant message with
+several people in it, and `lookup` or `who` for finding whoever is meant.

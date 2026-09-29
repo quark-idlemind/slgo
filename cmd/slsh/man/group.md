@@ -110,7 +110,8 @@ does not settle.
     group say Example Builders good evening, all
     group leave-chat Example Builders
 
-See also: `notice` for what a group posts, `im` for one person, `place` and `rez` for the commands land refuses when this is
+See also: `notice` for what a group posts, `im` for one person, `conference`
+for several, `place` and `rez` for the commands land refuses when this is
 wrong, `waiting` and `answer` for an invitation into a group, and
 `profile` for the groups somebody else has chosen to publish, which is
 a different list from this one.

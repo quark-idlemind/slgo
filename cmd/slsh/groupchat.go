@@ -199,6 +199,10 @@ func (c *chatInvites) clear(id msg.UUID) {
 // A group and a speaker are printed through Sender.Label and never bare.
 // Why: doc/group-chat.md
 func (sh *Shell) heardGroupChat(g *sl.GroupChat) {
+	if g.Conference {
+		sh.heardConference(g)
+		return
+	}
 	name, ok := sh.groups.name(g.Group)
 	if !ok || name == "" {
 		name = g.GroupName
