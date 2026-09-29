@@ -376,4 +376,29 @@ differed, and every answer to a question under "Not known".
 
 ## Measured
 
-Nothing yet.
+On Agni on 2026-09-29, two runs with three of this repository's avatars:
+Quark Idlemind and Perrick Hobb through the everyday slgod, and Mirkwin
+Resident on a second slgod, each with a slsh built from this branch.
+Quark Idlemind started a conference with the other two.
+
+- **Starting sends the others nothing.** The start was answered at once,
+  and its reply listed both invited avatars, so the starter was told
+  each "came into" the conference before either had heard of it. Neither
+  was sent an invitation when it started.
+- **The invitation comes with the first line.** When Quark Idlemind first
+  spoke, each of the others was sent the line and an invitation together,
+  in the `instantmessage` shape, as group chat's are. So `conference join`
+  typed before anyone had spoken found no conference to join.
+- **The two sides name it differently.** The starter's is "Multi-person
+  chat", as the viewer names one it starts; the invited avatars were
+  given the grid's name, "Quark Idlemind Conference".
+- **Joining and speaking.** Mirkwin Resident joined after the first line,
+  and each then heard the other within a second, marked as a conference.
+- **Not joining still hears.** Perrick Hobb never joined, and was sent
+  every line as it was spoken.
+- **A participant nobody has named is shown by id.** On joining, Mirkwin
+  Resident was told of Perrick Hobb by the id's first eight characters:
+  the name was not known to that session.
+- **Not seen.** A refusal, `conference add` to a running conference, a
+  conference made from an IM, a start refused and retried the older
+  way, and whether the grid sends a speaker's own words back.
