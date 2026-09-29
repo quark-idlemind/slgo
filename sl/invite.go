@@ -185,6 +185,13 @@ func (w *Session) ForgetInvitation(i *Invitation) {
 // caller acting for a person should have that person say the number
 // first.
 //
+// The profile's rules check it as a purchase, free or not: refused
+// unless pay = on, and held to pay_max, pay_daily and pay_to with the
+// group as the payee.  A session held here returns a *PayRefused; one
+// held through slgod is told by a MoneyBalanceReply signed
+// pay.RefusedBy, which this does not wait for.
+// Why: doc/money.md#how-each-is-checked
+//
 // Nothing replies to say the join worked.  What arrives afterwards is
 // an AgentGroupDataUpdate carrying the whole membership list again,
 // which is where a caller sees the new group appear.

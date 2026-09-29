@@ -284,8 +284,11 @@ func (p *payWait) answeredBy(m *Money, me msg.UUID) bool {
 	return false
 }
 
-// PayRefused is a payment refused: by the grid, or before it reached the
-// grid by slgod or by the profile's rules.
+// PayRefused is a payment or a purchase refused: by the grid, or before
+// it reached the grid by slgod or by the profile's rules.  A session
+// held here returns it from Send and DoCap; one held through slgod is
+// told by a MoneyBalanceReply signed pay.RefusedBy instead, which Pay
+// finds and the calls that buy do not wait for.
 type PayRefused struct {
 	// By is "the grid", pay.RefusedBy, or "this profile's rules" for a
 	// session held here.
@@ -296,7 +299,7 @@ type PayRefused struct {
 }
 
 func (e *PayRefused) Error() string {
-	return fmt.Sprintf("sl: %s refused the payment: %s", e.By, e.Reason)
+	return fmt.Sprintf("sl: %s refused it: %s", e.By, e.Reason)
 }
 
 // PayOutcome is what a payment whose answer never came turned out to be,

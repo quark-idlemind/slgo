@@ -278,12 +278,22 @@ here when another is shared the same way.
   waiting the default out, as `sl`'s do and `shortReadBacks` does for
   `cmd/slsh`'s.
 - `pay.Gate`, in `internal/pay`: the one check of a
-  `MoneyTransferRequest` against a profile's rules for paying, and the
+  `MoneyTransferRequest`, and of every other message that spends L$
+  (`pay.Spends` lists them: buying an object, land or a pass, joining a
+  group, a classified), against a profile's rules for paying, and the
   record of what it has paid. slgod runs it where it forwards a client's
   message (`server/pay.go`) and `sl.Direct.Send` for a session held
-  without a daemon, so every payment a program sends passes one of the
-  two; a viewer's does not, on purpose. slbotd pays nothing, and
+  without a daemon, so every payment and purchase a program sends passes
+  one of the two; a viewer's does not, on purpose.
+  `TestEveryMessageThatCarriesAPriceIsCheckedOrListed` fails for a
+  message added to the template that carries a price and is neither in
+  `Spends` nor listed there with why not. slbotd pays nothing, and
   `TestNothingHerePays` refuses a payment anywhere in it.
+- `Server.SetLog` (and `SetBase`), in `server/server.go`: a session's
+  `Log` is given when `StartAgent` makes it, before its circuit is up,
+  and is never assigned afterwards; a handler reads it from the first
+  message. `TestASessionLogsFromTheFirstMessageItHears` fails for one
+  assigned after.
 - `WatchSilence`, in `agent/agent.go` (`watchSilence` inside the
   package): calls a function once when a circuit has heard nothing for
   longer than a timeout, by a last-heard time it is given, looking a

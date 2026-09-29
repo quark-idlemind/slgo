@@ -58,6 +58,12 @@ type Object struct {
 	Name  string
 	Owner msg.UUID
 
+	// SalePrice is what the region last said the object is sold for,
+	// and Priced says it has said: ObjectProperties and
+	// ObjectPropertiesFamily carry it, an update does not.  See prices.go.
+	SalePrice int32
+	Priced    bool
+
 	// TextureEntry is the per face appearance, still packed.  Both
 	// kinds of update carry it, and taking it from only the compressed
 	// one left most prims looking untextured: a region sends a full
@@ -778,6 +784,16 @@ func (o *Objects) named(id msg.UUID, name string, owner msg.UUID) {
 	v.Name, v.Owner, v.Last = name, owner, time.Now()
 }
 
+// priced records what the region says an object is sold for, for an
+// object that is here, as named does a name.
+func (o *Objects) priced(id msg.UUID, price int32) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if v := o.byID[id]; v != nil {
+		v.SalePrice, v.Priced = price, true
+	}
+}
+
 // kill forgets an object by local id.
 //
 // KillObject names the local id and not the object id, so this is a
@@ -1028,6 +1044,7 @@ func (a *Agent) trackObjects() {
 		m := p.Message.(*msg.ObjectPropertiesFamily)
 		a.Objects().named(m.ObjectData.ObjectID,
 			trimNul(m.ObjectData.Name), m.ObjectData.OwnerID)
+		a.Objects().priced(m.ObjectData.ObjectID, m.ObjectData.SalePrice)
 	}, msg.Inline())
 
 	a.Disp.MustHandle("ObjectProperties", func(p *msg.Packet) {
@@ -1035,6 +1052,7 @@ func (a *Agent) trackObjects() {
 		for i := range m.ObjectData {
 			d := &m.ObjectData[i]
 			a.Objects().named(d.ObjectID, trimNul(d.Name), d.OwnerID)
+			a.Objects().priced(d.ObjectID, d.SalePrice)
 		}
 	}, msg.Inline())
 }

@@ -1,14 +1,15 @@
 package server
 
-// Paying, which slgod checks for every client.
+// Paying and buying, which slgod checks for every client.
 //
 // A client's message is a body this daemon frames and forwards, so any
-// client with the secret could put its own MoneyTransferRequest on the
-// circuit.  So sendMessage reads that one message on its way out and
-// checks it against the profile's rules (package pay) before it goes.
-// A refusal goes back to the client that sent it -- a MoneyBalanceReply
-// signed pay.RefusedBy on a stream, the error of a one-shot Send -- and
-// every refusal and every payment let through is logged.
+// client with the secret could put its own MoneyTransferRequest, or an
+// ObjectBuy, on the circuit.  So sendMessage reads the messages that
+// spend L$ (pay.Spends) on their way out and checks each against the
+// profile's rules (package pay) before it goes.  A refusal goes back to
+// the client that sent it -- a MoneyBalanceReply signed pay.RefusedBy on
+// a stream, the error of a one-shot Send -- and every refusal and every
+// payment or purchase let through is logged.
 //
 // A viewer's messages do not come this way and are not checked: that is
 // a person using the viewer's own pay dialog, and the rules are about
@@ -62,30 +63,36 @@ func (h *Hosted) payGate() *pay.Gate {
 	return h.pay
 }
 
-var moneyTransferRequest = msg.IDOf(&msg.MoneyTransferRequest{})
-
-// checkPayment decides whether a client's MoneyTransferRequest goes out.
-// It answers "" when it may, and otherwise why not, having told a
-// client on a stream; a one-shot sender, c nil, is told by the error
+// checkSpend decides whether a client's message goes out, when it is one
+// that spends L$: a payment, or one of the purchases package pay reads.
+// It answers "" when it may, and otherwise why not, having told a client
+// on a stream; a one-shot sender, c nil, is told by the error
 // sendMessage returns.
-func (h *Hosted) checkPayment(ctx context.Context, c *Client, sentBy string, body []byte) string {
-	m := &msg.MoneyTransferRequest{}
-	var d pay.Decision
+func (h *Hosted) checkSpend(ctx context.Context, c *Client, sentBy string, id msg.ID, body []byte) string {
+	if !pay.Spends(id) {
+		return ""
+	}
+	name := msg.Lookup(id).Name
+	m := msg.New(id)
 	a := h.Agent()
+	var v pay.Verdict
+	spends := true
 	switch {
 	case m.Decode(body) != nil:
-		d.Refused = "the MoneyTransferRequest could not be read, so it was not checked"
+		v = pay.Unread(nil, name, "the "+name+" could not be read, so it was not checked")
 	case a == nil:
-		d.Transfer = pay.ReadTransfer(m)
-		d.Refused = "the session is not up"
+		v = pay.Unread(m, name, "the session is not up")
 	default:
-		d = h.payGate().Check(ctx, a, m)
+		v, spends = h.payGate().CheckMessage(ctx, a, a.Account.AgentID, m)
+	}
+	if !spends {
+		return ""
 	}
 	if sentBy == "" {
 		sentBy = ElsewhereClient
 	}
-	h.logf("pay: %s", d.Describe(sentBy))
-	if d.Refused == "" {
+	h.logf("pay: %s", v.Describe(sentBy))
+	if v.Refused == "" {
 		return ""
 	}
 	if c != nil {
@@ -95,9 +102,23 @@ func (h *Hosted) checkPayment(ctx context.Context, c *Client, sentBy string, bod
 				balance = b
 			}
 		}
-		c.refusePayment(pay.Refusal(m, balance, d.Refused))
+		c.refusePayment(v.Refusal(balance))
 	}
-	return d.Refused
+	return v.Refused
+}
+
+// checkCap decides whether a capability request a client makes may go:
+// the one capability that spends L$, AcceptGroupInvite, is checked as
+// accepting the invitation is.  It answers "" when it may, and otherwise
+// why not.  Nobody is told but the caller, whose error it is.
+func (h *Hosted) checkCap(ctx context.Context, a *agent.Agent, r agent.CapRequest) string {
+	p := pay.ReadCapPurchase(a, a.Account.AgentID, a.CapOf(r), r.Body)
+	if p == nil {
+		return ""
+	}
+	v := h.payGate().CheckPurchase(ctx, a, p)
+	h.logf("pay: %s", v.Describe(ElsewhereClient))
+	return v.Refused
 }
 
 // refusePayment hands a client the reply saying its payment was refused.
@@ -120,8 +141,13 @@ func (c *Client) refusePayment(r *msg.MoneyBalanceReply) {
 // noteMoney logs what the grid says of a payment this avatar made,
 // whoever asked for it.
 func (h *Hosted) noteMoney(m *agent.Money) {
-	a := h.Agent()
-	if a == nil || !m.Transfer() || m.Source != a.Account.AgentID {
+	me := h.self
+	if me.IsZero() { // built by hand, as a test builds one
+		if a := h.Agent(); a != nil {
+			me = a.Account.AgentID
+		}
+	}
+	if me.IsZero() || !m.Transfer() || m.Source != me {
 		return
 	}
 	if m.Success {

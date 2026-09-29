@@ -38,6 +38,32 @@ type fakeSim struct {
 	// one went out.  Copied rather than kept, since the read buffer
 	// is reused for the next packet.
 	bodies map[string][][]byte
+
+	// names is what the sim answers a UUIDNameRequest with, by id; an
+	// avatar it does not list is not answered.
+	names map[msg.UUID]string
+
+	// onArrive is called once the avatar has arrived, on the sim's own
+	// goroutine, so a test can send something at that instant.  Set with
+	// whenArrived.
+	onArrive func()
+}
+
+// whenArrived sets what the sim does the moment the avatar arrives.
+func (f *fakeSim) whenArrived(fn func()) {
+	f.mu.Lock()
+	f.onArrive = fn
+	f.mu.Unlock()
+}
+
+// nameOf tells the sim who somebody is, for what asks the grid.
+func (f *fakeSim) nameOf(id msg.UUID, first, last string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.names == nil {
+		f.names = map[msg.UUID]string{}
+	}
+	f.names[id] = first + " " + last
 }
 
 // sawBody is every body this sim received of that message, in order.
@@ -152,6 +178,28 @@ func (f *fakeSim) run() {
 			amc.Data.RegionHandle = testvilleHandle
 			amc.SimData.ChannelVersion = []byte("Fake Server\x00")
 			f.send(amc, msg.FlagReliable)
+			f.mu.Lock()
+			arrived := f.onArrive
+			f.mu.Unlock()
+			if arrived != nil {
+				arrived()
+			}
+		case "UUIDNameRequest":
+			q := &msg.UUIDNameRequest{}
+			if q.Decode(body[k:]) != nil {
+				break
+			}
+			for _, b := range q.UUIDNameBlock {
+				f.mu.Lock()
+				full, ok := f.names[b.ID]
+				f.mu.Unlock()
+				first, last, _ := strings.Cut(full, " ")
+				if ok {
+					r := &msg.UUIDNameReply{UUIDNameBlock: []msg.UUIDNameReply_UUIDNameBlock{
+						{ID: b.ID, FirstName: []byte(first + "\x00"), LastName: []byte(last + "\x00")}}}
+					f.send(r, 0)
+				}
+			}
 		case "LogoutRequest":
 			f.send(&msg.LogoutReply{}, msg.FlagReliable)
 		}

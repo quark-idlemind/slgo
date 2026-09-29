@@ -107,6 +107,10 @@ type Agent struct {
 	money   money
 	pickers sync.Map
 
+	// prices is what the session has been told that says what a
+	// purchase costs, and names.  See prices.go.
+	prices prices
+
 	// asked remembers which local ids were recently asked about, so
 	// that something moving on the edge of the draw distance is not
 	// asked for several times a second.  Forgotten on entering another
@@ -731,6 +735,7 @@ func (a *Agent) register() {
 	a.keepOffers()
 	a.keepMoney()
 	a.keepPickers()
+	a.keepPrices()
 	a.followCrossings()
 	a.followNeighbours()
 

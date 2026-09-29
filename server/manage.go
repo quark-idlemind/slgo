@@ -151,9 +151,8 @@ func (s *Server) login(ctx context.Context, name string, loginFor LoginFor) (*Ho
 		return nil, status.Errorf(codes.Unavailable, "%s: %v", name, err)
 	}
 	s.mu.RLock()
-	log, onStart := s.log, s.onStart
+	onStart := s.onStart
 	s.mu.RUnlock()
-	h.Log = log
 	if onStart != nil {
 		// The same settling a startup session gets -- the active
 		// group, above all, without which the avatar cannot build and

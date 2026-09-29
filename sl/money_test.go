@@ -3,10 +3,12 @@ package sl
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/internal/pay"
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -373,4 +375,59 @@ func TestADirectSessionChecksAPaymentAgainstItsRules(t *testing.T) {
 		t.Fatalf("a payment the rules allow: %v", err)
 	}
 	waitFor(t, "the payment to go out", func() bool { return len(rw.datagrams()) == 1 })
+}
+
+// A purchase is checked the same way, and so is a message sent as it is
+// framed.  Nothing goes out for one refused.
+func TestADirectSessionChecksAPurchaseAgainstItsRules(t *testing.T) {
+	d := aDirectSession(t)
+	rw := &recordingWriter{}
+	d.a.Send = msg.NewSender(rw)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go d.a.Send.Run(ctx)
+
+	buy := &msg.ObjectBuy{}
+	buy.ObjectData = []msg.ObjectBuy_ObjectData{{ObjectLocalID: 9, SaleType: 2, SalePrice: 5}}
+	raw := func() msg.Message {
+		body, err := buy.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return msg.NewRaw(msg.IDOf(buy), body)
+	}
+
+	for name, m := range map[string]msg.Message{"typed": buy, "framed": raw()} {
+		var r *PayRefused
+		if err := d.Send(ctx, m, true); !errors.As(err, &r) || r.By != "this profile's rules" ||
+			!strings.Contains(r.Reason, "paying is off") {
+			t.Fatalf("a %s purchase under no rules: %v", name, err)
+		}
+	}
+
+	// Paying allowed, and the price not known: refused all the same.
+	d.pay = pay.NewGate(pay.Rules{On: true, To: []string{"*"}}, "")
+	var r *PayRefused
+	if err := d.Send(ctx, buy, true); !errors.As(err, &r) || !strings.Contains(r.Reason, "not one this session has been told of") {
+		t.Fatalf("a purchase of an object nobody described: %v", err)
+	}
+	// Answering an invitation by capability is one too.
+	d.pay = nil
+	body := []byte("<llsd><map><key>group</key><uuid>" + examplePayee.String() + "</uuid></map></llsd>")
+	if _, err := d.DoCap(ctx, agent.CapRequest{Cap: "AcceptGroupInvite", Method: "POST", Body: body}); !errors.As(err, &r) ||
+		!strings.Contains(r.Reason, "paying is off") {
+		t.Fatalf("accepting by capability under no rules: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if n := len(rw.datagrams()); n != 0 {
+		t.Fatalf("%d datagrams went out", n)
+	}
+
+	// What spends nothing goes as it did.
+	say := &msg.ChatFromViewer{}
+	say.ChatData.Message = []byte("hi\x00")
+	if err := d.Send(ctx, say, true); err != nil {
+		t.Fatalf("a chat: %v", err)
+	}
+	waitFor(t, "the chat to go out", func() bool { return len(rw.datagrams()) == 1 })
 }

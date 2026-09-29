@@ -568,7 +568,8 @@ func attachItemString(id msg.UUID) string {
 // sendMessage puts a client's message on the circuit.  The client
 // supplies the number and the body; the sequence number and
 // reliability are the server's, because they are circuit state.  The
-// body is not read, but for a payment's, which is checked first.
+// body is not read, but for a message that spends L$, which is checked
+// first.
 func sendMessage(ctx context.Context, h *Hosted, c *Client, sentBy string, m *pb.OutboundMessage) error {
 	if m == nil {
 		return status.Error(codes.InvalidArgument, "empty message")
@@ -585,15 +586,13 @@ func sendMessage(ctx context.Context, h *Hosted, c *Client, sentBy string, m *pb
 		return status.Error(codes.InvalidArgument, "message needs an id or a name")
 	}
 
-	// A payment goes out only if the profile's rules let it, and is
-	// said where it was asked for when they do not.  See pay.go.
-	if id == moneyTransferRequest {
-		if why := h.checkPayment(ctx, c, sentBy, m.Body); why != "" {
-			if c == nil {
-				return status.Errorf(codes.PermissionDenied, "slgod refused the payment: %s", why)
-			}
-			return nil
+	// A payment or a purchase goes out only if the profile's rules let
+	// it, and is said where it was asked for when they do not.  See pay.go.
+	if why := h.checkSpend(ctx, c, sentBy, id, m.Body); why != "" {
+		if c == nil {
+			return status.Errorf(codes.PermissionDenied, "slgod refused it: %s", why)
 		}
+		return nil
 	}
 
 	// A client moving the avatar takes the wheel, and a client setting
@@ -1084,14 +1083,20 @@ func (s *Server) Cap(ctx context.Context, req *pb.CapRequest) (*pb.CapResponse, 
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
-	resp, err := a.DoCap(ctx, agent.CapRequest{
+	r := agent.CapRequest{
 		Cap:    req.Cap,
 		Method: req.Method,
 		Path:   req.Path,
 		Body:   req.Body,
 		Type:   req.ContentType,
 		URL:    req.Url,
-	})
+	}
+	// Answering a group's invitation is a purchase when the group
+	// charges; see pay.go.
+	if why := h.checkCap(ctx, a, r); why != "" {
+		return nil, status.Errorf(codes.PermissionDenied, "slgod refused it: %s", why)
+	}
+	resp, err := a.DoCap(ctx, r)
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "%v", err)
 	}

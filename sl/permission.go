@@ -155,7 +155,9 @@ func (q *Permission) Grant(ctx context.Context, mask Perms) error {
 // GrantAll answers with everything that was asked for.
 //
 // Worth reading the request first: this is the call that can hand over
-// the avatar's money and its movement.
+// the avatar's money and its movement.  The profile's rules refuse a
+// grant of PermissionDebit whatever they say, since a script given it
+// can take any amount; see doc/money.md#how-each-is-checked.
 func (q *Permission) GrantAll(ctx context.Context) error {
 	return q.answer(ctx, q.Wants)
 }

@@ -69,6 +69,53 @@ func TestAViewersPaymentIsNotChecked(t *testing.T) {
 	}
 }
 
+// TestAViewersPurchaseIsNotChecked: as a payment is not.  The profile
+// says nothing about paying, so a client's ObjectBuy is refused, and the
+// same message from a viewer's own circuit reaches the grid.
+func TestAViewersPurchaseIsNotChecked(t *testing.T) {
+	here := msg.RegionHandle(3, 5)
+	r := newHomingRig(t, here)
+	h, said := r.host(t)
+	vh, _ := viewerLoginTo(t, r.ctx, r.srv, "viewer-secret")
+	a := h.Agent()
+	inRegion(t, a, here)
+
+	m := &msg.ObjectBuy{}
+	m.AgentData.AgentID, m.AgentData.SessionID = a.Account.AgentID, a.Account.SessionID
+	m.ObjectData = []msg.ObjectBuy_ObjectData{{ObjectLocalID: 9, SaleType: 2, SalePrice: 25}}
+	body, err := m.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = r.srv.Send(r.ctx, &pb.SendRequest{Agent: "example",
+		Message: &pb.OutboundMessage{Name: "ObjectBuy", Body: body, Reliable: true}})
+	if status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("a client's purchase under a profile that says nothing about paying: %v", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if r.sim.saw("ObjectBuy") {
+		t.Fatal("the client's purchase reached the grid")
+	}
+
+	c, err := vh.circuitFor("example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := net.DialUDP("udp", nil, c.Addr())
+	if err != nil {
+		t.Skipf("no loopback UDP: %v", err)
+	}
+	defer conn.Close()
+	viewerSends(t, conn, a, 1, m)
+
+	waitFor(t, 5*time.Second, "the viewer's purchase to reach the grid", func() bool {
+		return r.sim.saw("ObjectBuy")
+	})
+	if n := strings.Count(said.String(), "asked to buy"); n != 1 {
+		t.Errorf("%d purchases were checked, want the client's alone; the log:\n%s", n, said)
+	}
+}
+
 // TestWhatIsPaidOutlivesTheDaemon: the daily limit is counted from a
 // record in slgod's own directory, so a daemon started again counts what
 // the one before it paid.
