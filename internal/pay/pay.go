@@ -62,15 +62,6 @@ type Rules struct {
 	To []string
 }
 
-// IsKey reports whether a profile key is one of these rules'.
-func IsKey(key string) bool {
-	switch key {
-	case "pay", "pay_max", "pay_daily", "pay_to":
-		return true
-	}
-	return false
-}
-
 // Set reads one profile line.  pay_to adds to the list; the others
 // replace what an earlier line said.
 func (r *Rules) Set(key, value string) error {

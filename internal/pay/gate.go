@@ -43,9 +43,6 @@ func NewGate(rules Rules, ledger string) *Gate {
 	return &Gate{rules: rules, ledger: ledger, now: time.Now, names: map[string]msg.UUID{}}
 }
 
-// Rules is what this gate checks against.
-func (g *Gate) Rules() Rules { return g.rules }
-
 // Decision is what Check made of a payment.
 type Decision struct {
 	Transfer
