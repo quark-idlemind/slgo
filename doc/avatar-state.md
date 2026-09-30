@@ -76,12 +76,29 @@ sent one to six `ScriptControlChange` (one avatar six); an avatar
 wearing nothing scripted was sent none.  The flags and contents of
 those were not captured.
 
-Not measured: what the controls were, whether the counts drift upward
-across teleports as they would if a region sent its takes again without
-releasing the old region's (the viewer has the same exposure and
-nothing resets it), and whether a walk refused by this is what a person
-would want to be told.  The walk's refusal has been exercised against a
-simulated simulator only.
+Later the same day, with a box in the region whose script took
+`CONTROL_FWD | CONTROL_BACK` without passing them on, once the avatar
+had granted it the permission:
+
+- The take came as one `ScriptControlChange` of two blocks: first a
+  release of every control (`Controls` 0xFFFFFFFF, `TakeControls`
+  false), then the take, whose mask was 0x00180003.  That is forward
+  and back with the forward and back nudges, bits 19 and 20, which no
+  LSL constant names.  Why the simulator releases everything first is
+  not known; it does no harm here, because the counts stop at zero as
+  the viewer's do, and a release of what was never taken changes
+  nothing.
+- `where` then listed the four as taken, and `walk` was refused with
+  `ErrControlsTaken`'s words; the avatar did not move.
+- The script's `llReleaseControls` came as one block, a release of
+  0x00180003.  `where` listed nothing, and the same walk went there and
+  back.
+
+Not measured: what the attachments' takes at login were, whether the
+counts drift upward across teleports as they would if a region sent its
+takes again without releasing the old region's (the viewer has the same
+exposure and nothing resets it), and a take arriving during a walk,
+which has been exercised against a simulated simulator only.
 
 ## TeleportStart
 
@@ -170,6 +187,9 @@ microseconds apart; and an ejection from land was sent one with flags
 [history/teleport.md](history/teleport.md) and
 [history/landmark.md](history/landmark.md).
 
+Later the same day, going home with `landmark --home` was preceded by a
+`TeleportStart` with flags 32 (via home).
+
 Not measured: that a landmark teleport is sent two.  That is the
 viewer's own comment (`llviewermessage.cpp:3467`), and what was recorded
 of a landmark teleport ([history/landmark.md](history/landmark.md)) names
@@ -202,7 +222,9 @@ bar does.
 ### Measured
 
 On 2026-09-30 every avatar was sent one `HealthMessage` at login, and
-for an avatar standing on its own land it read 100.
+for an avatar standing on its own land it read 100.  Going home later
+brought another, also 100, about a third of a second after the
+`TeleportStart`.
 
 Not measured: what a region with damage enabled sends as an avatar is
 hurt, how often, or whether a region without it ever sends one after
