@@ -204,6 +204,54 @@ UUID
 	exit 1
 fi
 
+# A password digest is the password as far as the grid is concerned: the
+# viewer sends $1$ and the MD5 of the password, and whoever has it can log in
+# with it.  So one is marked the way a uuid is.  An invented digest has
+# fa4efa4e as hex digits nine to sixteen; a placeholder is one character
+# throughout, or 0123456789abcdef twice; and a digest that has to be real,
+# because a test works it out from the string it hashes, is written down
+# with that string in tools/known-hashes.
+knownh=$root/tools/known-hashes
+unmarkedh=$(perl -e '
+	my %known;
+	if (open my $k, "<", shift @ARGV) {
+		while (<$k>) { next if /^\s*(#|$)/; $known{lc((split /\s+/)[0])} = 1 }
+	}
+	sub ok {
+		my $h = lc shift;              # 32 hex digits
+		return 1 if substr($h, 8, 8) eq "fa4efa4e";
+		return 1 if $h =~ /^(.)\1*$/;
+		return 1 if $h eq "0123456789abcdef" x 2;
+		return $known{"\$1\$$h"};
+	}
+	for my $f (@ARGV) {
+		next if $f =~ m{/tools/known-hashes$};
+		open my $in, "<", $f or next;
+		while (my $line = <$in>) {
+			while ($line =~ /\$1\$([0-9a-fA-F]{32})(?![0-9a-fA-F])/g) {
+				print "$f:$.: \$1\$$1\n" unless ok($1);
+			}
+		}
+	}
+' "$knownh" $text)
+if [ -n "$unmarkedh" ]; then
+	echo "check-identities: these password digests are neither marked as invented nor known:"
+	echo
+	printf '%s\n' "$unmarkedh" | sed "s|^$root/||" | while IFS= read -r hit; do
+		printf '  %s\n' "$hit"
+	done
+	cat <<'HASH'
+
+A digest is a password to the grid.  An invented one says so: hex digits nine
+to sixteen are fa4efa4e, as in $1$52a57e577e57c0de5cf5fb1c76c742fa, and
+nothing else of a real one is kept.  A placeholder is one character
+throughout.  A digest a test has to compute for real goes in
+tools/known-hashes with the string it is the MD5 of.  CLAUDE.md has the
+whole of it.
+HASH
+	exit 1
+fi
+
 # A region's grid square is one map lookup from its name, so a square is
 # marked the way a uuid is: both coordinates of an invented one have the
 # high byte 0xAA, 43520 to 43775.  A placeholder has both below 16.  A real
