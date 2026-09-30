@@ -70,6 +70,22 @@ said, and `*` for a notice.  The first two are the pair that has to be
 told apart, since a remark and a reply read the same in a column; the
 third is the shell speaking rather than anybody in the world.
 
+## A friend logging in or out is a notice
+
+When a friend who lets this avatar see them online logs in or out, a
+notice says so, worded as the viewer words it:
+
+    15:07:40 * Example Resident is online
+    15:11:02 * Example Resident is offline
+
+At login the grid names every friend already on, and each of those is
+announced too, one line each.  A shell that attaches to a daemon that
+has been up a while was not listening then and announces only what
+arrives after it; `friends` says who is online now.  A name the shell
+does not have is asked for and waited for briefly, and the id is
+printed in its place when it does not come.  Nothing here has been
+measured on the grid yet: see doc/friend-notices.md.
+
 ## Control characters are shown, not obeyed
 
 What is heard is somebody else's text, and a terminal acts on the

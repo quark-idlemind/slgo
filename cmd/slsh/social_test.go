@@ -2239,3 +2239,87 @@ func TestOrIDPrefersTheName(t *testing.T) {
 		t.Errorf("orID with no name = %q, want the id", got)
 	}
 }
+
+// ------------------------------------------------------------ friends
+
+func onlineNote(ids ...msg.UUID) *msg.OnlineNotification {
+	m := &msg.OnlineNotification{}
+	for _, id := range ids {
+		m.AgentBlock = append(m.AgentBlock, msg.OnlineNotification_AgentBlock{AgentID: id})
+	}
+	return m
+}
+
+func offlineNote(ids ...msg.UUID) *msg.OfflineNotification {
+	m := &msg.OfflineNotification{}
+	for _, id := range ids {
+		m.AgentBlock = append(m.AgentBlock, msg.OfflineNotification_AgentBlock{AgentID: id})
+	}
+	return m
+}
+
+// A friend logging in or out is a notice, named when the name is known.
+func TestAFriendLoggingInAndOutIsAnnounced(t *testing.T) {
+	x := newTestShell(t)
+	knows(t, x, map[msg.UUID]string{testFriend: "Example Resident"})
+	watching(t, x)
+
+	x.grid.Relay(t, onlineNote(testFriend))
+	got := waits(t, x, "Example Resident is online")
+	if !strings.Contains(got, " * Example Resident is online") {
+		t.Errorf("the notice was %q", got)
+	}
+	x.grid.Relay(t, offlineNote(testFriend))
+	waits(t, x, "Example Resident is offline")
+}
+
+// A name that never comes is not waited for long, and the id stands in.
+func TestAFriendWhoseNameIsNotHadIsAnnouncedByItsId(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	x.grid.Relay(t, onlineNote(testOther))
+	waits(t, x, testOther.String()+" is online")
+}
+
+// The login burst is one message naming everybody already on, and each
+// is announced like any other.
+func TestTheLoginBurstIsAnnouncedOneLineEach(t *testing.T) {
+	x := newTestShell(t)
+	knows(t, x, map[msg.UUID]string{testFriend: "Example Resident", testOther: "Another Resident"})
+	watching(t, x)
+
+	x.grid.Relay(t, onlineNote(testFriend, testOther))
+	got := waits(t, x, "Another Resident is online")
+	if !strings.Contains(got, "Example Resident is online") {
+		t.Errorf("the burst said %q", got)
+	}
+}
+
+// A name that is slow to come does not hold up what is said meanwhile:
+// friends are announced apart from chat, and a burst is named with one
+// wait rather than one each.
+func TestAFriendsNameBeingWaitedForHoldsNothingElseUp(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	start := time.Now()
+	x.grid.Relay(t, onlineNote(testOther, testFriend))
+	said := &msg.ChatFromSimulator{}
+	said.ChatData.SourceID = testLamp
+	said.ChatData.FromName = append([]byte("a lamp"), 0)
+	said.ChatData.Message = append([]byte("still here"), 0)
+	x.grid.Relay(t, said)
+	waits(t, x, "still here")
+	if d := time.Since(start); d >= friendNameWait {
+		t.Errorf("chat was printed after %v, behind the wait for a friend's name", d)
+	}
+
+	got := waits(t, x, testFriend.String()+" is online")
+	if !strings.Contains(got, testOther.String()+" is online") {
+		t.Errorf("the first of the burst is missing:\n%s", got)
+	}
+	if d := time.Since(start); d >= 2*friendNameWait {
+		t.Errorf("two unnamed friends took %v, a wait each", d)
+	}
+}
