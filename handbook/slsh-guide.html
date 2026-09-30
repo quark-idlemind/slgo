@@ -732,8 +732,9 @@ health 73%</span></pre>
         <p>
           A control a script keeps is one the avatar does not obey, which is
           why the line is worth reading when a <code>walk</code> is refused.
-          The lines come from what the simulator has said since the session
-          began, so one can be stale if a script died without letting go.
+          The lines are what the simulator has said since the session began,
+          a take and a release at a time; whether a script that is deleted
+          while holding a control is always released has not been measured.
         </p>
 
         <p>
@@ -2031,8 +2032,7 @@ the next owner may now copy, modify, transfer</span>
           printed as a notice, <code>* Example Resident is online</code>, in
           chat mode or out of it. At login every friend already on is
           announced, a line each; a shell attached to a daemon that has been up
-          a while announces only what comes after it attached. This has not
-          been measured on the grid yet. <code>offer</code> offers friendship; <code>give</code> offers
+          a while announces only what comes after it attached. <code>offer</code> offers friendship; <code>give</code> offers
           an inventory item. Neither is a transfer: nothing moves until the
           other side accepts, and what they do is not reported back here.
         </p>
