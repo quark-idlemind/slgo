@@ -90,6 +90,17 @@ reads the square out of every handle it finds and refuses one that is
 not marked, not a placeholder with both coordinates below 16, and not
 on that list; a bare `(x, y)` it leaves to the list of real names below.
 
+A password digest is marked too, because it is a password: the viewer
+sends `$1$` and the MD5 of the password, and whoever has that can log in
+with it.  Hex digits nine to sixteen of an invented digest are
+`fa4efa4e`, the uuid's mark in the uuid's place, as in
+`$1$52a57e577e57c0de5cf5fb1c76c742fa`, and nothing else of a real one is
+kept -- nothing sorts by a digest.  A placeholder is one character
+throughout, or `0123456789abcdef` twice.  A digest a test has to work
+out for real from a string it names is in `tools/known-hashes`, with
+the string.  A digest in a captured login is always replaced, and
+`tools/check-identities` refuses any other.
+
 Names hide in the same way. They wrap across comment lines, they appear
 downcased in tests that check case-insensitive matching, they turn up
 as Go identifiers (a name welded to a word, like `<place>Asset`),

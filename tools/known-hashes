@@ -1,0 +1,11 @@
+# Real password digests this repository may use, and what each is the
+# MD5 of.
+#
+# Every other $1$ digest in the tree is invented, and says so: hex digits
+# nine to sixteen are fa4efa4e (see CLAUDE.md), or it is a placeholder,
+# one character throughout or 0123456789abcdef twice.
+# tools/check-identities refuses anything else.
+#
+# Only a digest a test works out from a string it names belongs here,
+# never one captured from a login.
+$1$acbd18db4cc2f85cedef654fccc4a4d8	MD5 of "foo", the digest cmd/slhash/main_test.go checks slhash against
