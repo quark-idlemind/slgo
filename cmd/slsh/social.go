@@ -215,6 +215,8 @@ func (sh *Shell) watch(ctx context.Context) {
 	// What is said in the group chats this avatar is in, with the
 	// invitations to the ones it is not.
 	gchats := sh.s.GroupChats(0)
+	// Friends logging in and out, the login burst included.
+	friends := sh.s.FriendChanges(0)
 	// The group names a notice is announced with, asked for now so that
 	// the first notice need not wait for them.  See heardNotice.
 	sh.groups.kick()
@@ -306,6 +308,11 @@ func (sh *Shell) watch(ctx context.Context) {
 				return
 			}
 			sh.heardGroupChat(g)
+		case c, ok := <-friends:
+			if !ok {
+				return
+			}
+			sh.heardFriend(ctx, c)
 		}
 	}
 }
@@ -1408,4 +1415,26 @@ func movedBy(cause string) string {
 		return " (forced off the land)"
 	}
 	return ""
+}
+
+// friendNameWait is how long a friend's name is waited for before the
+// line is printed with the id.
+const friendNameWait = 2 * time.Second
+
+// heardFriend announces a friend logging in or out, the way the viewer
+// words it: "NAME is online" or "NAME is offline".  A name the session
+// does not have is asked for and waited for briefly, and the id is
+// printed when it does not come.
+// Why: doc/friend-notices.md
+func (sh *Shell) heardFriend(ctx context.Context, c *sl.FriendChange) {
+	name := sh.s.Names(ctx, []msg.UUID{c.ID}, friendNameWait)[c.ID]
+	if name == "" {
+		name = c.ID.String()
+	}
+	status := "offline"
+	if c.Online {
+		status = "online"
+	}
+	sh.noticef("%s is %s", sl.SenderPerson.Label(name), status)
+	sh.prompt()
 }

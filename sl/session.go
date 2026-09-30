@@ -144,6 +144,7 @@ type Session struct {
 	regionSubs map[<-chan *RegionChange]*regionSub
 	moneySubs  map[<-chan *Money]*moneySub
 	gchatSubs  map[<-chan *GroupChat]*groupChatSub
+	friendSubs map[<-chan *FriendChange]*friendSub
 
 	// gchat is what is known of each group's chat, by group.  See
 	// groupchat.go.
@@ -379,6 +380,7 @@ func New(b Backend) (*Session, error) {
 		regionSubs:  map[<-chan *RegionChange]*regionSub{},
 		moneySubs:   map[<-chan *Money]*moneySub{},
 		gchatSubs:   map[<-chan *GroupChat]*groupChatSub{},
+		friendSubs:  map[<-chan *FriendChange]*friendSub{},
 		confStarts:  map[msg.UUID]*confStart{},
 		names:       map[msg.UUID]string{},
 		asking:      map[msg.UUID]bool{},
@@ -872,6 +874,22 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 
 	case *msg.UUIDNameReply:
 		w.nameReply(t)
+
+	// A friend coming or going, which a viewer announces; see
+	// friendnote.go.  The agent keeps who is online on its own.
+	case *msg.OnlineNotification:
+		ids := make([]msg.UUID, 0, len(t.AgentBlock))
+		for _, b := range t.AgentBlock {
+			ids = append(ids, b.AgentID)
+		}
+		w.friendsChanged(ids, true)
+
+	case *msg.OfflineNotification:
+		ids := make([]msg.UUID, 0, len(t.AgentBlock))
+		for _, b := range t.AgentBlock {
+			ids = append(ids, b.AgentID)
+		}
+		w.friendsChanged(ids, false)
 
 	case *msg.AvatarPickerReply:
 		w.pickerReply(t)
