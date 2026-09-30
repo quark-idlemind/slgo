@@ -2,6 +2,7 @@ package agent
 
 import (
 	"net"
+	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -135,6 +136,11 @@ func (a *Agent) crossTo(addr *net.UDPAddr, seed string, handle uint64) {
 	if handle != 0 && handle == a.RegionHandle() {
 		return
 	}
+
+	// Walking over a border sends no TeleportStart, so any that is
+	// kept belongs to a teleport that ended some other way, and is not
+	// this arrival's cause.
+	a.teleports.take(time.Now())
 
 	// The session's context rather than anything belonging to the
 	// goroutine that brought the message, which for the queue road is

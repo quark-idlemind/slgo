@@ -107,6 +107,10 @@ type Agent struct {
 	money   money
 	pickers sync.Map
 
+	// teleports is the flags of the latest TeleportStart, until the
+	// arrival they belong to.  See teleportflags.go.
+	teleports teleportStarts
+
 	// controls is what scripts have taken of the avatar's controls.
 	// See controls.go.
 	controls scriptControls
@@ -351,8 +355,10 @@ type Options struct {
 
 	// OnRegionChange is told that the avatar is in a different
 	// region from the one it was in, with that region's name and
-	// handle.  See regionChanged for when it fires and, as
-	// importantly, when it does not.
+	// handle, and the flags of the TeleportStart that began the
+	// teleport when it was one (zero when not, or when none came
+	// within TeleportCauseKept).  See regionChanged for when it fires
+	// and, as importantly, when it does not.
 	//
 	// It is what lets something above this package throw away what
 	// belongs to the region left behind, which is most of what a
@@ -744,6 +750,7 @@ func (a *Agent) register() {
 	a.keepMoney()
 	a.keepSimStats()
 	a.keepScriptControls()
+	a.keepTeleportStart()
 	a.keepPickers()
 	a.keepPrices()
 	a.followCrossings()
@@ -881,6 +888,10 @@ func (a *Agent) register() {
 		a.lookAt = m.Info.LookAt
 		a.mu.Unlock()
 		a.setCenter(m.Info.Position)
+		// The teleport it began has ended here, in the same region:
+		// not an arrival anywhere, so nothing is told, but its cause
+		// is spent.
+		a.teleports.take(time.Now())
 	}, msg.Inline())
 
 	// coarseTooHigh is the height byte at its ceiling.  A coarse
@@ -1012,6 +1023,10 @@ func (a *Agent) arrive(m *msg.AgentMovementComplete) {
 	// avatar has arrived somewhere it was not.
 	was := a.publishArrival(r, known, m)
 	a.mu.Unlock()
+	// Taken on every arrival, whether or not it is a change, so that a
+	// TeleportStart sent at login is spent by the first and cannot be
+	// given to a later one.
+	cause := a.teleports.take(time.Now())
 	a.setCenter(m.Data.Position)
 	a.inRegion.fire()
 	// A move is waiting for this one rather than for the first one
@@ -1019,7 +1034,7 @@ func (a *Agent) arrive(m *msg.AgentMovementComplete) {
 	if s := a.arrived.Load(); s != nil {
 		s.fire()
 	}
-	a.regionChanged(was, r.Handle, r.Name)
+	a.regionChanged(was, r.Handle, r.Name, cause)
 }
 
 // publishArrival makes r the region the session says the avatar is in,

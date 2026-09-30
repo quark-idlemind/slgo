@@ -203,6 +203,8 @@ func TestBothBackendsSayTheSameThingAboutARegionChange(t *testing.T) {
 		Detail:       "the avatar is now in " + goguenName,
 		Region:       goguenName,
 		RegionHandle: goguen,
+
+		TeleportFlags: TeleportViaHome | TeleportDisableCancel,
 	}}}
 
 	var hosted *RegionChange
@@ -214,7 +216,7 @@ func TestBothBackendsSayTheSameThingAboutARegionChange(t *testing.T) {
 
 	direct := aDirectSession(t)
 	direct.regions = make(chan *RegionChange, 1)
-	direct.regionChanged(goguenName, goguen)
+	direct.regionChanged(goguenName, goguen, TeleportViaHome|TeleportDisableCancel)
 
 	var got *RegionChange
 	select {
@@ -225,6 +227,9 @@ func TestBothBackendsSayTheSameThingAboutARegionChange(t *testing.T) {
 
 	if !reflect.DeepEqual(hosted, got) {
 		t.Errorf("hosted said %+v and direct said %+v", hosted, got)
+	}
+	if got.TeleportFlags != TeleportViaHome|TeleportDisableCancel || got.Cause() != "home" {
+		t.Errorf("the cause was lost on the way: flags %#x, cause %q", got.TeleportFlags, got.Cause())
 	}
 }
 

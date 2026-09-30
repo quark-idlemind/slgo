@@ -2248,8 +2248,15 @@ type AgentEvent struct {
 	// Both may be empty on a notice from a server that does not fill them
 	// in, which says nothing about whether the region changed: the kind
 	// is what says that.
-	Region        string `protobuf:"bytes,3,opt,name=region,proto3" json:"region,omitempty"`
-	RegionHandle  uint64 `protobuf:"varint,4,opt,name=region_handle,json=regionHandle,proto3" json:"region_handle,omitempty"`
+	Region       string `protobuf:"bytes,3,opt,name=region,proto3" json:"region,omitempty"`
+	RegionHandle uint64 `protobuf:"varint,4,opt,name=region_handle,json=regionHandle,proto3" json:"region_handle,omitempty"`
+	// Why the avatar moved, for REGION_CHANGED: the TeleportFlags of the
+	// TeleportStart that began the teleport, or zero when the region
+	// changed some other way (a border crossed, a session made again) or
+	// no TeleportStart came in the minute before.  The bits are the
+	// viewer's TELEPORT_FLAGS_*.  A server that does not fill it in sends
+	// zero, which says nothing about why.
+	TeleportFlags uint32 `protobuf:"varint,5,opt,name=teleport_flags,json=teleportFlags,proto3" json:"teleport_flags,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2308,6 +2315,13 @@ func (x *AgentEvent) GetRegion() string {
 func (x *AgentEvent) GetRegionHandle() uint64 {
 	if x != nil {
 		return x.RegionHandle
+	}
+	return 0
+}
+
+func (x *AgentEvent) GetTeleportFlags() uint32 {
+	if x != nil {
+		return x.TeleportFlags
 	}
 	return 0
 }
@@ -6536,13 +6550,14 @@ const file_slgo_proto_rawDesc = "" +
 	"\vfrom_client\x18\a \x01(\tR\n" +
 	"fromClient\x12\x14\n" +
 	"\x05offer\x18\b \x01(\tR\x05offer\x12\x1a\n" +
-	"\brecorded\x18\t \x01(\bR\brecorded\"\xd6\x01\n" +
+	"\brecorded\x18\t \x01(\bR\brecorded\"\xfd\x01\n" +
 	"\n" +
 	"AgentEvent\x12,\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x18.slgo.v1.AgentEvent.KindR\x04kind\x12\x16\n" +
 	"\x06detail\x18\x02 \x01(\tR\x06detail\x12\x16\n" +
 	"\x06region\x18\x03 \x01(\tR\x06region\x12#\n" +
-	"\rregion_handle\x18\x04 \x01(\x04R\fregionHandle\"E\n" +
+	"\rregion_handle\x18\x04 \x01(\x04R\fregionHandle\x12%\n" +
+	"\x0eteleport_flags\x18\x05 \x01(\rR\rteleportFlags\"E\n" +
 	"\x04Kind\x12\v\n" +
 	"\aUNKNOWN\x10\x00\x12\x12\n" +
 	"\x0eREGION_CHANGED\x10\x01\x12\x10\n" +

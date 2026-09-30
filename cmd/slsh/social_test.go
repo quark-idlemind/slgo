@@ -491,6 +491,34 @@ func TestAnArrivalNobodyAskedForIsPrinted(t *testing.T) {
 	}
 }
 
+// TestAnArrivalSaysWhatSentTheAvatarThere: a move the shell did not ask
+// for is told with its cause when the simulator gave one, and with
+// nothing where it gave none.
+func TestAnArrivalSaysWhatSentTheAvatarThere(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	x.grid.RelayRegionBy(t, "Sandbox Goguen", goguenHandle, sl.TeleportViaHome|sl.TeleportForceRedirect)
+	got := waits(t, x, "Sandbox Goguen")
+	if !strings.Contains(got, "the avatar is now in Sandbox Goguen (sent home) -- ") {
+		t.Errorf("the notice should say the avatar was sent home:\n%s", got)
+	}
+
+	x.out.Reset()
+	x.grid.RelayRegionBy(t, "Sandbox Goguen", goguenHandle, sl.TeleportViaLure)
+	got = waits(t, x, "Sandbox Goguen")
+	if !strings.Contains(got, "(by a teleport offer)") {
+		t.Errorf("the notice should say a lure moved the avatar:\n%s", got)
+	}
+
+	x.out.Reset()
+	x.grid.RelayRegion(t, "Sandbox Goguen", goguenHandle)
+	got = waits(t, x, "Sandbox Goguen")
+	if strings.Contains(got, "(") {
+		t.Errorf("a move with no cause should not name one:\n%s", got)
+	}
+}
+
 // TestAScriptAskingForSomethingSaysHowToAnswerIt.
 //
 // A dialog and a permission request both wait for an answer that has

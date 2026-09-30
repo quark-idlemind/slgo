@@ -294,8 +294,8 @@ func (sh *Shell) watch(ctx context.Context) {
 			// saying so is the useful half of the line: a script or a
 			// person holding an object from a moment ago is holding
 			// something the new region has never heard of.
-			sh.noticef("the avatar is now in %s -- what the last region "+
-				"described is gone", c.Region)
+			sh.noticef("the avatar is now in %s%s -- what the last region "+
+				"described is gone", c.Region, movedBy(c.Cause()))
 		case m, ok := <-money:
 			if !ok {
 				return
@@ -1384,4 +1384,28 @@ func firstWord(s string) string {
 		return s[:i]
 	}
 	return s
+}
+
+// movedBy is how a move's cause is said after the region it arrived
+// in, in brackets, or nothing when the move has none.  The cause is what
+// the simulator's TeleportStart said, which is the only way to learn
+// that a region was not somewhere the avatar went: sent home, or forced
+// off the land.
+// Why: doc/avatar-state.md#teleportstart
+func movedBy(cause string) string {
+	switch cause {
+	case "home":
+		return " (sent home)"
+	case "lure":
+		return " (by a teleport offer)"
+	case "landmark":
+		return " (by landmark)"
+	case "location":
+		return " (by teleport)"
+	case "god":
+		return " (by a god)"
+	case "forced":
+		return " (forced off the land)"
+	}
+	return ""
 }

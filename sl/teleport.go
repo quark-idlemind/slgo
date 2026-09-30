@@ -65,6 +65,30 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
+// Why a teleport was made, in the bits RegionChange.TeleportFlags
+// carries: the viewer's TELEPORT_FLAGS_*.  See agent.TeleportViaHome and
+// the others for where each is from.
+const (
+	TeleportSetHomeToTarget = agent.TeleportSetHomeToTarget
+	TeleportSetLastToTarget = agent.TeleportSetLastToTarget
+	TeleportViaLure         = agent.TeleportViaLure
+	TeleportViaLandmark     = agent.TeleportViaLandmark
+	TeleportViaLocation     = agent.TeleportViaLocation
+	TeleportViaHome         = agent.TeleportViaHome
+	TeleportViaTelehub      = agent.TeleportViaTelehub
+	TeleportViaLogin        = agent.TeleportViaLogin
+	TeleportViaGodlikeLure  = agent.TeleportViaGodlikeLure
+	TeleportGodlike         = agent.TeleportGodlike
+	Teleport911             = agent.Teleport911
+	TeleportDisableCancel   = agent.TeleportDisableCancel
+	TeleportViaRegionID     = agent.TeleportViaRegionID
+	TeleportIsFlying        = agent.TeleportIsFlying
+	TeleportShowResetHome   = agent.TeleportShowResetHome
+	TeleportForceRedirect   = agent.TeleportForceRedirect
+	TeleportViaGlobalCoords = agent.TeleportViaGlobalCoords
+	TeleportWithinRegion    = agent.TeleportWithinRegion
+)
+
 // ErrTeleportRefused is the grid saying no: the region does not exist,
 // or will not have this avatar.  The error is a *TeleportRefusal, which
 // carries both halves of what it said; errors.Is finds this inside it

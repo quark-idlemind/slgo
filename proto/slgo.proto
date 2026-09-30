@@ -829,6 +829,14 @@ message AgentEvent {
   // is what says that.
   string region = 3;
   uint64 region_handle = 4;
+
+  // Why the avatar moved, for REGION_CHANGED: the TeleportFlags of the
+  // TeleportStart that began the teleport, or zero when the region
+  // changed some other way (a border crossed, a session made again) or
+  // no TeleportStart came in the minute before.  The bits are the
+  // viewer's TELEPORT_FLAGS_*.  A server that does not fill it in sends
+  // zero, which says nothing about why.
+  uint32 teleport_flags = 5;
 }
 
 // ------------------------------------------------------------ control
