@@ -109,7 +109,9 @@ const (
 	ControlNudgeUpPos    uint32 = 0x00800000 // AGENT_CONTROL_NUDGE_UP_POS
 	ControlNudgeUpNeg    uint32 = 0x01000000 // AGENT_CONTROL_NUDGE_UP_NEG
 	ControlLButtonDown   uint32 = 0x10000000 // AGENT_CONTROL_LBUTTON_DOWN
+	ControlLButtonUp     uint32 = 0x20000000 // AGENT_CONTROL_LBUTTON_UP
 	ControlMLLButtonDown uint32 = 0x40000000 // AGENT_CONTROL_ML_LBUTTON_DOWN
+	ControlMLLButtonUp   uint32 = 0x80000000 // AGENT_CONTROL_ML_LBUTTON_UP
 )
 
 // RegionWidth is how many metres a region is across, and so the bound a
