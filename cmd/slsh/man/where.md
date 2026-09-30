@@ -80,6 +80,16 @@ one lets go.  It is what the simulator has told this session since it
 began, and it is never cleared, so the line can be stale if a script
 died without letting go.
 
+## The health line
+
+    health 73%
+
+It is there only when the simulator has said the avatar's health and it
+is below full: an avatar nothing has hurt is at 100, which says nothing
+worth a line.  It is the last figure sent, as a whole number the way a
+viewer's status bar shows it, and it is kept across a move, so after
+one it is the last region's figure until the new one says its own.
+
 ## Examples
 
     where

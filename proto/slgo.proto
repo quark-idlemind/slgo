@@ -1271,6 +1271,13 @@ message PresenceResponse {
   // have heard.  Zero is none.
   uint32 script_controls_taken = 11;
   uint32 script_controls_passed_on = 12;
+
+  // The avatar's health as the last HealthMessage said it, 0 to 100,
+  // and whether any has come: a region with damage enabled sends one,
+  // and a session that has heard none is not at full health, it is
+  // not told.
+  float health = 13;
+  bool health_known = 14;
 }
 
 // GroupMembership is one of the avatar's groups, as

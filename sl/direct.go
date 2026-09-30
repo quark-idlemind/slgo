@@ -327,6 +327,7 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 	// The place and the region in one read; see agent.Agent.Here.
 	at, handle, region := d.a.Here()
 	taken, passedOn := d.a.ScriptControls()
+	health, healthKnown := d.a.Health()
 	return &Presence{
 		Position:     at,
 		LookAt:       l.At,
@@ -342,6 +343,9 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 
 		ScriptControlsTaken:    taken,
 		ScriptControlsPassedOn: passedOn,
+
+		Health:      health,
+		HealthKnown: healthKnown,
 	}, nil
 }
 

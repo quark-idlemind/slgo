@@ -737,6 +737,7 @@ func (s *Server) Presence(ctx context.Context, req *pb.PresenceRequest) (*pb.Pre
 	// in the middle of this answer cannot make it out of two regions.
 	at, handle, region := a.Here()
 	taken, passedOn := a.ScriptControls()
+	health, healthKnown := a.Health()
 	return &pb.PresenceResponse{
 		Position:           vec(at),
 		LookAt:             vec(l.At),
@@ -751,6 +752,9 @@ func (s *Server) Presence(ctx context.Context, req *pb.PresenceRequest) (*pb.Pre
 
 		ScriptControlsTaken:    taken,
 		ScriptControlsPassedOn: passedOn,
+
+		Health:      health,
+		HealthKnown: healthKnown,
 	}, nil
 }
 

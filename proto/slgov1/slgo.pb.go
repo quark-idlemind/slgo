@@ -4247,8 +4247,14 @@ type PresenceResponse struct {
 	// have heard.  Zero is none.
 	ScriptControlsTaken    uint32 `protobuf:"varint,11,opt,name=script_controls_taken,json=scriptControlsTaken,proto3" json:"script_controls_taken,omitempty"`
 	ScriptControlsPassedOn uint32 `protobuf:"varint,12,opt,name=script_controls_passed_on,json=scriptControlsPassedOn,proto3" json:"script_controls_passed_on,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// The avatar's health as the last HealthMessage said it, 0 to 100,
+	// and whether any has come: a region with damage enabled sends one,
+	// and a session that has heard none is not at full health, it is
+	// not told.
+	Health        float32 `protobuf:"fixed32,13,opt,name=health,proto3" json:"health,omitempty"`
+	HealthKnown   bool    `protobuf:"varint,14,opt,name=health_known,json=healthKnown,proto3" json:"health_known,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PresenceResponse) Reset() {
@@ -4363,6 +4369,20 @@ func (x *PresenceResponse) GetScriptControlsPassedOn() uint32 {
 		return x.ScriptControlsPassedOn
 	}
 	return 0
+}
+
+func (x *PresenceResponse) GetHealth() float32 {
+	if x != nil {
+		return x.Health
+	}
+	return 0
+}
+
+func (x *PresenceResponse) GetHealthKnown() bool {
+	if x != nil {
+		return x.HealthKnown
+	}
+	return false
 }
 
 // GroupMembership is one of the avatar's groups, as
@@ -6720,7 +6740,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x01z\x18\x03 \x01(\x02R\x01z\"L\n" +
 	"\x0fPresenceRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12#\n" +
-	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\x97\x04\n" +
+	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\xd2\x04\n" +
 	"\x10PresenceResponse\x12,\n" +
 	"\bposition\x18\x01 \x01(\v2\x10.slgo.v1.Vector3R\bposition\x12)\n" +
 	"\alook_at\x18\x02 \x01(\v2\x10.slgo.v1.Vector3R\x06lookAt\x12(\n" +
@@ -6734,7 +6754,9 @@ const file_slgo_proto_rawDesc = "" +
 	"\x10maturity_ceiling\x18\n" +
 	" \x01(\tR\x0fmaturityCeiling\x122\n" +
 	"\x15script_controls_taken\x18\v \x01(\rR\x13scriptControlsTaken\x129\n" +
-	"\x19script_controls_passed_on\x18\f \x01(\rR\x16scriptControlsPassedOn\"M\n" +
+	"\x19script_controls_passed_on\x18\f \x01(\rR\x16scriptControlsPassedOn\x12\x16\n" +
+	"\x06health\x18\r \x01(\x02R\x06health\x12!\n" +
+	"\fhealth_known\x18\x0e \x01(\bR\vhealthKnown\"M\n" +
 	"\x0fGroupMembership\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +

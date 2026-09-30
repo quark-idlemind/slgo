@@ -111,6 +111,9 @@ type Agent struct {
 	// arrival they belong to.  See teleportflags.go.
 	teleports teleportStarts
 
+	// health is the latest HealthMessage.  See health.go.
+	health health
+
 	// controls is what scripts have taken of the avatar's controls.
 	// See controls.go.
 	controls scriptControls
@@ -751,6 +754,7 @@ func (a *Agent) register() {
 	a.keepSimStats()
 	a.keepScriptControls()
 	a.keepTeleportStart()
+	a.keepHealth()
 	a.keepPickers()
 	a.keepPrices()
 	a.followCrossings()

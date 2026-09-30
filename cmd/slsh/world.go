@@ -170,15 +170,20 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 }
 
 // stateLines prints what the simulator has said about the avatar that
-// is not where it is: the controls scripts hold.  Each line is there
-// only when it says something.
-// Why: doc/avatar-state.md#scriptcontrolchange
+// is not where it is: the controls scripts hold, and its health as a
+// whole number as the viewer's status bar shows it.  Each line is there
+// only when it says something, and health only when it is known and
+// below full.
+// Why: doc/avatar-state.md
 func stateLines(out io.Writer, p *sl.Presence) {
 	if p.ScriptControlsTaken != 0 {
 		fmt.Fprintf(out, "  controls taken by a script: %s\n", agent.ControlWords(p.ScriptControlsTaken))
 	}
 	if p.ScriptControlsPassedOn != 0 {
 		fmt.Fprintf(out, "  controls taken by a script and passed on: %s\n", agent.ControlWords(p.ScriptControlsPassedOn))
+	}
+	if p.HealthKnown && p.Health < 100 {
+		fmt.Fprintf(out, "  health %d%%\n", int(p.Health))
 	}
 }
 

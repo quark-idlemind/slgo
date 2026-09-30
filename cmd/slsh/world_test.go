@@ -941,3 +941,30 @@ func TestWhereSaysWhichControlsAScriptHolds(t *testing.T) {
 		t.Errorf("where did not name the controls passed on:\n%s", got)
 	}
 }
+
+// TestWhereSaysTheHealthOnlyWhenItIsKnownAndBelowFull.
+func TestWhereSaysTheHealthOnlyWhenItIsKnownAndBelowFull(t *testing.T) {
+	x := newTestShell(t)
+
+	// Not told: nothing, and a health of zero that was not said is not
+	// a dead avatar.
+	if got := x.do(t, "where"); strings.Contains(got, "health") {
+		t.Errorf("where mentions health nobody said:\n%s", got)
+	}
+
+	x.grid.presence.HealthKnown, x.grid.presence.Health = true, 100
+	if got := x.do(t, "where"); strings.Contains(got, "health") {
+		t.Errorf("where mentions full health:\n%s", got)
+	}
+
+	// A whole number, as the viewer's status bar has it.
+	x.grid.presence.Health = 73.9
+	if got := x.do(t, "where"); !strings.Contains(got, "\n  health 73%\n") {
+		t.Errorf("where did not say the health:\n%s", got)
+	}
+
+	x.grid.presence.Health = 0
+	if got := x.do(t, "where"); !strings.Contains(got, "\n  health 0%\n") {
+		t.Errorf("where did not say a health of zero that was said:\n%s", got)
+	}
+}
