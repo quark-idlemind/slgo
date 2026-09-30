@@ -107,6 +107,10 @@ type Agent struct {
 	money   money
 	pickers sync.Map
 
+	// controls is what scripts have taken of the avatar's controls.
+	// See controls.go.
+	controls scriptControls
+
 	// stats is the last minute of what the simulator said about how
 	// it is doing.  See simstats.go.
 	stats simStats
@@ -739,6 +743,7 @@ func (a *Agent) register() {
 	a.keepOffers()
 	a.keepMoney()
 	a.keepSimStats()
+	a.keepScriptControls()
 	a.keepPickers()
 	a.keepPrices()
 	a.followCrossings()

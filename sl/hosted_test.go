@@ -464,6 +464,21 @@ func TestSessionsListsWhatTheDaemonHolds(t *testing.T) {
 	}
 }
 
+// TestThePresenceCarriesTheControlsScriptsHold: the two masks cross as
+// they are, each in its own field.
+func TestThePresenceCarriesTheControlsScriptsHold(t *testing.T) {
+	t.Parallel()
+	h, d := newFakeDaemon(t)
+	d.presence = &pb.PresenceResponse{Region: "Test Region", ScriptControlsTaken: 0x3, ScriptControlsPassedOn: 0x10}
+	p, err := h.Presence(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("Presence: %v", err)
+	}
+	if p.ScriptControlsTaken != 0x3 || p.ScriptControlsPassedOn != 0x10 {
+		t.Errorf("controls taken %#x, passed on %#x", p.ScriptControlsTaken, p.ScriptControlsPassedOn)
+	}
+}
+
 // TestThePresenceIsTranslatedVectorByVector: three vectors that all look
 // alike, and a camera read as a position puts the interest list in the
 // wrong place -- which shows up much later as a region that describes

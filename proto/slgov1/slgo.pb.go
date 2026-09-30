@@ -4225,8 +4225,16 @@ type PresenceResponse struct {
 	// Empty means the login response did not say, and nothing more.
 	MaturityPreference string `protobuf:"bytes,9,opt,name=maturity_preference,json=maturityPreference,proto3" json:"maturity_preference,omitempty"`
 	MaturityCeiling    string `protobuf:"bytes,10,opt,name=maturity_ceiling,json=maturityCeiling,proto3" json:"maturity_ceiling,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// The controls scripts have taken of the avatar with llTakeControls,
+	// as the bits of AGENT_CONTROL_*: taken and not passed on, which go
+	// to the script and not to the avatar, and taken and passed on, which
+	// go to both.  Counted as the viewer counts them, from the session's
+	// start, so a client that attached later is told what it could not
+	// have heard.  Zero is none.
+	ScriptControlsTaken    uint32 `protobuf:"varint,11,opt,name=script_controls_taken,json=scriptControlsTaken,proto3" json:"script_controls_taken,omitempty"`
+	ScriptControlsPassedOn uint32 `protobuf:"varint,12,opt,name=script_controls_passed_on,json=scriptControlsPassedOn,proto3" json:"script_controls_passed_on,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *PresenceResponse) Reset() {
@@ -4327,6 +4335,20 @@ func (x *PresenceResponse) GetMaturityCeiling() string {
 		return x.MaturityCeiling
 	}
 	return ""
+}
+
+func (x *PresenceResponse) GetScriptControlsTaken() uint32 {
+	if x != nil {
+		return x.ScriptControlsTaken
+	}
+	return 0
+}
+
+func (x *PresenceResponse) GetScriptControlsPassedOn() uint32 {
+	if x != nil {
+		return x.ScriptControlsPassedOn
+	}
+	return 0
 }
 
 // GroupMembership is one of the avatar's groups, as
@@ -6683,7 +6705,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x01z\x18\x03 \x01(\x02R\x01z\"L\n" +
 	"\x0fPresenceRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12#\n" +
-	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\xa8\x03\n" +
+	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\x97\x04\n" +
 	"\x10PresenceResponse\x12,\n" +
 	"\bposition\x18\x01 \x01(\v2\x10.slgo.v1.Vector3R\bposition\x12)\n" +
 	"\alook_at\x18\x02 \x01(\v2\x10.slgo.v1.Vector3R\x06lookAt\x12(\n" +
@@ -6695,7 +6717,9 @@ const file_slgo_proto_rawDesc = "" +
 	"\x06groups\x18\b \x03(\v2\x18.slgo.v1.GroupMembershipR\x06groups\x12/\n" +
 	"\x13maturity_preference\x18\t \x01(\tR\x12maturityPreference\x12)\n" +
 	"\x10maturity_ceiling\x18\n" +
-	" \x01(\tR\x0fmaturityCeiling\"M\n" +
+	" \x01(\tR\x0fmaturityCeiling\x122\n" +
+	"\x15script_controls_taken\x18\v \x01(\rR\x13scriptControlsTaken\x129\n" +
+	"\x19script_controls_passed_on\x18\f \x01(\rR\x16scriptControlsPassedOn\"M\n" +
 	"\x0fGroupMembership\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +

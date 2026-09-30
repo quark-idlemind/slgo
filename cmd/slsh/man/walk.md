@@ -74,10 +74,20 @@ A walk is never taken across a region border, so a place outside 0 to
 sitting is refused too -- `stand` first -- and so is one somebody is
 driving from a viewer through the same daemon.
 
+So is one whose forward control a script has taken and does not pass
+on, which a vehicle or a game can do to whoever is in it:
+
+    a script has taken the forward control and does not pass it on
+
+A walk holds that control, and the script would be given it and the
+avatar would stand still until the walk called itself blocked.  `where`
+says which controls scripts hold.  One taken while the walk is going
+ends it, cancelled, with the reason below.
+
 The reasons a walk is cancelled are its own words: `timeout`,
 `superseded` when another walk or a `face` took over, `halted` when
 `halt` stopped it, `left the region`, `seated`, `a viewer took over`,
-`session ended`, and `overshot` for a walk that came to rest outside
+`a script took the forward control`, `session ended`, and `overshot` for a walk that came to rest outside
 the distance asked for three times running.
 
 ## Interrupting it stops the avatar

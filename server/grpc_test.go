@@ -1032,3 +1032,38 @@ func TestSimStatsAreHandedOverWithTheirAges(t *testing.T) {
 		t.Errorf("object capacity %d, want 15000", region.GetObjectCapacity())
 	}
 }
+
+// TestTheControlsScriptsHoldAreHandedOverInPresence: a client attached
+// after a script took them could not have heard it, so the daemon says
+// which are held, kept apart from the ones passed on.
+func TestTheControlsScriptsHoldAreHandedOverInPresence(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	ctx := context.Background()
+	h, _ := r.srv.Agent("example")
+
+	got, err := r.srv.Presence(ctx, &pb.PresenceRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetScriptControlsTaken() != 0 || got.GetScriptControlsPassedOn() != 0 {
+		t.Fatalf("controls %#x and %#x before any script took one", got.GetScriptControlsTaken(), got.GetScriptControlsPassedOn())
+	}
+
+	r.sim.send(&msg.ScriptControlChange{Data: []msg.ScriptControlChange_Data{
+		{TakeControls: true, Controls: agent.ControlAtPos | agent.ControlAtNeg, PassToAgent: false},
+		{TakeControls: true, Controls: agent.ControlUpPos, PassToAgent: true},
+	}}, 0)
+	waitFor(t, 5*time.Second, "the ScriptControlChange to be kept", func() bool {
+		taken, _ := h.Agent().ScriptControls()
+		return taken != 0
+	})
+
+	got, err = r.srv.Presence(ctx, &pb.PresenceRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetScriptControlsTaken() != agent.ControlAtPos|agent.ControlAtNeg ||
+		got.GetScriptControlsPassedOn() != agent.ControlUpPos {
+		t.Errorf("controls taken %#x, passed on %#x", got.GetScriptControlsTaken(), got.GetScriptControlsPassedOn())
+	}
+}

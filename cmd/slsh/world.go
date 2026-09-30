@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -164,7 +165,21 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 		fmt.Fprintf(out, "acting as group %s\n",
 			describeGroup(nameOfGroup(p.Groups, p.ActiveGroup), p.ActiveGroup))
 	}
+	stateLines(out, p)
 	return nil
+}
+
+// stateLines prints what the simulator has said about the avatar that
+// is not where it is: the controls scripts hold.  Each line is there
+// only when it says something.
+// Why: doc/avatar-state.md#scriptcontrolchange
+func stateLines(out io.Writer, p *sl.Presence) {
+	if p.ScriptControlsTaken != 0 {
+		fmt.Fprintf(out, "  controls taken by a script: %s\n", agent.ControlWords(p.ScriptControlsTaken))
+	}
+	if p.ScriptControlsPassedOn != 0 {
+		fmt.Fprintf(out, "  controls taken by a script and passed on: %s\n", agent.ControlWords(p.ScriptControlsPassedOn))
+	}
 }
 
 func cmdWho(ctx context.Context, sh *Shell, out io.Writer, args []string) error {

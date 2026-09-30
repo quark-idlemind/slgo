@@ -246,3 +246,25 @@ func TestPostureIsTheAgents(t *testing.T) {
 		t.Error("an avatar nobody holds had a posture")
 	}
 }
+
+// TestAWalkRefusedForAScriptsControlCrossesWithItsWords: the refusal is
+// one MOVE event saying REFUSED, and the reason is the sentence a
+// person reads at the shell.
+func TestAWalkRefusedForAScriptsControlCrossesWithItsWords(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	h, _ := r.srv.Agent("example")
+	r.sim.send(&msg.ScriptControlChange{Data: []msg.ScriptControlChange_Data{
+		{TakeControls: true, Controls: agent.ControlAtPos, PassToAgent: false}}}, 0)
+	waitFor(t, 5*time.Second, "the ScriptControlChange to be kept", func() bool {
+		taken, _ := h.Agent().ScriptControls()
+		return taken != 0
+	})
+
+	got, err := moveEvents(context.Background(), dialed(t, r), &pb.MoveRequest{Target: &pb.Vector3{X: 120, Y: 120}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].State != pb.MoveEvent_REFUSED || got[0].Reason != agent.ErrControlsTaken.Error() {
+		t.Errorf("the walk streamed %v", got)
+	}
+}

@@ -326,6 +326,7 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 	preference, ceiling := d.a.Maturity()
 	// The place and the region in one read; see agent.Agent.Here.
 	at, handle, region := d.a.Here()
+	taken, passedOn := d.a.ScriptControls()
 	return &Presence{
 		Position:     at,
 		LookAt:       l.At,
@@ -338,6 +339,9 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 
 		MaturityPreference: preference,
 		MaturityCeiling:    ceiling,
+
+		ScriptControlsTaken:    taken,
+		ScriptControlsPassedOn: passedOn,
 	}, nil
 }
 

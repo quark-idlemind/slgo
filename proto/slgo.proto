@@ -1254,6 +1254,15 @@ message PresenceResponse {
   // Empty means the login response did not say, and nothing more.
   string maturity_preference = 9;
   string maturity_ceiling = 10;
+
+  // The controls scripts have taken of the avatar with llTakeControls,
+  // as the bits of AGENT_CONTROL_*: taken and not passed on, which go
+  // to the script and not to the avatar, and taken and passed on, which
+  // go to both.  Counted as the viewer counts them, from the session's
+  // start, so a client that attached later is told what it could not
+  // have heard.  Zero is none.
+  uint32 script_controls_taken = 11;
+  uint32 script_controls_passed_on = 12;
 }
 
 // GroupMembership is one of the avatar's groups, as

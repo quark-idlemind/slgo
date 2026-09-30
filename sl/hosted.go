@@ -332,6 +332,9 @@ func (h *Hosted) Presence(ctx context.Context, drawDistance float32) (*Presence,
 
 		MaturityPreference: r.MaturityPreference,
 		MaturityCeiling:    r.MaturityCeiling,
+
+		ScriptControlsTaken:    r.ScriptControlsTaken,
+		ScriptControlsPassedOn: r.ScriptControlsPassedOn,
 	}, nil
 }
 
