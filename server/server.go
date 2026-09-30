@@ -359,12 +359,12 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 	// crossing to the session, not to whoever is attached to it.
 	// Chained like the two above, for their reason.
 	if caller := opts.OnRegionChange; caller != nil {
-		opts.OnRegionChange = func(region string, handle uint64) {
-			caller(region, handle)
-			h.noteRegion(region, handle)
+		opts.OnRegionChange = func(region string, handle uint64, teleport uint32) {
+			caller(region, handle, teleport)
+			h.noteRegion(region, handle, teleport)
 		}
 	} else {
-		opts.OnRegionChange = func(region string, handle uint64) { h.noteRegion(region, handle) }
+		opts.OnRegionChange = func(region string, handle uint64, teleport uint32) { h.noteRegion(region, handle, teleport) }
 	}
 	// What this avatar sends, for the answers to offers the daemon is
 	// keeping that nobody announced first.  Chained for the reason the
@@ -666,7 +666,7 @@ func (h *Hosted) notify(kind pb.AgentEvent_Kind, detail string) {
 //
 // It runs on the session's dispatch goroutine, so it does what notify
 // does and no more: the sends to clients do not block.
-func (h *Hosted) noteRegion(region string, handle uint64) {
+func (h *Hosted) noteRegion(region string, handle uint64, teleportFlags uint32) {
 	// A region that did not name itself in its handshake still moved
 	// the avatar, and the detail is read by a person: "the avatar is
 	// now in " with nothing after it is worse than saying less.
@@ -675,10 +675,11 @@ func (h *Hosted) noteRegion(region string, handle uint64) {
 		detail = "the avatar is now in " + region
 	}
 	h.notice(&pb.AgentEvent{
-		Kind:         pb.AgentEvent_REGION_CHANGED,
-		Detail:       detail,
-		Region:       region,
-		RegionHandle: handle,
+		Kind:          pb.AgentEvent_REGION_CHANGED,
+		Detail:        detail,
+		Region:        region,
+		RegionHandle:  handle,
+		TeleportFlags: teleportFlags,
 	})
 }
 

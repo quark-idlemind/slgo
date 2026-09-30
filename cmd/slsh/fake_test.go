@@ -844,8 +844,15 @@ func (f *fakeGrid) RelayEvent(t *testing.T, name, body string) {
 // than to look.
 func (f *fakeGrid) RelayRegion(t *testing.T, region string, handle uint64) {
 	t.Helper()
+	f.RelayRegionBy(t, region, handle, 0)
+}
+
+// RelayRegionBy is RelayRegion for a teleport that said why, in the
+// TeleportStart's flags.
+func (f *fakeGrid) RelayRegionBy(t *testing.T, region string, handle uint64, flags uint32) {
+	t.Helper()
 	select {
-	case f.regions <- &sl.RegionChange{Region: region, Handle: handle}:
+	case f.regions <- &sl.RegionChange{Region: region, Handle: handle, TeleportFlags: flags}:
 	case <-time.After(5 * time.Second):
 		t.Fatal("nothing read the region relay: is a session attached to this backend?")
 	}

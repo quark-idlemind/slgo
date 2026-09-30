@@ -177,8 +177,9 @@ func (a *Agent) enterRegion(region msg.UUID) {
 }
 
 // A RegionChangeHandler is told the name and handle of the region the
-// avatar is in now.  See Options.OnRegionChange.
-type RegionChangeHandler func(name string, handle uint64)
+// avatar is in now, and the TeleportStart flags that said why, which
+// are zero for anything but a teleport.  See Options.OnRegionChange.
+type RegionChangeHandler func(name string, handle uint64, teleportFlags uint32)
 
 // regionChanged says that the avatar is in a different region from the
 // one it was in.
@@ -201,15 +202,19 @@ type RegionChangeHandler func(name string, handle uint64)
 // reconnect is a fresh Agent, so its AgentMovementComplete is a first
 // arrival, and whatever hosts the session already says so for itself.
 //
+// The flags are the TeleportStart's, taken by arrive on every
+// arrival, so that one sent at login is spent by the first and one for
+// a teleport is given to the arrival it began; see teleportflags.go.
+//
 // A second AgentMovementComplete naming the region we are already in
 // says nothing either.  There is nothing to drop, and a notice for it
 // would have a client throw away an object cache it has just filled.
-func (a *Agent) regionChanged(was, now uint64, name string) {
+func (a *Agent) regionChanged(was, now uint64, name string, teleportFlags uint32) {
 	if was == 0 || was == now {
 		return
 	}
 	if fn := a.opts.OnRegionChange; fn != nil {
-		fn(name, now)
+		fn(name, now, teleportFlags)
 	}
 }
 

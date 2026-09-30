@@ -329,7 +329,7 @@ func TestADirectRegionChangeBringsTheNewRegionsCapabilities(t *testing.T) {
 	// The agent has the new region's set, and says the avatar moved the
 	// way it does, from its dispatch goroutine.
 	d.a.SetCaps(agent.Caps{"SimulatorFeatures": "https://sim.example.net/cap/features"})
-	d.regionChanged("Example Region", 1)
+	d.regionChanged("Example Region", 1, 0)
 
 	waitFor(t, "the new region's capabilities", func() bool {
 		return w.Info().HasCap("SimulatorFeatures")

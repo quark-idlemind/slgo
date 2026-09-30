@@ -57,6 +57,39 @@ grants "create objects" to a group rather than to a person, and the
 refusal talks about the land rather than the group.  The name says
 whether this is the group the land wants; the key is what `group` takes.
 
+## The controls line
+
+    controls taken by a script: forward, back
+    controls taken by a script and passed on: up
+
+A script that has asked for the avatar's controls -- a vehicle, a
+heads-up display, a game -- holds some of them, and these lines say
+which.  They are missing when no script holds any.
+
+The first are the ones the script keeps to itself.  The avatar does not
+move when one is pressed, or walked with: `walk` is refused while
+`forward` is in that line, and ends if a script takes it in the middle.
+The second are the ones the script is told of and the avatar obeys as
+well.  The words are forward, back, left, right, up, down, turn left,
+turn right, click and mouselook click, and a control with none is its
+number in hex.
+
+It is counted as a viewer counts it: each take adds one and each
+release takes one off, so a control two scripts hold is still held when
+one lets go.  It is what the simulator has told this session since it
+began, and it is never cleared, so the line can be stale if a script
+died without letting go.
+
+## The health line
+
+    health 73%
+
+It is there only when the simulator has said the avatar's health and it
+is below full: an avatar nothing has hurt is at 100, which says nothing
+worth a line.  It is the last figure sent, as a whole number the way a
+viewer's status bar shows it, and it is kept across a move, so after
+one it is the last region's figure until the new one says its own.
+
 ## Examples
 
     where

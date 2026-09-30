@@ -18,6 +18,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -910,5 +911,60 @@ func TestNeighboursSaysWhyItCannotAnswer(t *testing.T) {
 	}
 	if got := x.do(t, "neighbours on"); !strings.Contains(got, "the circuit is down") {
 		t.Errorf("neighbours on should report the failure, got %q", got)
+	}
+}
+
+// TestWhereSaysWhichControlsAScriptHolds: a line for the controls kept
+// from the avatar and another for the ones passed on, each only when
+// there are some, in words.
+func TestWhereSaysWhichControlsAScriptHolds(t *testing.T) {
+	x := newTestShell(t)
+
+	if got := x.do(t, "where"); strings.Contains(got, "controls") {
+		t.Errorf("where mentions controls when no script holds any:\n%s", got)
+	}
+
+	x.grid.presence.ScriptControlsTaken = agent.ControlAtPos | agent.ControlAtNeg
+	got := x.do(t, "where")
+	if !strings.Contains(got, "\n  controls taken by a script: forward, back\n") {
+		t.Errorf("where did not name the controls taken:\n%s", got)
+	}
+	if strings.Contains(got, "passed on") {
+		t.Errorf("where mentions controls passed on when there are none:\n%s", got)
+	}
+
+	x.grid.presence.ScriptControlsTaken = 0
+	x.grid.presence.ScriptControlsPassedOn = agent.ControlUpPos | 0x40
+	got = x.do(t, "where")
+	if !strings.Contains(got, "\n  controls taken by a script and passed on: up, 0x00000040\n") ||
+		strings.Contains(got, "controls taken by a script:") {
+		t.Errorf("where did not name the controls passed on:\n%s", got)
+	}
+}
+
+// TestWhereSaysTheHealthOnlyWhenItIsKnownAndBelowFull.
+func TestWhereSaysTheHealthOnlyWhenItIsKnownAndBelowFull(t *testing.T) {
+	x := newTestShell(t)
+
+	// Not told: nothing, and a health of zero that was not said is not
+	// a dead avatar.
+	if got := x.do(t, "where"); strings.Contains(got, "health") {
+		t.Errorf("where mentions health nobody said:\n%s", got)
+	}
+
+	x.grid.presence.HealthKnown, x.grid.presence.Health = true, 100
+	if got := x.do(t, "where"); strings.Contains(got, "health") {
+		t.Errorf("where mentions full health:\n%s", got)
+	}
+
+	// A whole number, as the viewer's status bar has it.
+	x.grid.presence.Health = 73.9
+	if got := x.do(t, "where"); !strings.Contains(got, "\n  health 73%\n") {
+		t.Errorf("where did not say the health:\n%s", got)
+	}
+
+	x.grid.presence.Health = 0
+	if got := x.do(t, "where"); !strings.Contains(got, "\n  health 0%\n") {
+		t.Errorf("where did not say a health of zero that was said:\n%s", got)
 	}
 }

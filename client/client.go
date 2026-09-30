@@ -236,6 +236,37 @@ type Event struct {
 type RegionChange struct {
 	Region string
 	Handle uint64
+
+	// TeleportFlags are the flags of the TeleportStart that began the
+	// teleport, in the viewer's TELEPORT_FLAGS_* bits: zero for a
+	// change that was not a teleport, and for a server that does not
+	// say.  Cause puts the likeliest in a word.
+	TeleportFlags uint32
+}
+
+// Cause says in a word what moved the avatar, from the first of these
+// its TeleportFlags carry: "home", "lure" (somebody's offer), "landmark",
+// "location" (a teleport to a map position or a region), "god" and
+// "forced" (ForceRedirect, which a parcel's owner sends an avatar off
+// it with).  It is empty when there are none, or when the flags say
+// something else -- a telehub, a login, a region named by its id.
+func (c *RegionChange) Cause() string {
+	f := c.TeleportFlags
+	switch {
+	case f&agent.TeleportViaHome != 0:
+		return "home"
+	case f&(agent.TeleportViaLure) != 0:
+		return "lure"
+	case f&agent.TeleportViaLandmark != 0:
+		return "landmark"
+	case f&agent.TeleportViaLocation != 0:
+		return "location"
+	case f&(agent.TeleportViaGodlikeLure|agent.TeleportGodlike) != 0:
+		return "god"
+	case f&agent.TeleportForceRedirect != 0:
+		return "forced"
+	}
+	return ""
 }
 
 // Decode parses the event body.
@@ -627,6 +658,8 @@ func (c *Conn) recvLoop(stream pb.Grid_StreamClient) {
 				case c.regions <- &RegionChange{
 					Region: b.Notice.GetRegion(),
 					Handle: b.Notice.GetRegionHandle(),
+
+					TeleportFlags: b.Notice.GetTeleportFlags(),
 				}:
 				default:
 					c.dropped.Add(1)

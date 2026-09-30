@@ -55,15 +55,16 @@ const (
 
 // Why a walk was Cancelled: MoveProgress.Reason.
 const (
-	CancelSuperseded   = agent.CancelSuperseded
-	CancelHalted       = agent.CancelHalted
-	CancelClientGone   = agent.CancelClientGone
-	CancelTimeout      = agent.CancelTimeout
-	CancelLeftRegion   = agent.CancelLeftRegion
-	CancelSeated       = agent.CancelSeated
-	CancelViewer       = agent.CancelViewer
-	CancelSessionEnded = agent.CancelSessionEnded
-	CancelOvershot     = agent.CancelOvershot
+	CancelSuperseded    = agent.CancelSuperseded
+	CancelHalted        = agent.CancelHalted
+	CancelClientGone    = agent.CancelClientGone
+	CancelTimeout       = agent.CancelTimeout
+	CancelLeftRegion    = agent.CancelLeftRegion
+	CancelSeated        = agent.CancelSeated
+	CancelViewer        = agent.CancelViewer
+	CancelControlsTaken = agent.CancelControlsTaken
+	CancelSessionEnded  = agent.CancelSessionEnded
+	CancelOvershot      = agent.CancelOvershot
 )
 
 // A Mover is a backend that can walk the avatar.

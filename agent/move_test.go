@@ -575,7 +575,7 @@ func TestTheLookIsRefreshedAfterAMove(t *testing.T) {
 func TestTheFirstArrivalOfASessionIsNotARegionChange(t *testing.T) {
 	told := make(chan string, 4)
 	a, _, _ := twoRegions(t, Options{SkipCaps: true,
-		OnRegionChange: func(name string, _ uint64) { told <- name }})
+		OnRegionChange: func(name string, _ uint64, _ uint32) { told <- name }})
 
 	// Connect does not return until AgentMovementComplete has been
 	// handled, so anything this was going to say has been said.
@@ -604,7 +604,7 @@ func TestAMoveSaysWhichRegionTheAvatarIsInNow(t *testing.T) {
 	}
 	told := make(chan where, 4)
 	a, from, to := twoRegions(t, Options{SkipCaps: true,
-		OnRegionChange: func(name string, handle uint64) { told <- where{name, handle} }})
+		OnRegionChange: func(name string, handle uint64, _ uint32) { told <- where{name, handle} }})
 
 	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
 		t.Fatalf("moveTo: %v", err)
@@ -648,7 +648,7 @@ func TestAHandshakeArrivingBehindTheMovementStillNamesTheNewRegion(t *testing.T)
 	}
 	told := make(chan where, 4)
 	a, from, to := twoRegions(t, Options{SkipCaps: true,
-		OnRegionChange: func(name string, handle uint64) { told <- where{name, handle} }})
+		OnRegionChange: func(name string, handle uint64, _ uint32) { told <- where{name, handle} }})
 	to.sim.mu.Lock()
 	to.sim.lateHandshake = true
 	to.sim.mu.Unlock()
@@ -894,7 +894,7 @@ func TestAMoveWhoseRegionNeverIntroducesItselfEndsTheSession(t *testing.T) {
 func TestArrivingAgainInTheRegionWeAreInIsNotAChange(t *testing.T) {
 	told := make(chan string, 4)
 	a, from, _ := twoRegions(t, Options{SkipCaps: true,
-		OnRegionChange: func(name string, _ uint64) { told <- name }})
+		OnRegionChange: func(name string, _ uint64, _ uint32) { told <- name }})
 
 	// The same region and the same handle, at a different spot, which is
 	// what makes the arrival visible from here without asking the
@@ -971,7 +971,7 @@ func TestWaitCapsIsTheNewRegionsSetAndNotTheOldOne(t *testing.T) {
 	var self atomic.Pointer[Agent]
 	told := make(chan heard, 4)
 	a, from, to := twoRegions(t, Options{
-		OnRegionChange: func(name string, _ uint64) { told <- heard{name, self.Load().Caps()} }})
+		OnRegionChange: func(name string, _ uint64, _ uint32) { told <- heard{name, self.Load().Caps()} }})
 	self.Store(a)
 
 	if caps, err := a.WaitCaps(context.Background()); err != nil {

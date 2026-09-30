@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -147,6 +148,11 @@ func TestAWalkThatDidNotArriveIsTheCommandFailing(t *testing.T) {
 		{sl.MoveProgress{State: sl.Cancelled, Reason: sl.CancelTimeout, Position: msg.Vector3{X: 1, Y: 2, Z: 3},
 			Remaining: 4, Elapsed: 500 * time.Millisecond},
 			"slsh: walk: cancelled (timeout) at 1.00, 2.00, 3.00, 4.00 m from 5.00, 2.00, after 500ms\n"},
+		{sl.MoveProgress{State: sl.Refused, Reason: agent.ErrControlsTaken.Error()},
+			"slsh: walk: a script has taken the forward control and does not pass it on\n"},
+		{sl.MoveProgress{State: sl.Cancelled, Reason: sl.CancelControlsTaken, Position: msg.Vector3{X: 1, Y: 2, Z: 3},
+			Remaining: 4, Elapsed: 500 * time.Millisecond},
+			"slsh: walk: cancelled (a script took the forward control) at 1.00, 2.00, 3.00, 4.00 m from 5.00, 2.00, after 500ms\n"},
 		{sl.MoveProgress{State: sl.OutOfRegion, Reason: "5.0, 2.0 is somewhere else"},
 			"slsh: walk: 5.0, 2.0 is somewhere else\n"},
 	} {

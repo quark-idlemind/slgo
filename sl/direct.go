@@ -197,9 +197,9 @@ func (d *Direct) event(name string, body []byte) {
 //
 // Info is not revised here: this runs before the move has the new
 // region's capabilities.  The session asks Refresh when it reads this.
-func (d *Direct) regionChanged(region string, handle uint64) {
+func (d *Direct) regionChanged(region string, handle uint64, teleportFlags uint32) {
 	select {
-	case d.regions <- &RegionChange{Region: region, Handle: handle}:
+	case d.regions <- &RegionChange{Region: region, Handle: handle, TeleportFlags: teleportFlags}:
 	default:
 	}
 }
@@ -326,6 +326,8 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 	preference, ceiling := d.a.Maturity()
 	// The place and the region in one read; see agent.Agent.Here.
 	at, handle, region := d.a.Here()
+	taken, passedOn := d.a.ScriptControls()
+	health, healthKnown := d.a.Health()
 	return &Presence{
 		Position:     at,
 		LookAt:       l.At,
@@ -338,6 +340,12 @@ func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence,
 
 		MaturityPreference: preference,
 		MaturityCeiling:    ceiling,
+
+		ScriptControlsTaken:    taken,
+		ScriptControlsPassedOn: passedOn,
+
+		Health:      health,
+		HealthKnown: healthKnown,
 	}, nil
 }
 

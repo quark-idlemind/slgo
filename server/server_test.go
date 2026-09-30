@@ -1620,3 +1620,63 @@ func TestAClientIsToldWhereTheAvatarIsNow(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 	}
 }
+
+// TestAClientIsToldWhyTheAvatarMoved: the flags of the TeleportStart
+// that began a teleport ride on the notice of the arrival, and are
+// spent by it -- a move with no TeleportStart of its own, as a border
+// crossing is, says none.
+func TestAClientIsToldWhyTheAvatarMoved(t *testing.T) {
+	sim := newSim(t)
+	defer sim.close()
+	var logins atomic.Int64
+	hs := loginServer(t, sim, &logins, nil)
+
+	srv := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if _, err := srv.StartAgent(ctx, "example",
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL},
+		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1}); err != nil {
+		t.Fatal(err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() { defer close(done); srv.Serve(ctx, ln) }()
+	defer func() { cancel(); <-done }()
+	c, err := client.Dial(context.Background(), ln.Addr().String(), plaintext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if _, err := c.Attach(context.Background(), "example"); err != nil {
+		t.Fatal(err)
+	}
+
+	next := func() *client.RegionChange {
+		t.Helper()
+		select {
+		case rc := <-c.RegionChanges():
+			return rc
+		case <-time.After(5 * time.Second):
+			t.Fatal("the client was not told the avatar had moved")
+			return nil
+		}
+	}
+
+	start := &msg.TeleportStart{}
+	start.Info.TeleportFlags = agent.TeleportViaLandmark | agent.TeleportDisableCancel
+	sim.send(start, msg.FlagReliable)
+	sim.enterRegion("Testville East", msg.RegionHandle(43521, 43520))
+	rc := next()
+	if rc.TeleportFlags != agent.TeleportViaLandmark|agent.TeleportDisableCancel || rc.Cause() != "landmark" {
+		t.Errorf("the first move says flags %#x, cause %q", rc.TeleportFlags, rc.Cause())
+	}
+
+	sim.enterRegion("Testville North", msg.RegionHandle(43521, 43521))
+	if rc := next(); rc.TeleportFlags != 0 || rc.Cause() != "" {
+		t.Errorf("a move with no TeleportStart says flags %#x, cause %q", rc.TeleportFlags, rc.Cause())
+	}
+}

@@ -1406,3 +1406,35 @@ func TestOnlyARegionChangeIsOne(t *testing.T) {
 	default:
 	}
 }
+
+// TestARegionChangeSaysWhatMovedTheAvatarInAWord: the first cause the
+// flags carry, in a fixed order, and nothing for what has none.
+func TestARegionChangeSaysWhatMovedTheAvatarInAWord(t *testing.T) {
+	for _, c := range []struct {
+		flags uint32
+		want  string
+	}{
+		{0, ""},
+		{agent.TeleportViaHome, "home"},
+		{agent.TeleportViaLure, "lure"},
+		{agent.TeleportViaLandmark, "landmark"},
+		{agent.TeleportViaLocation, "location"},
+		{agent.TeleportViaGodlikeLure, "god"},
+		{agent.TeleportGodlike, "god"},
+		{agent.TeleportForceRedirect, "forced"},
+		// Ejected from land and sent home: the measured combination,
+		// 34848, says where it went before it says it was forced.
+		{agent.TeleportForceRedirect | agent.TeleportDisableCancel | agent.TeleportViaHome, "home"},
+		{agent.TeleportViaLandmark | agent.TeleportSetLastToTarget, "landmark"},
+		// A cancel button's flag, a telehub, a login and a region by its
+		// id are not causes this names.
+		{agent.TeleportDisableCancel, ""},
+		{agent.TeleportViaTelehub, ""},
+		{agent.TeleportViaLogin, ""},
+		{agent.TeleportViaRegionID, ""},
+	} {
+		if got := (&RegionChange{TeleportFlags: c.flags}).Cause(); got != c.want {
+			t.Errorf("flags %#x: cause %q, want %q", c.flags, got, c.want)
+		}
+	}
+}

@@ -173,8 +173,8 @@ func (v *viewerHost) eventsFor(profile string) func(string, []byte) {
 // nothing by the protocol, because in an ordinary session the viewer is
 // the client that asked.  See viewer.Circuit.RegionChanged for what is
 // said and why that is all that is said.
-func (v *viewerHost) movedFor(profile string) func(string, uint64) {
-	return func(region string, _ uint64) {
+func (v *viewerHost) movedFor(profile string) func(string, uint64, uint32) {
+	return func(region string, _ uint64, _ uint32) {
 		if c, ok := v.circuits.Load(profile); ok {
 			c.(*viewer.Circuit).RegionChanged(region)
 		}

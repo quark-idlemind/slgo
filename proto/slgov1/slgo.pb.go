@@ -2248,8 +2248,15 @@ type AgentEvent struct {
 	// Both may be empty on a notice from a server that does not fill them
 	// in, which says nothing about whether the region changed: the kind
 	// is what says that.
-	Region        string `protobuf:"bytes,3,opt,name=region,proto3" json:"region,omitempty"`
-	RegionHandle  uint64 `protobuf:"varint,4,opt,name=region_handle,json=regionHandle,proto3" json:"region_handle,omitempty"`
+	Region       string `protobuf:"bytes,3,opt,name=region,proto3" json:"region,omitempty"`
+	RegionHandle uint64 `protobuf:"varint,4,opt,name=region_handle,json=regionHandle,proto3" json:"region_handle,omitempty"`
+	// Why the avatar moved, for REGION_CHANGED: the TeleportFlags of the
+	// TeleportStart that began the teleport, or zero when the region
+	// changed some other way (a border crossed, a session made again) or
+	// no TeleportStart came in the minute before.  The bits are the
+	// viewer's TELEPORT_FLAGS_*.  A server that does not fill it in sends
+	// zero, which says nothing about why.
+	TeleportFlags uint32 `protobuf:"varint,5,opt,name=teleport_flags,json=teleportFlags,proto3" json:"teleport_flags,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2308,6 +2315,13 @@ func (x *AgentEvent) GetRegion() string {
 func (x *AgentEvent) GetRegionHandle() uint64 {
 	if x != nil {
 		return x.RegionHandle
+	}
+	return 0
+}
+
+func (x *AgentEvent) GetTeleportFlags() uint32 {
+	if x != nil {
+		return x.TeleportFlags
 	}
 	return 0
 }
@@ -4225,8 +4239,22 @@ type PresenceResponse struct {
 	// Empty means the login response did not say, and nothing more.
 	MaturityPreference string `protobuf:"bytes,9,opt,name=maturity_preference,json=maturityPreference,proto3" json:"maturity_preference,omitempty"`
 	MaturityCeiling    string `protobuf:"bytes,10,opt,name=maturity_ceiling,json=maturityCeiling,proto3" json:"maturity_ceiling,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// The controls scripts have taken of the avatar with llTakeControls,
+	// as the bits of AGENT_CONTROL_*: taken and not passed on, which go
+	// to the script and not to the avatar, and taken and passed on, which
+	// go to both.  Counted as the viewer counts them, from the session's
+	// start, so a client that attached later is told what it could not
+	// have heard.  Zero is none.
+	ScriptControlsTaken    uint32 `protobuf:"varint,11,opt,name=script_controls_taken,json=scriptControlsTaken,proto3" json:"script_controls_taken,omitempty"`
+	ScriptControlsPassedOn uint32 `protobuf:"varint,12,opt,name=script_controls_passed_on,json=scriptControlsPassedOn,proto3" json:"script_controls_passed_on,omitempty"`
+	// The avatar's health as the last HealthMessage said it, 0 to 100,
+	// and whether any has come: a region with damage enabled sends one,
+	// and a session that has heard none is not at full health, it is
+	// not told.
+	Health        float32 `protobuf:"fixed32,13,opt,name=health,proto3" json:"health,omitempty"`
+	HealthKnown   bool    `protobuf:"varint,14,opt,name=health_known,json=healthKnown,proto3" json:"health_known,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PresenceResponse) Reset() {
@@ -4327,6 +4355,34 @@ func (x *PresenceResponse) GetMaturityCeiling() string {
 		return x.MaturityCeiling
 	}
 	return ""
+}
+
+func (x *PresenceResponse) GetScriptControlsTaken() uint32 {
+	if x != nil {
+		return x.ScriptControlsTaken
+	}
+	return 0
+}
+
+func (x *PresenceResponse) GetScriptControlsPassedOn() uint32 {
+	if x != nil {
+		return x.ScriptControlsPassedOn
+	}
+	return 0
+}
+
+func (x *PresenceResponse) GetHealth() float32 {
+	if x != nil {
+		return x.Health
+	}
+	return 0
+}
+
+func (x *PresenceResponse) GetHealthKnown() bool {
+	if x != nil {
+		return x.HealthKnown
+	}
+	return false
 }
 
 // GroupMembership is one of the avatar's groups, as
@@ -6514,13 +6570,14 @@ const file_slgo_proto_rawDesc = "" +
 	"\vfrom_client\x18\a \x01(\tR\n" +
 	"fromClient\x12\x14\n" +
 	"\x05offer\x18\b \x01(\tR\x05offer\x12\x1a\n" +
-	"\brecorded\x18\t \x01(\bR\brecorded\"\xd6\x01\n" +
+	"\brecorded\x18\t \x01(\bR\brecorded\"\xfd\x01\n" +
 	"\n" +
 	"AgentEvent\x12,\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x18.slgo.v1.AgentEvent.KindR\x04kind\x12\x16\n" +
 	"\x06detail\x18\x02 \x01(\tR\x06detail\x12\x16\n" +
 	"\x06region\x18\x03 \x01(\tR\x06region\x12#\n" +
-	"\rregion_handle\x18\x04 \x01(\x04R\fregionHandle\"E\n" +
+	"\rregion_handle\x18\x04 \x01(\x04R\fregionHandle\x12%\n" +
+	"\x0eteleport_flags\x18\x05 \x01(\rR\rteleportFlags\"E\n" +
 	"\x04Kind\x12\v\n" +
 	"\aUNKNOWN\x10\x00\x12\x12\n" +
 	"\x0eREGION_CHANGED\x10\x01\x12\x10\n" +
@@ -6683,7 +6740,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x01z\x18\x03 \x01(\x02R\x01z\"L\n" +
 	"\x0fPresenceRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12#\n" +
-	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\xa8\x03\n" +
+	"\rdraw_distance\x18\x02 \x01(\x02R\fdrawDistance\"\xd2\x04\n" +
 	"\x10PresenceResponse\x12,\n" +
 	"\bposition\x18\x01 \x01(\v2\x10.slgo.v1.Vector3R\bposition\x12)\n" +
 	"\alook_at\x18\x02 \x01(\v2\x10.slgo.v1.Vector3R\x06lookAt\x12(\n" +
@@ -6695,7 +6752,11 @@ const file_slgo_proto_rawDesc = "" +
 	"\x06groups\x18\b \x03(\v2\x18.slgo.v1.GroupMembershipR\x06groups\x12/\n" +
 	"\x13maturity_preference\x18\t \x01(\tR\x12maturityPreference\x12)\n" +
 	"\x10maturity_ceiling\x18\n" +
-	" \x01(\tR\x0fmaturityCeiling\"M\n" +
+	" \x01(\tR\x0fmaturityCeiling\x122\n" +
+	"\x15script_controls_taken\x18\v \x01(\rR\x13scriptControlsTaken\x129\n" +
+	"\x19script_controls_passed_on\x18\f \x01(\rR\x16scriptControlsPassedOn\x12\x16\n" +
+	"\x06health\x18\r \x01(\x02R\x06health\x12!\n" +
+	"\fhealth_known\x18\x0e \x01(\bR\vhealthKnown\"M\n" +
 	"\x0fGroupMembership\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +

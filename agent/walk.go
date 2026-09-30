@@ -91,6 +91,25 @@ const (
 	ControlAtPos  uint32 = 0x00000001 // AGENT_CONTROL_AT_POS
 	ControlFastAt uint32 = 0x00000400 // AGENT_CONTROL_FAST_AT
 	ControlStop   uint32 = 0x00004000 // AGENT_CONTROL_STOP
+
+	// The rest a script can take with llTakeControls, and so the ones
+	// ScriptControls names; see controls.go.  Values as above,
+	// indra_constants.h:323-359.
+	ControlAtNeg         uint32 = 0x00000002 // AGENT_CONTROL_AT_NEG
+	ControlLeftPos       uint32 = 0x00000004 // AGENT_CONTROL_LEFT_POS
+	ControlLeftNeg       uint32 = 0x00000008 // AGENT_CONTROL_LEFT_NEG
+	ControlUpPos         uint32 = 0x00000010 // AGENT_CONTROL_UP_POS
+	ControlUpNeg         uint32 = 0x00000020 // AGENT_CONTROL_UP_NEG
+	ControlYawPos        uint32 = 0x00000100 // AGENT_CONTROL_YAW_POS
+	ControlYawNeg        uint32 = 0x00000200 // AGENT_CONTROL_YAW_NEG
+	ControlNudgeAtPos    uint32 = 0x00080000 // AGENT_CONTROL_NUDGE_AT_POS
+	ControlNudgeAtNeg    uint32 = 0x00100000 // AGENT_CONTROL_NUDGE_AT_NEG
+	ControlNudgeLeftPos  uint32 = 0x00200000 // AGENT_CONTROL_NUDGE_LEFT_POS
+	ControlNudgeLeftNeg  uint32 = 0x00400000 // AGENT_CONTROL_NUDGE_LEFT_NEG
+	ControlNudgeUpPos    uint32 = 0x00800000 // AGENT_CONTROL_NUDGE_UP_POS
+	ControlNudgeUpNeg    uint32 = 0x01000000 // AGENT_CONTROL_NUDGE_UP_NEG
+	ControlLButtonDown   uint32 = 0x10000000 // AGENT_CONTROL_LBUTTON_DOWN
+	ControlMLLButtonDown uint32 = 0x40000000 // AGENT_CONTROL_ML_LBUTTON_DOWN
 )
 
 // RegionWidth is how many metres a region is across, and so the bound a
@@ -228,7 +247,8 @@ const (
 	OutOfRegion
 
 	// Refused is a walk that was never started, for the reason given:
-	// the avatar is sitting, or a viewer is driving it.
+	// the avatar is sitting, a viewer is driving it, or a script has
+	// taken the forward control.
 	Refused
 )
 
@@ -274,6 +294,10 @@ const (
 
 	// CancelSeated is the avatar being sat down while it walked.
 	CancelSeated = "seated"
+
+	// CancelControlsTaken is a script taking the forward control, and
+	// not passing it on, while the walk was under way.  See ErrControlsTaken.
+	CancelControlsTaken = "a script took the forward control"
 
 	// CancelViewer is a viewer taking the camera over while the walk
 	// was under way.  See DeferPresence.
@@ -500,8 +524,9 @@ func (a *Agent) refusal() error {
 // passed to progress as well.
 //
 // A walk that cannot start is not an error.  A target outside the region
-// comes back as OutOfRegion, and a seated avatar or one a viewer is
-// driving as Refused, before anything is sent -- they are answers about
+// comes back as OutOfRegion, and a seated avatar, one a viewer is
+// driving, or one whose forward control a script has taken as Refused,
+// before anything is sent -- they are answers about
 // the world rather than failures to reach it.  The error is kept for a
 // session that could not send at all.
 //
@@ -537,6 +562,9 @@ func (a *Agent) Move(ctx context.Context, r MoveRequest, progress func(MoveProgr
 	}
 	if err := a.refusal(); err != nil {
 		return report(Refused, err.Error(), start), nil
+	}
+	if a.walkHeld() {
+		return report(Refused, ErrControlsTaken.Error(), start), nil
 	}
 
 	w := &walk{stop: make(chan string, 1)}
@@ -604,6 +632,9 @@ func (a *Agent) Move(ctx context.Context, r MoveRequest, progress func(MoveProgr
 			return p, true, err
 		case a.presenceDeferred():
 			p, err := end(Cancelled, CancelViewer)
+			return p, true, err
+		case a.walkHeld():
+			p, err := end(Cancelled, CancelControlsTaken)
 			return p, true, err
 		}
 		if p, _ := a.Posture(); p.Seated() {

@@ -736,6 +736,8 @@ func (s *Server) Presence(ctx context.Context, req *pb.PresenceRequest) (*pb.Pre
 	// The place and the region in one read, so that an arrival landing
 	// in the middle of this answer cannot make it out of two regions.
 	at, handle, region := a.Here()
+	taken, passedOn := a.ScriptControls()
+	health, healthKnown := a.Health()
 	return &pb.PresenceResponse{
 		Position:           vec(at),
 		LookAt:             vec(l.At),
@@ -747,6 +749,12 @@ func (s *Server) Presence(ctx context.Context, req *pb.PresenceRequest) (*pb.Pre
 		Groups:             memberships(a.Groups()),
 		MaturityPreference: preference,
 		MaturityCeiling:    ceiling,
+
+		ScriptControlsTaken:    taken,
+		ScriptControlsPassedOn: passedOn,
+
+		Health:      health,
+		HealthKnown: healthKnown,
 	}, nil
 }
 

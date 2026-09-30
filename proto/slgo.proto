@@ -829,6 +829,14 @@ message AgentEvent {
   // is what says that.
   string region = 3;
   uint64 region_handle = 4;
+
+  // Why the avatar moved, for REGION_CHANGED: the TeleportFlags of the
+  // TeleportStart that began the teleport, or zero when the region
+  // changed some other way (a border crossed, a session made again) or
+  // no TeleportStart came in the minute before.  The bits are the
+  // viewer's TELEPORT_FLAGS_*.  A server that does not fill it in sends
+  // zero, which says nothing about why.
+  uint32 teleport_flags = 5;
 }
 
 // ------------------------------------------------------------ control
@@ -1254,6 +1262,22 @@ message PresenceResponse {
   // Empty means the login response did not say, and nothing more.
   string maturity_preference = 9;
   string maturity_ceiling = 10;
+
+  // The controls scripts have taken of the avatar with llTakeControls,
+  // as the bits of AGENT_CONTROL_*: taken and not passed on, which go
+  // to the script and not to the avatar, and taken and passed on, which
+  // go to both.  Counted as the viewer counts them, from the session's
+  // start, so a client that attached later is told what it could not
+  // have heard.  Zero is none.
+  uint32 script_controls_taken = 11;
+  uint32 script_controls_passed_on = 12;
+
+  // The avatar's health as the last HealthMessage said it, 0 to 100,
+  // and whether any has come: a region with damage enabled sends one,
+  // and a session that has heard none is not at full health, it is
+  // not told.
+  float health = 13;
+  bool health_known = 14;
 }
 
 // GroupMembership is one of the avatar's groups, as

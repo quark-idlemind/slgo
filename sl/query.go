@@ -61,6 +61,21 @@ type Presence struct {
 	// an avatar will be refused land it would have been let onto.
 	MaturityPreference string
 	MaturityCeiling    string
+
+	// ScriptControlsTaken and ScriptControlsPassedOn are the controls
+	// scripts have taken with llTakeControls, as agent.Control* bits:
+	// the first the ones a script keeps to itself, which do not move
+	// the avatar, and the second the ones it passes on, which do both.
+	// Zero is none.  See agent.Agent.ScriptControls.
+	ScriptControlsTaken    uint32
+	ScriptControlsPassedOn uint32
+
+	// Health is the avatar's health, 0 to 100, as the last
+	// HealthMessage said it, and HealthKnown whether one has come: a
+	// region with damage enabled sends them, and full health and not
+	// having been told are different answers.
+	Health      float32
+	HealthKnown bool
 }
 
 // Group is one of the avatar's memberships, as AgentGroupDataUpdate

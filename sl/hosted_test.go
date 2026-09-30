@@ -464,6 +464,44 @@ func TestSessionsListsWhatTheDaemonHolds(t *testing.T) {
 	}
 }
 
+// TestThePresenceCarriesTheControlsScriptsHold: the two masks cross as
+// they are, each in its own field.
+func TestThePresenceCarriesTheControlsScriptsHold(t *testing.T) {
+	t.Parallel()
+	h, d := newFakeDaemon(t)
+	d.presence = &pb.PresenceResponse{Region: "Test Region", ScriptControlsTaken: 0x3, ScriptControlsPassedOn: 0x10}
+	p, err := h.Presence(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("Presence: %v", err)
+	}
+	if p.ScriptControlsTaken != 0x3 || p.ScriptControlsPassedOn != 0x10 {
+		t.Errorf("controls taken %#x, passed on %#x", p.ScriptControlsTaken, p.ScriptControlsPassedOn)
+	}
+}
+
+// TestThePresenceCarriesTheHealthAndWhetherItIsKnown: a health of zero
+// that was said and one that was not come out differently.
+func TestThePresenceCarriesTheHealthAndWhetherItIsKnown(t *testing.T) {
+	t.Parallel()
+	h, d := newFakeDaemon(t)
+	d.presence = &pb.PresenceResponse{Region: "Test Region", Health: 73.5, HealthKnown: true}
+	p, err := h.Presence(context.Background(), 0)
+	if err != nil {
+		t.Fatalf("Presence: %v", err)
+	}
+	if p.Health != 73.5 || !p.HealthKnown {
+		t.Errorf("health %v known %v", p.Health, p.HealthKnown)
+	}
+	d.presence = &pb.PresenceResponse{Region: "Test Region", HealthKnown: true}
+	if p, _ = h.Presence(context.Background(), 0); p.Health != 0 || !p.HealthKnown {
+		t.Errorf("a health of zero came out as %v known %v", p.Health, p.HealthKnown)
+	}
+	d.presence = &pb.PresenceResponse{Region: "Test Region"}
+	if p, _ = h.Presence(context.Background(), 0); p.HealthKnown {
+		t.Error("a health nobody said came out known")
+	}
+}
+
 // TestThePresenceIsTranslatedVectorByVector: three vectors that all look
 // alike, and a camera read as a position puts the interest list in the
 // wrong place -- which shows up much later as a region that describes
