@@ -129,7 +129,7 @@ var groups = []group{
 		// its maturity rating is wrong, and this is where somebody
 		// goes next.  What it sets belongs to the account rather than
 		// to the region, which is why it is also under avatars.
-		members: []string{"where", "parcel", "group", "invite", "maturity", "tp", "landmark", "sit", "stand", "animate", "walk", "face", "halt", "who", "look", "map", "regions", "neighbours",
+		members: []string{"where", "parcel", "group", "invite", "maturity", "tp", "landmark", "sit", "stand", "animate", "walk", "face", "halt", "who", "look", "simstats", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
 			"detach", "dress", "move", "dump", "rez", "reform", "touch", "texture",
 			"take", "place", "perms", "drop", "fetch", "start", "stop", "link", "unlink"},

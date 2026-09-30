@@ -413,8 +413,23 @@ func (d *Direct) Region(ctx context.Context) (*Region, bool, error) {
 		ProductName:   r.ProductName, ProductSKU: r.ProductSKU,
 		ColoName: r.ColoName,
 		CPUClass: r.CPUClass, CPURatio: r.CPURatio,
-		Protocols: r.Protocols,
+		Protocols:      r.Protocols,
+		ObjectCapacity: r.ObjectCapacity,
 	}, known, nil
+}
+
+// SimStats reads the history this process's own agent keeps.
+func (d *Direct) SimStats(ctx context.Context) (*SimStats, error) {
+	handle, samples := d.a.SimStats()
+	out := &SimStats{Handle: handle, Read: time.Now(), Samples: make([]StatSample, len(samples))}
+	for i, sm := range samples {
+		v := make(map[StatID]float64, len(sm.Stats))
+		for _, st := range sm.Stats {
+			v[StatID(st.ID)] = float64(st.Value)
+		}
+		out.Samples[i] = StatSample{At: sm.At, Values: v}
+	}
+	return out, nil
 }
 
 // Neighbours reads the agent's own circuits, and sets the flag first

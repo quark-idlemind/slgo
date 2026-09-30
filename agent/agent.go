@@ -107,6 +107,10 @@ type Agent struct {
 	money   money
 	pickers sync.Map
 
+	// stats is the last minute of what the simulator said about how
+	// it is doing.  See simstats.go.
+	stats simStats
+
 	// prices is what the session has been told that says what a
 	// purchase costs, and names.  See prices.go.
 	prices prices
@@ -212,7 +216,6 @@ type Agent struct {
 	look        Look
 	activeGroup msg.UUID
 	groups      []Group
-	regionFlags uint32
 
 	// maturity is the preference the grid granted the last time this
 	// session asked for one, and empty until it has.  See Maturity.
@@ -225,7 +228,8 @@ type Agent struct {
 
 	// here is the region the session says the avatar is in, its handle
 	// included, and introduced whether a handshake has named one yet.
-	// Only publishArrival writes them.
+	// Only publishArrival writes them, but for the flags and capacity
+	// in here, which each SimStats of the same region refreshes.
 	here       Region
 	introduced bool
 
@@ -734,6 +738,7 @@ func (a *Agent) register() {
 	a.trackPosture()
 	a.keepOffers()
 	a.keepMoney()
+	a.keepSimStats()
 	a.keepPickers()
 	a.keepPrices()
 	a.followCrossings()
@@ -828,7 +833,6 @@ func (a *Agent) register() {
 			r.Handle = a.here.Handle
 			a.publishArrival(r, true, nil)
 		}
-		a.regionFlags = m.RegionInfo.RegionFlags
 		a.mu.Unlock()
 
 		a.setHandshake(m)
@@ -1024,6 +1028,11 @@ func (a *Agent) arrive(m *msg.AgentMovementComplete) {
 // beside another's handle or place.  See arrival.
 func (a *Agent) publishArrival(r Region, known bool, m *msg.AgentMovementComplete) (was uint64) {
 	was = a.here.Handle
+	// The capacity comes in SimStats rather than the handshake, so a
+	// handshake of the same region again leaves it as it was.
+	if r.ID == a.here.ID && r.ObjectCapacity == 0 {
+		r.ObjectCapacity = a.here.ObjectCapacity
+	}
 	a.here, a.introduced = r, known
 	if m != nil {
 		a.position = m.Data.Position

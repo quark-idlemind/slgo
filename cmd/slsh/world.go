@@ -215,6 +215,11 @@ func cmdLook(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	fmt.Fprintf(out, "  access   %s\n", sl.AccessName(r.Access))
 	fmt.Fprintf(out, "  water    %.1fm\n", r.WaterHeight)
 	fmt.Fprintf(out, "  product  %s\n", r.ProductName)
+	// From the region's reports rather than its handshake, so not for
+	// the first two seconds in a region.
+	if r.ObjectCapacity > 0 {
+		fmt.Fprintf(out, "  capacity %d objects\n", r.ObjectCapacity)
+	}
 	if n, err := sh.s.Known(ctx); err == nil {
 		fmt.Fprintf(out, "  objects  %d described so far\n", n)
 	}

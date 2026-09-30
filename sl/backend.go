@@ -213,6 +213,12 @@ type Backend interface {
 	// is sent; see doc/local-ids.md.
 	Region(ctx context.Context) (*Region, bool, error)
 
+	// SimStats is what the simulator has said about how it is doing
+	// over the last minute.  Here for the reason Region is: it is said
+	// to whoever holds the circuit, every two seconds, and a session
+	// attached a moment ago was not listening.
+	SimStats(ctx context.Context) (*SimStats, error)
+
 	// Land is what the session was told about the ground under the
 	// avatar: the parcel it was pushed when it arrived, and the
 	// region's parcel overlay.

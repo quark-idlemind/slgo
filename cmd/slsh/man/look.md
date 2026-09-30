@@ -1,6 +1,6 @@
 What the simulator said about the region when the avatar arrived: its
 name and key, who owns it, its access rating, the height of the water,
-and which product it runs as.  `where` is the same question asked about
+which product it runs as, and how many objects it can hold.  `where` is the same question asked about
 the avatar rather than about the land, and `objects` is what is
 standing on it.
 
@@ -11,6 +11,7 @@ standing on it.
       access   general
       water    20.0m
       product  Estate / Full Region
+      capacity 15000 objects
       objects  195 described so far
 
 The access rating is printed in the words a viewer shows -- general,
@@ -24,6 +25,11 @@ shell attached to a daemon therefore gets the same answer as one that
 logged in itself, and a shell that attached an hour late gets it too.
 A refusal here means the handshake has not arrived yet, which happens
 for a second or two after a login and not otherwise.
+
+The capacity is the exception.  It comes in the report the simulator
+sends every two seconds, the one `simstats` reads, and not in the
+handshake, so for the first two seconds in a region the line is not
+there.
 
 ## The count of objects is a count of what has been heard
 
@@ -42,7 +48,7 @@ holding now rather than as a census.
 
     look
 
-See also: `where`, `who`, `objects`, `regions` for the same question
-asked about somewhere else on the grid, `caps` and `features` for what
-this simulator offers a client, and `lsl` for the language it
-implements.
+See also: `where`, `who`, `objects`, `simstats` for how the region is
+running, `regions` for the same question asked about somewhere else on
+the grid, `caps` and `features` for what this simulator offers a
+client, and `lsl` for the language it implements.

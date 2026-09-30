@@ -201,6 +201,9 @@ func (b *fakeBackend) Objects(ctx context.Context, named, id string) ([]*sl.Seen
 func (b *fakeBackend) Region(ctx context.Context) (*sl.Region, bool, error) {
 	return &sl.Region{Name: "Nowhere"}, true, nil
 }
+func (b *fakeBackend) SimStats(ctx context.Context) (*sl.SimStats, error) {
+	return &sl.SimStats{}, nil
+}
 func (b *fakeBackend) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {
 	return &sl.Neighbours{}, nil
 }

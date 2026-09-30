@@ -103,6 +103,12 @@ service Grid {
   // which happens once, before any client is listening.
   rpc Region(RegionRequest) returns (RegionInfo);
 
+  // SimStats is what the simulator has said about how it is doing --
+  // time dilation, frame rate, script time, agents and objects -- over
+  // the last minute.  It says it every two seconds to whoever is there,
+  // and a client that was not listening can be told it only from here.
+  rpc SimStats(SimStatsRequest) returns (SimStatsResponse);
+
   // Land is what the session was told about the ground it is on: the
   // parcel it was pushed on arrival, and the region's parcel overlay.
   //
@@ -1439,6 +1445,36 @@ message RegionInfo {
 
   // Known is false until the handshake has arrived.
   bool known = 16;
+
+  // Object_capacity is how many prims the region holds, which comes in
+  // SimStats rather than the handshake, and is zero until one has.
+  uint32 object_capacity = 17;
+}
+
+message SimStatsRequest { string agent = 1; }
+
+message SimStatsResponse {
+  // Handle is the region the samples are of, the one the avatar is in.
+  uint64 handle = 1;
+
+  // Samples are the simulator's reports, oldest first.
+  repeated SimStatsSample samples = 2;
+}
+
+message SimStatsSample {
+  // Age_ms is how long before this answer the report arrived: an age
+  // rather than a time, so that a client need not share the daemon's
+  // clock.
+  int64 age_ms = 1;
+
+  repeated SimStat stats = 2;
+}
+
+// SimStat is one statistic: its number, the viewer's ESimStatID, and
+// its value.
+message SimStat {
+  uint32 id = 1;
+  float value = 2;
 }
 
 // ---------------------------------------------------------------- land

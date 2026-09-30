@@ -370,6 +370,10 @@ func TestEveryCallSaysWhichAgentItCouldNotFind(t *testing.T) {
 			_, err := empty.Region(ctx, &pb.RegionRequest{Agent: n})
 			return err
 		},
+		"SimStats": func(n string) error {
+			_, err := empty.SimStats(ctx, &pb.SimStatsRequest{Agent: n})
+			return err
+		},
 		"Attachments": func(n string) error {
 			_, err := empty.Attachments(ctx, &pb.AttachmentsRequest{Agent: n})
 			return err
@@ -983,5 +987,48 @@ func TestNeighboursAreAskedAboutAndTurnedOverThroughTheOneCall(t *testing.T) {
 	if got.GetOn() || len(got.GetNeighbours()) != 0 {
 		t.Errorf("neighbours = %v, on=%v after being turned off",
 			got.GetNeighbours(), got.GetOn())
+	}
+}
+
+// TestSimStatsAreHandedOverWithTheirAges: a client asking later is told
+// the last minute, and how long ago each report came rather than when,
+// so that its clock need not agree with the daemon's.
+func TestSimStatsAreHandedOverWithTheirAges(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	ctx := context.Background()
+	h, _ := r.srv.Agent("example")
+
+	m := &msg.SimStats{}
+	m.Region.RegionX, m.Region.RegionY = 43520, 43520
+	m.Region.ObjectCapacity = 15000
+	m.Stat = []msg.SimStats_Stat{{StatID: 0, StatValue: 0.98}, {StatID: 13, StatValue: 3}}
+	r.sim.send(m, 0)
+	waitFor(t, 5*time.Second, "the SimStats to be kept", func() bool {
+		_, got := h.Agent().SimStats()
+		return len(got) == 1
+	})
+
+	got, err := r.srv.SimStats(ctx, &pb.SimStatsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetHandle() != testvilleHandle || len(got.GetSamples()) != 1 {
+		t.Fatalf("handle %d, %d samples; want Testville's one", got.GetHandle(), len(got.GetSamples()))
+	}
+	s := got.GetSamples()[0]
+	if s.GetAgeMs() < 0 || s.GetAgeMs() > 5000 {
+		t.Errorf("age %d ms, want a moment", s.GetAgeMs())
+	}
+	st := s.GetStats()
+	if len(st) != 2 || st[0].GetId() != 0 || st[0].GetValue() != 0.98 || st[1].GetId() != 13 || st[1].GetValue() != 3 {
+		t.Errorf("stats %v", st)
+	}
+
+	region, err := r.srv.Region(ctx, &pb.RegionRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if region.GetObjectCapacity() != 15000 {
+		t.Errorf("object capacity %d, want 15000", region.GetObjectCapacity())
 	}
 }

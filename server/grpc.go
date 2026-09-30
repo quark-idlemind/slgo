@@ -898,7 +898,29 @@ func (s *Server) Region(ctx context.Context, req *pb.RegionRequest) (*pb.RegionI
 		CpuClass: r.CPUClass, CpuRatio: r.CPURatio,
 		Protocols: r.Protocols,
 		Known:     known,
+
+		ObjectCapacity: r.ObjectCapacity,
 	}, nil
+}
+
+// SimStats answers what the simulator has said about how it is doing
+// over the last minute.
+func (s *Server) SimStats(ctx context.Context, req *pb.SimStatsRequest) (*pb.SimStatsResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	handle, samples := h.Agent().SimStats()
+	now := time.Now()
+	out := &pb.SimStatsResponse{Handle: handle, Samples: make([]*pb.SimStatsSample, len(samples))}
+	for i, sm := range samples {
+		ps := &pb.SimStatsSample{AgeMs: now.Sub(sm.At).Milliseconds(), Stats: make([]*pb.SimStat, len(sm.Stats))}
+		for j, st := range sm.Stats {
+			ps.Stats[j] = &pb.SimStat{Id: st.ID, Value: st.Value}
+		}
+		out.Samples[i] = ps
+	}
+	return out, nil
 }
 
 // Land answers what the session was told about the ground it is on.
