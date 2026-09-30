@@ -687,11 +687,12 @@ is what you want</span>
         <div class="tablewrap">
           <table>
             <tbody>
-              <tr><td class="cmd">where</td><td class="what">the region, the position, and the group being acted as</td></tr>
+              <tr><td class="cmd">where</td><td class="what">the region, the position, the group being acted as, the controls scripts have taken, and health when below full</td></tr>
               <tr><td class="cmd">parcel</td><td class="what">the land underfoot: who owns it, and what it permits</td></tr>
               <tr><td class="cmd">who</td><td class="what">who else is here, nearest first, with their keys</td></tr>
               <tr><td class="cmd">map</td><td class="what">the same people as a picture, which says which way rather than how far</td></tr>
-              <tr><td class="cmd">look</td><td class="what">what the simulator said about the region when this session arrived</td></tr>
+              <tr><td class="cmd">look</td><td class="what">what the simulator said about the region when this session arrived, its object capacity among it</td></tr>
+              <tr><td class="cmd">simstats</td><td class="what">how the simulator is doing: dilation, frame time, script time, now and averaged over the last minute</td></tr>
               <tr><td class="cmd">objects</td><td class="what">the objects the region has described; <code>-c</code> for the prims inside each</td></tr>
               <tr><td class="cmd">caps · features · lsl</td><td class="what">what this simulator grants, supports and implements</td></tr>
             </tbody>
@@ -710,6 +711,56 @@ is what you want</span>
           answer, and everything that puts the avatar somewhere else — a
           position, another region, a place kept in inventory, a seat — is
           <a href="#moving">the chapter after this one</a>.
+        </p>
+
+        <p>
+          <code>where</code> says more than where. A script that has taken the
+          avatar's controls &mdash; a vehicle, a game &mdash; adds a line
+          naming them, separately for the ones it keeps and the ones it passes
+          on, and an avatar that has been hurt adds its health when that is
+          below 100%:
+        </p>
+
+        <div class="term">
+          <pre><span class="p">/$</span> <span class="k">where</span>
+<span class="o">Testville at 33, 73, 1000
+controls taken by a script: forward, back
+controls taken by a script and passed on: up
+health 73%</span></pre>
+        </div>
+
+        <p>
+          A control a script keeps is one the avatar does not obey, which is
+          why the line is worth reading when a <code>walk</code> is refused.
+          The lines come from what the simulator has said since the session
+          began, so one can be stale if a script died without letting go.
+        </p>
+
+        <p>
+          <code>simstats</code> is the region asked how it is doing rather than
+          what it holds. The simulator reports every two seconds and the
+          session keeps the last minute, so the command prints each statistic
+          now and averaged over 5, 15, 30 and 60 seconds, which tells a spike
+          from a region that is slow. <code>-g</code> draws the minute,
+          <code>-a</code> prints every statistic, and naming some prints only
+          those. It answers the same through a daemon, and a shell that
+          attached a moment ago gets the whole minute.
+        </p>
+
+        <div class="term">
+          <pre><span class="p">/$</span> <span class="k">simstats dilation fps agents</span>
+<span class="o">Testville: 30 reports over the last 59s, the newest 1s ago
+                 now      5s     15s     30s     60s
+  dilation    0.9981  0.9981  0.9981  0.9561  0.9709
+  fps          44.95   44.95   44.95   43.40   43.89
+  agents           3       3       3       3       3</span></pre>
+        </div>
+
+        <p>
+          <code>look</code> now includes how many objects the region can hold,
+          beside the count it has described so far. The capacity arrives with
+          the statistics, so it is missing for the first two seconds in a
+          region.
         </p>
 
         <h3>The land under you, which is the half that decides things</h3>
@@ -1104,9 +1155,21 @@ a digit is that many in one cell, and + is more than nine
               <tr><td class="cmd">neighbours</td><td class="what">the circuits a border crossing needs; <code>on</code> and <code>off</code> change it</td></tr>
               <tr><td class="cmd">sit · stand</td><td class="what">onto a seat and off it again, which moves the avatar several metres</td></tr>
               <tr><td class="cmd">animate</td><td class="what">play an animation, built in or from inventory; <code>--stop</code> stops it, <code>--list</code> names the built-ins</td></tr>
+              <tr><td class="cmd">walk</td><td class="what">on foot in a straight line to a place in this region, or to somebody or something by name</td></tr>
             </tbody>
           </table>
         </div>
+
+        <p>
+          <code>walk</code> is the fifth way and the only one that is not a
+          jump: it walks the avatar, in a straight line, and reports where it
+          came to rest. It goes round nothing and never crosses a border. It is
+          refused for an avatar that is sitting, and for one whose
+          <em>forward</em> control a script has taken and does not pass on,
+          which a vehicle or a game can do; <code>where</code> says which
+          controls scripts hold. A script that takes forward in the middle of
+          a walk ends it, cancelled. <code>man walk</code> has the rest.
+        </p>
 
         <h3>Three numbers, and what they mean past the edge</h3>
         <p>
@@ -1258,7 +1321,12 @@ Pelmar Bay                       43584, 43584 moderate  47921114796146688</span>
 
         <p>
           A line of notice says so: <code>the avatar is now in Sandbox Goguen
-          -- what the last region described is gone</code>. It comes from the
+          -- what the last region described is gone</code>. When the grid said why
+          the avatar was moved, the region is followed by the cause &mdash;
+          <code>(sent home)</code>, <code>(forced off the land)</code>,
+          <code>(by a teleport offer)</code>, <code>(by landmark)</code>,
+          <code>(by teleport)</code> or <code>(by a god)</code> &mdash; and by
+          nothing when it did not. It comes from the
           same place arriving chat does, so it appears whoever asked for the
           move — another client attached to the same daemon, a lure somebody
           offered and you accepted, a session re-established after the circuit
@@ -1416,7 +1484,10 @@ Dell of Ashes at 113, 109, 1011</span>
           command's path reads those alerts, so the ejection is invisible to it.
           A position printed here can be true when it is printed and false a
           moment afterwards, with nothing saying so. If a landmark lands
-          somewhere it should not be, run <code>where</code> again.
+          somewhere it should not be, run <code>where</code> again. The
+          session's own notice that the avatar is now in another region, which
+          names a move such as being sent home, is what to watch for too; that
+          it appears in this case is inferred from the code, not measured.
         </p>
 
         <div class="note">
@@ -1956,7 +2027,12 @@ the next owner may now copy, modify, transfer</span>
         <h3>Friendship, and handing things over</h3>
         <p>
           <code>friends</code> lists who is online, <code>-a</code> all of
-          them. <code>offer</code> offers friendship; <code>give</code> offers
+          them. A friend who lets you see them online logging in or out is
+          printed as a notice, <code>* Example Resident is online</code>, in
+          chat mode or out of it. At login every friend already on is
+          announced, a line each; a shell attached to a daemon that has been up
+          a while announces only what comes after it attached. This has not
+          been measured on the grid yet. <code>offer</code> offers friendship; <code>give</code> offers
           an inventory item. Neither is a transfer: nothing moves until the
           other side accepts, and what they do is not reported back here.
         </p>
@@ -2153,7 +2229,9 @@ type the answer; ^D ends it, ESC starts again, ^C sends nothing</span>
           <code>status</code> is what to reach for when a session looks idle
           and you want to know whether it is idle or broken. The last list is
           messages arriving that this build has no handler for, which is how a
-          protocol change announces itself; <code>placements</code> does the
+          protocol change announces itself (the capture above is from a build
+          that had no handler for <code>SimStats</code>, which this one has and
+          <code>simstats</code> reads); <code>placements</code> does the
           same for the form an object's position arrives in, counting the
           objects described so far by it, and <code>decoding</code>, which
           appears only once there is something to count, says how many
@@ -2511,6 +2589,8 @@ how_extra   = {"reasoning_effort": "none"}</span></pre>
 
               <tr><td class="group-title" colspan="2">Region</td></tr>
               <tr><td class="cmd">where · parcel · look · map</td><td class="what">the region, the land under you, what it says of itself, and who is about</td></tr>
+              <tr><td class="cmd">simstats</td><td class="what">how the simulator is doing, now and over the last minute</td></tr>
+              <tr><td class="cmd">walk</td><td class="what">on foot in a straight line to a place in this region</td></tr>
               <tr><td class="cmd">tp · regions · landmark</td><td class="what">going to a position, finding a region by name, going to a place kept</td></tr>
               <tr><td class="cmd">neighbours · sit · stand</td><td class="what">walking over a border; onto a seat and off it again</td></tr>
               <tr><td class="cmd">animate</td><td class="what">play an animation, built in or from inventory, and stop it</td></tr>
