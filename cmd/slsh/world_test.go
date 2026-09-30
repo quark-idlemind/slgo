@@ -125,10 +125,15 @@ func TestLookIsWhatTheSimulatorSaidAboutItself(t *testing.T) {
 	x := newTestShell(t)
 	x.grid.objects = []*sl.Seen{{Object: sl.Object{ID: testLamp, Local: 1}, PCode: 9}}
 
+	if got := x.do(t, "look"); strings.Contains(got, "capacity") {
+		t.Errorf("a capacity before the region has reported one:\n%s", got)
+	}
+	x.grid.region.ObjectCapacity = 15000
+
 	got := x.do(t, "look")
 	for _, want := range []string{
 		"Test Region", "  access   general", "  water    20.0m",
-		"Estate / Full Region", "1 described so far",
+		"Estate / Full Region", "  capacity 15000 objects", "1 described so far",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("look should mention %q:\n%s", want, got)

@@ -209,7 +209,7 @@ func TestTheNewSimulatorsSequenceNumbersAreNotTakenForRetransmissions(t *testing
 	a, from, to := twoRegions(t, Options{SkipCaps: true})
 
 	var stats atomic.Int64
-	if err := a.Handle("SimStats", func(*msg.Packet) { stats.Add(1) }); err != nil {
+	if err := a.Handle("AttachedSound", func(*msg.Packet) { stats.Add(1) }); err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,7 +217,7 @@ func TestTheNewSimulatorsSequenceNumbersAreNotTakenForRetransmissions(t *testing
 	// anything the new simulator will reach during its handshake.
 	const filled = 30
 	for i := 0; i < filled; i++ {
-		from.sim.send(&msg.SimStats{}, 0)
+		from.sim.send(&msg.AttachedSound{}, 0)
 	}
 	waitFor(t, "the old region's packets to arrive", func() bool {
 		return stats.Load() >= filled
@@ -228,7 +228,7 @@ func TestTheNewSimulatorsSequenceNumbersAreNotTakenForRetransmissions(t *testing
 	}
 
 	was := stats.Load()
-	to.sim.send(&msg.SimStats{}, 0)
+	to.sim.send(&msg.AttachedSound{}, 0)
 	waitFor(t, "the new region's packet to be delivered", func() bool {
 		return stats.Load() > was
 	})

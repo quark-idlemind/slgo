@@ -7,7 +7,9 @@ import (
 )
 
 // The region introduces itself once, in RegionHandshake, and never
-// mentions any of it again.
+// mentions most of it again.  The flags are the exception: every
+// SimStats repeats them, with the object capacity the handshake leaves
+// out, and simstats.go keeps them current.
 //
 // So this is decoded and kept for the same reason the objects are: it
 // arrives before any client is listening and cannot be asked for a
@@ -24,9 +26,14 @@ type Region struct {
 	Name   string
 
 	// Flags carry what may be done here -- terraforming, damage, fly,
-	// and so on.  Extended holds the ones that outgrew a U32.
+	// and so on.  Extended holds the ones that outgrew a U32.  Both
+	// are as the latest SimStats had them, once one has come.
 	Flags    uint32
 	Extended uint64
+
+	// ObjectCapacity is how many prims the region holds, and zero
+	// until its first SimStats.
+	ObjectCapacity uint32
 
 	// Access is the maturity rating, and Owner the estate owner.
 	Access uint8

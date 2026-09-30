@@ -402,8 +402,28 @@ func (h *Hosted) Region(ctx context.Context) (*Region, bool, error) {
 		ProductName:   r.ProductName, ProductSKU: r.ProductSku,
 		ColoName: r.ColoName,
 		CPUClass: r.CpuClass, CPURatio: r.CpuRatio,
-		Protocols: r.Protocols,
+		Protocols:      r.Protocols,
+		ObjectCapacity: r.ObjectCapacity,
 	}, r.Known, nil
+}
+
+// SimStats reads the daemon's history.  Each report comes with its age
+// rather than its time, and is placed by this machine's clock.
+func (h *Hosted) SimStats(ctx context.Context) (*SimStats, error) {
+	r, err := h.conn.SimStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	out := &SimStats{Handle: r.Handle, Read: now, Samples: make([]StatSample, len(r.Samples))}
+	for i, sm := range r.Samples {
+		v := make(map[StatID]float64, len(sm.Stats))
+		for _, st := range sm.Stats {
+			v[StatID(st.Id)] = float64(st.Value)
+		}
+		out.Samples[i] = StatSample{At: now.Add(-time.Duration(sm.AgeMs) * time.Millisecond), Values: v}
+	}
+	return out, nil
 }
 
 // Land reads what the daemon's session was told, and rebuilds the

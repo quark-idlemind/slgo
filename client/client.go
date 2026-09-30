@@ -941,6 +941,13 @@ func (c *Conn) Region(ctx context.Context) (*pb.RegionInfo, error) {
 	return c.grid.Region(ctx, &pb.RegionRequest{Agent: c.agentName()})
 }
 
+// SimStats asks what the simulator has said about how it is doing over
+// the last minute, which only a client that was listening all along
+// could otherwise know.
+func (c *Conn) SimStats(ctx context.Context) (*pb.SimStatsResponse, error) {
+	return c.grid.SimStats(ctx, &pb.SimStatsRequest{Agent: c.agentName()})
+}
+
 // Land is what the session was told about the ground it is on: the
 // parcel it was pushed on arrival, and the region's parcel overlay.
 //

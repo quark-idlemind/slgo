@@ -430,8 +430,13 @@ type Region struct {
 	Handle uint64
 	Name   string
 
-	Flags    uint32
-	Extended uint64
+	// Flags and Extended are as the latest SimStats had them, once one
+	// has come, so an estate change made while the avatar is there is
+	// seen.  ObjectCapacity comes only in SimStats, and is zero until
+	// the first.
+	Flags          uint32
+	Extended       uint64
+	ObjectCapacity uint32
 
 	Access        uint8
 	Owner         msg.UUID

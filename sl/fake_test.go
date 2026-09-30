@@ -888,6 +888,10 @@ func (f *fakeBackend) Neighbours(ctx context.Context, set *bool) (*Neighbours, e
 	return &n, nil
 }
 
+func (f *fakeBackend) SimStats(ctx context.Context) (*SimStats, error) {
+	return &SimStats{Read: time.Now()}, nil
+}
+
 func (f *fakeBackend) Region(ctx context.Context) (*Region, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -1057,7 +1057,9 @@ inventory, says where one goes, makes one and goes to one.
 one -- which is what walking over a border needs, and is off unless
 asked for.
 
-The simulator describes itself with `caps`, `features` and `lsl`.
+The simulator describes itself with `caps`, `features` and `lsl`, and
+`simstats` says how it is running -- time dilation, frame rate, script
+time -- now and averaged over the last minute.
 Talking is `chat`, `say`, `im`, `talk`, `friends`, `lookup`, `offer`,
 `give` and `profile`. Anything that wants an answer -- a teleport
 offer, a script's dialog, a friendship, an inventory offer, a

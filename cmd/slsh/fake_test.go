@@ -152,6 +152,10 @@ type fakeGrid struct {
 	neighbours    sl.Neighbours
 	neighboursErr error
 
+	// simStats is what SimStats answers; nil is none heard yet.
+	simStats    *sl.SimStats
+	simStatsErr error
+
 	presenceErr, objectsErr, regionErr, friendsErr, sendErr, capErr error
 
 	// presenceCalls counts how many times the avatar has been asked
@@ -1872,6 +1876,18 @@ func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
 		return nil, false, f.regionErr
 	}
 	return f.region, true, nil
+}
+
+func (f *fakeGrid) SimStats(ctx context.Context) (*sl.SimStats, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.simStatsErr != nil {
+		return nil, f.simStatsErr
+	}
+	if f.simStats == nil {
+		return &sl.SimStats{Read: time.Now()}, nil
+	}
+	return f.simStats, nil
 }
 
 func (f *fakeGrid) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {
