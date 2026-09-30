@@ -102,6 +102,12 @@ const (
 	ControlUpNeg         uint32 = 0x00000020 // AGENT_CONTROL_UP_NEG
 	ControlYawPos        uint32 = 0x00000100 // AGENT_CONTROL_YAW_POS
 	ControlYawNeg        uint32 = 0x00000200 // AGENT_CONTROL_YAW_NEG
+	ControlNudgeAtPos    uint32 = 0x00080000 // AGENT_CONTROL_NUDGE_AT_POS
+	ControlNudgeAtNeg    uint32 = 0x00100000 // AGENT_CONTROL_NUDGE_AT_NEG
+	ControlNudgeLeftPos  uint32 = 0x00200000 // AGENT_CONTROL_NUDGE_LEFT_POS
+	ControlNudgeLeftNeg  uint32 = 0x00400000 // AGENT_CONTROL_NUDGE_LEFT_NEG
+	ControlNudgeUpPos    uint32 = 0x00800000 // AGENT_CONTROL_NUDGE_UP_POS
+	ControlNudgeUpNeg    uint32 = 0x01000000 // AGENT_CONTROL_NUDGE_UP_NEG
 	ControlLButtonDown   uint32 = 0x10000000 // AGENT_CONTROL_LBUTTON_DOWN
 	ControlMLLButtonDown uint32 = 0x40000000 // AGENT_CONTROL_ML_LBUTTON_DOWN
 )

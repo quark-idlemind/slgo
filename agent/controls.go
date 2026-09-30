@@ -109,7 +109,10 @@ func (a *Agent) walkHeld() bool {
 // bit order.  The LSL constants of the same value are CONTROL_FWD,
 // CONTROL_BACK, CONTROL_LEFT, CONTROL_RIGHT, CONTROL_UP, CONTROL_DOWN,
 // CONTROL_ROT_LEFT, CONTROL_ROT_RIGHT, CONTROL_LBUTTON and
-// CONTROL_ML_LBUTTON.
+// CONTROL_ML_LBUTTON.  The nudges have no LSL constant: the simulator
+// adds them to what a script takes, CONTROL_FWD bringing the forward
+// nudge with it.
+// Why: doc/avatar-state.md#measured
 var controlNames = []struct {
 	bit  uint32
 	name string
@@ -122,6 +125,12 @@ var controlNames = []struct {
 	{ControlUpNeg, "down"},
 	{ControlYawPos, "turn left"},
 	{ControlYawNeg, "turn right"},
+	{ControlNudgeAtPos, "nudge forward"},
+	{ControlNudgeAtNeg, "nudge back"},
+	{ControlNudgeLeftPos, "nudge left"},
+	{ControlNudgeLeftNeg, "nudge right"},
+	{ControlNudgeUpPos, "nudge up"},
+	{ControlNudgeUpNeg, "nudge down"},
 	{ControlLButtonDown, "click"},
 	{ControlMLLButtonDown, "mouselook click"},
 }

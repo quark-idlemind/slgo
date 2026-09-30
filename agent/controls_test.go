@@ -81,6 +81,10 @@ func TestControlsAreNamedInWords(t *testing.T) {
 		{ControlLeftPos | ControlLeftNeg | ControlUpPos | ControlUpNeg, "left, right, up, down"},
 		{ControlYawPos | ControlYawNeg, "turn left, turn right"},
 		{ControlLButtonDown | ControlMLLButtonDown, "click, mouselook click"},
+		// What a script's CONTROL_FWD | CONTROL_BACK was measured
+		// arriving as.
+		{0x00180003, "forward, back, nudge forward, nudge back"},
+		{ControlNudgeLeftPos | ControlNudgeLeftNeg | ControlNudgeUpPos | ControlNudgeUpNeg, "nudge left, nudge right, nudge up, nudge down"},
 		{ControlAtPos | 0x00000040, "forward, 0x00000040"},
 		{0x80000000, "0x80000000"},
 	} {
