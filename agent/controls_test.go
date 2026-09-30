@@ -86,7 +86,10 @@ func TestControlsAreNamedInWords(t *testing.T) {
 		{0x00180003, "forward, back, nudge forward, nudge back"},
 		{ControlNudgeLeftPos | ControlNudgeLeftNeg | ControlNudgeUpPos | ControlNudgeUpNeg, "nudge left, nudge right, nudge up, nudge down"},
 		{ControlAtPos | 0x00000040, "forward, 0x00000040"},
-		{0x80000000, "0x80000000"},
+		// What an attachment's CONTROL_LBUTTON was seen arriving as.
+		{ControlLButtonDown | ControlLButtonUp, "click, click release"},
+		{ControlMLLButtonUp, "mouselook click release"},
+		{0x00008000, "0x00008000"},
 	} {
 		if got := ControlWords(c.mask); got != c.want {
 			t.Errorf("ControlWords(%#x) = %q, want %q", c.mask, got, c.want)

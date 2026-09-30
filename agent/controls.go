@@ -132,7 +132,9 @@ var controlNames = []struct {
 	{ControlNudgeUpPos, "nudge up"},
 	{ControlNudgeUpNeg, "nudge down"},
 	{ControlLButtonDown, "click"},
+	{ControlLButtonUp, "click release"},
 	{ControlMLLButtonDown, "mouselook click"},
+	{ControlMLLButtonUp, "mouselook click release"},
 }
 
 // ControlWords names the bits of a control mask in words, separated by
