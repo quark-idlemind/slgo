@@ -93,8 +93,8 @@ const (
 	ControlStop   uint32 = 0x00004000 // AGENT_CONTROL_STOP
 
 	// The rest a script can take with llTakeControls, and so the ones
-	// ScriptControls names; see controls.go.  Values as above, indra_constants.h
-	// lines 323-358.
+	// ScriptControls names; see controls.go.  Values as above,
+	// indra_constants.h:323-359.
 	ControlAtNeg         uint32 = 0x00000002 // AGENT_CONTROL_AT_NEG
 	ControlLeftPos       uint32 = 0x00000004 // AGENT_CONTROL_LEFT_POS
 	ControlLeftNeg       uint32 = 0x00000008 // AGENT_CONTROL_LEFT_NEG
