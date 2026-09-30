@@ -215,8 +215,9 @@ func (sh *Shell) watch(ctx context.Context) {
 	// What is said in the group chats this avatar is in, with the
 	// invitations to the ones it is not.
 	gchats := sh.s.GroupChats(0)
-	// Friends logging in and out, the login burst included.
-	friends := sh.s.FriendChanges(0)
+	// Friends logging in and out, the login burst included, announced
+	// apart from this loop; see announceFriends.
+	go sh.announceFriends(ctx, sh.s.FriendChanges(0))
 	// The group names a notice is announced with, asked for now so that
 	// the first notice need not wait for them.  See heardNotice.
 	sh.groups.kick()
@@ -308,11 +309,6 @@ func (sh *Shell) watch(ctx context.Context) {
 				return
 			}
 			sh.heardGroupChat(g)
-		case c, ok := <-friends:
-			if !ok {
-				return
-			}
-			sh.heardFriend(ctx, c)
 		}
 	}
 }
@@ -1421,20 +1417,47 @@ func movedBy(cause string) string {
 // line is printed with the id.
 const friendNameWait = 2 * time.Second
 
-// heardFriend announces a friend logging in or out, the way the viewer
-// words it: "NAME is online" or "NAME is offline".  A name the session
-// does not have is asked for and waited for briefly, and the id is
-// printed when it does not come.
+// announceFriends prints friends logging in and out, the way the viewer
+// words it: "NAME is online" or "NAME is offline".
+//
+// It runs apart from the loop that prints chat and the rest, because a
+// name the session does not have is asked for and waited for, and a
+// login burst of such names would otherwise hold chat up behind it.
+// What has arrived together is named together, with one wait, and
+// printed in the order it came; a name that does not come is printed as
+// the id.
 // Why: doc/friend-notices.md
-func (sh *Shell) heardFriend(ctx context.Context, c *sl.FriendChange) {
-	name := sh.s.Names(ctx, []msg.UUID{c.ID}, friendNameWait)[c.ID]
-	if name == "" {
-		name = c.ID.String()
+func (sh *Shell) announceFriends(ctx context.Context, friends <-chan *sl.FriendChange) {
+	for c := range friends {
+		batch := []*sl.FriendChange{c}
+	more:
+		for {
+			select {
+			case next, ok := <-friends:
+				if !ok {
+					break more
+				}
+				batch = append(batch, next)
+			default:
+				break more
+			}
+		}
+		ids := make([]msg.UUID, len(batch))
+		for i, b := range batch {
+			ids[i] = b.ID
+		}
+		names := sh.s.Names(ctx, ids, friendNameWait)
+		for _, b := range batch {
+			name := names[b.ID]
+			if name == "" {
+				name = b.ID.String()
+			}
+			status := "offline"
+			if b.Online {
+				status = "online"
+			}
+			sh.noticef("%s is %s", sl.SenderPerson.Label(name), status)
+		}
+		sh.prompt()
 	}
-	status := "offline"
-	if c.Online {
-		status = "online"
-	}
-	sh.noticef("%s is %s", sl.SenderPerson.Label(name), status)
-	sh.prompt()
 }

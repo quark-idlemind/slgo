@@ -41,8 +41,10 @@ the viewer does not check either.
 
 slsh prints each as a notice beside the others, `15:07:40 * Example
 Resident is online`, naming the friend as a person (`Sender.Label`).
-The name is asked for and waited for two seconds; past that the id is
-printed. This is slsh's way of following the viewer's setting: it is
+A name the session does not have is asked for and waited for two
+seconds, past which the id is printed.  The waiting is done apart from
+the loop that prints chat, so it holds nothing else up, and what arrived
+together -- a login burst -- is named together with the one wait. This is slsh's way of following the viewer's setting: it is
 always on, and there is no `ChatOnlineNotification` switch.
 
 A shell attaching to a daemon that has been up a while was not listening

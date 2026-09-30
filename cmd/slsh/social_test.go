@@ -2295,3 +2295,31 @@ func TestTheLoginBurstIsAnnouncedOneLineEach(t *testing.T) {
 		t.Errorf("the burst said %q", got)
 	}
 }
+
+// A name that is slow to come does not hold up what is said meanwhile:
+// friends are announced apart from chat, and a burst is named with one
+// wait rather than one each.
+func TestAFriendsNameBeingWaitedForHoldsNothingElseUp(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+
+	start := time.Now()
+	x.grid.Relay(t, onlineNote(testOther, testFriend))
+	said := &msg.ChatFromSimulator{}
+	said.ChatData.SourceID = testLamp
+	said.ChatData.FromName = append([]byte("a lamp"), 0)
+	said.ChatData.Message = append([]byte("still here"), 0)
+	x.grid.Relay(t, said)
+	waits(t, x, "still here")
+	if d := time.Since(start); d >= friendNameWait {
+		t.Errorf("chat was printed after %v, behind the wait for a friend's name", d)
+	}
+
+	got := waits(t, x, testFriend.String()+" is online")
+	if !strings.Contains(got, testOther.String()+" is online") {
+		t.Errorf("the first of the burst is missing:\n%s", got)
+	}
+	if d := time.Since(start); d >= 2*friendNameWait {
+		t.Errorf("two unnamed friends took %v, a wait each", d)
+	}
+}
