@@ -124,12 +124,15 @@ again afterwards:
   sends, to `From` and quoting the transaction: no item in 10 seconds.
 - `DialogTaskInventoryAccepted` (10), to `From`, quoting the
   transaction, with the destination folder as the bucket: the item was
-  in that folder within 9 seconds. `AcceptTaskInventoryOffer` sends it.
+  in that folder within 9 seconds. `InventoryOffer.Accept` sends it.
 
 A second give, measured the same day from an object another avatar
 owned: `From` was that owner, not the receiver, and dialog 10 addressed
 to that `From`, with the receiver's Scripts folder as the bucket, put
 the item in the receiver's Scripts folder.
+
+A decline is dialog 11 by the same rule, the offer's dialog plus two (the
+viewer's source, not measured).
 
 Not measured: whether 10 accepts any folder or only the default one for
 the item's type (the Scripts folder was used both times).

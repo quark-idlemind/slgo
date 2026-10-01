@@ -321,8 +321,8 @@ func (b *bot) offered(ctx context.Context, s *sl.Session, im *sl.IM) {
 // as that rather than as a failure: the offer was dealt with, just not
 // here.
 func (b *bot) take(ctx context.Context, offer *sl.InventoryOffer) {
-	who := offer.FromName
-	if who == "" {
+	who := offer.FromLabel()
+	if offer.FromName == "" {
 		who = offer.From.String()
 	}
 	what := offer.Name
@@ -335,7 +335,13 @@ func (b *bot) take(ctx context.Context, offer *sl.InventoryOffer) {
 	case AcceptAnyone:
 		take = true
 	case AcceptTrusted:
-		take = b.d.cfg.Trusts(offer.From, offer.FromName)
+		// An object's give names the object, which anybody may call
+		// anything: only the owner's id is trusted for one.
+		name := offer.FromName
+		if offer.Dialog == sl.DialogTaskInventoryOffered {
+			name = ""
+		}
+		take = b.d.cfg.Trusts(offer.From, name)
 	case AcceptNobody:
 	}
 	if !take {

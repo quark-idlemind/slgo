@@ -1091,19 +1091,56 @@ func TestIMSubscriptionsCloseWhenTheSessionEnds(t *testing.T) {
 	}
 }
 
-// TestAnObjectsGiveIsAcceptedTheWayTheViewerAcceptsIt: dialog 10 to the
-// offer's From, quoting its transaction, with the folder as the bucket.
-// Measured: DialogInventoryAccepted left an object's give undelivered,
-// and this delivered it into the folder.  Why: doc/im-senders.md#an-objects-give
-func TestAnObjectsGiveIsAcceptedTheWayTheViewerAcceptsIt(t *testing.T) {
-	w, f := newFakeSession(t)
+// taskGiveText is the text of an object's give, as measured: the item's
+// name in quotes, two spaces, and the place in parentheses.
+const taskGiveText = "'Example Box'  ( http://slurl.com/secondlife/Testville/128/64/22 )"
 
+// TestAnObjectsGiveIsAnInventoryOffer: dialog 9 is read as an offer whose
+// name is in its text and whose one-byte bucket is the asset type, with
+// no item id.  Why: doc/im-senders.md#an-objects-give
+func TestAnObjectsGiveIsAnInventoryOffer(t *testing.T) {
+	txn := msg.MustParseUUID("1b797e57-7e57-c0de-ecc5-bb0994d73573")
+	im := &IM{From: somebody, FromName: "Example Giver", Dialog: DialogTaskInventoryOffered,
+		ID: txn, Text: taskGiveText, Bucket: []byte{byte(AssetLSLText)}}
+	o, ok := InventoryOfferFrom(im)
+	if !ok {
+		t.Fatal("a dialog 9 message with an asset type is not read as an offer")
+	}
+	if o.Name != "Example Box" || o.Asset != AssetLSLText || !o.Item.IsZero() ||
+		o.Dialog != DialogTaskInventoryOffered || o.Transaction != txn || o.From != somebody {
+		t.Errorf("offer = %+v", o)
+	}
+	im.Text = "something else"
+	if o, _ := InventoryOfferFrom(im); o.Name != "something else" {
+		t.Errorf("a text that does not read gave the name %q, want the whole text", o.Name)
+	}
+	im.Bucket = nil
+	if _, ok := InventoryOfferFrom(im); ok {
+		t.Error("a dialog 9 message with no bucket was read as an offer")
+	}
+}
+
+// TestAnObjectsGiveIsAcceptedTheWayTheViewerAcceptsIt: dialog 10 to the
+// offer's From, quoting its transaction, with the folder as the bucket,
+// and declined as 11.  Measured for the accept: DialogInventoryAccepted
+// left an object's give undelivered, and this delivered it into the
+// folder.  The decline is the viewer's rule, not measured.
+// Why: doc/im-senders.md#an-objects-give
+func TestAnObjectsGiveIsAcceptedTheWayTheViewerAcceptsIt(t *testing.T) {
 	owner := msg.MustParseUUID("1b587e57-7e57-c0de-fe21-0ce74a6b6378")
 	txn := msg.MustParseUUID("1b797e57-7e57-c0de-ecc5-bb0994d73573")
 	folder := msg.MustParseUUID("eb907e57-7e57-c0de-a12a-dcedb409b250")
-	im := &IM{From: owner, FromName: "Example Box", Dialog: DialogTaskInventoryOffered, ID: txn}
-	if err := w.AcceptTaskInventoryOffer(context.Background(), im, folder); err != nil {
-		t.Fatalf("AcceptTaskInventoryOffer: %v", err)
+	give := func() *InventoryOffer {
+		o, _ := InventoryOfferFrom(&IM{From: owner, FromName: "Example Box", Dialog: DialogTaskInventoryOffered,
+			ID: txn, Text: taskGiveText, Bucket: []byte{byte(AssetLSLText)}})
+		return o
+	}
+
+	w, f := newFakeSession(t)
+	o := give()
+	o.w = w
+	if err := o.Accept(context.Background(), folder); err != nil {
+		t.Fatalf("Accept: %v", err)
 	}
 	m := onlySent[*msg.ImprovedInstantMessage](t, f)
 	if m.MessageBlock.Dialog != DialogTaskInventoryAccepted {
@@ -1117,5 +1154,42 @@ func TestAnObjectsGiveIsAcceptedTheWayTheViewerAcceptsIt(t *testing.T) {
 	}
 	if string(m.MessageBlock.BinaryBucket) != string(folder[:]) {
 		t.Errorf("bucket %x, want the folder %s", m.MessageBlock.BinaryBucket, folder)
+	}
+
+	w, f = newFakeSession(t)
+	o = give()
+	o.w = w
+	if err := o.Decline(context.Background()); err != nil {
+		t.Fatalf("Decline: %v", err)
+	}
+	m = onlySent[*msg.ImprovedInstantMessage](t, f)
+	if m.MessageBlock.Dialog != DialogTaskInventoryDeclined || m.MessageBlock.ToAgentID != owner ||
+		m.MessageBlock.ID != txn {
+		t.Errorf("decline = dialog %d to %s quoting %s", m.MessageBlock.Dialog, m.MessageBlock.ToAgentID, m.MessageBlock.ID)
+	}
+}
+
+// TestAnOfferAnswersWithItsDialogPlusOneOrTwo: the viewer's rule, for a
+// group notice's item (32) as for the others.  Only 4 and 9 are read into
+// an offer here; 32 is the rule applied to a hand-made one.
+func TestAnOfferAnswersWithItsDialogPlusOneOrTwo(t *testing.T) {
+	for _, c := range []struct{ dialog, accept, decline uint8 }{
+		{0, DialogInventoryAccepted, DialogInventoryDeclined},
+		{DialogInventoryOffered, 5, 6},
+		{DialogTaskInventoryOffered, 10, 11},
+		{32, 33, 34},
+	} {
+		w, f := newFakeSession(t)
+		o := &InventoryOffer{Dialog: c.dialog, From: somebody, Transaction: msg.UUID{9}, w: w}
+		if err := w.AcceptInventoryOffer(context.Background(), o, msg.UUID{}); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.DeclineInventoryOffer(context.Background(), o); err != nil {
+			t.Fatal(err)
+		}
+		ms := sentOf[*msg.ImprovedInstantMessage](f)
+		if len(ms) != 2 || ms[0].MessageBlock.Dialog != c.accept || ms[1].MessageBlock.Dialog != c.decline {
+			t.Errorf("dialog %d answered %v", c.dialog, ms)
+		}
 	}
 }

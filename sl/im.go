@@ -40,8 +40,10 @@ const (
 	// doc/im-senders.md#an-objects-give.
 	DialogTaskInventoryOffered = 9
 
-	// The answers to DialogTaskInventoryOffered.  An object's offer is not
-	// completed by DialogInventoryAccepted.  See AcceptTaskInventoryOffer.
+	// The answers to DialogTaskInventoryOffered, which an InventoryOffer
+	// of dialog 9 sends by the viewer's rule: accept is the offer's dialog
+	// + 1, decline + 2.  An object's offer is not completed by
+	// DialogInventoryAccepted.  See InventoryOffer.Accept.
 	DialogTaskInventoryAccepted = 10
 	DialogTaskInventoryDeclined = 11
 
@@ -386,17 +388,30 @@ func (o *Offer) Decline(ctx context.Context) error {
 // GiveToAvatar makes one of these on the other side.  Nothing arrives
 // in inventory until it is accepted: the offer is an instant message
 // and the answer is another one, quoting the same transaction.
+//
+// It covers an avatar's offer (dialog 4) and an object's give (dialog 9).
+// The answer is the offer's dialog + 1 to accept and + 2 to decline, the
+// viewer's rule for every kind.
 type InventoryOffer struct {
 	At       time.Time
 	From     msg.UUID
 	FromName string
 
-	// Name is what the giver called it, which is the message text.
+	// Dialog is the dialog the offer arrived as: DialogInventoryOffered
+	// or DialogTaskInventoryOffered.  Zero is taken as the first.
+	Dialog uint8
+
+	// Name is what the giver called it: the message text for an
+	// avatar's offer, and for an object's give the item's name read out
+	// of the text (see TaskOfferItemName), or the whole text when it
+	// does not read.
 	Name string
 
-	// Asset is the kind of thing, and Item its id, both read out of
-	// the binary bucket.  A FOLDER is offered as AssetCategory, and
-	// then Item is the folder.
+	// Asset is the kind of thing, read out of the binary bucket, and
+	// Item its id, which only a bucket of 17 bytes or more carries: an object's
+	// give has one byte and no Item.  A FOLDER is offered as
+	// AssetCategory, and then Item is the folder.
+	// Why: doc/im-senders.md#an-objects-give
 	Asset AssetType
 	Item  msg.UUID
 
@@ -419,21 +434,67 @@ func (o *InventoryOffer) String() string {
 }
 
 // InventoryOfferFrom reads an offer out of an instant message, and says
-// whether it was one.
+// whether it was one: dialog 4, or dialog 9 (an object's give).
 func InventoryOfferFrom(im *IM) (*InventoryOffer, bool) {
-	if im.Dialog != DialogInventoryOffered || len(im.Bucket) < 17 {
+	if im.Dialog != DialogInventoryOffered && im.Dialog != DialogTaskInventoryOffered {
+		return nil, false
+	}
+	if len(im.Bucket) < 1 || (im.Dialog == DialogInventoryOffered && len(im.Bucket) < 17) {
 		return nil, false
 	}
 	o := &InventoryOffer{
 		At:          im.At,
 		From:        im.From,
 		FromName:    im.FromName,
+		Dialog:      im.Dialog,
 		Name:        im.Text,
 		Asset:       AssetType(int8(im.Bucket[0])),
 		Transaction: im.ID,
 	}
-	copy(o.Item[:], im.Bucket[1:17])
+	if im.Dialog == DialogTaskInventoryOffered {
+		if name, ok := TaskOfferItemName(im.Text); ok {
+			o.Name = name
+		}
+	}
+	if len(im.Bucket) >= 17 {
+		copy(o.Item[:], im.Bucket[1:17])
+	}
 	return o, true
+}
+
+// TaskOfferItemName reads the item's name out of the text of an object's
+// give: the name in single quotes, two spaces, and the object's place in
+// parentheses.  The name lies between the first quote and the last quote
+// followed by two spaces and an opening parenthesis, so a name with a
+// quote in it is read whole.
+// Why: doc/im-senders.md#an-objects-give
+func TaskOfferItemName(text string) (string, bool) {
+	first := strings.Index(text, "'")
+	last := strings.LastIndex(text, "'  (")
+	if first < 0 || last <= first {
+		return "", false
+	}
+	return text[first+1 : last], true
+}
+
+// FromLabel is who offered it as a line should print it: an object's give
+// carries the object's name, so it is labelled as one; see Sender.Label.
+func (o *InventoryOffer) FromLabel() string {
+	if o.Dialog == DialogTaskInventoryOffered {
+		return SenderObject.Label(o.FromName)
+	}
+	return o.FromName
+}
+
+// answerDialog is the dialog that answers the offer: its own plus one
+// to accept, plus two to decline.  Measured only for 4 and 9.
+// Why: doc/im-senders.md#an-objects-give
+func (o *InventoryOffer) answerDialog(plus uint8) uint8 {
+	d := o.Dialog
+	if d == 0 {
+		d = DialogInventoryOffered
+	}
+	return d + plus
 }
 
 // InventoryOffers are the offers waiting for an answer, oldest first.
@@ -561,26 +622,12 @@ func (o *InventoryOffer) Decline(ctx context.Context) error {
 // how "answer N" in slsh came to send a second acceptance of an offer
 // already taken.
 func (w *Session) AcceptInventoryOffer(ctx context.Context, o *InventoryOffer, into msg.UUID) error {
-	dialog := uint8(DialogInventoryAccepted)
-	m := w.im(o.From, dialog, "")
+	m := w.im(o.From, o.answerDialog(1), "")
 	// The transaction is the offer's, not a new one.
 	m.MessageBlock.ID = o.Transaction
 	if !into.IsZero() {
 		m.MessageBlock.BinaryBucket = into[:]
 	}
-	return w.Send(ctx, m)
-}
-
-// AcceptTaskInventoryOffer accepts an item an object offered (dialog 9)
-// into folder: DialogTaskInventoryAccepted, addressed to the offer's From,
-// quoting its transaction, with the folder as the binary bucket.
-// AcceptInventoryOffer does not deliver an object's give; this does.
-// Whether the item arrived is read from inventory afterwards.
-// Why: doc/im-senders.md#an-objects-give
-func (w *Session) AcceptTaskInventoryOffer(ctx context.Context, im *IM, folder msg.UUID) error {
-	m := w.im(im.From, DialogTaskInventoryAccepted, "")
-	m.MessageBlock.ID = im.ID
-	m.MessageBlock.BinaryBucket = folder[:]
 	return w.Send(ctx, m)
 }
 
@@ -590,7 +637,7 @@ func (w *Session) AcceptTaskInventoryOffer(ctx context.Context, im *IM, folder m
 // Decline is the one to reach for; this leaves the offer waiting, the
 // same trap AcceptInventoryOffer describes.
 func (w *Session) DeclineInventoryOffer(ctx context.Context, o *InventoryOffer) error {
-	m := w.im(o.From, DialogInventoryDeclined, "")
+	m := w.im(o.From, o.answerDialog(2), "")
 	m.MessageBlock.ID = o.Transaction
 	return w.Send(ctx, m)
 }

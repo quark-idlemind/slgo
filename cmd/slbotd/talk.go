@@ -181,7 +181,7 @@ func waitingFor(s *sl.Session) []waiting {
 		out = append(out, waiting{
 			kind: "item",
 			at:   o.At,
-			what: fmt.Sprintf("%s offers %q", o.FromName, o.Name),
+			what: fmt.Sprintf("%s offers %q", o.FromLabel(), o.Name),
 			// A zero folder is what a viewer sends when somebody
 			// clicks Accept rather than dragging it somewhere: the
 			// grid files it under whatever kind of thing it is.
