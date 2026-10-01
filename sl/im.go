@@ -34,10 +34,16 @@ const (
 	DialogInventoryAccepted = 5
 	DialogInventoryDeclined = 6
 
-	// DialogTaskInventoryOffered is an object giving an item.  As with
-	// DialogFromTask, From is the owner and FromName the object's; read
-	// from the viewer's source, not measured.  See doc/im-senders.md.
+	// DialogTaskInventoryOffered is an object giving an item.  From is
+	// the owner, FromName the object's, ID the transaction, and Text the
+	// item's name quoted with where the object was.  Measured; see
+	// doc/im-senders.md#an-objects-give.
 	DialogTaskInventoryOffered = 9
+
+	// The answers to DialogTaskInventoryOffered.  An object's offer is not
+	// completed by DialogInventoryAccepted.  See AcceptTaskInventoryOffer.
+	DialogTaskInventoryAccepted = 10
+	DialogTaskInventoryDeclined = 11
 
 	// The dialogs of a group's chat session: the invitation, the start
 	// a viewer sends to join, the message, and the leave.  The session is
@@ -562,6 +568,19 @@ func (w *Session) AcceptInventoryOffer(ctx context.Context, o *InventoryOffer, i
 	if !into.IsZero() {
 		m.MessageBlock.BinaryBucket = into[:]
 	}
+	return w.Send(ctx, m)
+}
+
+// AcceptTaskInventoryOffer accepts an item an object offered (dialog 9)
+// into folder: DialogTaskInventoryAccepted, addressed to the offer's From,
+// quoting its transaction, with the folder as the binary bucket.
+// AcceptInventoryOffer does not deliver an object's give; this does.
+// Whether the item arrived is read from inventory afterwards.
+// Why: doc/im-senders.md#an-objects-give
+func (w *Session) AcceptTaskInventoryOffer(ctx context.Context, im *IM, folder msg.UUID) error {
+	m := w.im(im.From, DialogTaskInventoryAccepted, "")
+	m.MessageBlock.ID = im.ID
+	m.MessageBlock.BinaryBucket = folder[:]
 	return w.Send(ctx, m)
 }
 

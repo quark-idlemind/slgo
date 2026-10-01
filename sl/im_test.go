@@ -1090,3 +1090,32 @@ func TestIMSubscriptionsCloseWhenTheSessionEnds(t *testing.T) {
 		t.Error("a subscription taken out after the session ended was not closed")
 	}
 }
+
+// TestAnObjectsGiveIsAcceptedTheWayTheViewerAcceptsIt: dialog 10 to the
+// offer's From, quoting its transaction, with the folder as the bucket.
+// Measured: DialogInventoryAccepted left an object's give undelivered,
+// and this delivered it into the folder.  Why: doc/im-senders.md#an-objects-give
+func TestAnObjectsGiveIsAcceptedTheWayTheViewerAcceptsIt(t *testing.T) {
+	w, f := newFakeSession(t)
+
+	owner := msg.MustParseUUID("1b587e57-7e57-c0de-fe21-0ce74a6b6378")
+	txn := msg.MustParseUUID("1b797e57-7e57-c0de-ecc5-bb0994d73573")
+	folder := msg.MustParseUUID("eb907e57-7e57-c0de-a12a-dcedb409b250")
+	im := &IM{From: owner, FromName: "Example Box", Dialog: DialogTaskInventoryOffered, ID: txn}
+	if err := w.AcceptTaskInventoryOffer(context.Background(), im, folder); err != nil {
+		t.Fatalf("AcceptTaskInventoryOffer: %v", err)
+	}
+	m := onlySent[*msg.ImprovedInstantMessage](t, f)
+	if m.MessageBlock.Dialog != DialogTaskInventoryAccepted {
+		t.Errorf("dialog %d, want %d", m.MessageBlock.Dialog, DialogTaskInventoryAccepted)
+	}
+	if m.MessageBlock.ToAgentID != owner {
+		t.Errorf("sent to %s, want the offer's From %s", m.MessageBlock.ToAgentID, owner)
+	}
+	if m.MessageBlock.ID != txn {
+		t.Errorf("transaction %s, want %s", m.MessageBlock.ID, txn)
+	}
+	if string(m.MessageBlock.BinaryBucket) != string(folder[:]) {
+		t.Errorf("bucket %x, want the folder %s", m.MessageBlock.BinaryBucket, folder)
+	}
+}

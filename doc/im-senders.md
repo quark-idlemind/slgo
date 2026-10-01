@@ -99,6 +99,37 @@ the object's name in the same way. Neither was measured.
 came from a user rather than a script, leaves out 9, 19 and 31 alike
 (`llimprocessing.cpp:89-139`). Line numbers are Firestorm's.
 
+## An object's give
+
+Measured on Agni on 2026-10-01: one `llGiveInventory(llGetOwner(), ...)`
+of a script from a prim, received by its owner.
+
+| Field | What it held |
+|---|---|
+| `IM.Dialog` | 9 |
+| `IM.From` | the object's **owner**, which here was the avatar that received it |
+| `IM.FromName` | the object's name |
+| `IM.ID` | a transaction id: neither the object's key nor the item's |
+| `IM.Text` | the item's name in single quotes, two spaces, and where the object was, in parentheses: `'Example Box'  ( http://slurl.com/secondlife/Testville/128/64/22 )` |
+| `IM.Bucket` | one byte, the asset type: 10, a script |
+
+So the item's name is not the whole of `Text`, and the offer does not
+carry the item's id.
+
+What answered it, each tried on its own give and the inventory read
+again afterwards:
+
+- Nothing: no item in 9 seconds.
+- `DialogInventoryAccepted` (5), which is what `AcceptInventoryOffer`
+  sends, to `From` and quoting the transaction: no item in 10 seconds.
+- `DialogTaskInventoryAccepted` (10), to `From`, quoting the
+  transaction, with the destination folder as the bucket: the item was
+  in that folder within 9 seconds. `AcceptTaskInventoryOffer` sends it.
+
+Not measured: a give from an object the receiver does not own, where
+`From` is somebody else; and whether 10 accepts any folder or only the
+default one for the item's type (the Scripts folder was used).
+
 ## What slgo does with them
 
 Until 2026-09-26 slgo called dialog 19 `DialogBusyAutoResponse` and
