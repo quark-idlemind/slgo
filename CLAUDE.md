@@ -48,6 +48,19 @@ the repository -- one invented name per real one, everywhere -- so that
 a measurement written up in `doc/` and the test built from the same
 capture still agree with each other.
 
+A name comes from `tools/known-names`, and is invented. Every name the
+tree uses is written down there, by kind, and a name that is not is
+refused wherever one can be recognised (`doc/identities.md` lists the
+places). When you need a new one, take it from the spares at the end of
+that file and add a spare in its place. An invention need not match a
+real place one for one, and must not be a real resident, region, parcel,
+group or object. Kept as they are: `Example Resident` and the `Example`
+and `Test` names, which are the mark of an invention as `7e57` is for
+ids; the owner's own (`Quark Idlemind`, `qi`, his group `Quark
+Engineering Works`); and Linden's, each with why in the list. The local
+identity list below stays as a backstop for prose, which nothing can
+recognise.
+
 An invented uuid carries one signature, and there is no other way for
 an id to be here:
 
@@ -169,8 +182,9 @@ been. `objects --owner` names people.
 
 Every check runs and the exit status says if any found something: a
 compiled binary, a network address, an id without the signature, a grid
-square that is not marked, a name on the list. Only the last needs the
-list; the others need nothing, and run for everybody. An id in a file
+square that is not marked, a name that is not on `tools/known-names`, a
+name on the local list. Only the last needs the list kept off the tree;
+the others need nothing, and run for everybody. An id in a file
 name, a tag or a commit message is as written down as one in a file, and
 `doc/identities.md` catalogues every form an identifier or a name takes
 here and which check, if any, sees it.
