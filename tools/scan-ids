@@ -172,10 +172,11 @@ sub find_ids {
 	# id.  Anything longer that is LLSD binary -- it opens with the
 	# "<? LLSD/Binary ?>" header, or it sits in an XML <binary> and parses
 	# whole as a binary value -- is parsed, and every uuid in it, however
-	# deep, is checked.  A document with the header that does not parse is
-	# reported, so that a capture that is not valid LLSD gets looked at.
-	# Longer bytes in a <binary> that do not parse and have no header are
-	# a packed field, which is any bytes at all, and are not looked at.
+	# deep, is checked.  What does not parse is reported, header or not:
+	# longer bytes in a <binary> that are not LLSD are a packed field, which
+	# can hold an id at any offset that nothing can find, so a person looks.
+	# Text is the exception: it is a string, and names in it are the name
+	# checks' business.
 	while ($t =~ /(?<![A-Za-z0-9+\/=_-])([A-Za-z0-9+\/]{20,}={0,2})(?![A-Za-z0-9+\/=_-])/g) {
 		my ($s, $e, $run) = ($-[1], $+[1], $1);
 		(my $bare = $run) =~ s/=+$//;
@@ -192,6 +193,10 @@ sub find_ids {
 			next;
 		}
 		next if length($bytes) < 16;
+		# Text sent as binary -- the grid sends some strings so, with a
+		# NUL on the end -- is a string, not a field an id could hide in.
+		(my $str = $bytes) =~ s/\x00\z//;
+		next if $str =~ /\A[\x09\x0a\x0d\x20-\x7e\x80-\xff]*\z/ && utf8::decode($str);
 		my $hdr = "<? LLSD/Binary ?>\n";
 		my $has = index($bytes, $hdr) == 0;
 		next unless $has || $inbinary;
@@ -199,7 +204,7 @@ sub find_ids {
 		my $pos = $has ? length $hdr : 0;
 		my $ok = eval { llsd_value($bytes, \$pos, \@ids, 0); $pos == length $bytes };
 		if (!$ok) {
-			push @r, rec('unparseable LLSD binary', $s, $e, '', $unit) if $has;
+			push @r, rec('unparseable LLSD binary', $s, $e, '', $unit);
 			next;
 		}
 		push @r, rec('base64 LLSD uuid', $s, $e, $_, $unit) for @ids;

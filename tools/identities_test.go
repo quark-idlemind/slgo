@@ -205,6 +205,21 @@ func TestAnIdNestedInLLSDBinaryIsFoundWhatEverItsVersion(t *testing.T) {
 	}
 }
 
+// TestBytesInABinaryThatAreNotLLSDAreLookedAt: a packed field longer than
+// an id can hold one at any offset, and nothing can say where, so a person
+// looks rather than the check passing it.
+func TestBytesInABinaryThatAreNotLLSDAreLookedAt(t *testing.T) {
+	packed := append([]byte{0xff, 0x00, 0x13}, bytes.Repeat([]byte{0xc3}, 17)...)
+	out, refused := scan(t, xmlBinary(packed))
+	if !refused || !strings.Contains(out, "unparseable") {
+		t.Errorf("twenty bytes of packed field in a <binary> were let through:\n%s", out)
+	}
+	// A string the grid sent as binary, NUL and all, is text.
+	if out, refused := scan(t, xmlBinary([]byte("Example Builders and Friends\x00"))); refused {
+		t.Errorf("a string sent as binary was refused:\n%s", out)
+	}
+}
+
 func TestNewIdMakesSignedIdsInOrderAndNotTwiceOverFirstGroups(t *testing.T) {
 	needPerl(t)
 	out, err := exec.Command("perl", "new-id", "-n", "40").Output()
