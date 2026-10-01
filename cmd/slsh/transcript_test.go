@@ -89,7 +89,7 @@ func TestNothingRedirectedIsInTheTranscript(t *testing.T) {
 func TestWhatWasHeardIsInTheTranscript(t *testing.T) {
 	x, dir := logShell(t)
 	x.heard(&sl.IM{
-		From:     msg.UUID{0x7a, 0x4f, 0x2b, 0x90},
+		From:     msg.UUID{0x7e, 0xd3, 0x7e, 0x57},
 		FromName: "Example Resident",
 		Text:     "are you still at the build",
 		Dialog:   sl.DialogMessage,
@@ -115,7 +115,7 @@ func TestWhatWasHeardIsInTheTranscript(t *testing.T) {
 func TestTheTranscriptHoldsTheTextOfAnEscapeRatherThanTheEscape(t *testing.T) {
 	x, dir := logShell(t)
 	x.heard(&sl.IM{
-		From:     msg.UUID{0x7a, 0x4f, 0x2b, 0x90},
+		From:     msg.UUID{0x7e, 0xd3, 0x7e, 0x57},
 		FromName: "Example\x1b]0;a title\x07Resident",
 		Text:     "hello\x1b[2J\x1b]52;c;aGk=\x07",
 		Dialog:   sl.DialogMessage,

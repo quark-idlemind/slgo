@@ -301,7 +301,7 @@ func TestUUIDStringRoundTrip(t *testing.T) {
 	if !(UUID{}).IsZero() {
 		t.Error("the zero value should be the nil UUID")
 	}
-	for _, bad := range []string{"", "nope", "876e7e577e57c0de9eeb1bd0e1ec6995", "zz8d79aa-75be-47c0-8e28-26040267ec6d"} {
+	for _, bad := range []string{"", "nope", strings.ReplaceAll(s, "-", ""), "zz" + s[2:]} {
 		if _, err := ParseUUID(bad); err == nil {
 			t.Errorf("ParseUUID(%q) should fail", bad)
 		}

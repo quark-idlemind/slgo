@@ -279,18 +279,27 @@ func TestLoginBodyCarriesMachine(t *testing.T) {
 	}
 }
 
+// md5Of is the md5 of raw bytes as the 32 lowercase hex digits a viewer
+// sends.  The tests below work their expected digests out with it rather
+// than hold them as literals: a literal digest would have to be an
+// invented one, which is no md5 of anything.
+func md5Of(b ...byte) string {
+	d := md5.Sum(b)
+	return hex.EncodeToString(d[:])
+}
+
 // TestHashMAC: the field named "mac" carries a digest, never an
-// address.  The expected values were produced outside this package, by
-// piping the six raw bytes through md5(1).
+// address: the md5 of the six raw bytes.
 func TestHashMAC(t *testing.T) {
+	invented := md5Of(0x7e, 0x52, 0x2b, 0x3c, 0x57, 0x06)
 	cases := map[string]string{
-		"7E:52:2B:3C:57:06": "3d877e577e57c0de5ee847431f341bc5",
-		"7e:52:2b:3c:57:06": "3d877e577e57c0de5ee847431f341bc5", // case of the address does not matter
-		"7E-52-2B-3C-57-06": "3d877e577e57c0de5ee847431f341bc5", // nor does its separator
-		"00:EA:7C:A7:DE:AD": "ef427e577e57c0de79bee7a6c8f7dd25", // the built in default
+		"7E:52:2B:3C:57:06": invented,
+		"7e:52:2b:3c:57:06": invented,                                  // case of the address does not matter
+		"7E-52-2B-3C-57-06": invented,                                  // nor does its separator
+		"00:EA:7C:A7:DE:AD": md5Of(0x00, 0xea, 0x7c, 0xa7, 0xde, 0xad), // the built in default
 		// A digest passes through, lowercased.
-		"3d877e577e57c0de5ee847431f341bc5": "3d877e577e57c0de5ee847431f341bc5",
-		"3D877E577E57C0DE5EE847431F341BC5": "3d877e577e57c0de5ee847431f341bc5",
+		invented:                  invented,
+		strings.ToUpper(invented): invented,
 	}
 	for in, want := range cases {
 		if got := hashMAC(in); got != want {
@@ -323,7 +332,7 @@ func TestLoginBodySendsHashedMAC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v["mac"] != "3d877e577e57c0de5ee847431f341bc5" {
+	if want := md5Of(0x7e, 0x52, 0x2b, 0x3c, 0x57, 0x06); v["mac"] != want {
 		t.Errorf("mac = %q, want the digest, not the address", v["mac"])
 	}
 }

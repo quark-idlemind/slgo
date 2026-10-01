@@ -46,6 +46,35 @@ sub find_ids {
 			hexunits($s[0], map { [$s[$_], $e[$_] - $s[$_]] } 1 .. 5));
 	}
 
+	# A format string that makes ids: "ab3f7e57-7e57-c0de-12ab-%012d".  The
+	# directive takes the digits it is wide, so the string is read as 32
+	# slots, a '?' for each one a directive fills.
+	{
+		my $piece = qr/(?:[0-9a-fA-F]|%0[0-9]+[dxX])+/;
+		while ($t =~ /(?<![0-9a-fA-F%])($piece)-($piece)-($piece)-($piece)-($piece)(?![0-9a-fA-F])/g) {
+			my @s = @-; my @e = @+;
+			my @want = (8, 4, 4, 4, 12);
+			my ($slots, @units, $ok, $any);
+			$ok = 1;
+			for my $g (1 .. 5) {
+				my $text = substr($t, $s[$g], $e[$g] - $s[$g]);
+				my $width = 0;
+				while ($text =~ /\G(?:([0-9a-fA-F]+)|%0([0-9]+)[dxX])/gc) {
+					if (defined $1) {
+						push @units, [$s[$g] + $-[1] - $s[0], length $1, 'hex', length $1];
+						$slots .= lc $1; $width += length $1;
+					} else {
+						push @units, [$s[$g] + $-[0] - $s[0], $+[0] - $-[0], 'skip', $2 + 0];
+						$slots .= '?' x $2; $width += $2; $any = 1;
+					}
+				}
+				$ok = 0 unless $width == $want[$g - 1];
+			}
+			next unless $ok && $any;
+			push @r, rec('format', $s[0], $e[0], $slots, \@units);
+		}
+	}
+
 	# Elided to the first group, or to the first few: ab3f7e57-...
 	while ($t =~ /(?<![0-9a-fA-F])([0-9a-fA-F]{8})((?:-[0-9a-fA-F]{4}){0,3})-?(?:\.\.\.|\xe2\x80\xa6)/g) {
 		my ($s, $e, $g1, $more) = ($-[0], $+[0], $1, $2);
@@ -230,7 +259,7 @@ if ($mode eq '--first-groups') {
 	my %g = %{ $known->{first} || {} };
 	for my $f (@ARGV) {
 		my $t = slurp($f); next unless defined $t && $t !~ /\0/;
-		$g{ substr $_->{hex}, 0, 8 } = 1 for find_ids($t);
+		for (find_ids($t)) { my $g = substr $_->{hex}, 0, 8; $g{$g} = 1 unless $g =~ /\?/ }
 	}
 	print "$_\n" for sort keys %g;
 	exit 0;
@@ -248,6 +277,15 @@ sub verdict {
 		return 1 if $g =~ /7e57$/;
 		return 1 if $known->{first}{$g};
 		return 0;
+	}
+	if ($form eq 'format') {
+		# Every slot a directive does not fill must agree with the signature.
+		my $want = '7e577e57c0de';
+		for my $i (4 .. 15) {
+			my $c = substr $h, $i, 1;
+			return 0 unless $c eq '?' || $c eq substr($want, $i - 4, 1);
+		}
+		return 1;
 	}
 	return 1 if $h =~ $SIG;
 	# The null key is written with its hyphens.  Thirty-two zeros with none

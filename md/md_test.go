@@ -141,7 +141,7 @@ func TestProseWrapsToTheWidthItWasGiven(t *testing.T) {
 }
 
 func TestAWordLongerThanTheWidthIsLeftWhole(t *testing.T) {
-	const word = "a9a87e577e57c0de1386d6cc4c66fa82"
+	word := strings.Repeat("a", 32)
 	got := vislines(RenderWidth(word, 10))
 	if len(got) != 1 || got[0] != word {
 		t.Errorf("a long word was cut: %q", got)
