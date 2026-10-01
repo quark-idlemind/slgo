@@ -167,12 +167,15 @@ sub find_ids {
 			[ map { [$_ * 4 + 2, 2, 'hex', 2] } 0 .. 15 ]);
 	}
 
-	# Base64.  A run of twenty characters or more is decoded; it is an id
-	# when it is sixteen bytes and nothing else (22 characters, or 24 with
-	# the padding), and inside an LLSD <binary> any run of sixteen bytes
-	# or more is looked through for a window shaped like a random (version
-	# 4) uuid, which is what a real id is and a signed one is not.  Other
-	# base64 is not looked at: any run of bytes is some 16 bytes.
+	# Base64.  A run of twenty characters or more is decoded.  Sixteen
+	# bytes and nothing else (22 characters, or 24 with the padding) is an
+	# id.  Anything longer that is LLSD binary -- it opens with the
+	# "<? LLSD/Binary ?>" header, or it sits in an XML <binary> and parses
+	# whole as a binary value -- is parsed, and every uuid in it, however
+	# deep, is checked.  A document with the header that does not parse is
+	# reported, so that a capture that is not valid LLSD gets looked at.
+	# Longer bytes in a <binary> that do not parse and have no header are
+	# a packed field, which is any bytes at all, and are not looked at.
 	while ($t =~ /(?<![A-Za-z0-9+\/=_-])([A-Za-z0-9+\/]{20,}={0,2})(?![A-Za-z0-9+\/=_-])/g) {
 		my ($s, $e, $run) = ($-[1], $+[1], $1);
 		(my $bare = $run) =~ s/=+$//;
@@ -182,17 +185,24 @@ sub find_ids {
 		my $canon = encode_base64($bytes, '');
 		$canon =~ s/=+$//;
 		next unless $canon eq $bare;
-		if (length($bytes) == 16 && !$inbinary) {
-			next unless $bare =~ /[0-9+]/ || $run =~ /=/;
-			push @r, rec('base64', $s, $e, unpack('H*', $bytes), [[0, length $run, 'b64', 32]]);
-		} elsif (length($bytes) >= 16 && $inbinary) {
-			for my $i (0 .. length($bytes) - 16) {
-				my $w = substr($bytes, $i, 16);
-				my ($b6, $b8) = unpack('x6Cx1C', $w);
-				next unless ($b6 >> 4) == 4 && ($b8 >> 6) == 2;
-				push @r, rec('base64 in binary', $s, $e, unpack('H*', $w), [[0, length $run, 'b64', 32]]);
-			}
+		my $unit = [[0, length $run, 'b64', 32]];
+		if (length($bytes) == 16) {
+			next unless $inbinary || $bare =~ /[0-9+]/ || $run =~ /=/;
+			push @r, rec('base64', $s, $e, unpack('H*', $bytes), $unit);
+			next;
 		}
+		next if length($bytes) < 16;
+		my $hdr = "<? LLSD/Binary ?>\n";
+		my $has = index($bytes, $hdr) == 0;
+		next unless $has || $inbinary;
+		my @ids;
+		my $pos = $has ? length $hdr : 0;
+		my $ok = eval { llsd_value($bytes, \$pos, \@ids, 0); $pos == length $bytes };
+		if (!$ok) {
+			push @r, rec('unparseable LLSD binary', $s, $e, '', $unit) if $has;
+			next;
+		}
+		push @r, rec('base64 LLSD uuid', $s, $e, $_, $unit) for @ids;
 	}
 
 	# One find per place: the longest from the earliest start wins.
@@ -204,6 +214,38 @@ sub find_ids {
 		$last = $x->{end};
 	}
 	return @out;
+}
+# One LLSD binary value from $d at $$p; dies if the bytes run out or a type
+# is not one.  Every 'u' found, at any depth, is pushed on @$ids as hex.
+sub llsd_value {
+	my ($d, $p, $ids, $depth) = @_;
+	die "deep\n" if $depth > 64;
+	my $need = sub { die "short\n" if $$p + $_[0] > length $d };
+	my $len = sub { $need->(4); my $n = unpack 'N', substr($d, $$p, 4); $$p += 4; $n };
+	$need->(1);
+	my $c = substr $d, $$p++, 1;
+	if ($c eq '!' || $c eq '1' || $c eq '0') { return }
+	if ($c eq 'i') { $need->(4); $$p += 4; return }
+	if ($c eq 'r' || $c eq 'd') { $need->(8); $$p += 8; return }
+	if ($c eq 'u') { $need->(16); push @$ids, unpack('H*', substr($d, $$p, 16)); $$p += 16; return }
+	if ($c =~ /^[bsl]$/) { my $n = $len->(); $need->($n); $$p += $n; return }
+	if ($c eq '[') {
+		my $n = $len->();
+		llsd_value($d, $p, $ids, $depth + 1) for 1 .. $n;
+		$need->(1); die "no ]\n" unless substr($d, $$p++, 1) eq ']';
+		return;
+	}
+	if ($c eq '{') {
+		my $n = $len->();
+		for (1 .. $n) {
+			$need->(1); die "no k\n" unless substr($d, $$p++, 1) eq 'k';
+			my $kl = $len->(); $need->($kl); $$p += $kl;
+			llsd_value($d, $p, $ids, $depth + 1);
+		}
+		$need->(1); die "no }\n" unless substr($d, $$p++, 1) eq '}';
+		return;
+	}
+	die "type\n";
 }
 sub max0 { $_[0] < 0 ? 0 : $_[0] }
 sub min { $_[0] < $_[1] ? $_[0] : $_[1] }
@@ -259,7 +301,7 @@ if ($mode eq '--first-groups') {
 	my %g = %{ $known->{first} || {} };
 	for my $f (@ARGV) {
 		my $t = slurp($f); next unless defined $t && $t !~ /\0/;
-		for (find_ids($t)) { my $g = substr $_->{hex}, 0, 8; $g{$g} = 1 unless $g =~ /\?/ }
+		for (find_ids($t)) { my $g = substr $_->{hex}, 0, 8; $g{$g} = 1 unless $g eq '' || $g =~ /\?/ }
 	}
 	print "$_\n" for sort keys %g;
 	exit 0;
@@ -287,6 +329,7 @@ sub verdict {
 		}
 		return 1;
 	}
+	return 0 if $form eq 'unparseable LLSD binary';
 	return 1 if $h =~ $SIG;
 	# The null key is written with its hyphens.  Thirty-two zeros with none
 	# is a digest, a mac or an id0 that was left blank, and they are signed

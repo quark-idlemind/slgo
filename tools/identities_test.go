@@ -171,12 +171,37 @@ func TestOnlySixteenBytesOfBase64AreAnId(t *testing.T) {
 	if out, refused := scan(t, "x = "+long+"\n"); refused {
 		t.Errorf("a longer base64 string was refused:\n%s", out)
 	}
-	// In a <binary>, a window shaped like a random uuid is an id.
-	v4 := slices.Clone(raw)
-	v4[6], v4[8] = 0x4a, 0x9b
-	blob := base64.StdEncoding.EncodeToString(append([]byte{1, 2, 3}, v4...))
-	if _, refused := scan(t, "<key>k</key><binary>"+blob+"</binary>\n"); !refused {
-		t.Error("an id inside an LLSD binary was let through")
+}
+
+// llsdDoc is an LLSD binary document, header and all: a map with one key
+// whose value is an array holding an integer and a uuid, nested so that
+// the id is not at a fixed offset.
+func llsdDoc(id []byte) []byte {
+	d := []byte("<? LLSD/Binary ?>\n{\x00\x00\x00\x01k\x00\x00\x00\x03ids[\x00\x00\x00\x02i\x00\x00\x00\x07u")
+	d = append(d, id...)
+	return append(d, ']', '}')
+}
+
+func xmlBinary(b []byte) string {
+	return "<key>k</key><binary>" + base64.StdEncoding.EncodeToString(b) + "</binary>\n"
+}
+
+func TestAnIdNestedInLLSDBinaryIsFoundWhatEverItsVersion(t *testing.T) {
+	// Byte 6 has a high nibble of 0, so this is not a version 4 uuid and
+	// nothing may be assumed from its shape.
+	unsigned := bytes.Repeat([]byte{0xc3}, 16)
+	unsigned[6], unsigned[8] = 0x0a, 0x1b
+	if _, refused := scan(t, xmlBinary(llsdDoc(unsigned))); !refused {
+		t.Error("an unsigned id nested in LLSD binary was let through")
+	}
+	signed := []byte{0x1d, 0x2e, 0x7e, 0x57, 0x7e, 0x57, 0xc0, 0xde, 1, 2, 3, 4, 5, 6, 7, 8}
+	if out, refused := scan(t, xmlBinary(llsdDoc(signed))); refused {
+		t.Errorf("a signed id nested in LLSD binary was refused:\n%s", out)
+	}
+	doc := llsdDoc(unsigned)
+	out, refused := scan(t, xmlBinary(doc[:len(doc)-6]))
+	if !refused || !strings.Contains(out, "unparseable") {
+		t.Errorf("truncated LLSD binary was not reported as unparseable:\n%s", out)
 	}
 }
 

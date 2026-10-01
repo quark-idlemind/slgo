@@ -93,14 +93,17 @@ not in `tools/known-uuids`. The examples are one invented id.
 - **Base64**: `qz9+V35XwN6dQWwuCPG3pQ==`. A run of twenty base64 characters
   or more is decoded. It is an id when it decodes to exactly sixteen
   bytes (22 characters, or 24 with padding, and not a word made only of
-  letters). Inside an LLSD `<binary>` -- where the event queue sends packed
-  fields, and where an id could sit at any offset -- every window of
-  sixteen bytes is looked at, and one shaped like a random (version 4)
-  uuid is refused unless it is known. That is a judgement: any run of
-  bytes is some sixteen bytes, so an unconditional refusal of every blob
-  would refuse every packed field. A real id is nearly always a version 4
-  uuid, and a signed one never is, so the test costs nothing it should not.
-  Base64 anywhere else, longer than an id, is not decoded.
+  letters). Longer bytes that are LLSD binary -- they open with the
+  `<? LLSD/Binary ?>` header, or sit in an XML `<binary>` and parse whole
+  as a binary value -- are parsed (undef, booleans, `i`, `r`, `d`, `u`,
+  `b`, `s`, `l`, arrays and maps, nested as deep as they go), and every
+  `u` is checked: signed or known, or refused. Nothing is assumed from an
+  id's shape, since it is not certain that Second Life's ids are version 4
+  uuids. A document with the header that does not parse to its end is
+  reported as unparseable LLSD binary, so a capture that is not valid
+  LLSD gets a person's look. Longer bytes in a `<binary>` with no header
+  that do not parse are a packed field, which can be any bytes, and are
+  not looked at; so is base64 anywhere else that is longer than an id.
 - **A format string that makes ids**: `"ab3f7e57-7e57-c0de-9d41-%012d"`.
   Each directive stands for the digits it is wide, and every digit the
   string writes in the signature's place must agree with it. A test that
