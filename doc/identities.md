@@ -282,3 +282,13 @@ end if any found something; only the checks of names need the list
 kept off the tree, and without it those are skipped with a note while
 the rest run. `go.sum` is not read, since it is a list of hashes of other
 people's code and base64 inside it means nothing.
+
+What no rule can recognise is found by reading, and `tools/words` makes
+the reading shorter: it lists every distinct word in a revision, or with
+`--history` in every file version, commit message, tag message and ref
+name on any branch or tag, with how often each occurs and where one is.
+A name nobody wrote down on any list still shows up there as a word, and
+`grep -i` over the output finds it whatever its case or whatever it is
+welded into.  Its output names whatever the history holds, so it goes in
+an untracked file -- `*-audit-*.md` at the top of the checkout is
+ignored for this.
