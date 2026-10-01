@@ -79,6 +79,15 @@ type Object struct {
 	// A running one moves a face's texture on from what its entry says.
 	TextureAnim []byte
 
+	// Click is the click action byte, and ClickKnown says an update
+	// carried it: zero is the touch action, so a zero Click with
+	// ClickKnown false means no update has said.  Full and compressed
+	// updates carry it and terse ones do not, and forgetting an
+	// appearance leaves it alone.
+	// Why: doc/slate-sl-changes.md#click-action
+	Click      uint8
+	ClickKnown bool
+
 	// AttachPoint is where a worn object is attached, and zero when it
 	// is not worn.  AttachItem is the inventory item it was worn from.
 	//
@@ -483,6 +492,7 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	o.judgedLocked(v, far)
 	v.Local, v.Parent, v.PCode, v.Scale = d.ID, d.ParentID, d.PCode, d.Scale
 	v.Shape = msg.ShapeOfUpdate(d)
+	v.Click, v.ClickKnown = d.ClickAction, true
 	// A full update carries the appearance as well, and it is the only
 	// update most prims ever get: a region sends a compressed one for
 	// what it thinks is worth compressing, so waiting for one leaves
@@ -577,6 +587,7 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	o.judgedLocked(v, far)
 	v.Local, v.Parent, v.PCode = c.LocalID, parent, c.PCode
 	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
+	v.Click, v.ClickKnown = c.Click, true
 	if !c.Shape.IsZero() {
 		v.Shape = c.Shape
 	}
@@ -681,6 +692,9 @@ func (o *Objects) unsure(c *msg.Compressed, camera msg.Vector3, drawDistance flo
 	o.judgedLocked(v, far)
 	v.Local, v.PCode = c.LocalID, c.PCode
 	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
+	// The header decoded, so the click byte is known even though the
+	// body is not.
+	v.Click, v.ClickKnown = c.Click, true
 	if !c.Owner.IsZero() {
 		v.Owner = c.Owner
 	}

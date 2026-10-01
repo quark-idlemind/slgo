@@ -4744,7 +4744,11 @@ type ObjectInfo struct {
 	Shape    *PrimShape  `protobuf:"bytes,14,opt,name=shape,proto3" json:"shape,omitempty"`
 	// TextureAnim is the texture animation, still packed, as the last
 	// full or compressed update said it; empty when it said none.
-	TextureAnim   []byte `protobuf:"bytes,15,opt,name=texture_anim,json=textureAnim,proto3" json:"texture_anim,omitempty"`
+	TextureAnim []byte `protobuf:"bytes,15,opt,name=texture_anim,json=textureAnim,proto3" json:"texture_anim,omitempty"`
+	// The click action byte, and whether an update said it: zero is the
+	// touch action, so click 0 with click_known false means none has.
+	Click         uint32 `protobuf:"varint,16,opt,name=click,proto3" json:"click,omitempty"`
+	ClickKnown    bool   `protobuf:"varint,17,opt,name=click_known,json=clickKnown,proto3" json:"click_known,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4882,6 +4886,20 @@ func (x *ObjectInfo) GetTextureAnim() []byte {
 		return x.TextureAnim
 	}
 	return nil
+}
+
+func (x *ObjectInfo) GetClick() uint32 {
+	if x != nil {
+		return x.Click
+	}
+	return 0
+}
+
+func (x *ObjectInfo) GetClickKnown() bool {
+	if x != nil {
+		return x.ClickKnown
+	}
+	return false
 }
 
 // Quaternion is a rotation, unpacked: the wire form is three floats
@@ -6777,7 +6795,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x0eObjectsRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
 	"\x05named\x18\x02 \x01(\tR\x05named\x12\x0e\n" +
-	"\x02id\x18\x03 \x01(\tR\x02id\"\xdb\x03\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"\x92\x04\n" +
 	"\n" +
 	"ObjectInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
@@ -6796,7 +6814,10 @@ const file_slgo_proto_rawDesc = "" +
 	"attachItem\x12/\n" +
 	"\brotation\x18\r \x01(\v2\x13.slgo.v1.QuaternionR\brotation\x12(\n" +
 	"\x05shape\x18\x0e \x01(\v2\x12.slgo.v1.PrimShapeR\x05shape\x12!\n" +
-	"\ftexture_anim\x18\x0f \x01(\fR\vtextureAnim\"D\n" +
+	"\ftexture_anim\x18\x0f \x01(\fR\vtextureAnim\x12\x14\n" +
+	"\x05click\x18\x10 \x01(\rR\x05click\x12\x1f\n" +
+	"\vclick_known\x18\x11 \x01(\bR\n" +
+	"clickKnown\"D\n" +
 	"\n" +
 	"Quaternion\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x02R\x01x\x12\f\n" +

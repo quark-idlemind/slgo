@@ -162,6 +162,11 @@ type Seen struct {
 	// the object has none.
 	TextureAnim []byte
 
+	// Click is the click action byte; a zero Click with ClickKnown
+	// false means no update has said, and with true means touch.
+	Click      uint8
+	ClickKnown bool
+
 	// Shape is the prim's profile and path, still packed.  Form
 	// unpacks it into something with names.
 	Shape msg.PrimShape

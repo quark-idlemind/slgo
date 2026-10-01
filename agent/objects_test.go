@@ -99,6 +99,9 @@ type compressedObject struct {
 	texture  []byte
 	anim     []byte
 
+	// click is the ClickAction byte of the fixed header.
+	click uint8
+
 	// state is the State byte, and nameValues the name-values, which
 	// together say what a worn object is worn from and where.
 	state      uint8
@@ -136,7 +139,7 @@ func (c compressedObject) bytes() []byte {
 	w.u8(c.state)
 	w.u32(0xdeadbeef) // CRC
 	w.u8(3)           // Material
-	w.u8(0)           // ClickAction
+	w.u8(c.click)     // ClickAction
 	w.vec(c.scale)
 	w.vec(c.position)
 	w.quat(c.rotation)
@@ -671,6 +674,72 @@ func TestAnUpdateSaysWhetherATextureAnimationRuns(t *testing.T) {
 	o.compressed(decodeCompressed(t, compressedObject{id: aPrim, local: 7, pcode: 9}), msg.Vector3{}, 0)
 	if got, _ := o.Get(aPrim); got.TextureAnim != nil {
 		t.Errorf("animation = %v after a compressed update with none", got.TextureAnim)
+	}
+}
+
+// TestAFullUpdateKeepsTheClickAction: the byte is stored with
+// ClickKnown, and a zero is the touch action, which is not the same as
+// a prim nothing has described.
+// Why: doc/slate-sl-changes.md#click-action
+func TestAFullUpdateKeepsTheClickAction(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	a.SetLook(Look{Far: 128})
+	full := func(id msg.UUID, local uint32, click uint8) *msg.ObjectUpdate {
+		return arriving(t, msg.ObjectUpdate_ObjectData{
+			ID: local, FullID: id, PCode: 9, ClickAction: click,
+			ObjectData: placement(msg.Vector3{}, msg.Quaternion{}),
+		})
+	}
+	feed(t, a, full(aPrim, 7, 2))
+	got, _ := a.Objects().Get(aPrim)
+	if got.Click != 2 || !got.ClickKnown {
+		t.Errorf("click %d known %v after a full update carrying 2", got.Click, got.ClickKnown)
+	}
+
+	feed(t, a, full(aChild, 8, 0))
+	zero, _ := a.Objects().Get(aChild)
+	if zero.Click != 0 || !zero.ClickKnown {
+		t.Errorf("click %d known %v after a full update carrying 0, want touch, known", zero.Click, zero.ClickKnown)
+	}
+
+	// What no update has described is not in the store at all.
+	if _, ok := a.Objects().Get(someone); ok {
+		t.Errorf("an object nothing described is in the store")
+	}
+}
+
+// TestACompressedUpdateKeepsTheClickAction: whole, or cut off after its
+// header, the byte in the header is what the object says, and an
+// appearance forgotten does not take it with it.
+// Why: doc/slate-sl-changes.md#click-action
+func TestACompressedUpdateKeepsTheClickAction(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	whole := compressedObject{id: aPrim, local: 4, pcode: 9, click: 3, text: someText}
+	o.compressed(decodeCompressed(t, whole), msg.Vector3{}, 0)
+	if got, _ := o.Get(aPrim); got.Click != 3 || !got.ClickKnown {
+		t.Errorf("click %d known %v after a whole compressed update carrying 3", got.Click, got.ClickKnown)
+	}
+
+	// A first sighting whose body is cut off, header intact.
+	cut := compressedObject{id: aChild, local: 5, pcode: 9, click: 6, text: someText}.bytes()[:84+5]
+	c, err := msg.DecodeCompressed(cut)
+	if err == nil || c == nil {
+		t.Fatalf("DecodeCompressed of a cut blob = %v, %v, want the header and an error", c, err)
+	}
+	o.unsure(c, msg.Vector3{}, 0)
+	got, _ := o.Get(aChild)
+	if got.Click != 6 || !got.ClickKnown {
+		t.Errorf("click %d known %v after a cut blob with header byte 6", got.Click, got.ClickKnown)
+	}
+
+	// Forgetting the appearance leaves the byte alone.
+	o.forgetAppearance(4)
+	if got, _ := o.Get(aPrim); got.Click != 3 || !got.ClickKnown {
+		t.Errorf("click %d known %v after the appearance was forgotten", got.Click, got.ClickKnown)
 	}
 }
 

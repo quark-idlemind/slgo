@@ -1397,6 +1397,11 @@ message ObjectInfo {
   // TextureAnim is the texture animation, still packed, as the last
   // full or compressed update said it; empty when it said none.
   bytes texture_anim = 15;
+
+  // The click action byte, and whether an update said it: zero is the
+  // touch action, so click 0 with click_known false means none has.
+  uint32 click = 16;
+  bool click_known = 17;
 }
 
 // Quaternion is a rotation, unpacked: the wire form is three floats
