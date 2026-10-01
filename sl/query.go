@@ -134,6 +134,20 @@ func (w *Session) Inventory(ctx context.Context) (*agent.Inventory, error) {
 	return inv, nil
 }
 
+// The values of Seen.Click, Linden's published LSL CLICK_ACTION_*
+// constants.  Taken from the published list, not measured.
+const (
+	ClickTouch     uint8 = 0 // CLICK_ACTION_TOUCH
+	ClickSit       uint8 = 1 // CLICK_ACTION_SIT
+	ClickBuy       uint8 = 2 // CLICK_ACTION_BUY
+	ClickPay       uint8 = 3 // CLICK_ACTION_PAY
+	ClickOpen      uint8 = 4 // CLICK_ACTION_OPEN
+	ClickPlay      uint8 = 5 // CLICK_ACTION_PLAY
+	ClickOpenMedia uint8 = 6 // CLICK_ACTION_OPEN_MEDIA
+	ClickZoom      uint8 = 7 // CLICK_ACTION_ZOOM
+	ClickDisabled  uint8 = 8 // CLICK_ACTION_DISABLED
+)
+
 // Seen is what is known about an object in the region.
 //
 // "In the region" means within the draw distance: the simulator
@@ -162,8 +176,9 @@ type Seen struct {
 	// the object has none.
 	TextureAnim []byte
 
-	// Click is the click action byte; a zero Click with ClickKnown
-	// false means no update has said, and with true means touch.
+	// Click is the click action byte (ClickTouch and the rest); a zero
+	// Click with ClickKnown false means no update has said, and with
+	// true means touch.
 	Click      uint8
 	ClickKnown bool
 
