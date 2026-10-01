@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+"""List every distinct word in a git revision's text files, or in the
+whole history.
+
+    tools/words [REV] [OUT]       REV defaults to main, OUT to stdout
+    tools/words --history [OUT]   every file version reachable from any
+                                  branch or tag, every commit message,
+                                  every tag message, and the ref names
+
+A word is a run of letters and digits; everything else -- punctuation,
+underscores, spaces, symbols -- separates words, so /Users/quark gives
+Users and quark.  Case is kept, so Pelmar and pelmar are two entries.
+Files are read from git's object store, not from the working tree, so
+uncommitted changes and untracked files are not included.  Binary files
+are skipped, and so is go.sum, whose base64 hashes are not words.
+
+Output: a header, then one line per word -- the word, a tab, how many
+times it occurs, a tab, how many sources it is in, and with --history a
+tab and one place it occurs (a path, or a commit or tag whose message
+has it) -- sorted case-insensitively.
+"""
+
+import re
+import subprocess
+import sys
+from collections import Counter
+
+WORD = re.compile(r"[^\W_]+")  # letters and digits; _ separates too
+
+
+def git(*args):
+    return subprocess.run(["git", *args], capture_output=True, check=True).stdout
+
+
+def blobs_at(rev):
+    for rec in git("ls-tree", "-r", "-z", rev).split(b"\0"):
+        if not rec:
+            continue
+        meta, path = rec.split(b"\t", 1)
+        mode, kind, sha = meta.split()
+        if kind == b"blob" and mode != b"120000":
+            yield sha.decode(), path.decode("utf-8", "replace")
+
+
+def blobs_in_history():
+    seen = set()
+    for line in git("rev-list", "--objects", "--all").decode("utf-8", "replace").splitlines():
+        sha, _, path = line.partition(" ")
+        if path and sha not in seen:
+            seen.add(sha)
+            yield sha, path
+
+
+def read_blobs(entries):
+    cat = subprocess.Popen(["git", "cat-file", "--batch"],
+                           stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    for sha, path in entries:
+        cat.stdin.write(sha.encode() + b"\n")
+        cat.stdin.flush()
+        head = cat.stdout.readline().split()
+        if len(head) < 3:
+            continue
+        data = cat.stdout.read(int(head[2]))
+        cat.stdout.read(1)
+        if head[1] == b"blob":
+            yield path, data
+    cat.stdin.close()
+    cat.wait()
+
+
+def messages():
+    for rec in git("log", "--all", "--format=%h%x00%B%x01").split(b"\x01"):
+        rec = rec.lstrip(b"\n")
+        if rec:
+            h, _, body = rec.partition(b"\0")
+            yield "commit message " + h.decode(), body
+    for rec in git("for-each-ref", "refs/tags",
+                   "--format=%(refname:short)%00%(contents)%01").split(b"\x01"):
+        rec = rec.lstrip(b"\n")
+        if rec:
+            name, _, body = rec.partition(b"\0")
+            yield "tag message " + name.decode(), body
+    for kind in ("heads", "tags"):
+        yield kind + " (ref names)", git("for-each-ref", "refs/" + kind,
+                                         "--format=%(refname:short)")
+
+
+def main():
+    args = sys.argv[1:]
+    history = bool(args) and args[0] == "--history"
+    if history:
+        args = args[1:]
+        label = "every branch and tag"
+        what = "file versions, commit messages, tag messages and ref lists"
+        sources = list(read_blobs(blobs_in_history())) + list(messages())
+    else:
+        rev = args.pop(0) if args else "main"
+        short = git("rev-parse", "--short", rev).decode().strip()
+        label = f"{rev} ({short})"
+        what = "text files"
+        sources = list(read_blobs(blobs_at(rev)))
+    out = open(args[0], "w") if args else sys.stdout
+
+    count, sources_with, where = Counter(), Counter(), {}
+    read = skipped = 0
+    for path, data in sources:
+        if path == "go.sum" or path.endswith("/go.sum") or b"\0" in data:
+            skipped += 1
+            continue
+        words = WORD.findall(data.decode("utf-8", "replace"))
+        count.update(words)
+        sources_with.update(set(words))
+        for w in words:
+            where.setdefault(w, path)
+        read += 1
+
+    cols = "word, occurrences, sources" + (", one place it occurs" if history else "")
+    print(f"# Every distinct word in slgo: {label}", file=out)
+    print("#", file=out)
+    print(f"# {read} {what} read; {skipped} skipped (go.sum, binary).", file=out)
+    print("# A word is a run of letters and digits; anything else separates words.", file=out)
+    print(f"# {len(count)} distinct words, case kept.  Columns: {cols}.", file=out)
+    print(file=out)
+    for w in sorted(count, key=lambda w: (w.lower(), w)):
+        line = f"{w}\t{count[w]}\t{sources_with[w]}"
+        if history:
+            line += "\t" + where[w]
+        print(line, file=out)
+
+
+if __name__ == "__main__":
+    main()
