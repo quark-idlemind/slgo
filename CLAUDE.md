@@ -35,8 +35,9 @@ protocol rather than people: the built-in animation asset ids in
 name "Protected Land", which `cmd/slsh/parcel.go` matches on.  So do
 Linden's public sandbox regions, their names and their squares: nobody
 lives in a sandbox, and a test that has to check arithmetic against a
-square the grid really answered with uses one.  Every real uuid of that
-kind is listed in `tools/known-uuids`, with where
+square the grid really answered with uses one.  So does the null key,
+`00000000-0000-0000-0000-000000000000`, the id that names nothing.  Every
+real uuid of that kind is listed in `tools/known-uuids`, with where
 Linden publishes it, and a real uuid that is not on that list does not
 belong here.
 
@@ -47,31 +48,53 @@ the repository -- one invented name per real one, everywhere -- so that
 a measurement written up in `doc/` and the test built from the same
 capture still agree with each other.
 
-When inventing a uuid, keep the first four characters of the real one
-and invent the remaining twenty-eight. Anything that sorts by id then
-sorts the way it did, which is what several tests depend on, and
-twenty-eight invented characters is no longer anybody's identifier.
+An invented uuid carries one signature, and there is no other way for
+an id to be here:
 
-And mark it: groups two and three of an invented uuid are always
-`fa4e-fa4e`, as in `2ce77e57-7e57-c0de-a128-5caa99806c61`.  A real id and
-a convincing invention look exactly alike, and without the mark the only
-way to tell them apart is to go and search the live grid's logs for each
-one.  With it, an id is either marked, or a placeholder nobody could
-mistake for one (a group of one repeated character, like
-`c75d7e57-7e57-c0de-b372-000000000001`, or sixteen bytes in order), or
-in `tools/known-uuids` -- and `tools/check-identities` refuses any other.
-The mark sits in the middle so that the first eight characters, which
-the documentation elides ids to, and the tail, which orders a family of
-ids, are left alone.
+    xxxx7e57-7e57-c0de-xxxx-xxxxxxxxxxxx
 
-A uuid appears in this tree in more than one shape and they have to be
-kept in step: hyphenated text, hexdump groups of eight
-(`sl/texture_test.go`), and Go byte literals (`msg.UUID{0x89, ...}` in
-`cmd/slsh/faces_test.go`). A search that finds only the hyphenated form
-will leave the others behind and the tests will fail somewhere else
-entirely.
+The first group is four random hex digits and `7e57`, groups two and
+three are `7e57-c0de`, and everything else is random, as in
+`ab3f7e57-7e57-c0de-9d41-6c2e08f1b7a5`. Make one with `tools/new-id`
+(`-n 5` for five, sorted); it refuses a first group that any id in the
+tree already uses. Nothing of a real id is kept -- not its first four
+characters, not its tail -- because a kept fragment is a fragment of
+somebody's identifier. A real id and a convincing invention look exactly
+alike, and the only way to tell them apart without the signature is to
+go and search the live grid's logs for each one; with it, an id is
+signed, or it is in `tools/known-uuids`, and `tools/check-identities`
+refuses any other. There are no exceptions: not a placeholder (a
+repeated character, or bytes in order), not a test's throwaway. An id that has to sort a family of ids is made with
+`tools/new-id -n`, which sorts what it makes.
 
-A grid square is invented too, and marked the way a uuid is: the high
+An id elided in documentation is written as its first group, `ab3f7e57-...`,
+and because that group ends in `7e57` the elision shows it was invented.
+Elide to the first group and no further.
+
+Every other 128-bit value is the same shape without the hyphens, and is
+signed the same way: `xxxx7e577e57c0dexxxxxxxxxxxxxxxx`
+(`tools/new-id --hash`). That is a `$1$` password digest -- a password to
+the grid, because the viewer sends `$1$` and the MD5 of the password --
+and a login's `mac` and `id0`, which name a machine; a digest in a
+captured login is always replaced, and zeros are no exception, because
+a blank is a value too. The one digest a test has to work out for real
+from a string it names is in `tools/known-hashes`, with the string.
+
+A uuid appears in this tree in many shapes and they all have to carry the
+signature. `tools/scan-ids` finds each one -- hyphenated in either case,
+with or without braces or quotes or a URL round it, without hyphens, a
+hexdump in groups of eight or pairs or fours (wrapped or not), a Go byte
+literal over several lines (`msg.UUID{0x89, ...}`, `[]byte{...}`,
+`[16]byte{...}`), `"\x89\x03..."` escapes, base64, a format string that
+makes ids (`"...-%012d"`), and an id elided to its first group -- and
+`doc/identities.md` lists them with what each one is checked against. A
+search that finds only the hyphenated form leaves the others behind.
+What the tool cannot see is an id derived from another by arithmetic:
+a literal derived from a real id lacks the signature and is caught, and
+one a test computes from a signed id is fine, but two uint64s or a big
+integer are for review.
+
+A grid square is invented too, and marked in the way a uuid is signed: the high
 byte of both coordinates of an invented square is always `0xAA`. On
 each axis the invented square is `base + (real - centre)`, where
 `centre` is the real square of the region the group is about. A region
@@ -90,17 +113,6 @@ reads the square out of every handle it finds and refuses one that is
 not marked, not a placeholder with both coordinates below 16, and not
 on that list; a bare `(x, y)` it leaves to the list of real names below.
 
-A password digest is marked too, because it is a password: the viewer
-sends `$1$` and the MD5 of the password, and whoever has that can log in
-with it.  Hex digits nine to sixteen of an invented digest are
-`fa4efa4e`, the uuid's mark in the uuid's place, as in
-`$1$52a57e577e57c0de5cf5fb1c76c742fa`, and nothing else of a real one is
-kept -- nothing sorts by a digest.  A placeholder is one character
-throughout, or `0123456789abcdef` twice.  A digest a test has to work
-out for real from a string it names is in `tools/known-hashes`, with
-the string.  A digest in a captured login is always replaced, and
-`tools/check-identities` refuses any other.
-
 Names hide in the same way. They wrap across comment lines, they appear
 downcased in tests that check case-insensitive matching, they turn up
 as Go identifiers (a name welded to a word, like `<place>Asset`),
@@ -116,7 +128,7 @@ answered, a man page that needed output and pasted the last run with its
 names swapped and its numbers left alone.
 
 So an example is invented from nothing, not adapted from something
-real. Its name is not the one in the capture, its uuid carries the mark,
+real. Its name is not the one in the capture, its uuid carries the signature,
 and its numbers were never on the grid. The same goes for an example
 somebody gives in conversation to say what they mean: that is the real
 thing, told so that it is understood, and what goes in the file is an
@@ -151,16 +163,25 @@ neighbours' parcels. A landmark listing names the places somebody has
 been. `objects --owner` names people.
 
     tools/check-identities            what is staged
-    tools/check-identities --all      the whole tree
-    tools/check-identities --install-hook
+    tools/check-identities --all      the whole tree, and the tags
+    tools/check-identities --message FILE   a commit message
+    tools/check-identities --install-hook   before every commit and message
+
+Every check runs and the exit status says if any found something: a
+compiled binary, a network address, an id without the signature, a grid
+square that is not marked, a name on the list. Only the last needs the
+list; the others need nothing, and run for everybody. An id in a file
+name, a tag or a commit message is as written down as one in a file, and
+`doc/identities.md` catalogues every form an identifier or a name takes
+here and which check, if any, sees it.
 
 It reads the list of real names from `~/.config/slgo/identities.tsv`,
 or from `$SLGO_IDENTITIES`. That list is deliberately not in this
 repository -- writing the names down here is the thing being prevented
 -- so it lives on the machine that did the measuring, one
 `real<TAB>replacement` per line. Somebody who has never touched the
-live grid has no such file, and the check says so and passes rather
-than failing on them.
+live grid has no such file, and that one check says so and is skipped
+rather than failing on them.
 
 When a measurement brings a new name, uuid or grid square in, add it to
 that list at the same time; a checker is only as good as what it has
@@ -306,6 +327,13 @@ here when another is shared the same way.
   and is never assigned afterwards; a handler reads it from the first
   message. `TestASessionLogsFromTheFirstMessageItHears` fails for one
   assigned after.
+- `tools/new-id` and `tools/scan-ids`: the one way to make an invented
+  id (signed, with a first group nothing else uses, sorted when you ask
+  for several) and the one place that knows every shape an id is written
+  in. A new shape goes in `scan-ids`, with a case in
+  `tools/identities_test.go`, and not in a pattern of your own;
+  `TestNothingInTheTreeIsAnUnsignedIdentifier` fails for any id in a
+  tracked file that is neither signed nor in `tools/known-uuids`.
 - `WatchSilence`, in `agent/agent.go` (`watchSilence` inside the
   package): calls a function once when a circuit has heard nothing for
   longer than a timeout, by a last-heard time it is given, looking a
