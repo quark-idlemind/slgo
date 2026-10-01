@@ -1,10 +1,11 @@
 # Real uuids this repository may use, and where each is published.
 #
-# Every other uuid in the tree is invented, and says so: groups two and
-# three are fa4e-fa4e (see CLAUDE.md), or it is a placeholder nobody could
-# mistake for an id -- a group of one repeated character, or sixteen bytes
-# in order.  tools/check-identities refuses anything else, so a real id
-# can only come in by being written down here, with its source beside it.
+# Every other uuid in the tree is invented, and says so: it is
+# xxxx7e57-7e57-c0de-xxxx-xxxxxxxxxxxx (see CLAUDE.md), made with
+# tools/new-id.  There is no other way in -- no placeholder, no repeated
+# character, no bytes in order -- and tools/check-identities refuses
+# anything else, so a real id can only come in by being written down here,
+# with its source beside it.
 #
 # Only Linden Lab's own published constants belong here: the ids every
 # viewer carries built in, which name nothing and nobody.  Never a
@@ -14,6 +15,7 @@
 # One per line: uuid, a tab, the viewer's name for it, a tab, where it is
 # published.
 
+00000000-0000-0000-0000-000000000000	NULL_KEY	the LSL constant NULL_KEY (wiki.secondlife.com/wiki/NULL_KEY), the id that names nothing
 1a5fe8ac-a804-8a5d-7cbd-56bd83184568	ANIM_AGENT_SIT	indra/llcharacter/llanimationstates.cpp
 b1709c8d-ecd3-54a1-4f28-d55ac0840782	ANIM_AGENT_SIT_FEMALE	indra/llcharacter/llanimationstates.cpp
 245f3c54-f1c0-bf2e-811f-46d8eeb386e7	ANIM_AGENT_SIT_GENERIC	indra/llcharacter/llanimationstates.cpp

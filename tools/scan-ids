@@ -1,0 +1,283 @@
+#!/usr/bin/perl
+# scan-ids finds every 128-bit identifier written in a file, in every form
+# one is written in here, and says whether it carries the signature.
+#
+# An invented id is xxxx7e57-7e57-c0de-xxxx-xxxxxxxxxxxx: its first group
+# ends in 7e57, groups two and three are 7e57-c0de, and nothing else of it
+# is anybody's.  Anything else is either one of Linden Lab's published
+# constants, written down with where it is published in tools/known-uuids
+# (or, for a 32-digit value that is not an id, tools/known-hashes), or it is
+# refused.  doc/identities.md lists the forms and CLAUDE.md has the rule.
+#
+# Usage:
+#     scan-ids --check FILE...          what is neither signed nor known
+#     scan-ids --spans FILE...          every find, for a rewrite
+#     scan-ids --first-groups FILE...   the first group of every id found
+#
+# --check also reads each file's own name.  Exit status is 1 when --check
+# found something.
+
+use strict;
+use warnings;
+use MIME::Base64 qw(decode_base64 encode_base64);
+use File::Basename qw(dirname);
+use Cwd qw(abs_path);
+
+my $root = dirname(dirname(abs_path(__FILE__)));
+my $SIG = qr/^[0-9a-f]{4}7e577e57c0de[0-9a-f]{16}$/;
+
+# A record is [form, start, end, hex, units].  hex is the 32 digits, lower
+# case, or the 8 digits of a first group; units are the pieces of the text
+# that hold the digits, each [offset from start, length, kind, digits].
+sub rec { my ($form, $s, $e, $hex, $units) = @_;
+	return { form => $form, start => $s, end => $e, hex => $hex, units => $units } }
+
+sub hexunits { my ($base, @g) = @_; return [ map { [$_->[0] - $base, $_->[1], 'hex', $_->[1]] } @g ] }
+
+sub find_ids {
+	my ($t) = @_;
+	my @r;
+
+	# Hyphenated, either case, in braces, quotes or a URL: nothing is
+	# required of what is round it except that it is not more hex.
+	while ($t =~ /(?<![0-9a-fA-F])([0-9a-fA-F]{8})-([0-9a-fA-F]{4})-([0-9a-fA-F]{4})-([0-9a-fA-F]{4})-([0-9a-fA-F]{12})(?![0-9a-fA-F])/g) {
+		my @s = @-; my @e = @+; my $hex = lc "$1$2$3$4$5";
+		push @r, rec('hyphenated', $s[0], $e[0], $hex,
+			hexunits($s[0], map { [$s[$_], $e[$_] - $s[$_]] } 1 .. 5));
+	}
+
+	# Elided to the first group, or to the first few: ab3f7e57-...
+	while ($t =~ /(?<![0-9a-fA-F])([0-9a-fA-F]{8})((?:-[0-9a-fA-F]{4}){0,3})-?(?:\.\.\.|\xe2\x80\xa6)/g) {
+		my ($s, $e, $g1, $more) = ($-[0], $+[0], $1, $2);
+		my @units = ([0, 8, 'hex', 8]);
+		my $hex = lc $g1;
+		my $form = 'elided';
+		if (length $more) {
+			$form = 'partial';
+			my $o = 8;
+			while ($more =~ /-([0-9a-fA-F]{4})/g) {
+				push @units, [$o + 1, 4, 'hex', 4]; $o += 5; $hex .= lc $1;
+			}
+		}
+		push @r, rec($form, $s, $e, $hex, \@units);
+	}
+
+	# 32 digits with nothing between: an id without hyphens, a password
+	# digest, a mac or an id0.
+	while ($t =~ /(?<![0-9a-fA-F])([0-9a-fA-F]{32})(?![0-9a-fA-F])/g) {
+		push @r, rec('bare', $-[0], $+[0], lc $1, [[0, 32, 'hex', 32]]);
+	}
+
+	# Groups of one size, two to sixteen digits, one separator between:
+	# a hexdump in four groups of eight, byte pairs, groups of four, two
+	# uint64s.  The separator may be a line break and a comment marker.
+	my $sep = qr/(?:[ \t]*[:,._-]?[ \t]*|[ \t]*[:,]?[ \t]*\r?\n[ \t]*(?:(?:\/\/|#|\*|;|>|\|)[ \t]*)?)/;
+	for my $size (2, 4, 8, 16) {
+		my $n = 32 / $size;
+		my $tok = qr/(?<![0-9A-Za-z_])[0-9a-fA-F]{$size}(?![0-9A-Za-z_])/;
+		while ($t =~ /($tok(?:$sep$tok)+)/g) {
+			my ($s, $run) = ($-[1], $1);
+			my @g;
+			while ($run =~ /($tok)/g) { push @g, [$-[1], $size] }
+			next if @g < $n;
+			my @w = @g[0 .. $n - 1];
+			my $hex = lc join '', map { substr($run, $_->[0], $size) } @w;
+			my $end = $s + $w[-1][0] + $size;
+			push @r, rec("groups of $size", $s + $w[0][0], $end, $hex,
+				[ map { [$_->[0] - $w[0][0], $size, 'hex', $size] } @w ]);
+		}
+	}
+
+	# A Go byte literal: msg.UUID{...}, []byte{...}, [16]byte{...}, in hex
+	# or decimal, over as many lines as it likes.  A UUID literal of four
+	# bytes or more that is not sixteen is the start of an id.
+	while ($t =~ /(\bUUID|\[\]byte|\[\d*\]byte)\s*\{([^{}]*)\}/g) {
+		my ($kind, $body, $bs) = ($1, $2, $-[2]);
+		(my $plain = $body) =~ s{(//[^\n]*|/\*.*?\*/)}{ ' ' x length $1 }gse;
+		my (@items, $pos);
+		$pos = 0;
+		for my $piece (split /,/, $plain, -1) {
+			push @items, [$pos, $piece];
+			$pos += length($piece) + 1;
+		}
+		pop @items if @items && $items[-1][1] =~ /^\s*$/;
+		my $ok = 1; my @bytes; my @units;
+		for my $it (@items) {
+			my ($o, $p) = @$it;
+			if ($p =~ /^(\s*0[xX])([0-9a-fA-F]{1,2})\s*$/) {
+				push @bytes, hex $2;
+				push @units, [$bs + $o + length($1), length($2), 'byte-hex', 2];
+			} elsif ($p =~ /^(\s*)(\d{1,3})\s*$/ && $2 < 256) {
+				push @bytes, $2 + 0;
+				push @units, [$bs + $o + length($1), length($2), 'byte-dec', 2];
+			} else { $ok = 0; last }
+		}
+		next unless $ok;
+		my $n = @bytes;
+		my ($form, $take);
+		# A []byte of sixteen is an id only when every one is written 0x..;
+		# anything with a decimal in it is a packet or a table.
+		if ($n == 16) {
+			next if $kind eq '[]byte' && grep { $_->[2] ne 'byte-hex' } @units;
+			($form, $take) = ('byte list', 16);
+		}
+		elsif ($kind eq 'UUID' && $n >= 4 && $units[0][2] eq 'byte-hex') { ($form, $take) = ('byte list prefix', 4) }
+		else { next }
+		my $start = $bs; my $end = $bs + length $body;
+		my $hex = join '', map { sprintf '%02x', $_ } @bytes[0 .. $take - 1];
+		push @r, rec($form, $start, $end, $hex,
+			[ map { [$_->[0] - $start, $_->[1], $_->[2], $_->[3]] } @units[0 .. $take - 1] ]);
+	}
+
+	# "\x89\x03...": sixteen escapes in a row.
+	while ($t =~ /((?:\\x[0-9a-fA-F]{2})+)/g) {
+		my ($s, $run) = ($-[1], $1);
+		my @b = $run =~ /\\x([0-9a-fA-F]{2})/g;
+		next unless @b == 16;
+		push @r, rec('\\x escapes', $s, $s + length $run, lc join('', @b),
+			[ map { [$_ * 4 + 2, 2, 'hex', 2] } 0 .. 15 ]);
+	}
+
+	# Base64.  A run of twenty characters or more is decoded; it is an id
+	# when it is sixteen bytes and nothing else (22 characters, or 24 with
+	# the padding), and inside an LLSD <binary> any run of sixteen bytes
+	# or more is looked through for a window shaped like a random (version
+	# 4) uuid, which is what a real id is and a signed one is not.  Other
+	# base64 is not looked at: any run of bytes is some 16 bytes.
+	while ($t =~ /(?<![A-Za-z0-9+\/=_-])([A-Za-z0-9+\/]{20,}={0,2})(?![A-Za-z0-9+\/=_-])/g) {
+		my ($s, $e, $run) = ($-[1], $+[1], $1);
+		(my $bare = $run) =~ s/=+$//;
+		my $pre = substr($t, max0($s - 64), min($s, 64));
+		my $inbinary = $pre =~ /<binary[^>]*>\s*$/ || $pre =~ /b64"$/;
+		my $bytes = decode_base64($bare);
+		my $canon = encode_base64($bytes, '');
+		$canon =~ s/=+$//;
+		next unless $canon eq $bare;
+		if (length($bytes) == 16 && !$inbinary) {
+			next unless $bare =~ /[0-9+]/ || $run =~ /=/;
+			push @r, rec('base64', $s, $e, unpack('H*', $bytes), [[0, length $run, 'b64', 32]]);
+		} elsif (length($bytes) >= 16 && $inbinary) {
+			for my $i (0 .. length($bytes) - 16) {
+				my $w = substr($bytes, $i, 16);
+				my ($b6, $b8) = unpack('x6Cx1C', $w);
+				next unless ($b6 >> 4) == 4 && ($b8 >> 6) == 2;
+				push @r, rec('base64 in binary', $s, $e, unpack('H*', $w), [[0, length $run, 'b64', 32]]);
+			}
+		}
+	}
+
+	# One find per place: the longest from the earliest start wins.
+	@r = sort { $a->{start} <=> $b->{start} || $b->{end} <=> $a->{end} } @r;
+	my @out; my $last = -1;
+	for my $x (@r) {
+		next if $x->{start} < $last;
+		push @out, $x;
+		$last = $x->{end};
+	}
+	return @out;
+}
+sub max0 { $_[0] < 0 ? 0 : $_[0] }
+sub min { $_[0] < $_[1] ? $_[0] : $_[1] }
+
+sub slurp {
+	my ($f) = @_;
+	open my $in, '<:raw', $f or return;
+	local $/;
+	my $t = <$in>;
+	return $t;
+}
+
+sub load_known {
+	my %known;
+	if (open my $k, '<', "$root/tools/known-uuids") {
+		while (<$k>) {
+			next if /^\s*(#|$)/;
+			my ($id) = split /\s+/;
+			(my $h = lc $id) =~ s/-//g;
+			$known{uuid}{$h} = 1;
+			$known{first}{substr $h, 0, 8} = 1;
+		}
+	}
+	if (open my $k, '<', "$root/tools/known-hashes") {
+		while (<$k>) {
+			next if /^\s*(#|$)/;
+			my ($d) = split /\s+/;
+			$d =~ s/^\$1\$//;
+			$known{hash}{lc $d} = 1;
+		}
+	}
+	return \%known;
+}
+
+my $mode = shift @ARGV // '';
+die "usage: scan-ids --check|--spans|--first-groups FILE...\n"
+	unless $mode =~ /^--(check|spans|first-groups)$/;
+
+if ($mode eq '--spans') {
+	for my $f (@ARGV) {
+		my $t = slurp($f); next unless defined $t && $t !~ /\0/;
+		for my $x (find_ids($t)) {
+			print join("\t", $f, $x->{start}, $x->{end} - $x->{start}, $x->{form}, $x->{hex},
+				join(',', map { join ':', @$_ } @{ $x->{units} })), "\n";
+		}
+	}
+	exit 0;
+}
+
+my $known = load_known();
+
+if ($mode eq '--first-groups') {
+	my %g = %{ $known->{first} || {} };
+	for my $f (@ARGV) {
+		my $t = slurp($f); next unless defined $t && $t !~ /\0/;
+		$g{ substr $_->{hex}, 0, 8 } = 1 for find_ids($t);
+	}
+	print "$_\n" for sort keys %g;
+	exit 0;
+}
+
+# --check
+sub line_of { my ($t, $off) = @_; return 1 + (substr($t, 0, $off) =~ tr/\n//) }
+
+sub verdict {
+	my ($x) = @_;
+	my $h = $x->{hex};
+	my $form = $x->{form};
+	if ($form eq 'elided' || $form eq 'partial' || $form eq 'byte list prefix') {
+		my $g = substr $h, 0, 8;
+		return 1 if $g =~ /7e57$/;
+		return 1 if $known->{first}{$g};
+		return 0;
+	}
+	return 1 if $h =~ $SIG;
+	# The null key is written with its hyphens.  Thirty-two zeros with none
+	# is a digest, a mac or an id0 that was left blank, and they are signed
+	# like the rest.
+	return 0 if $form eq 'bare' && $h =~ /^0+$/;
+	return 1 if $known->{uuid}{$h};
+	return 1 if $known->{hash}{$h} && $form ne 'hyphenated';
+	return 0;
+}
+
+my $bad = 0;
+for my $f (@ARGV) {
+	my $name = $f;
+	my $rel = $f; my $inside = ($rel =~ s{^\Q$root\E/}{});
+	next if $rel =~ m{^tools/known-(uuids|hashes)$};
+	# A name is checked as text too, if it is a name in this tree and not,
+	# say, where a commit message was put while it was written.
+	for my $x ($inside || $rel !~ m{^/} ? find_ids($rel) : ()) {
+		next if verdict($x);
+		print "$rel: file name has $x->{form} $x->{hex}\n"; $bad = 1;
+	}
+	my $t = slurp($f);
+	next unless defined $t && $t !~ /\0/;
+	for my $x (find_ids($t)) {
+		next if verdict($x);
+		my $text = substr($t, $x->{start}, $x->{end} - $x->{start});
+		$text =~ s/\s+/ /g; $text = substr($text, 0, 60) . '...' if length $text > 63;
+		printf "%s:%d: %s %s\n", $rel, line_of($t, $x->{start}), $x->{form}, $text;
+		$bad = 1;
+	}
+}
+exit $bad;

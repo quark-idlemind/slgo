@@ -1,10 +1,11 @@
 # Real password digests this repository may use, and what each is the
 # MD5 of.
 #
-# Every other $1$ digest in the tree is invented, and says so: hex digits
-# nine to sixteen are fa4efa4e (see CLAUDE.md), or it is a placeholder,
-# one character throughout or 0123456789abcdef twice.
-# tools/check-identities refuses anything else.
+# Every other 32-digit value in the tree is invented, and says so: it is
+# xxxx7e577e57c0dexxxxxxxxxxxxxxxx, a uuid without its hyphens (see
+# CLAUDE.md), made with tools/new-id --hash.  That holds for a $1$
+# password digest, a login's mac and its id0 alike, and tools/check-identities
+# refuses anything else.
 #
 # Only a digest a test works out from a string it names belongs here,
 # never one captured from a login.

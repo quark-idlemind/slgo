@@ -1,0 +1,60 @@
+#!/usr/bin/perl
+# new-id prints a fresh invented identifier, the one way to make one.
+#
+# An invented uuid is xxxx7e57-7e57-c0de-xxxx-xxxxxxxxxxxx: four random hex
+# digits and 7e57, then 7e57-c0de, then random.  Every other 128-bit value
+# a file here may hold -- a password digest, a login's mac or id0 -- is the
+# same thing without hyphens.  tools/check-identities refuses anything that
+# is neither that nor in tools/known-uuids or tools/known-hashes; CLAUDE.md
+# says why.
+#
+#     tools/new-id            one uuid
+#     tools/new-id -n 5       five, sorted
+#     tools/new-id --hash     one 32-digit value, no hyphens
+#
+# It refuses an id whose first group is already used by any id in the tree,
+# in any form, so that documentation may elide an id to its first group --
+# ab3f7e57-... -- and still mean one.  Run it from inside the repository.
+
+use strict;
+use warnings;
+use File::Basename qw(dirname);
+use Cwd qw(abs_path);
+
+my $here = dirname(abs_path(__FILE__));
+my ($n, $hash) = (1, 0);
+while (@ARGV) {
+	my $a = shift @ARGV;
+	if ($a eq '-n' && @ARGV) { $n = shift @ARGV }
+	elsif ($a eq '--hash') { $hash = 1 }
+	else { die "usage: new-id [-n N] [--hash]\n" }
+}
+die "new-id: -n wants a number from 1 to 5000\n" unless $n =~ /^\d+$/ && $n >= 1 && $n <= 5000;
+
+# What the tree already uses: the first group of every id in every tracked
+# file, and Linden's own.
+my %used;
+{
+	my $root = `git -C "$here" rev-parse --show-toplevel 2>/dev/null`;
+	chomp $root;
+	my @files = $root ? split(/\0/, `git -C "$root" ls-files -z`) : ();
+	@files = grep { !m{(^|/)go\.sum$} } @files;
+	open my $p, '-|', "$here/scan-ids", '--first-groups', map { "$root/$_" } @files
+		or die "new-id: cannot run scan-ids: $!\n";
+	while (<$p>) { chomp; $used{$_} = 1 }
+	close $p;
+}
+
+open my $rnd, '<:raw', '/dev/urandom' or die "new-id: no /dev/urandom: $!\n";
+sub random_hex { my $b; read($rnd, $b, $_[0]) == $_[0] or die "new-id: short read\n"; return unpack 'H*', $b }
+
+my @ids;
+while (@ids < $n) {
+	my $first = random_hex(2) . '7e57';
+	next if $used{$first};
+	$used{$first} = 1;
+	push @ids, $first . '7e57c0de' . random_hex(8);
+}
+for my $h (sort @ids) {
+	print $hash ? $h : join('-', unpack 'A8 A4 A4 A4 A12', $h), "\n";
+}
