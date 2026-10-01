@@ -1,0 +1,394 @@
+# The names this repository may use, and what each is.
+#
+# Every name in the tree that stands for something in Second Life -- an
+# avatar, a region, a parcel, a group, a landmark, an object or an
+# inventory item -- is invented, and is written down here.  A name that is
+# not here is refused by tools/check-identities wherever it can be
+# recognised (doc/identities.md lists the places).  Nobody can tell a real
+# name from a convincing invention, so the rule is the other way round: a
+# name comes in by being added here, and a new one is taken from the
+# spares at the end first.
+#
+# An invention need not match a real place one for one, and must not be a
+# real resident, region, parcel, group or object.  The Example family
+# (Example Resident, Example Builders, ...) and the Test... names are the
+# mark of an invention here, as 7e57 is for ids.  Two kinds are the only
+# real ones allowed: the owner's own (Quark Idlemind, qi, his group) and
+# Linden Lab's published names (its sandboxes, parcel names, standard
+# folders); each says why beside it.
+#
+# Matching ignores case and treats Rue&amp;Reed and Rue&Reed alike.  A
+# name given as a search key may be the start of a name or of one of its
+# words, and a first or last name may be one word of one; neither needs a
+# line of its own.
+#
+# One per line: the name, a tab, what it is or why it may be here.
+
+# == avatar ==
+Perrick Hobb
+Perrick Hobbinson
+Hobb Resident
+hobb.idlemind
+Ozu Brantwick
+Odile Marne
+Kerra Yule
+Kerra Hartwood
+Linnet Ewry
+Linnet Ewrynn
+Taren Holt
+Taren
+Holt
+holt-beta
+Skell Dunmoore
+Jorr Starlit
+Flint Prober
+Ruvo
+Kit
+Mirkwin Resident
+Lorn Resident
+Lorn Harbour
+holt	a part or handle of an avatar name above
+hobb	a part or handle of an avatar name above
+perrick.hobb	a part or handle of an avatar name above
+linnet	a part or handle of an avatar name above
+kerra	a part or handle of an avatar name above
+lorn	a part or handle of an avatar name above
+
+# == region ==
+Pelmar Reach
+Pelmar Mill
+Pelmar Field
+Pelmar Bay
+Pelmar Reach Two
+Pelmar Reach Annexe
+Pelmar Reach Waterside Crossings
+Pelmarwood
+Pelmara
+Orrick Gate
+Kelva Sands
+Brackenfen
+Nightmire Sea
+Vortaro
+Vortera
+Vorterhaven Sands
+Vorterra Cove
+Vortero Flats
+Corvane
+Daskwell
+Dell of Ashes
+Dovet
+Sandbox Goguen Margin
+Briarholt
+
+# == parcel ==
+Thrushmoor
+Thrushmoor Home
+Windlestraw Lodge
+Zorrim
+OMEN
+La Cardonna
+Quill Lodge
+Garrow's Hideaway
+Rue&Reed
+Sorrel Home
+Slow Shoal Estate
+Ulmar
+Perlwick Row
+Halcyonae
+The Briarholt and Ravensdon Boutique
+
+# == group ==
+Pelmar Reach Builders
+Lorn Rangers
+Lorn Family
+
+# == landmark ==
+Ravensdon Boutique Shop
+Ravensdon
+Pelmar Reach Workshop
+
+# == object ==
+Tanagera Design
+Overseer v15.000001
+HearthEmbers
+
+# == generic ==
+Some Body	placeholder (avatar)
+Trusted Resident	placeholder (avatar)
+Somebody Else	placeholder (avatar)
+Another Resident	placeholder (avatar)
+Example Payee	placeholder (avatar)
+Example Friend	placeholder (avatar)
+Example Lurer	placeholder (avatar)
+Third Resident	placeholder (avatar)
+Someone Else	placeholder (avatar)
+Builder Resident	placeholder (avatar)
+Example Inviter	placeholder (avatar)
+Stranger Bot	placeholder (avatar)
+Example Giver	placeholder (avatar)
+One Resident	placeholder (avatar)
+Nobody Resident	placeholder (avatar)
+Another Person	placeholder (avatar)
+Harness Resident	placeholder (avatar)
+Wearer Resident	placeholder (avatar)
+Near Resident	placeholder (avatar)
+Example Builder	placeholder (avatar)
+Somebody Entirely	placeholder (avatar)
+Fourth Resident	placeholder (avatar)
+Far Resident	placeholder (avatar)
+Old Resident	placeholder (avatar)
+Helper Resident	placeholder (avatar)
+Example Wanderer	placeholder (avatar)
+Not Listed	placeholder (avatar)
+Somebody Resident	placeholder (avatar)
+Passing Stranger	placeholder (avatar)
+Example Bot	placeholder (avatar)
+Some Body Junior	placeholder (avatar)
+Somebody Faraway	placeholder (avatar)
+Some Stranger	placeholder (avatar)
+Anybody At All	placeholder (avatar)
+Somebody Nobody Listed	placeholder (avatar)
+Evening plans	generic test name (conference)
+Builders	placeholder (group)
+Example Builders	placeholder (group)
+Example Group	placeholder (group)
+Explorers	placeholder (group)
+Testers	placeholder (group)
+Testville Gardeners	placeholder (group)
+Example Rules	placeholder (group)
+Some Other Group	placeholder (group)
+Example Club	placeholder (group)
+Somebody Else's Group	placeholder (group)
+Everyone Else	placeholder (group)
+Testers 2	placeholder (group)
+Example Explorers	placeholder (group)
+No Group At All	placeholder (group)
+Builders 2	placeholder (group)
+Officer	generic test name (group-role)
+Apprentice	generic test name (group-role)
+a script	generic test name (inventory)
+a folder	generic test name (inventory)
+greeter	generic test name (inventory)
+a link	generic test name (inventory)
+a notecard	generic test name (inventory)
+a texture	generic test name (inventory)
+a picture	generic test name (inventory)
+readme	generic test name (inventory)
+a note	generic test name (inventory)
+Greeter	generic test name (inventory)
+hello.lsl	generic test name (inventory)
+a dress	generic test name (inventory)
+Kid	generic test name (inventory)
+Alpha Two	generic test name (inventory)
+hovertext.lsl	generic test name (inventory)
+Zulu	generic test name (inventory)
+Sunday	generic test name (inventory)
+experiments	generic test name (inventory)
+stage 0 here	generic test name (inventory)
+Grandkid	generic test name (inventory)
+a wave	generic test name (inventory)
+A Sandbox	placeholder (landmark)
+Workspace	generic test name (landmark)
+Meeting moved to Friday	generic test name (notice)
+a prim	generic test name (object)
+workbench	generic test name (object)
+a lamp	generic test name (object)
+a thing	generic test name (object)
+lantern	generic test name (object)
+a hat	generic test name (object)
+Box1	generic test name (object)
+the workbench	generic test name (object)
+A Friend	generic test name (object)
+a probe	generic test name (object)
+a box	generic test name (object)
+a sign	generic test name (object)
+a shirt	generic test name (object)
+a bench	generic test name (object)
+badge	generic test name (object)
+A Big Box	generic test name (object)
+lanterns	generic test name (object)
+a lantern	generic test name (object)
+a clock	generic test name (object)
+Welcome Kit	generic test name (object)
+Old Stuff	generic test name (object)
+a gate	generic test name (object)
+a blue shirt	generic test name (object)
+Example Box	generic test name (object)
+the bench	generic test name (object)
+Grabby Box	generic test name (object)
+a lamp stand	generic test name (object)
+a door	generic test name (object)
+a red shirt	generic test name (object)
+TrioBox	generic test name (object)
+a mystery	generic test name (object)
+Doorbell	generic test name (object)
+Anvil	generic test name (object)
+brass lantern	generic test name (object)
+Old Hat	generic test name (object)
+New Hat	generic test name (object)
+a second lamp	generic test name (object)
+a box of parts	generic test name (object)
+big sign	generic test name (object)
+TrioChild	generic test name (object)
+Flames	generic test name (object)
+a lamp shade	generic test name (object)
+a chime	generic test name (object)
+wall panel	generic test name (object)
+meter	generic test name (object)
+The East Half	placeholder (parcel)
+The West Half	placeholder (parcel)
+builder	generic test name (profile-handle)
+spare	generic test name (profile-handle)
+helper	generic test name (profile-handle)
+Test Region	placeholder (region)
+Testville	placeholder (region)
+Example Landing	placeholder (region)
+Nowhere	placeholder (region)
+Example Region	placeholder (region)
+Example Shallows	placeholder (region)
+Example Bay	placeholder (region)
+Nowhere At All	placeholder (region)
+Example Landing North	placeholder (region)
+Example Bayside	placeholder (region)
+Sandbox Two	placeholder (region)
+Sandbox Adult	placeholder (region)
+Somewhere New	placeholder (region)
+Somewhere Else	placeholder (region)
+Testville East	placeholder (region)
+Testville North	placeholder (region)
+Sandbox One	placeholder (region)
+Test HUD	generic test name (object)
+Someone	generic test word
+Somebody	generic test word
+Nobody	generic test word
+Wearer	generic test word
+Builder	generic test word
+Else	generic test word
+Body	generic test word
+Some	generic test word
+Deep	generic test word
+Friend	generic test word
+Both Halves	generic test word
+Impossible	generic test word
+Old	generic test word
+Older	generic test word
+Twice	generic test word
+Beta	generic test word
+Alpha	generic test word
+Data	generic test word
+Channel	generic test word
+Disposition	generic test word
+Label	generic test word
+Name	generic test word
+Path	generic test word
+Send	generic test word
+Text	generic test word
+Local	generic test word
+Region	generic test word
+Object	generic test word
+Script	generic test word
+Probe	generic test word
+Boxes	generic test word
+Keyed Item	generic test word
+Named By Its Key	generic test word
+Named In Its Body	generic test word
+Two Words	generic test word
+Unencodable	generic test word
+Conference with Another Resident	generic test word
+Some Other	generic test word
+An outfit	generic test word
+Workshop	generic test word
+Landmarks	generic test word
+Example Workshop	generic test word
+A Lamp	generic test word
+LH Med Fire Grate	generic test word
+First Last	generic test word
+A One	generic test word
+A Two	generic test word
+A Three	generic test word
+A Four	generic test word
+A Five	generic test word
+A Six	generic test word
+A Seven	generic test word
+A Eight	generic test word
+A Nine	generic test word
+A Ten	generic test word
+Somewhere else	generic test word
+Resident	generic test word
+Trashcan	generic test name (a custom folder, not Linden's Trash)
+Test Object	generic test name (object)
+Tools	generic test name (folder)
+Example Tester	placeholder (avatar); handbook/setups.html profile `dev`
+
+# == kept-real: the owner's ==
+Quark Idlemind	the owner's avatar (profile qi)
+Quark	the owner's avatar (profile qi)
+Idlemind	the owner's avatar (profile qi)
+qi	the owner's profile handle
+Quark Engineering Works	the owner's group, the one his avatars act as (cmd/slsh/man/invite.md)
+Example Resident	the placeholder avatar every example uses; its first word Example marks the Example family as invented
+
+# == kept-real: Linden's ==
+Governor Linden	Linden Lab's own account
+Protected Land	Linden's parcel name for roads and rez zones, matched in cmd/slsh/parcel.go
+Protected Land - Rez zone	Linden's parcel name for a rez zone inside protected land
+Sandbox Goguen	Linden's public sandbox; real square in tools/known-squares, observed in doc/history/teleport.md
+Sandbox Bricker	Linden's public sandbox (adult); observed in doc/history/teleport.md
+Sandbox Newcomb	Linden's public sandbox; observed in doc/history/neighbours.md
+Sandbox	the start of Linden's sandbox names, used as a map search key
+Linden Lab Employee	a group title Linden Lab uses
+Linden Homes	Linden's residential product
+Objects	Linden's standard inventory folder, as slsh lists it
+Scripts	standard inventory folder
+Notecards	standard inventory folder
+Textures	standard inventory folder
+Landmarks	standard inventory folder
+Animations	standard inventory folder
+Trash	standard inventory folder
+Clothing	standard inventory folder
+My Inventory	the viewer's name for the inventory root
+Current Outfit	the viewer's outfit folder
+My Outfits	the viewer's outfit folder
+Calling Cards	standard inventory folder
+Favorites	standard inventory folder
+Papierkorb	the German viewer's name for Trash
+Dallas	Linden's data-centre name in RegionInfo
+Estate / Full Region	Linden's product name in RegionInfo
+Multi-person chat	the viewer's name for a conference it starts
+
+# == spares ==
+Isaul Pemberton	spare avatar
+Nerys Quillfeather	spare avatar
+Ottoline Brandle	spare avatar
+Hesper Dunmow	spare avatar
+Caddoc Ravelston	spare avatar
+Windrasp	spare region
+Harrowmere Ford	spare region
+Lantern Skerry	spare region
+Ostrava Hollow	spare region
+Tessellane	spare region
+Grindlow Croft	spare parcel
+The Larkmeadow	spare parcel
+Umber Wharf	spare parcel
+Peatsmoke Cottage	spare parcel
+Cresset Yard	spare parcel
+Brindled Coppicers	spare group
+Saltmarsh Surveyors	spare group
+The Ninth Lantern	spare group
+Hobnail Society	spare group
+Lowtide Cartographers	spare group
+Pewter Heron Lamp	spare object
+Tinkerbell Crate	spare object
+Marrow Gong	spare object
+Cobwebbed Orrery	spare object
+Fenwick Windchime	spare object
+Mooring Post Nine	spare landmark
+Old Kiln Steps	spare landmark
+Cartwright Bridge	spare landmark
+Saltpan Lookout	spare landmark
+Fogbell Landing	spare landmark
+Gannet Row Estate	spare estate
+Mistral Holdings	spare estate
+Harrowgate Commons	spare estate
+Brindle Fells Estate	spare estate
+Quarry Lane Estate	spare estate

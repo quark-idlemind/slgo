@@ -17,8 +17,12 @@ the rule is that an invented one carries a signature and a real one is
 refused. That needs no list of what is real, and it runs for everybody.
 
 A **name** is words, and no rule can tell a real name from an invented
-one. Names are matched against a list of the real ones, kept off the tree,
-and an allowlist of the names that may appear is coming to replace it.
+one, so the rule is the other way round: every name the tree uses is
+written down in `tools/known-names`, and one that is not there is refused
+wherever a name can be recognised (below). An invention need not match a
+real place one for one; it has to be a name nobody has. A new one is taken
+from the spares at the end of that file. The list kept off the tree
+(`~/.config/slgo/identities.tsv`) stays as a backstop for prose.
 What people said -- chat, instant messages, notices, profiles -- cannot be
 matched at all and is always replaced.
 
@@ -146,9 +150,63 @@ SLURL or a `maps.secondlife.com` link, and none of those is looked for.
 
 ## Names
 
-None of these is enforced by a rule. They are described so that a change
-that adds one looks for it in every guise, and so that the allowlist that is
-coming knows what to match.
+`tools/known-names` is the allowlist, in sections by kind: avatar, region,
+parcel, group, landmark, object, generic (placeholders and test words),
+kept-real (the owner's, with why; Linden Lab's, with where it is observed)
+and spares. One name a line, a tab, what it is. The check ignores case,
+reads `Rue&amp;Reed` and a doubled apostrophe as the characters they stand
+for, and accepts a first or last name that is one word of a listed name and
+a search key that is the start of one. The `Example` family
+(`Example Resident`, `Example Builders`, ...) and the `Test` names are the
+mark of an invention, as `7e57` is for ids, and are listed as generic.
+Kept as they are: the owner's avatar `Quark Idlemind`, his profile `qi` and
+his group `Quark Engineering Works`; Linden's `Governor Linden`, `Protected
+Land`, its public sandboxes, its standard folders, and the animation and
+texture names in `tools/known-uuids`.
+
+`tools/scan-names` (run by `tools/check-identities`, and over the whole
+tree by `go test ./tools`) reads these places, and nothing else:
+
+- a name field given a string in Go or JSON: `Name`, `FirstName`,
+  `LastName`, `First`, `Last`, `FromName`, `OwnerName`, `AvatarName`,
+  `SimName`, `Region`, `RegionName`, `ParcelName`, `GroupName`,
+  `ObjectName`, `DisplayName` and their snake_case forms, with `:`, `=`,
+  `==` or `!=`, also as `[]byte("...\x00")`; a name key and its string in
+  an XML or LLSD fixture (`<key>SimName</key><string>...`);
+- the first string handed to the test helpers that make a region, parcel,
+  group, avatar or offer (`mapBlock`, `enterRegion`, `AnswerTeleport`,
+  `aGroup`, `avatarGroups`, `pickerRow`, `inviting`, `at`, ...), the strings
+  of a `map[msg.UUID]string{...}`, and the labelled variables a test gives a
+  person (`owner:`, `stranger:`, `somebody:`, `wearer:`, ...);
+- `first =` and `last =` of a profile, `--first` and `--last`, and the name
+  after `--login`; a username (`Username: "first.last"`, `im first.last`),
+  which must be `first.last` of a listed `First Last`, or `first` of a
+  `First Resident`;
+- a SLURL, `secondlife://Name/x/y/z`, and a `maps.secondlife.com` link,
+  with `%20` read as a space;
+- a region in a transcript: `Name at x, y, z`, the key after `tp` and
+  `regions` (a whole name or the start of one), and a region listing row
+  (a name, spaces, then the two grid coordinates);
+- the `parcel --map` legend rows (a letter, the name, the area in square metres);
+- the group an avatar `acting as group NAME (`, `group = NAME` in a profile
+  and `-group NAME`;
+- a landmark by path (`/Landmarks/NAME`) or after `landmark`, `--go` and
+  `--make`; who said it (`< NAME: text`, `[IM NAME]`, `* NAME is online`);
+- text hidden in base64: a run that decodes to a name-shaped string, or
+  to LLSD binary whose strings are read the same way (`tools/scan-ids`
+  already lets such text through as a string).
+
+A value is judged only if it is shaped like a name: it opens with a capital,
+has a lower-case letter (so `NAME` and `PATH`, which stand for one, are not
+names), is at most four words and ends in no sentence mark. A single word
+with a capital inside it (`ObjectUpdate`, `TransferPacket`) is a protocol
+message, not a name, and is not read. A format string is not read. Names in
+prose -- a sentence, a man page's description, a comment, a commit message
+-- and lower-case object names (`a lamp`) are not recognisable and are left
+to reading and to the local list. The first-name search keys in a test
+(`im lorn hello`) are left to reading too.
+
+What follows is how a name is disguised, for a change that adds one.
 
 - **Avatars**: a legacy `First Last`, `First Resident`, the username
   `first.last` or `first` in lower case, a display name, a first name alone
@@ -214,8 +272,8 @@ it is rarely written one way.
 | id as two uint64s or a big integer, or derived by arithmetic | review |
 | grid square | the square rule: `0xAA` marked, or listed in `tools/known-squares` |
 | address | the address rule |
-| avatar, region, parcel, group, object names | the local list of real names kept off the tree (a backstop), and the allowlist when it comes |
-| names in a disguise | the same list, which finds an entry in any case and written with HTML entities; the other disguises are for review |
+| avatar, region, parcel, group, landmark names in the places listed above | `tools/scan-names` against `tools/known-names`, run by `tools/check-identities` and by `go test ./tools` |
+| the same names in prose, object and inventory names, other disguises | the local list of real names kept off the tree (a backstop), and review: the allowlist is not consulted for these |
 | host names, email addresses, real-life names, tokens, serials | the local list, and review |
 | chat, IMs, notices, profiles, picks, classifieds | reading what came back before committing it: captured speech is always replaced, because no rule can recognise it |
 
