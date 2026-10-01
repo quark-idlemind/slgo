@@ -176,3 +176,86 @@ ae2de45c-d252-50b8-5c6e-19f39ce79317	IMG_USE_BAKED_UPPER	indra/llcommon/indra_co
 5748decc-f629-461c-9a36-a35a221fe21f	TEXTURE_BLANK	indra/newview/app_settings/keywords_lsl_default.xml
 8b5fec65-8d8d-9dc5-cda8-8fdf2716e361	TEXTURE_MEDIA	indra/newview/app_settings/keywords_lsl_default.xml
 8dcd4a48-2d37-4909-9f78-f7a9eb4ef903	TEXTURE_TRANSPARENT	indra/newview/app_settings/keywords_lsl_default.xml
+
+# The sounds a viewer plays itself, as listed at
+# wiki.secondlife.com/wiki/Client_sounds; each cites where the viewer's
+# source has it, and the four in no viewer file cite that page.
+e8af4a28-aa83-4310-a7c4-c047e15ea0df	UISndFootsteps	indra/newview/app_settings/settings.xml
+25a863e8-dc42-4e8a-a357-e76422ace9b5	SND_STONE_RUBBER	indra/llmessage/sound_ids.cpp
+8761f73f-6cf9-4186-8aaa-0948ed002db1	SND_METAL_RUBBER	indra/llmessage/sound_ids.cpp
+2de4da5a-faf8-46be-bac6-c4d74f1e5767	SND_GLASS_RUBBER	indra/llmessage/sound_ids.cpp
+7d1826f4-24c4-4aac-8c2e-eff45df37783	SND_WOOD_RUBBER	indra/llmessage/sound_ids.cpp
+68d62208-e257-4d0c-bbe2-20c9ea9760bb	SND_FLESH_RUBBER	indra/llmessage/sound_ids.cpp
+75cf3ade-9a5b-4c4d-bb35-f9799bda7fb2	SND_RUBBER_PLASTIC	indra/llmessage/sound_ids.cpp
+ed124764-705d-d497-167a-182cd9fa2e6c	UISndAlert	indra/newview/app_settings/settings.xml
+4c8c3c77-de8d-bde2-b9b8-32635e0fd4a6	UISndClick	indra/newview/app_settings/settings.xml
+cb58f920-5b52-8a49-b81c-e532adbbe6f1	error (chord) no longer used	wiki.secondlife.com/wiki/Client_sounds
+219c5d93-6c09-31c5-fb3f-c5fe7495c115	UISndHealthReductionF	indra/newview/app_settings/settings.xml
+e057c244-5768-1056-c37e-1537454eeb62	UISndHealthReductionM	indra/newview/app_settings/settings.xml
+67cc2844-00f3-2b3c-b991-6418d01e1bb7	UISndFriendshipOffer	indra/newview/app_settings/settings.xml
+c825dfbc-9827-7e02-6507-3713d18916c1	UISndGroupInvitation	indra/newview/app_settings/settings.xml
+4174f859-0d3d-c517-c424-72923dc21f65	UISndInvalidOp	indra/newview/app_settings/settings.xml
+5e191c7b-8996-9ced-a177-b2ac32bfea06	SND_TYPING	indra/llmessage/sound_ids.cpp
+77a018af-098e-c037-51a6-178f05877c6f	UISndMoneyChangeUp	indra/newview/app_settings/settings.xml
+104974e3-dfda-428b-99ee-b0d4e748d3a3	UISndMoneyChangeDown	indra/newview/app_settings/settings.xml
+2ca849ba-2885-4bc3-90ef-d4987a5b983a	UISndBadKeystroke	indra/newview/app_settings/settings.xml
+be582e5d-b123-41a2-a150-454c39e961c8	SND_WOOD_FLESH	indra/llmessage/sound_ids.cpp
+212b6d1e-8d9c-4986-b3aa-f3c6df8d987d	object collision (rubber)	indra/llprimitive/llmaterialtable.cpp
+d55c7f3c-e1c3-4ddc-9eff-9ef805d9190e	object collision (plastic)	indra/llprimitive/llmaterialtable.cpp
+2d8c6f51-149e-4e23-8413-93a379b42b67	object collision (flesh)	indra/llprimitive/llmaterialtable.cpp
+6f00669f-15e0-4793-a63e-c03f62fee43a	object collision (wood splintering)	indra/llprimitive/llmaterialtable.cpp
+85cda060-b393-48e6-81c8-2cfdfb275351	object collision (glass break)	indra/llprimitive/llmaterialtable.cpp
+d1375446-1c4d-470b-9135-30132433b678	object collision (metal clunk)	indra/llprimitive/llmaterialtable.cpp
+3c8fc726-1fd6-862d-fa01-16c5b2568db6	UISndObjectRezIn	indra/newview/app_settings/settings.xml
+0cb7b00a-4c10-6948-84de-a93c09af2ba9	UISndObjectDelete	indra/newview/app_settings/settings.xml
+f4a0660f-5446-dea2-80b7-6482a082803c	UISndObjectCreate	indra/newview/app_settings/settings.xml
+8eaed61f-92ff-6485-de83-4dcc938a478e	UISndPieMenuAppear	indra/newview/app_settings/settings.xml
+d9f73cf8-17b4-6f7a-1565-7951226c305d	UISndMicToggle	indra/newview/app_settings/settings.xml
+f6ba9816-dcaf-f755-7b67-51b31b6233e5	UISndPieMenuSliceHighlight1	indra/newview/app_settings/settings.xml
+7aff2265-d05b-8b72-63c7-dbf96dc2f21f	UISndPieMenuSliceHighlight2	indra/newview/app_settings/settings.xml
+09b2184e-8601-44e2-afbb-ce37434b8ba1	UISndPieMenuSliceHighlight3	indra/newview/app_settings/settings.xml
+bbe4c7fc-7044-b05e-7b89-36924a67593c	UISndPieMenuSliceHighlight4	indra/newview/app_settings/settings.xml
+d166039b-b4f5-c2ec-4911-c85c727b016c	UISndPieMenuSliceHighlight5	indra/newview/app_settings/settings.xml
+242af82b-43c2-9a3b-e108-3b0c7e384981	UISndPieMenuSliceHighlight6	indra/newview/app_settings/settings.xml
+c1f334fb-a5be-8fe7-22b3-29631c21cf0b	UISndPieMenuSliceHighlight7	indra/newview/app_settings/settings.xml
+3d09f582-3851-c0e0-f5ba-277ac5c73fb4	UISndSnapshot	indra/newview/app_settings/settings.xml
+d7a9a565-a013-2a69-797d-5332baa1a947	UISndTeleportOut	indra/newview/app_settings/settings.xml
+e95c96a5-293c-bb7a-57ad-ce2e785ad85f	thunder	wiki.secondlife.com/wiki/Client_sounds
+449bc80c-91b6-6365-8fd1-95bd91016624	warning (ding) no longer used	wiki.secondlife.com/wiki/Client_sounds
+2c346eda-b60c-ab33-1119-b8941916a499	UISndWindowClose	indra/newview/app_settings/settings.xml
+c80260ba-41fd-8a46-768a-6bf236360e3a	UISndIncomingVoiceCall	indra/newview/app_settings/settings.xml
+6cf2be26-90cb-2669-a599-f5ab7698225f	appearance animation (zipper) no longer used	wiki.secondlife.com/wiki/Client_sounds
+00000000-0000-0000-0000-000000000100	SND_RIDE	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000101	SND_SHOT	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000102	SND_MORTAR	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000103	SND_HIT	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000104	SND_EXPLOSION	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000105	SND_BOING	indra/llmessage/sound_ids.cpp
+9f1bc096-3592-411e-9b0b-c447a9ff054c	SND_OBJECT_CREATE	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000106	SND_CHIRP	indra/llmessage/sound_ids.cpp
+828a9526-175b-455d-8af0-0e3c0fb602b2	SND_CHIRP2	indra/llmessage/sound_ids.cpp
+f99772d6-1ce6-4a39-a28b-06d26c94c9e3	SND_CHIRP3	indra/llmessage/sound_ids.cpp
+54472ca4-7fc9-42cb-b7d5-99ad5b12bd50	SND_CHIRP4	indra/llmessage/sound_ids.cpp
+2929964f-fac5-40d7-9179-2864a8fa9ace	SND_CHIRP5	indra/llmessage/sound_ids.cpp
+9abff1d3-863a-4e04-bd83-3834fd7fcff4	SND_CHIRPDEAD	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000107	SND_MUNCH	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000108	SND_PUNCH	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000109	SND_SPLASH	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000110	SND_CLICK	indra/llmessage/sound_ids.cpp
+ab858f9a-1f44-4d39-9b33-351543d03ccb	SND_WHISTLE	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000111	SND_ARROW_SHOT	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000112	SND_ARROW_THUD	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000113	SND_LASER_SHOT	indra/llmessage/sound_ids.cpp
+67f5e4f0-0534-4d97-bc01-f297648d20e0	SND_JET_THRUST	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000114	SND_SILENCE	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000115	SND_BUBBLES	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000116	SND_WELCOME	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000117	SND_SQUISH	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000118	SND_SUBPOD	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000119	SND_FOOTSTEPS	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000124	SND_STEP_LEFT	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000125	SND_STEP_RIGHT	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000120	SND_BALL_COLLISION	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000121	SND_OOOH_SCARE_ME	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000122	SND_PAYBACK_TIME	indra/llmessage/sound_ids.cpp
+00000000-0000-0000-0000-000000000123	SND_READY_FOR_BATTLE	indra/llmessage/sound_ids.cpp
