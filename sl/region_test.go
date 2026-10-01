@@ -52,7 +52,7 @@ func TestARegionChangeDropsWhatTheRegionSaidAndKeepsWhatItDidNot(t *testing.T) {
 
 	inv := &msg.ReplyTaskInventory{}
 	inv.InventoryData.TaskID = thePrim
-	inv.InventoryData.Filename = append([]byte("inventory_88fa7e57"), 0)
+	inv.InventoryData.Filename = append([]byte("inventory_89ad7e57"), 0)
 	f.Relay(t, inv)
 
 	// And what the GRID said, which no region owns: a name learned, a

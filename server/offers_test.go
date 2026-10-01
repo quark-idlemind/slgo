@@ -318,7 +318,7 @@ func TestTheRecordKeepsOneOfEachAndNoMore(t *testing.T) {
 
 	// Items are the exception: two things handed over are two offers.
 	for i := range offerLimit + 3 {
-		id := msg.UUID{0x9c, 0x07, byte(i >> 8), byte(i)}
+		id := offerID(i)
 		h.noteOffer(arrived(instantMessage(aGiver, "Example Giver", imInventoryOffered, id, "a lantern", itemBucket(id)),
 			uint32(100+i)))
 	}
@@ -331,9 +331,17 @@ func TestTheRecordKeepsOneOfEachAndNoMore(t *testing.T) {
 	}
 	var m msg.ImprovedInstantMessage
 	m.Decode(rec.GetMessages()[0].GetBody())
-	if want := (msg.UUID{0x9c, 0x07, 0, 3}); m.MessageBlock.ID != want {
+	if want := offerID(3); m.MessageBlock.ID != want {
 		t.Errorf("the oldest kept is %v, want %v: the oldest go first", m.MessageBlock.ID, want)
 	}
+}
+
+// offerID is the i'th of a run of ids that differ only in their last two
+// bytes, so that they sort in the order they were made.
+func offerID(i int) msg.UUID {
+	id := msg.MustParseUUID("02ed7e57-7e57-c0de-4379-11761c330000")
+	id[14], id[15] = byte(i>>8), byte(i)
+	return id
 }
 
 // TestStartAgentWatchesWhatTheAvatarSends: the backstop is only a

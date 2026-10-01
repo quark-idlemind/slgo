@@ -22,12 +22,18 @@
 # Usage:
 #     tools/check-identities                 what is staged for commit
 #     tools/check-identities --worktree      what is changed but not staged
-#     tools/check-identities --all           every tracked file
+#     tools/check-identities --all           every tracked file, and the tags
 #     tools/check-identities FILE...         the files named
+#     tools/check-identities --message FILE  a commit message, before it is made
 #     tools/check-identities --install-hook  run it before every commit
 #
-# It prints the file and line of anything it finds, and what to write instead.
-# Exit status is 1 when something was found, 0 when nothing was.
+# Every check runs, whatever an earlier one found: it prints the file and line
+# of everything it finds, and what to write instead, and the exit status is 1
+# at the end if any of them found something, 0 if none did.  The checks are:
+# a compiled binary, a network address, a 128-bit identifier that does not
+# carry the signature (tools/scan-ids, which doc/identities.md describes), a
+# grid square that is not marked, and the list of real names above.  Only the
+# last needs a list; the others need nothing.
 
 set -eu
 
@@ -35,25 +41,37 @@ map=${SLGO_IDENTITIES:-$HOME/.config/slgo/identities.tsv}
 root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 
 if [ "${1:-}" = "--install-hook" ]; then
-	hook=$(git rev-parse --git-dir)/hooks/pre-commit
-	if [ -e "$hook" ] && ! grep -q check-identities "$hook" 2>/dev/null; then
-		printf 'a pre-commit hook already exists and does not call this:\n  %s\n' "$hook" >&2
-		exit 1
-	fi
-	cat > "$hook" <<'HOOK'
+	hooks=$(git rev-parse --git-dir)/hooks
+	for h in pre-commit commit-msg; do
+		if [ -e "$hooks/$h" ] && ! grep -q check-identities "$hooks/$h" 2>/dev/null; then
+			printf 'a %s hook already exists and does not call this:\n  %s\n' "$h" "$hooks/$h" >&2
+			exit 1
+		fi
+	done
+	cat > "$hooks/pre-commit" <<'HOOK'
 #!/bin/sh
 exec "$(git rev-parse --show-toplevel)/tools/check-identities"
 HOOK
-	chmod +x "$hook"
-	echo "installed $hook"
+	cat > "$hooks/commit-msg" <<'HOOK'
+#!/bin/sh
+exec "$(git rev-parse --show-toplevel)/tools/check-identities" --message "$1"
+HOOK
+	chmod +x "$hooks/pre-commit" "$hooks/commit-msg"
+	echo "installed $hooks/pre-commit and $hooks/commit-msg"
 	exit 0
 fi
 
+# The list of real names is the one check that needs a file kept off the
+# tree.  Without it that check says so and the rest run as they always do.
+haslist=1
 if [ ! -r "$map" ]; then
-	echo "check-identities: no list at $map, so nothing to check against"
-	echo "  (that is the ordinary case for anybody who has not measured on the grid)"
-	exit 0
+	haslist=0
+	echo "check-identities: no list at $map, so no real names are checked for"
+	echo "  (that is the ordinary case for anybody who has not measured on the grid;"
+	echo "  everything else is checked all the same)"
 fi
+
+failed=0
 
 # What to look at.  Staged additions by default, because that is what a commit
 # is about to make public.
@@ -62,11 +80,12 @@ case "$scope" in
 --staged)   files=$(git diff --cached --name-only --diff-filter=ACMR) ;;
 --worktree) files=$(git diff --name-only --diff-filter=ACMR) ;;
 --all)      files=$(git ls-files) ;;
+--message)  files=""; msgfile=${2:?check-identities: --message wants a file} ;;
 -*)         echo "check-identities: no such option $scope" >&2; exit 2 ;;
 *)          files=$* ;;
 esac
 
-[ -n "$files" ] || { echo "check-identities: nothing to check"; exit 0; }
+[ -n "$files" ] || [ "$scope" = "--message" ] || { echo "check-identities: nothing to check"; exit 0; }
 
 # Text only: a texture is not going to name anybody, and grep on a jpeg is
 # noise.
@@ -80,6 +99,16 @@ for f in $files; do
 	esac
 	[ -f "$root/$f" ] && text="$text $root/$f"
 done
+if [ "$scope" = "--message" ]; then
+	text=$msgfile
+	idfiles=$msgfile
+else
+	idfiles=""
+	for f in $files; do
+		case "$f" in go.sum|*/go.sum) continue ;; esac
+		[ -f "$root/$f" ] && idfiles="$idfiles $root/$f"
+	done
+fi
 [ -n "$text" ] || { echo "check-identities: nothing to check"; exit 0; }
 
 # Nothing compiled belongs in the repository.  A Go binary also carries
@@ -110,7 +139,7 @@ Add its name to .gitignore -- under /cmd/*/ if it is built beside its source,
 and in the root list if it is built by path -- and take it out of the change.
 A binary committed once stays in the history for as long as the history does.
 BIN
-	exit 1
+	failed=1
 fi
 
 # A simulator's address says which machine a real region was running on.
@@ -134,122 +163,63 @@ Use the documentation range instead -- 203.0.113.0/24, 198.51.100.0/24 or
 192.0.2.0/24 -- and say in the text that the address is invented.  A region
 moves between machines, so the number was only ever true of one moment.
 ADDR
-	exit 1
+	failed=1
 fi
 
-# Every uuid has to show that it is not somebody's, and this needs no list.
-# An invented one carries the mark -- groups two and three are fa4e-fa4e,
-# so a hexdump's second group is fa4efa4e and a byte literal's bytes four
-# to seven are 0xfa 0x4e 0xfa 0x4e.  A placeholder is one nobody could take
-# for an id: a group of one repeated character, or sixteen bytes in order.
-# A real one is Linden Lab's own constant and is written down, with where it
-# is published, in tools/known-uuids.  Anything else might be a resident's,
-# and a checker cannot tell a real id from a convincing invention -- which is
-# exactly why the invention has to say so.
-known=$root/tools/known-uuids
-unmarked=$(perl -e '
-	my %known;
-	if (open my $k, "<", shift @ARGV) {
-		while (<$k>) { next if /^\s*(#|$)/; $known{lc((split /\s+/)[0])} = 1 }
-	}
-	sub ok {
-		my $h = lc shift;              # 32 hex digits
-		return 1 if substr($h, 8, 8) eq "fa4efa4e";
-		my $id = join "-", unpack "A8 A4 A4 A4 A12", $h;
-		return 1 if $known{$id};
-		for my $g (split /-/, $id) { return 1 if $g =~ /^(.)\1*$/ }
-		my @b = map { hex } $h =~ /(..)/g;
-		my ($up, $down) = (1, 1);
-		for my $i (1 .. 15) {
-			$up = 0 unless $b[$i] > $b[$i-1];
-			$down = 0 unless $b[$i] < $b[$i-1];
-		}
-		return $up || $down;
-	}
-	for my $f (@ARGV) {
-		next if $f =~ m{/tools/known-uuids$};
-		open my $in, "<", $f or next;
-		while (my $line = <$in>) {
-			my @ids;
-			while ($line =~ /(?<![0-9a-fA-F-])([0-9a-fA-F]{8})-([0-9a-fA-F]{4})-([0-9a-fA-F]{4})-([0-9a-fA-F]{4})-([0-9a-fA-F]{12})(?![0-9a-fA-F-])/g) {
-				push @ids, ["$1-$2-$3-$4-$5", "$1$2$3$4$5"];
-			}
-			while ($line =~ /(?<![0-9a-fA-F])([0-9a-fA-F]{8}) ([0-9a-fA-F]{8}) ([0-9a-fA-F]{8}) ([0-9a-fA-F]{8})(?![0-9a-fA-F])/g) {
-				push @ids, ["$1 $2 $3 $4", "$1$2$3$4"];
-			}
-			while ($line =~ /UUID\{((?:\s*0[xX][0-9a-fA-F]{1,2}\s*,){15}\s*0[xX][0-9a-fA-F]{1,2}\s*,?\s*)\}/g) {
-				my @b = map { sprintf "%02x", hex } $1 =~ /0[xX]([0-9a-fA-F]{1,2})/g;
-				push @ids, ["UUID{...}", join "", @b];
-			}
-			for (@ids) { print "$f:$.: $_->[0]\n" unless ok($_->[1]) }
-		}
-	}
-' "$known" $text)
-if [ -n "$unmarked" ]; then
-	echo "check-identities: these uuids are neither marked as invented nor known:"
-	echo
-	printf '%s\n' "$unmarked" | sed "s|^$root/||" | while IFS= read -r hit; do
-		printf '  %s\n' "$hit"
-	done
-	cat <<'UUID'
+# Every 128-bit value has to show that it is not somebody's, and this needs
+# no list.  An invented uuid, password digest, mac or id0 carries the
+# signature xxxx7e57-7e57-c0de-xxxx-xxxxxxxxxxxx (a digest, mac or id0 is the
+# same without the hyphens), and an id written down elided -- ab3f7e57-... --
+# has a first group ending in 7e57.  The only others allowed are Linden Lab's
+# published constants in tools/known-uuids, and the one digest a test works
+# out from a string in tools/known-hashes.  There is no other exception: a
+# checker cannot tell a real id from a convincing invention, which is exactly
+# why the invention has to say so.  tools/scan-ids knows every shape an id is
+# written in and finds each one; doc/identities.md lists them.
+if [ -n "$idfiles" ]; then
+	# shellcheck disable=SC2086
+	unsigned=$("$root/tools/scan-ids" --check $idfiles 2>&1 || true)
+	if [ -n "$unsigned" ]; then
+		echo "check-identities: these identifiers are neither signed as invented nor known:"
+		echo
+		printf '%s\n' "$unsigned" | while IFS= read -r hit; do
+			printf '  %s\n' "$hit"
+		done
+		cat <<'UUID'
 
-An invented uuid says so: keep the first eight characters and make groups
-two and three fa4e-fa4e, as in 2ce77e57-7e57-c0de-a128-5caa99806c61.  When it
-replaces a real one, the first four characters are the real one's and the rest
-is invented.  A real uuid of Linden Lab's own -- a built-in animation, a
-standard texture -- goes in tools/known-uuids with where it is published.
-Nothing that names a resident, a region, an object or a group is ever real
-here.  CLAUDE.md has the whole of it.
+An invented identifier carries the signature, and tools/new-id makes one:
+
+    $ tools/new-id
+    ab3f7e57-7e57-c0de-9d41-6c2e08f1b7a5
+
+Four digits and 7e57, then 7e57-c0de, then the rest.  A password digest, a
+login's mac or id0 is the same thing without the hyphens.  An id elided to
+its first group is written ab3f7e57-... and shows it was invented.  Nothing
+of a real one is kept, and nothing is exempt: a placeholder is signed too.
+A uuid of Linden Lab's own -- a built-in animation, a standard texture, the
+null key -- goes in tools/known-uuids with where it is published.  Nothing
+that names a resident, a region, an object or a group is ever real here.
+CLAUDE.md and doc/identities.md have the whole of it.
 UUID
-	exit 1
+		failed=1
+	fi
 fi
 
-# A password digest is the password as far as the grid is concerned: the
-# viewer sends $1$ and the MD5 of the password, and whoever has it can log in
-# with it.  So one is marked the way a uuid is.  An invented digest has
-# fa4efa4e as hex digits nine to sixteen; a placeholder is one character
-# throughout, or 0123456789abcdef twice; and a digest that has to be real,
-# because a test works it out from the string it hashes, is written down
-# with that string in tools/known-hashes.
-knownh=$root/tools/known-hashes
-unmarkedh=$(perl -e '
-	my %known;
-	if (open my $k, "<", shift @ARGV) {
-		while (<$k>) { next if /^\s*(#|$)/; $known{lc((split /\s+/)[0])} = 1 }
-	}
-	sub ok {
-		my $h = lc shift;              # 32 hex digits
-		return 1 if substr($h, 8, 8) eq "fa4efa4e";
-		return 1 if $h =~ /^(.)\1*$/;
-		return 1 if $h eq "0123456789abcdef" x 2;
-		return $known{"\$1\$$h"};
-	}
-	for my $f (@ARGV) {
-		next if $f =~ m{/tools/known-hashes$};
-		open my $in, "<", $f or next;
-		while (my $line = <$in>) {
-			while ($line =~ /\$1\$([0-9a-fA-F]{32})(?![0-9a-fA-F])/g) {
-				print "$f:$.: \$1\$$1\n" unless ok($1);
-			}
-		}
-	}
-' "$knownh" $text)
-if [ -n "$unmarkedh" ]; then
-	echo "check-identities: these password digests are neither marked as invented nor known:"
-	echo
-	printf '%s\n' "$unmarkedh" | sed "s|^$root/||" | while IFS= read -r hit; do
-		printf '  %s\n' "$hit"
-	done
-	cat <<'HASH'
-
-A digest is a password to the grid.  An invented one says so: hex digits nine
-to sixteen are fa4efa4e, as in $1$52a57e577e57c0de5cf5fb1c76c742fa, and
-nothing else of a real one is kept.  A placeholder is one character
-throughout.  A digest a test has to compute for real goes in
-tools/known-hashes with the string it is the MD5 of.  CLAUDE.md has the
-whole of it.
-HASH
-	exit 1
+# Tags are part of what is published, and a name or a message there is
+# written down as much as a file is.
+if [ "$scope" = "--all" ]; then
+	tagtext=$(mktemp)
+	git for-each-ref --format='%(refname:short)%0a%(contents)' refs/tags > "$tagtext" 2>/dev/null || true
+	unsigned=$("$root/tools/scan-ids" --check "$tagtext" 2>&1 | sed "s|^.*$(basename "$tagtext")|tags|" || true)
+	rm -f "$tagtext"
+	if [ -n "$unsigned" ]; then
+		echo "check-identities: a tag's name or message holds an identifier that is not signed:"
+		echo
+		printf '%s\n' "$unsigned" | while IFS= read -r hit; do
+			printf '  %s\n' "$hit"
+		done
+		failed=1
+	fi
 fi
 
 # A region's grid square is one map lookup from its name, so a square is
@@ -348,10 +318,12 @@ real square of one of Linden Lab's public sandboxes goes in
 tools/known-squares with where it was observed.  CLAUDE.md has the whole of
 it.
 SQUARE
-	exit 1
+	failed=1
 fi
 
 found=0
+list=$map
+[ "$haslist" -eq 1 ] || list=/dev/null
 # Read the list, skipping comments and blank lines.  A uuid is also looked for
 # by its first eight characters, because the documentation elides them that way
 # -- eight characters of somebody's id is still theirs.
@@ -404,20 +376,23 @@ while IFS="$(printf '\t')" read -r real repl; do
 		report "$hits" "$(printf '%s' "$repl" | cut -c1-8)" "$short"
 		;;
 	esac
-done < "$map"
+done < "$list"
 
 if [ "$found" -ne 0 ]; then
 	cat <<'WHY'
 Nothing that identifies a real resident, their land, their objects or their
-groups belongs in this repository, which is public.  Invent a name and invent
-the uuid, keeping the first four characters of the uuid so that anything
-sorting by id still sorts the same way.  CLAUDE.md has the whole of it.
+groups belongs in this repository, which is public.  Invent a name, and make
+every uuid with tools/new-id so that it carries the signature.  CLAUDE.md has
+the whole of it.
 
 If one of these is a false positive -- an ordinary word that happens to match
 -- the answer is to make the entry in the list more specific rather than to
 skip the check.
 WHY
-	exit 1
+	failed=1
 fi
 
+if [ "$failed" -ne 0 ]; then
+	exit 1
+fi
 echo "check-identities: nothing real in what was checked"

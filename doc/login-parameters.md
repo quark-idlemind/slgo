@@ -59,9 +59,8 @@ called. A viewer never sends a MAC address.
 `llhasheduniqueid.cpp:33` takes `LLMachineID::getUniqueID()` -- falling
 back to `LLUUID::getNodeID()`, which is the network card -- md5s the six
 bytes, and sends the **32 lowercase hex digit** digest as `mac`. When it
-cannot get an id at all it sends the literal
-`00157e577e57c0de028f000000000000` and logs "cannot uniquely identify
-this machine".
+cannot get an id at all it sends the literal string of 32 zero digits
+and logs "cannot uniquely identify this machine".
 
 `id0` is `LLAppViewer::mSerialNumber`, from the platform's
 `generateSerialNumber`. On macOS (`llappviewermacosx.cpp:411`) that is
@@ -73,8 +72,8 @@ So a real viewer's pair is two md5 digests, and so is ours. `agent.Login`
 hashes `MAC` on the way out (`hashMAC`), which puts the split in the
 useful place: `~/.config/slgod/config` keeps the invented address
 `7E:52:2B:3C:57:06`, which a person can read and check, and the wire
-carries `3d877e577e57c0de5ee847431f341bc5`, which is what a viewer would
-carry. A value that is already 32 hex digits passes straight through, so
+carries the md5 of its six bytes, 32 hex digits, which is what a viewer
+would carry. A value that is already 32 hex digits passes straight through, so
 a digest lifted out of a viewer's log can be used as it stands.
 
 We sent the colon form until August 2026. Correcting it moved the

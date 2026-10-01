@@ -102,7 +102,7 @@ func TestARegionIdThatWillNotParseIsRefusedRatherThanBecomingHome(t *testing.T) 
 	t.Parallel()
 	for _, bad := range []string{
 		"Landmark version 2\nregion_id not-a-uuid\nlocal_pos 32.00 70.00 1000.09\n",
-		"Landmark version 2\nregion_id a8377e577e57c0de49f1463af55b7a68\n" +
+		"Landmark version 2\nregion_id " + strings.ReplaceAll(pelmarReach.String(), "-", "") + "\n" +
 			"local_pos 32.00 70.00 1000.09\n",
 		"Landmark version 2\nregion_id \nlocal_pos 32.00 70.00 1000.09\n",
 		"Landmark version 2\nlocal_pos 32.00 70.00 1000.09\n",

@@ -292,7 +292,7 @@ func TestAnInstantMessageOpensAConversationAndSaysSo(t *testing.T) {
 	// that id to be, and from the id itself when it knows nobody.
 	x.out.Reset()
 	x.grid.Relay(t, imFrom(testOther, "", sl.DialogMessage, "no name on this one"))
-	if got := waits(t, x, "no name on this one"); !strings.Contains(got, "(cccccccc)") {
+	if got := waits(t, x, "no name on this one"); !strings.Contains(got, "(d22b7e57)") {
 		t.Errorf("an unnamed sender should be printed as the id:\n%s", got)
 	}
 }

@@ -47,7 +47,7 @@ func TestDescribeFaceSaysOnlyWhatWasDone(t *testing.T) {
 	}
 
 	f := sl.PlainFaces(1)[0]
-	f.Texture = msg.UUID{0x89, 0x55, 0x67, 0x47}
+	f.Texture = msg.MustParseUUID("90397e57-7e57-c0de-de82-ae6404acf598")
 	f.SetColour(255, 80, 80)
 	f.SetAlpha(200)
 	f.SetRepeats(4, 2)

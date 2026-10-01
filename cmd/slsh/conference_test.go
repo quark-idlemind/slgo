@@ -314,7 +314,7 @@ func TestAConferencesSpeechIsPrintedWithTheConferenceAndTheSpeaker(t *testing.T)
 			`<key>%s</key><map><key>transition</key><string>ENTER</string></map></map></map></llsd>`,
 		confSessions[0], x.s.Me(), testOther))
 	got = waits(t, x, "came into")
-	if !strings.Contains(got, "* (cccccccc) came into [Conference] Multi-person chat #1") &&
+	if !strings.Contains(got, "* (d22b7e57) came into [Conference] Multi-person chat #1") &&
 		!strings.Contains(got, "* Third Resident came into [Conference] Multi-person chat #1") {
 		t.Errorf("printed %q", got)
 	}
