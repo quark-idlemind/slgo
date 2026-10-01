@@ -126,9 +126,13 @@ again afterwards:
   transaction, with the destination folder as the bucket: the item was
   in that folder within 9 seconds. `AcceptTaskInventoryOffer` sends it.
 
-Not measured: a give from an object the receiver does not own, where
-`From` is somebody else; and whether 10 accepts any folder or only the
-default one for the item's type (the Scripts folder was used).
+A second give, measured the same day from an object another avatar
+owned: `From` was that owner, not the receiver, and dialog 10 addressed
+to that `From`, with the receiver's Scripts folder as the bucket, put
+the item in the receiver's Scripts folder.
+
+Not measured: whether 10 accepts any folder or only the default one for
+the item's type (the Scripts folder was used both times).
 
 ## What slgo does with them
 
