@@ -32,8 +32,9 @@
 # at the end if any of them found something, 0 if none did.  The checks are:
 # a compiled binary, a network address, a 128-bit identifier that does not
 # carry the signature (tools/scan-ids, which doc/identities.md describes), a
-# grid square that is not marked, and the list of real names above.  Only the
-# last needs a list; the others need nothing.
+# grid square that is not marked, a name that is not on tools/known-names, and
+# the list of real names above.  Only the last needs a list kept off the tree;
+# the others need nothing.
 
 set -eu
 
@@ -319,6 +320,35 @@ tools/known-squares with where it was observed.  CLAUDE.md has the whole of
 it.
 SQUARE
 	failed=1
+fi
+
+# A name is words, and nothing can tell a real one from an invented one, so
+# every name the tree uses is written down in tools/known-names and one that
+# is not there is refused.  Only the places where a name is plainly a name
+# are read -- tools/scan-names and doc/identities.md say which -- and prose
+# is left to the person reading it and to the list kept off the tree below.
+if [ "$scope" != "--message" ] && [ -n "$idfiles" ]; then
+	# shellcheck disable=SC2086
+	unlisted=$("$root/tools/scan-names" --check $idfiles 2>&1 || true)
+	if [ -n "$unlisted" ]; then
+		echo "check-identities: these names are not on tools/known-names:"
+		echo
+		printf '%s\n' "$unlisted" | while IFS= read -r hit; do
+			printf '  %s\n' "$hit"
+		done
+		cat <<'NAMES'
+
+Every name in this repository is invented and is listed in tools/known-names.
+Take a fresh one from the spares at the end of that file (and make a new
+spare), or invent one that is not a real resident, region, parcel, group or
+object, and add it under its kind with a line saying what it is.  An example
+uses the Example family (Example Resident, Example Builders, ...).  Never
+add a name because it is in a capture: that is the real thing, and what goes
+in a file is an equivalent made up for the purpose.  CLAUDE.md and
+doc/identities.md have the whole of it.
+NAMES
+		failed=1
+	fi
 fi
 
 found=0

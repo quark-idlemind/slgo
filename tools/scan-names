@@ -1,0 +1,318 @@
+#!/usr/bin/perl
+# scan-names finds the names of Second Life things in the places a name can
+# be recognised mechanically, and says whether each is on tools/known-names.
+#
+# A name is words, and no rule can tell a real one from an invented one --
+# so the rule is the other way round: every name the tree uses is written
+# down in tools/known-names, with what it is, and one that is not there is
+# refused.  A new one is taken from the spares at the end of that file.
+#
+# Only the places where a name is plainly a name are read, because anywhere
+# else an ordinary word looks the same.  doc/identities.md lists them; the
+# short version is a name field in code, a name key in a fixture, the
+# first/last lines of a profile, a username, a SLURL, a region in a
+# transcript or after tp, a parcel in a map legend, a group the avatar acts
+# as, and text hidden in base64.  Prose is left to the person reading it.
+#
+# Usage:
+#     scan-names --check FILE...    what is not on the list, file:line: place
+#     scan-names --list FILE...     every name found: place, file:line, name
+#
+# Exit status is 1 when --check found something.
+
+use strict;
+use warnings;
+use MIME::Base64 qw(decode_base64 encode_base64);
+use File::Basename qw(dirname);
+use Cwd qw(abs_path);
+
+my $root = dirname(dirname(abs_path(__FILE__)));
+
+# ---- the list
+
+my (%known, %words, @names);
+sub load_known {
+	open my $k, '<', "$root/tools/known-names" or die "scan-names: no tools/known-names\n";
+	while (<$k>) {
+		next if /^\s*(#|$)/;
+		chomp;
+		my ($n) = split /\t/;
+		$n =~ s/\s+$//;
+		my $l = lc $n;
+		$known{$l} = 1;
+		push @names, $l;
+		$words{$_} = 1 for $l =~ /([a-z][a-z']*)/g;
+	}
+}
+
+# A name as the list spells it: entities and doubled apostrophes undone,
+# a trailing NUL or newline escape dropped, spaces squeezed, case ignored.
+sub norm {
+	my ($v) = @_;
+	$v =~ s/(?:\\x00|\\0|\\n|\\t)+$//;
+	$v =~ s/&amp;/&/g; $v =~ s/&#39;|&apos;|&rsquo;/'/g; $v =~ s/&quot;/"/g;
+	$v =~ s/''/'/g;
+	$v =~ s/%20/ /g;
+	$v =~ s/^\s+|\s+$//g; $v =~ s/\s+/ /g;
+	return lc $v;
+}
+
+# Shaped like a name: it opens with a capital, has a lower-case letter
+# somewhere (so NAME and PATH, which stand for a name, are not one), is at
+# most six words and carries no digit run that makes it a measurement.
+sub shaped {
+	my ($v) = @_;
+	return 0 unless $v =~ /^[A-Z][A-Za-z'&.\-]*(?: (?:[A-Za-z'&.\-]+|\d+))*$/;
+	return 0 unless $v =~ /[a-z]/;
+	return 0 if (() = $v =~ / /g) > 3;
+	return 0 if $v =~ /\d{3}/;
+	# A message name or a type (ObjectUpdate, TransferPacket) is one word
+	# with a capital inside it; the protocol is not what this is for.
+	return 0 if $v =~ /^[A-Z][a-z]+(?:[A-Z][a-z0-9]*)+$/;
+	return 0 if $v =~ /[.!?:;,]$/;
+	return 1;
+}
+
+sub on_list {
+	my ($v) = @_;
+	return $known{norm($v)};
+}
+# A search key: the start of a name on the list, or of one of its words.
+sub prefix_ok {
+	my ($v) = @_;
+	my $n = norm($v);
+	return 0 if $n eq '';
+	return 1 if $known{$n};
+	for my $k (@names) { return 1 if index($k, $n) == 0 }
+	for my $w (keys %words) { return 1 if index($w, $n) == 0 }
+	return 0;
+}
+# A part of a name: one word of one on the list.
+sub part_ok { my ($v) = @_; return $words{lc $v} }
+# A username: first.last for a name on the list, and first alone for
+# first Resident.
+sub user_ok {
+	my ($v) = @_;
+	$v = lc $v;
+	for my $k (@names) {
+		my @w = $k =~ /([a-z][a-z']*)/g;
+		next unless @w >= 2;
+		return 1 if $v eq lc "$w[0].$w[1]";
+		return 1 if $w[1] eq 'resident' && $v eq $w[0];
+	}
+	return 0;
+}
+
+# ---- the places
+
+my $FIELD = qr/(?:Name|FirstName|LastName|First|Last|FromName|FromAgentName|OwnerName|AvatarName|SimName|Region|RegionName|ParcelName|GroupName|ObjectName|DisplayName|AgentName|ToName|ChatName|chatName|name|avatar_name|region_name|parcel_name|group_name|display_name|legacy_first_name|legacy_last_name|first_name|last_name|first|last|region|sim_name)/;
+my $KEY = qr/(?:Name|SimName|RegionName|ParcelName|GroupName|ObjectName|OwnerName|FromName|FromAgentName|DisplayName|AgentName|region|sim_name|region_name|parcel_name|group_name|display_name|legacy_first_name|legacy_last_name|first_name|last_name|AvatarName)/;
+my $HELPER = qr/(?:mapBlock|enterRegion|AnswerTeleport|aGroup|aParcel|parcelBody|answerParcel|avatarGroups|pickerRow|namesReply|inviting|imFrom|groupSaid|offering|at)/;
+my $TITLE = qr/[A-Z][A-Za-z'&.\-]*(?: (?:of|and|the|[A-Z][A-Za-z'&.\-]*))*/;
+my $ZZZ = qr/-?\d+(?:\.\d+)?/;
+
+# Each finder is given the text of one line and the file name, and calls
+# $emit->(place, kind, value) for what it finds.  kind says how to judge
+# it: 'name' (a whole name, shaped like one), 'key' (a name or the start of
+# one), 'part' (one word of a name), 'user' (a username).
+sub find_names {
+	my ($line, $file, $emit) = @_;
+
+	# A name field in Go or JSON given a string: Name: "x", .Name == "x",
+	# "GroupName": "x", []byte("x\x00").
+	while ($line =~ /(?<![A-Za-z0-9_])$FIELD(?:"|\])?\s*(?::=|==|!=|=|:)\s*(?:\[\]byte\()?"((?:[^"\\]|\\x00|\\n|\\.)*)"/g) {
+		my $v = $1; $v =~ s/\\x00$//;
+		$emit->('name field', 'name', $v);
+	}
+	# A fixture key and its string: <key>SimName</key><string>x</string>.
+	while ($line =~ /<key>$KEY<\/key>\s*<(?:string|binary[^>]*)>([^<]*)</g) {
+		$emit->('name key', 'name', $1);
+	}
+	while ($line =~ /"$KEY"\s*:\s*"((?:[^"\\]|\\.)*)"/g) {
+		$emit->('name key', 'name', $1);
+	}
+	# The helpers a test calls with a name as the first string.
+	while ($line =~ /(?<![A-Za-z0-9_])$HELPER\(\s*(?:[a-z][A-Za-z0-9_.]*,\s*)*"([^"\\]+)"/g) {
+		$emit->('name argument', 'name', $1);
+	}
+	# A person fixture: a map from id to name, and the labelled variables
+	# a test gives a name to.
+	while ($line =~ /map\[msg\.UUID\]string\{(.*)\}/g) {
+		my $m = $1;
+		$emit->('name map', 'name', $1) while $m =~ /"((?:[^"\\]|\\.)*)"/g;
+	}
+	while ($line =~ /(?<![A-Za-z0-9_])(?:owner|stranger|somebody|testSomebody|wearer|other|near|far|chatTalker|confStranger|who|person|friend):\s*"([^"\\]+)"/g) {
+		$emit->('name field', 'name', $1);
+	}
+	# first = and last = of a profile, --first/--last, and the login line.
+	while ($line =~ /(?<![A-Za-z0-9_.-])(?:first|last)\s*=\s*([A-Z][a-z]+)(?=\\n|\s|$|"|`|<)/g) {
+		$emit->('profile first/last', 'part', $1);
+	}
+	while ($line =~ /--(?:first|last)[ =]([A-Z][a-z]+)\b/g) { $emit->('--first/--last', 'part', $1) }
+	while ($line =~ /(?<![A-Za-z0-9-])-{1,2}login (?:--[a-z-]+ )*([A-Z][a-z]+ [A-Z][a-z]+)/g) {
+		$emit->('login', 'name', $1);
+	}
+	# A username: first.last.
+	while ($line =~ /(?<![A-Za-z0-9_.])(?:Username|UserName|username|user_name)\W{1,5}([a-z]+\.[a-z]+)\b/g) {
+		$emit->('username', 'user', $1);
+	}
+	while ($line =~ /(?<![A-Za-z0-9_.])(?:inviting|im|offer|lure|invite|pay|walk|profile|friend)\(?[ "]+([a-z]+\.[a-z]+)\b/g) {
+		my $u = $1;
+		next if $u =~ /\.(?:txt|lsl|png|jpg|md|go|json|tsv|sh|html|log|msg|key|pem)$/;
+		$emit->('username', 'user', $u);
+	}
+	# A SLURL: secondlife://Name/x/y/z, maps.secondlife.com/secondlife/Name/x/y/z.
+	while ($line =~ m{secondlife://(?!/)([^/\s"'<>]+)/\d}g) { $emit->('slurl', 'name', $1) }
+	while ($line =~ m{maps\.secondlife\.com/secondlife/([^/\s"'<>]+)/\d}g) { $emit->('slurl', 'name', $1) }
+	# A region in a transcript: "Name at 128, 128, 25".
+	while ($line =~ /(?<![A-Za-z0-9'&])($TITLE) at $ZZZ, $ZZZ, $ZZZ/g) {
+		my $v = $1;
+		$v =~ s/^(?:The|Teleporting|Setting|Going|You|Standing|Now) (?=[A-Z])//;
+		$emit->('region at position', 'name', $v);
+	}
+	# tp and regions: a whole name or the start of one.
+	while ($line =~ /(?<![A-Za-z0-9_-])(?:tp|regions|teleport) (?:--wait \d+ )?($TITLE)(?= $ZZZ|$|"|`|\\|\s--|\s*<)/g) {
+		$emit->('tp/regions', 'key', $1);
+	}
+	while ($line =~ /"(?:tp|regions) (?:--wait \d+ )?([a-z]{3,})"/g) {
+		my $v = $1;
+		next if $v =~ /^(?:home|here|help)$/;
+		$emit->('tp/regions', 'key', $v);
+	}
+	# A region listing row: Name, then the grid square.
+	if ($line =~ /^\s*(?:<[^>]+>)*(\S(?:.*?\S)?)\s{2,}(\d{4,5}), (\d{4,5})\b/ ) {
+		$emit->('region listing', 'name', $1);
+	}
+	# The parcel map legend: a letter, the name, the area.
+	if ($line =~ /^ {1,6}[a-z.]  (\S(?:.*?\S)?)\s{2,}\d+ m(?:²|&sup2;)/) {
+		$emit->('parcel legend', 'name', $1);
+	}
+	# A group an avatar acts as, and a group set in a profile.
+	while ($line =~ /acting as group (.+?) \(/g) { $emit->('group', 'name', $1) }
+	while ($line =~ /(?<![A-Za-z0-9_.-])group\s+=\s+([A-Z][^\n#<`"]*?)\s*(?:$|#|<|`|"|\\n)/g) {
+		$emit->('group', 'name', $1);
+	}
+	while ($line =~ /-group (?:[a-z]+=)?(?:"([^"]+)"|([A-Z][A-Za-z]*))/g) {
+		$emit->('group', 'name', defined $1 ? $1 : $2);
+	}
+	# A landmark by path.
+	while ($line =~ m{/Landmarks/([A-Z][^/<"`\\\n]*?)(?=\s{2,}|<|"|`|\\|$)}g) {
+		$emit->('landmark', 'name', $1);
+	}
+	while ($line =~ /(?<![A-Za-z0-9_-])landmark (?:--(?:go|make|wait \d+) )*($TITLE)(?=$|"|`|\\|\s*<)/g) {
+		$emit->('landmark', 'name', $1);
+	}
+	# Who said it: a line of chat, an IM or a notice.
+	while ($line =~ /(?:^|[ "`>])[<>] (?:\[(?:Group|Conference|IM)\] )?($TITLE)(?= in \[|: |:$)/g) {
+		$emit->('chat sender', 'name', $1);
+	}
+	while ($line =~ /\* ($TITLE) (?:is online|is offline|came into|invites|offers|asked)/g) {
+		$emit->('presence line', 'name', $1);
+	}
+	while ($line =~ /(?<![A-Za-z0-9_-])\[(?:IM|Group|Conference) ($TITLE)\]/g) {
+		$emit->('chat sender', 'name', $1);
+	}
+}
+
+# Text hidden in base64: a run of twenty characters or more that decodes
+# to a name-shaped string with a NUL on the end, or to LLSD binary whose
+# strings are read the same way.
+sub find_base64 {
+	my ($t, $emit_at) = @_;
+	while ($t =~ /(?<![A-Za-z0-9+\/=_-])([A-Za-z0-9+\/]{12,}={0,2})(?![A-Za-z0-9+\/=_-])/g) {
+		my ($s, $run) = ($-[1], $1);
+		(my $bare = $run) =~ s/=+$//;
+		next if length($bare) % 4 == 1;
+		my $bytes = decode_base64($bare);
+		(my $canon = encode_base64($bytes, '')) =~ s/=+$//;
+		next unless $canon eq $bare;
+		my @strs;
+		my $hdr = "<? LLSD/Binary ?>\n";
+		if (index($bytes, $hdr) == 0 || substr($bytes, 0, 1) =~ /^[{\[]$/) {
+			my $p = index($bytes, $hdr) == 0 ? length $hdr : 0;
+			eval { llsd_strings($bytes, \$p, \@strs, 0); 1 } or @strs = ();
+		}
+		else {
+			(my $str = $bytes) =~ s/\x00\z//;
+			push @strs, $str if $str =~ /\A[\x20-\x7e]{4,}\z/;
+		}
+		for my $v (@strs) {
+			next unless shaped($v);
+			$emit_at->($s, 'base64 text', 'name', $v);
+		}
+	}
+}
+sub llsd_strings {
+	my ($d, $p, $out, $depth) = @_;
+	die "deep\n" if $depth > 32;
+	my $need = sub { die "short\n" if $$p + $_[0] > length $d };
+	my $len = sub { $need->(4); my $n = unpack 'N', substr($d, $$p, 4); $$p += 4; $n };
+	$need->(1);
+	my $c = substr $d, $$p++, 1;
+	if ($c =~ /^[!10]$/) { return }
+	if ($c eq 'i') { $need->(4); $$p += 4; return }
+	if ($c =~ /^[rd]$/) { $need->(8); $$p += 8; return }
+	if ($c eq 'u') { $need->(16); $$p += 16; return }
+	if ($c =~ /^[bsl]$/) {
+		my $n = $len->(); $need->($n);
+		(my $s = substr($d, $$p, $n)) =~ s/\x00\z//;
+		push @$out, $s if $c eq 's';
+		$$p += $n; return;
+	}
+	if ($c eq '[') { my $n = $len->(); llsd_strings($d, $p, $out, $depth + 1) for 1 .. $n; $need->(1); $$p++; return }
+	if ($c eq '{') {
+		my $n = $len->();
+		for (1 .. $n) { $need->(1); $$p++; my $kl = $len->(); $need->($kl); $$p += $kl; llsd_strings($d, $p, $out, $depth + 1) }
+		$need->(1); $$p++; return;
+	}
+	die "type\n";
+}
+
+sub slurp {
+	my ($f) = @_;
+	open my $in, '<:raw', $f or return;
+	local $/;
+	return scalar <$in>;
+}
+
+my $mode = shift @ARGV // '';
+die "usage: scan-names --check|--list FILE...\n" unless $mode =~ /^--(check|list)$/;
+load_known() if $mode eq '--check' || 1;
+
+my $bad = 0;
+for my $f (@ARGV) {
+	my $rel = $f; $rel =~ s{^\Q$root\E/}{};
+	next if $rel =~ m{^tools/known-names$} && $mode eq '--check';
+	next if $rel =~ m{(?:^|/)go\.sum$|\.pb\.go$|^cmd/slsh/askindex\.txt$|^handbook/handbook\.(?:css|js)$|^msg/messages_gen\.go$};
+	my $t = slurp($f);
+	next unless defined $t && $t !~ /\0/;
+	my @lines = split /\n/, $t, -1;
+	my $emit = sub {
+		my ($ln, $place, $kind, $v) = @_;
+		(my $show = $v) =~ s/\s+/ /g;
+		my $ok;
+		return if $v =~ /%[sdvqx]/;   # a format string, not a name
+		if ($kind eq 'name') {
+			my $c = $v; $c =~ s/(?:\\x00|\\n|\\t)+$//; $c =~ s/%20/ /g; $c =~ s/&amp;/&/g;
+			return unless shaped($c) || $place =~ /^(?:slurl|region listing|parcel legend|login)$/ && $c =~ /[A-Za-z]/;
+			return if $c =~ /^[A-Z]+$/ || $c =~ /^[A-Z ]+$/;
+			$ok = on_list($v) || ($c !~ / / && part_ok(lc $c));
+		}
+		elsif ($kind eq 'key')  { return if $v =~ /^[A-Z ]+$/ || $v =~ /^(?:HOME|X Y Z)$/; $ok = prefix_ok($v) }
+		elsif ($kind eq 'part') { $ok = part_ok($v) }
+		elsif ($kind eq 'user') { $ok = user_ok($v) }
+		if ($mode eq '--list') { print "$place\t$rel:$ln\t$show\n"; return }
+		return if $ok;
+		print "$rel:$ln: $place: \"$show\" is not on tools/known-names\n";
+		$bad = 1;
+	};
+	for my $i (0 .. $#lines) {
+		my $ln = $i + 1;
+		find_names($lines[$i], $rel, sub { $emit->($ln, @_) });
+	}
+	find_base64($t, sub {
+		my ($off, $place, $kind, $v) = @_;
+		$emit->(1 + (substr($t, 0, $off) =~ tr/\n//), $place, $kind, $v);
+	});
+}
+exit $bad;
