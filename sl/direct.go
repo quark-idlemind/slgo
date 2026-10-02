@@ -385,6 +385,8 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			PCode:        o.PCode,
 			TextureEntry: o.TextureEntry,
 			TextureAnim:  o.TextureAnim,
+			Click:        o.Click,
+			ClickKnown:   o.ClickKnown,
 			Shape:        o.Shape,
 			Text:         o.Text,
 			AttachPoint:  o.AttachPoint,

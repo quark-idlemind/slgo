@@ -134,6 +134,23 @@ func (w *Session) Inventory(ctx context.Context) (*agent.Inventory, error) {
 	return inv, nil
 }
 
+// The values of Seen.Click, Linden's published LSL CLICK_ACTION_*
+// constants, as Firestorm's indra_constants.h has them too.
+// CLICK_ACTION_NONE is 0, the same byte as touch.  Taken from the
+// published list, not measured.
+const (
+	ClickTouch     uint8 = 0 // CLICK_ACTION_TOUCH
+	ClickSit       uint8 = 1 // CLICK_ACTION_SIT
+	ClickBuy       uint8 = 2 // CLICK_ACTION_BUY
+	ClickPay       uint8 = 3 // CLICK_ACTION_PAY
+	ClickOpen      uint8 = 4 // CLICK_ACTION_OPEN
+	ClickPlay      uint8 = 5 // CLICK_ACTION_PLAY
+	ClickOpenMedia uint8 = 6 // CLICK_ACTION_OPEN_MEDIA
+	ClickZoom      uint8 = 7 // CLICK_ACTION_ZOOM
+	ClickDisabled  uint8 = 8 // CLICK_ACTION_DISABLED
+	ClickIgnore    uint8 = 9 // CLICK_ACTION_IGNORE
+)
+
 // Seen is what is known about an object in the region.
 //
 // "In the region" means within the draw distance: the simulator
@@ -161,6 +178,12 @@ type Seen struct {
 	// TextureAnim is the texture animation, still packed, and nil when
 	// the object has none.
 	TextureAnim []byte
+
+	// Click is the click action byte (ClickTouch and the rest); a zero
+	// Click with ClickKnown false means no update has said, and with
+	// true means touch.
+	Click      uint8
+	ClickKnown bool
 
 	// Shape is the prim's profile and path, still packed.  Form
 	// unpacks it into something with names.

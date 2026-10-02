@@ -883,6 +883,8 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			Rotation:     quat(o.Rotation),
 			Shape:        shape(o.Shape),
 			TextureAnim:  o.TextureAnim,
+			Click:        uint32(o.Click),
+			ClickKnown:   o.ClickKnown,
 		})
 	}
 	return out, nil

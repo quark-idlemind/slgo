@@ -619,6 +619,7 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 			Position: &pb.Vector3{X: 128}, Scale: &pb.Vector3{X: 0.5, Y: 0.5, Z: 0.5},
 			TextureEntry: []byte{1, 2, 3}, TextureAnim: []byte{4, 5}, Text: "floating",
 			AttachPoint: 6, AttachItem: theChild.String(),
+			Click: 0, ClickKnown: true,
 		},
 		{Id: "not a uuid", Local: 78},
 	}
@@ -645,6 +646,9 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 	}
 	if o.AttachPoint != 6 || o.AttachItem != theChild {
 		t.Errorf("worn at %d from %s", o.AttachPoint, o.AttachItem)
+	}
+	if o.Click != 0 || !o.ClickKnown {
+		t.Errorf("click %d known %v, want touch, known", o.Click, o.ClickKnown)
 	}
 
 	d.fail = errors.New("no such agent")

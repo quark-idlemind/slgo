@@ -559,3 +559,14 @@ func TestResolveStopsWhenTheCallerDoes(t *testing.T) {
 		}
 	})
 }
+
+// TestTheClickActionsAreLindensPublishedValues: the names stand for the
+// numbers in the published LSL list, in its order.
+func TestTheClickActionsAreLindensPublishedValues(t *testing.T) {
+	for i, c := range []uint8{ClickTouch, ClickSit, ClickBuy, ClickPay, ClickOpen,
+		ClickPlay, ClickOpenMedia, ClickZoom, ClickDisabled, ClickIgnore} {
+		if int(c) != i {
+			t.Errorf("click action %d is %d", i, c)
+		}
+	}
+}
