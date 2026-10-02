@@ -321,8 +321,8 @@ func (b *bot) offered(ctx context.Context, s *sl.Session, im *sl.IM) {
 // as that rather than as a failure: the offer was dealt with, just not
 // here.
 func (b *bot) take(ctx context.Context, offer *sl.InventoryOffer) {
-	who := offer.FromName
-	if who == "" {
+	who := offer.FromLabel()
+	if offer.FromName == "" {
 		who = offer.From.String()
 	}
 	what := offer.Name
@@ -335,7 +335,13 @@ func (b *bot) take(ctx context.Context, offer *sl.InventoryOffer) {
 	case AcceptAnyone:
 		take = true
 	case AcceptTrusted:
-		take = b.d.cfg.Trusts(offer.From, offer.FromName)
+		// An object's give names the object, which anybody may call
+		// anything: only the owner's id is trusted for one.
+		name := offer.FromName
+		if offer.Dialog == sl.DialogTaskInventoryOffered {
+			name = ""
+		}
+		take = b.d.cfg.Trusts(offer.From, name)
 	case AcceptNobody:
 	}
 	if !take {
@@ -343,9 +349,9 @@ func (b *bot) take(ctx context.Context, offer *sl.InventoryOffer) {
 		return
 	}
 
-	// A zero folder is what a viewer sends when somebody clicks Accept
-	// rather than dragging the item somewhere: the grid files it under
-	// whatever kind of thing it is.
+	// A zero folder is filled in with the default one for the item's
+	// type, as a viewer does when somebody clicks Accept rather than
+	// dragging the item somewhere; if there is none, nothing is sent.
 	accept, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	if err := offer.Accept(accept, msg.UUID{}); err != nil {

@@ -893,7 +893,7 @@ func cmdOffers(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	for _, o := range items {
 		fmt.Fprintf(out, "%-11s %-28s %s ago   from %s%s\n",
 			o.Asset.String(), o.Name,
-			time.Since(o.At).Round(time.Second), o.FromName, beforeShell(o.Recorded))
+			time.Since(o.At).Round(time.Second), o.FromLabel(), beforeShell(o.Recorded))
 	}
 	return nil
 }
@@ -921,8 +921,8 @@ func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	}
 	if ok {
 		// Into the folder the shell is in, so that "cd Objects; accept"
-		// puts it where it was wanted.  A zero folder would let the
-		// grid choose.
+		// puts it where it was wanted.  A zero folder would send the
+		// default one for the item's type.
 		_, folder, err := sh.resolveDir(ctx, ".")
 		if err != nil {
 			return err
@@ -930,7 +930,7 @@ func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		if err := o.Accept(ctx, folder); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "accepted %q from %s\n", o.Name, o.FromName)
+		fmt.Fprintf(out, "accepted %q from %s\n", o.Name, o.FromLabel())
 		return nil
 	}
 
@@ -959,7 +959,7 @@ func cmdDecline(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 		if err := o.Decline(ctx); err != nil {
 			return err
 		}
-		fmt.Fprintf(out, "declined %q from %s\n", o.Name, o.FromName)
+		fmt.Fprintf(out, "declined %q from %s\n", o.Name, o.FromLabel())
 		return nil
 	}
 

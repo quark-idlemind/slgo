@@ -666,3 +666,44 @@ func TestAnAnsweredPermissionStopsWaiting(t *testing.T) {
 		t.Errorf("the refusal sent %s, want nothing", got)
 	}
 }
+
+// TestAnObjectsGiveIsWaitingLabelledAndAnsweredAsDialogTen: an object's
+// give is an inventory offer too.  It lists with the item's name out of
+// the text and the object's name labelled as one, and accepting it sends
+// dialog 10 into the folder the shell is in.
+// Why: doc/im-senders.md#an-objects-give
+func TestAnObjectsGiveIsWaitingLabelledAndAnsweredAsDialogTen(t *testing.T) {
+	x := newTestShell(t)
+	x.do(t, "cd Objects")
+
+	m := imFrom(testFriend, "Example Giver", sl.DialogTaskInventoryOffered,
+		"'Example Box'  ( http://slurl.com/secondlife/Testville/128/64/22 )")
+	m.MessageBlock.BinaryBucket = []byte{byte(sl.AssetLSLText)}
+	x.grid.Relay(t, m)
+	waitForOffers(t, x, 0, 1)
+
+	if got := x.do(t, "offers"); !strings.Contains(got, `Example Box`) ||
+		!strings.Contains(got, "from [Object] Example Giver") || strings.Contains(got, "slurl") {
+		t.Errorf("offers listed the give as:\n%s", got)
+	}
+	if got := x.do(t, "waiting"); !strings.Contains(got, `1  inventory   [Object] Example Giver offers "Example Box"`) {
+		t.Errorf("waiting listed the give as:\n%s", got)
+	}
+	got := x.do(t, "accept")
+	if want := "accepted \"Example Box\" from [Object] Example Giver\n"; got != want {
+		t.Errorf("accept printed %q, want %q", got, want)
+	}
+	var answer *msg.ImprovedInstantMessage
+	for _, s := range x.grid.Sent() {
+		if im, ok := s.(*msg.ImprovedInstantMessage); ok {
+			answer = im
+		}
+	}
+	if answer == nil || answer.MessageBlock.Dialog != sl.DialogTaskInventoryAccepted ||
+		answer.MessageBlock.ToAgentID != testFriend || msg.UUID(answer.MessageBlock.BinaryBucket) != testObjects {
+		t.Errorf("the answer was %+v, want dialog 10 to the giver into the Objects folder", answer)
+	}
+	if n := len(x.s.InventoryOffers()); n != 0 {
+		t.Errorf("the accepted give is still waiting: %d", n)
+	}
+}

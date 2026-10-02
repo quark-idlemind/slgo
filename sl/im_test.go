@@ -584,6 +584,7 @@ func TestAnInventoryOfferIsKeptUntilItIsAnswered(t *testing.T) {
 	w, f := newFakeSession(t)
 
 	txn := msg.MustParseUUID("19cc7e57-7e57-c0de-4169-ae942a366a74")
+	serveFolders(t, f, theObjectsFolder())
 	o := relayInventoryOffer(t, w, f, somebody, "Quark Idlemind", "a box of parts", txn)
 	if o.Asset != AssetObject || o.Item != (msg.UUID{0xaa}) {
 		t.Errorf("offer = %+v", o)
@@ -605,10 +606,10 @@ func TestAnInventoryOfferIsKeptUntilItIsAnswered(t *testing.T) {
 	if m.MessageBlock.ToAgentID != somebody {
 		t.Errorf("the answer went to %s", m.MessageBlock.ToAgentID)
 	}
-	// A zero folder means the default one for that kind of thing,
-	// which is said by sending no bucket at all.
-	if len(m.MessageBlock.BinaryBucket) != 0 {
-		t.Errorf("a default folder sent a bucket of %d bytes", len(m.MessageBlock.BinaryBucket))
+	// A zero folder becomes the default one for the type, as a viewer's
+	// does: never an empty bucket.
+	if string(m.MessageBlock.BinaryBucket) != string(aFolder[:]) {
+		t.Errorf("a default folder sent the bucket %x, want the Objects folder %s", m.MessageBlock.BinaryBucket, aFolder)
 	}
 	if len(w.InventoryOffers()) != 0 {
 		t.Error("the offer is still waiting after being accepted")
@@ -683,6 +684,9 @@ func waiting(offers ...*InventoryOffer) *Session {
 	w := &Session{invOffers: map[msg.UUID]*InventoryOffer{}}
 	for i, o := range offers {
 		o.Transaction = msg.UUID{byte(i + 1)}
+		if w.invOffers == nil {
+			w.invOffers = map[msg.UUID]*InventoryOffer{}
+		}
 		w.invOffers[o.Transaction] = o
 	}
 	return w
@@ -1088,5 +1092,181 @@ func TestIMSubscriptionsCloseWhenTheSessionEnds(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Error("a subscription taken out after the session ended was not closed")
+	}
+}
+
+// taskGiveText is the text of an object's give, as measured: the item's
+// name in quotes, two spaces, and the place in parentheses.
+const taskGiveText = "'Example Box'  ( http://slurl.com/secondlife/Testville/128/64/22 )"
+
+// TestAnObjectsGiveIsAnInventoryOffer: dialog 9 is read as an offer whose
+// name is in its text and whose one-byte bucket is the asset type, with
+// no item id.  Why: doc/im-senders.md#an-objects-give
+func TestAnObjectsGiveIsAnInventoryOffer(t *testing.T) {
+	txn := msg.MustParseUUID("1b797e57-7e57-c0de-ecc5-bb0994d73573")
+	im := &IM{From: somebody, FromName: "Example Giver", Dialog: DialogTaskInventoryOffered,
+		ID: txn, Text: taskGiveText, Bucket: []byte{byte(AssetLSLText)}}
+	o, ok := InventoryOfferFrom(im)
+	if !ok {
+		t.Fatal("a dialog 9 message with an asset type is not read as an offer")
+	}
+	if o.Name != "Example Box" || o.Asset != AssetLSLText || !o.Item.IsZero() ||
+		o.Dialog != DialogTaskInventoryOffered || o.Transaction != txn || o.From != somebody {
+		t.Errorf("offer = %+v", o)
+	}
+	im.Text = "something else"
+	if o, _ := InventoryOfferFrom(im); o.Name != "something else" {
+		t.Errorf("a text that does not read gave the name %q, want the whole text", o.Name)
+	}
+	im.Bucket = nil
+	if _, ok := InventoryOfferFrom(im); ok {
+		t.Error("a dialog 9 message with no bucket was read as an offer")
+	}
+}
+
+// TestAnObjectsGiveIsAcceptedTheWayTheViewerAcceptsIt: dialog 10 to the
+// offer's From, quoting its transaction, with the folder as the bucket,
+// and declined as 11.  Measured for the accept: DialogInventoryAccepted
+// left an object's give undelivered, and this delivered it into the
+// folder.  The decline is the viewer's rule, not measured.
+// Why: doc/im-senders.md#an-objects-give
+func TestAnObjectsGiveIsAcceptedTheWayTheViewerAcceptsIt(t *testing.T) {
+	owner := msg.MustParseUUID("1b587e57-7e57-c0de-fe21-0ce74a6b6378")
+	txn := msg.MustParseUUID("1b797e57-7e57-c0de-ecc5-bb0994d73573")
+	folder := msg.MustParseUUID("eb907e57-7e57-c0de-a12a-dcedb409b250")
+	give := func() *InventoryOffer {
+		o, _ := InventoryOfferFrom(&IM{From: owner, FromName: "Example Box", Dialog: DialogTaskInventoryOffered,
+			ID: txn, Text: taskGiveText, Bucket: []byte{byte(AssetLSLText)}})
+		return o
+	}
+
+	w, f := newFakeSession(t)
+	o := give()
+	o.w = w
+	if err := o.Accept(context.Background(), folder); err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	m := onlySent[*msg.ImprovedInstantMessage](t, f)
+	if m.MessageBlock.Dialog != DialogTaskInventoryAccepted {
+		t.Errorf("dialog %d, want %d", m.MessageBlock.Dialog, DialogTaskInventoryAccepted)
+	}
+	if m.MessageBlock.ToAgentID != owner {
+		t.Errorf("sent to %s, want the offer's From %s", m.MessageBlock.ToAgentID, owner)
+	}
+	if m.MessageBlock.ID != txn {
+		t.Errorf("transaction %s, want %s", m.MessageBlock.ID, txn)
+	}
+	if string(m.MessageBlock.BinaryBucket) != string(folder[:]) {
+		t.Errorf("bucket %x, want the folder %s", m.MessageBlock.BinaryBucket, folder)
+	}
+
+	w, f = newFakeSession(t)
+	o = give()
+	o.w = w
+	if err := o.Decline(context.Background()); err != nil {
+		t.Fatalf("Decline: %v", err)
+	}
+	m = onlySent[*msg.ImprovedInstantMessage](t, f)
+	if m.MessageBlock.Dialog != DialogTaskInventoryDeclined || m.MessageBlock.ToAgentID != owner ||
+		m.MessageBlock.ID != txn {
+		t.Errorf("decline = dialog %d to %s quoting %s", m.MessageBlock.Dialog, m.MessageBlock.ToAgentID, m.MessageBlock.ID)
+	}
+}
+
+// TestAnOfferAnswersWithItsDialogPlusOneOrTwo: the viewer's rule, for a
+// group notice's item (32) as for the others.  Only 4 and 9 are read into
+// an offer here; 32 is the rule applied to a hand-made one.
+func TestAnOfferAnswersWithItsDialogPlusOneOrTwo(t *testing.T) {
+	for _, c := range []struct{ dialog, accept, decline uint8 }{
+		{0, DialogInventoryAccepted, DialogInventoryDeclined},
+		{DialogInventoryOffered, 5, 6},
+		{DialogTaskInventoryOffered, 10, 11},
+		{32, 33, 34},
+	} {
+		w, f := newFakeSession(t)
+		o := &InventoryOffer{Dialog: c.dialog, From: somebody, Transaction: msg.UUID{9}, w: w}
+		if err := w.AcceptInventoryOffer(context.Background(), o, aFolder); err != nil {
+			t.Fatal(err)
+		}
+		if err := w.DeclineInventoryOffer(context.Background(), o); err != nil {
+			t.Fatal(err)
+		}
+		ms := sentOf[*msg.ImprovedInstantMessage](f)
+		if len(ms) != 2 || ms[0].MessageBlock.Dialog != c.accept || ms[1].MessageBlock.Dialog != c.decline {
+			t.Errorf("dialog %d answered %v", c.dialog, ms)
+		}
+	}
+}
+
+// TestAZeroFolderBecomesTheDefaultFolderForTheType: a viewer sets the
+// folder when the offer arrives, from the item's type, and always
+// writes it to the bucket.  For a person's offer (4) and an object's
+// give (9) alike.  Read from Firestorm's source, not measured.
+// Why: doc/im-senders.md#what-slgo-does-with-them
+func TestAZeroFolderBecomesTheDefaultFolderForTheType(t *testing.T) {
+	scripts := msg.MustParseUUID("5c1e7e57-7e57-c0de-8b3a-41f0d6e2a97c")
+	for _, c := range []struct {
+		name   string
+		dialog uint8
+		asset  AssetType
+		want   msg.UUID
+	}{
+		{"an offer of an object", DialogInventoryOffered, AssetObject, aFolder},
+		{"a give of a script", DialogTaskInventoryOffered, AssetLSLText, scripts},
+		{"an offer of a script", DialogInventoryOffered, AssetLSLText, scripts},
+		{"a give of an object", DialogTaskInventoryOffered, AssetObject, aFolder},
+	} {
+		w, f := newFakeSession(t)
+		serveFolders(t, f, theObjectsFolder(),
+			&Folder{ID: scripts, ParentID: testInvRoot, Name: "Scripts", Type: 10})
+		o := &InventoryOffer{Dialog: c.dialog, From: somebody, Asset: c.asset,
+			Transaction: msg.UUID{9}, w: w}
+		if err := o.Accept(context.Background(), msg.UUID{}); err != nil {
+			t.Fatalf("%s: Accept: %v", c.name, err)
+		}
+		m := onlySent[*msg.ImprovedInstantMessage](t, f)
+		if string(m.MessageBlock.BinaryBucket) != string(c.want[:]) {
+			t.Errorf("%s: bucket %x, want %s", c.name, m.MessageBlock.BinaryBucket, c.want)
+		}
+		if want := c.dialog + 1; m.MessageBlock.Dialog != want {
+			t.Errorf("%s: dialog %d, want %d", c.name, m.MessageBlock.Dialog, want)
+		}
+	}
+}
+
+// TestAZeroFolderThatCannotBeFoundSendsNothing: no folder of the type,
+// a type that has none, and an inventory that could not be read are each
+// an error, and the offer stays waiting.  An empty bucket is never sent.
+func TestAZeroFolderThatCannotBeFoundSendsNothing(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		asset  AssetType
+		folder bool // serve the Objects folder
+	}{
+		{"no folder of the type", AssetLSLText, true},
+		{"a type with no folder", AssetNone, true},
+		{"the inventory cannot be read", AssetObject, false},
+	} {
+		w, f := newFakeSession(t)
+		if c.folder {
+			serveFolders(t, f, theObjectsFolder())
+		}
+		w.mu.Lock()
+		o := &InventoryOffer{Dialog: DialogTaskInventoryOffered, From: somebody, Asset: c.asset,
+			Transaction: msg.UUID{9}, w: w, key: "k"}
+		if w.invOffers == nil {
+			w.invOffers = map[msg.UUID]*InventoryOffer{}
+		}
+		w.invOffers[o.Transaction] = o
+		w.mu.Unlock()
+		if err := o.Accept(context.Background(), msg.UUID{}); err == nil {
+			t.Errorf("%s: Accept said it had worked", c.name)
+		}
+		if n := len(f.Sent()); n != 0 {
+			t.Errorf("%s: sent %d messages", c.name, n)
+		}
+		if len(w.InventoryOffers()) != 1 {
+			t.Errorf("%s: the offer was forgotten", c.name)
+		}
 	}
 }

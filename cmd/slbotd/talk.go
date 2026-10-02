@@ -181,10 +181,9 @@ func waitingFor(s *sl.Session) []waiting {
 		out = append(out, waiting{
 			kind: "item",
 			at:   o.At,
-			what: fmt.Sprintf("%s offers %q", o.FromName, o.Name),
-			// A zero folder is what a viewer sends when somebody
-			// clicks Accept rather than dragging it somewhere: the
-			// grid files it under whatever kind of thing it is.
+			what: fmt.Sprintf("%s offers %q", o.FromLabel(), o.Name),
+			// A zero folder is filled in with the default one for the
+			// item's type, as a viewer does on Accept.
 			accept:  func(ctx context.Context) error { return o.Accept(ctx, msg.UUID{}) },
 			decline: o.Decline,
 		})

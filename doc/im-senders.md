@@ -99,6 +99,44 @@ the object's name in the same way. Neither was measured.
 came from a user rather than a script, leaves out 9, 19 and 31 alike
 (`llimprocessing.cpp:89-139`). Line numbers are Firestorm's.
 
+## An object's give
+
+Measured on Agni on 2026-10-01: one `llGiveInventory(llGetOwner(), ...)`
+of a script from a prim, received by its owner.
+
+| Field | What it held |
+|---|---|
+| `IM.Dialog` | 9 |
+| `IM.From` | the object's **owner**, which here was the avatar that received it |
+| `IM.FromName` | the object's name |
+| `IM.ID` | a transaction id: neither the object's key nor the item's |
+| `IM.Text` | the item's name in single quotes, two spaces, and where the object was, in parentheses: `'Example Box'  ( http://slurl.com/secondlife/Testville/128/64/22 )` |
+| `IM.Bucket` | one byte, the asset type: 10, a script |
+
+So the item's name is not the whole of `Text`, and the offer does not
+carry the item's id.
+
+What answered it, each tried on its own give and the inventory read
+again afterwards:
+
+- Nothing: no item in 9 seconds.
+- `DialogInventoryAccepted` (5), which is what `AcceptInventoryOffer`
+  sends, to `From` and quoting the transaction: no item in 10 seconds.
+- `DialogTaskInventoryAccepted` (10), to `From`, quoting the
+  transaction, with the destination folder as the bucket: the item was
+  in that folder within 9 seconds. `InventoryOffer.Accept` sends it.
+
+A second give, measured the same day from an object another avatar
+owned: `From` was that owner, not the receiver, and dialog 10 addressed
+to that `From`, with the receiver's Scripts folder as the bucket, put
+the item in the receiver's Scripts folder.
+
+A decline is dialog 11 by the same rule, the offer's dialog plus two (the
+viewer's source, not measured).
+
+Not measured: whether 10 accepts any folder or only the default one for
+the item's type (the Scripts folder was used both times).
+
 ## What slgo does with them
 
 Until 2026-09-26 slgo called dialog 19 `DialogBusyAutoResponse` and
@@ -121,6 +159,14 @@ counted it as conversation. Now:
   conversation. A do-not-disturb auto response is a notice,
   `* do not disturb auto response from NAME: TEXT`.
 - `examples/greeter` does not answer one.
+- Accepting an offer (4 or 9) sends the folder as the bucket, and when
+  the caller names none it is the default folder for the item's type,
+  as a viewer's is: `FolderTypeOf` the asset type, then `FolderOfType`.
+  An empty bucket is never sent, and a type or an inventory with no
+  such folder is an error with nothing sent. That is read from
+  Firestorm's source (`llimprocessing.cpp:1614` sets the offer's
+  folder, `llviewermessage.cpp:1781` writes it to the bucket), not
+  measured; an empty bucket has never been measured either way.
 
 ## Labelling a sender
 

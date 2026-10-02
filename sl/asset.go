@@ -29,6 +29,7 @@ import (
 type AssetType int32
 
 const (
+	AssetNone         AssetType = -1 // LL's AT_NONE: no kind at all
 	AssetTexture      AssetType = 0
 	AssetSound        AssetType = 1
 	AssetCallingCard  AssetType = 2

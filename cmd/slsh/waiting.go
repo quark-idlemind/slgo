@@ -150,7 +150,7 @@ func (w waiter) who() string {
 	case w.asked != nil:
 		return w.asked.Name
 	case w.item != nil:
-		return w.item.FromName
+		return w.item.FromLabel()
 	case w.friend != nil:
 		return w.friend.Name
 	case w.perm != nil:

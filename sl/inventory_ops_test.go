@@ -1603,3 +1603,63 @@ func TestAMoveNeedsSomewhereToGo(t *testing.T) {
 		t.Errorf("sent %s for a move with nowhere to go", f.describe())
 	}
 }
+
+// TestFolderTypeOfFollowsFirestorm: assetTypeToFolderType is a cast, so
+// a folder type has its asset type's number; AT_NONE is FT_NONE.  Types
+// the folder table has no entry for are cast the same way, and find no
+// folder.  Firestorm's llfoldertype.cpp:211-218, not measured.
+func TestFolderTypeOfFollowsFirestorm(t *testing.T) {
+	for _, c := range []struct {
+		asset AssetType
+		want  FolderType
+	}{
+		{AssetNone, FolderNone},
+		{AssetTexture, 0},
+		{AssetSound, 1},
+		{AssetCallingCard, 2},
+		{AssetLandmark, 3},
+		{AssetClothing, 5},
+		{AssetObject, 6},
+		{AssetNotecard, 7},
+		{AssetCategory, FolderRoot},
+		{AssetLSLText, 10},
+		{AssetBodypart, 13},
+		{AssetAnimation, 20},
+		{AssetGesture, 21},
+		{AssetMesh, 49},
+		{AssetSettings, 56},
+		{AssetMaterial, 57},
+		// No entry in the folder table: cast, and no folder has it.
+		{AssetScriptLegacy, 4},
+		{AssetLSLBytecode, 11},
+		{AssetSoundWAV, 17},
+		{AssetLink, 24},
+		{AssetLinkFolder, 25},
+	} {
+		if got := FolderTypeOf(c.asset); got != c.want {
+			t.Errorf("FolderTypeOf(%d) = %d, want %d", c.asset, got, c.want)
+		}
+	}
+}
+
+// TestFolderOfTypeFindsTheLowestIdAndTheRoot: the viewer takes the
+// lowest id when several folders have a type, and the root for the
+// root's type.
+func TestFolderOfTypeFindsTheLowestIdAndTheRoot(t *testing.T) {
+	w, f := newFakeSession(t)
+	low := msg.MustParseUUID("0a117e57-7e57-c0de-9c42-d3e07b15f6a8")
+	serveFolders(t, f,
+		&Folder{ID: aFolder, ParentID: testInvRoot, Name: "Objects", Type: 6},
+		&Folder{ID: low, ParentID: testInvRoot, Name: "Papierkorb", Type: 6},
+	)
+	got, err := w.FolderOfType(context.Background(), 6)
+	if err != nil || got != low {
+		t.Errorf("FolderOfType(6) = %s, %v, want %s", got, err, low)
+	}
+	if got, err := w.FolderOfType(context.Background(), FolderRoot); err != nil || got != w.InventoryRoot() {
+		t.Errorf("FolderOfType(root) = %s, %v", got, err)
+	}
+	if _, err := w.FolderOfType(context.Background(), FolderNone); err == nil {
+		t.Error("FolderOfType(FolderNone) found a folder")
+	}
+}
