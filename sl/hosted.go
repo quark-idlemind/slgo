@@ -384,6 +384,8 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			PCode:        uint8(o.Pcode),
 			TextureEntry: o.TextureEntry,
 			TextureAnim:  o.TextureAnim,
+			Click:        uint8(o.Click),
+			ClickKnown:   o.ClickKnown,
 			Text:         o.Text,
 		}
 		s.Object.Name = o.Name

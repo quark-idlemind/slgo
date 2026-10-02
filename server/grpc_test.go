@@ -95,7 +95,7 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	prim := msg.MustParseUUID("14ff7e57-7e57-c0de-3d5f-1eb0c71e7610")
 	anim := []byte{1, 0xff, 4, 4, 0, 0, 0, 0, 0, 0, 0x80, 0x40, 0, 0, 0x20, 0x41}
 	upd := &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{ID: 4242, FullID: prim, PCode: 9,
-		TextureEntry: []byte{7, 7, 7}, TextureAnim: anim}}}
+		TextureEntry: []byte{7, 7, 7}, TextureAnim: anim, ClickAction: 2}}}
 	r.sim.send(upd, 0)
 	waitFor(t, 5*time.Second, "the object update to be recorded", func() bool {
 		return h.Agent().Objects().Count() > 0
@@ -112,6 +112,9 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	if o := all.GetObjects()[0]; string(o.GetTextureEntry()) != "\x07\x07\x07" ||
 		string(o.GetTextureAnim()) != string(anim) {
 		t.Errorf("appearance %v animation %v", o.GetTextureEntry(), o.GetTextureAnim())
+	}
+	if o := all.GetObjects()[0]; o.GetClick() != 2 || !o.GetClickKnown() {
+		t.Errorf("click %d known %v, want 2, known", o.GetClick(), o.GetClickKnown())
 	}
 	// An object nobody is wearing has no item, so "is it worn" is a
 	// test on the field being set rather than on a zero uuid.

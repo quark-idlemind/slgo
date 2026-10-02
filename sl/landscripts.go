@@ -22,8 +22,10 @@ import (
 // inferred from one spot.
 const parcelHeight = 50
 
-// scriptsBlocked says why the land will not run scripts in o, or ""
-// where it will and where that cannot be told.
+// ScriptsBlocked says why the land will not run scripts in o, or ""
+// where it will and where that cannot be told.  So "" is not proof
+// that a script will run.
+// Why: doc/ground.md#where-the-land-stops-running-scripts
 //
 // The region's flags stop every script, worn or not.  Past them, a worn
 // object, one nothing has described, land that has not arrived, and a
@@ -33,7 +35,7 @@ const parcelHeight = 50
 // bottom is within parcelHeight of the highest ground under it.  The
 // prim the script is in is what is placed; a linkset has not been
 // measured.
-func (w *Session) scriptsBlocked(ctx context.Context, o *Object) string {
+func (w *Session) ScriptsBlocked(ctx context.Context, o *Object) string {
 	if r, known, err := w.b.Region(ctx); err == nil && known && r != nil {
 		switch {
 		case r.Flags&agent.RegionEstateSkipScripts != 0:

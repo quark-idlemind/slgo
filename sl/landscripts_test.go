@@ -16,7 +16,7 @@ import (
 // theLandGroup is the group the parcel under test is set to.
 var theLandGroup = msg.MustParseUUID("41d97e57-7e57-c0de-29fb-119ddd42e51c")
 
-// land is what the fake region says to scriptsBlocked: the ground under
+// land is what the fake region says to ScriptsBlocked: the ground under
 // everything, the parcel, and who owns the prim and what group it is in.
 type land struct {
 	ground      float32
@@ -190,7 +190,7 @@ func TestTheLandRunsItsOwnersScriptsAndItsGroups(t *testing.T) {
 			t.Parallel()
 			w, f := newFakeSession(t)
 			a := onLand(t, f, c.l, c.z)
-			got := w.scriptsBlocked(context.Background(), &Object{ID: thePrim, Local: 77})
+			got := w.ScriptsBlocked(context.Background(), &Object{ID: thePrim, Local: 77})
 			if (got != "") != c.blocked {
 				t.Errorf("blocked = %q, want blocked %v", got, c.blocked)
 			}
@@ -214,7 +214,7 @@ func TestTheRegionCanStopEveryScript(t *testing.T) {
 		f.mu.Lock()
 		f.region.Flags = flag
 		f.mu.Unlock()
-		if got := w.scriptsBlocked(context.Background(), &Object{ID: thePrim}); got != want {
+		if got := w.ScriptsBlocked(context.Background(), &Object{ID: thePrim}); got != want {
 			t.Errorf("flag %#x: blocked = %q, want %q", flag, got, want)
 		}
 		if n := a.of("ParcelPropertiesRequest"); n != 0 {
@@ -247,7 +247,7 @@ func TestWhatCannotBeToldIsNotBlocked(t *testing.T) {
 			f.mu.Lock()
 			change(f)
 			f.mu.Unlock()
-			if got := w.scriptsBlocked(context.Background(), &Object{ID: thePrim}); got != "" {
+			if got := w.ScriptsBlocked(context.Background(), &Object{ID: thePrim}); got != "" {
 				t.Errorf("blocked = %q", got)
 			}
 			if n := a.of("ParcelPropertiesRequest"); n != 0 {
@@ -281,7 +281,7 @@ func TestAChildPrimIsPlacedInItsRootsFrame(t *testing.T) {
 	}
 	f.mu.Unlock()
 
-	w.scriptsBlocked(context.Background(), &Object{ID: thePrim})
+	w.ScriptsBlocked(context.Background(), &Object{ID: thePrim})
 
 	// Turned three eighths of a turn in all, a unit square spans the
 	// square root of two each way, about its centre at 100, 62.

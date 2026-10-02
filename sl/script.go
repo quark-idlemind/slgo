@@ -266,7 +266,7 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 	// only the wait for its output is not.
 	var blocked string
 	if !s.NotRunning {
-		blocked = w.scriptsBlocked(ctx, s.In)
+		blocked = w.ScriptsBlocked(ctx, s.In)
 	}
 
 	// Listen before compiling.
