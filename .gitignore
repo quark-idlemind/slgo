@@ -11,6 +11,7 @@
 /cmd/*/sl-host
 /cmd/*/msggen
 /cmd/*/md
+/cmd/*/slpic
 /msggen
 
 # And in the root, which is where "go build ./cmd/slsh" leaves it.
@@ -34,6 +35,9 @@
 # without it the command's name would hide the renderer.
 /md
 !/md/
+
+# The binary from "go build ./cmd/slpic".
+/slpic
 
 # slrun and slbench were automate and autobench until 2026-08-22.  A
 # checkout from before the rename has their binaries in it, and taking
