@@ -91,3 +91,7 @@ __pycache__/
 /handbook/*-bundle.html
 /S
 /G
+
+# Claude Code's settings and notes for this checkout.  They belong to
+# the machine they were written on, not to the tree.
+/.claude/
