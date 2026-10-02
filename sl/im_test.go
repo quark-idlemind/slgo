@@ -584,6 +584,7 @@ func TestAnInventoryOfferIsKeptUntilItIsAnswered(t *testing.T) {
 	w, f := newFakeSession(t)
 
 	txn := msg.MustParseUUID("19cc7e57-7e57-c0de-4169-ae942a366a74")
+	serveFolders(t, f, theObjectsFolder())
 	o := relayInventoryOffer(t, w, f, somebody, "Quark Idlemind", "a box of parts", txn)
 	if o.Asset != AssetObject || o.Item != (msg.UUID{0xaa}) {
 		t.Errorf("offer = %+v", o)
@@ -605,10 +606,10 @@ func TestAnInventoryOfferIsKeptUntilItIsAnswered(t *testing.T) {
 	if m.MessageBlock.ToAgentID != somebody {
 		t.Errorf("the answer went to %s", m.MessageBlock.ToAgentID)
 	}
-	// A zero folder means the default one for that kind of thing,
-	// which is said by sending no bucket at all.
-	if len(m.MessageBlock.BinaryBucket) != 0 {
-		t.Errorf("a default folder sent a bucket of %d bytes", len(m.MessageBlock.BinaryBucket))
+	// A zero folder becomes the default one for the type, as a viewer's
+	// does: never an empty bucket.
+	if string(m.MessageBlock.BinaryBucket) != string(aFolder[:]) {
+		t.Errorf("a default folder sent the bucket %x, want the Objects folder %s", m.MessageBlock.BinaryBucket, aFolder)
 	}
 	if len(w.InventoryOffers()) != 0 {
 		t.Error("the offer is still waiting after being accepted")
@@ -683,6 +684,9 @@ func waiting(offers ...*InventoryOffer) *Session {
 	w := &Session{invOffers: map[msg.UUID]*InventoryOffer{}}
 	for i, o := range offers {
 		o.Transaction = msg.UUID{byte(i + 1)}
+		if w.invOffers == nil {
+			w.invOffers = map[msg.UUID]*InventoryOffer{}
+		}
 		w.invOffers[o.Transaction] = o
 	}
 	return w
@@ -1181,7 +1185,7 @@ func TestAnOfferAnswersWithItsDialogPlusOneOrTwo(t *testing.T) {
 	} {
 		w, f := newFakeSession(t)
 		o := &InventoryOffer{Dialog: c.dialog, From: somebody, Transaction: msg.UUID{9}, w: w}
-		if err := w.AcceptInventoryOffer(context.Background(), o, msg.UUID{}); err != nil {
+		if err := w.AcceptInventoryOffer(context.Background(), o, aFolder); err != nil {
 			t.Fatal(err)
 		}
 		if err := w.DeclineInventoryOffer(context.Background(), o); err != nil {
@@ -1190,6 +1194,79 @@ func TestAnOfferAnswersWithItsDialogPlusOneOrTwo(t *testing.T) {
 		ms := sentOf[*msg.ImprovedInstantMessage](f)
 		if len(ms) != 2 || ms[0].MessageBlock.Dialog != c.accept || ms[1].MessageBlock.Dialog != c.decline {
 			t.Errorf("dialog %d answered %v", c.dialog, ms)
+		}
+	}
+}
+
+// TestAZeroFolderBecomesTheDefaultFolderForTheType: a viewer sets the
+// folder when the offer arrives, from the item's type, and always
+// writes it to the bucket.  For a person's offer (4) and an object's
+// give (9) alike.  Read from Firestorm's source, not measured.
+// Why: doc/im-senders.md#what-slgo-does-with-them
+func TestAZeroFolderBecomesTheDefaultFolderForTheType(t *testing.T) {
+	scripts := msg.MustParseUUID("5c1e7e57-7e57-c0de-8b3a-41f0d6e2a97c")
+	for _, c := range []struct {
+		name   string
+		dialog uint8
+		asset  AssetType
+		want   msg.UUID
+	}{
+		{"an offer of an object", DialogInventoryOffered, AssetObject, aFolder},
+		{"a give of a script", DialogTaskInventoryOffered, AssetLSLText, scripts},
+		{"an offer of a script", DialogInventoryOffered, AssetLSLText, scripts},
+		{"a give of an object", DialogTaskInventoryOffered, AssetObject, aFolder},
+	} {
+		w, f := newFakeSession(t)
+		serveFolders(t, f, theObjectsFolder(),
+			&Folder{ID: scripts, ParentID: testInvRoot, Name: "Scripts", Type: 10})
+		o := &InventoryOffer{Dialog: c.dialog, From: somebody, Asset: c.asset,
+			Transaction: msg.UUID{9}, w: w}
+		if err := o.Accept(context.Background(), msg.UUID{}); err != nil {
+			t.Fatalf("%s: Accept: %v", c.name, err)
+		}
+		m := onlySent[*msg.ImprovedInstantMessage](t, f)
+		if string(m.MessageBlock.BinaryBucket) != string(c.want[:]) {
+			t.Errorf("%s: bucket %x, want %s", c.name, m.MessageBlock.BinaryBucket, c.want)
+		}
+		if want := c.dialog + 1; m.MessageBlock.Dialog != want {
+			t.Errorf("%s: dialog %d, want %d", c.name, m.MessageBlock.Dialog, want)
+		}
+	}
+}
+
+// TestAZeroFolderThatCannotBeFoundSendsNothing: no folder of the type,
+// a type that has none, and an inventory that could not be read are each
+// an error, and the offer stays waiting.  An empty bucket is never sent.
+func TestAZeroFolderThatCannotBeFoundSendsNothing(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		asset  AssetType
+		folder bool // serve the Objects folder
+	}{
+		{"no folder of the type", AssetLSLText, true},
+		{"a type with no folder", AssetNone, true},
+		{"the inventory cannot be read", AssetObject, false},
+	} {
+		w, f := newFakeSession(t)
+		if c.folder {
+			serveFolders(t, f, theObjectsFolder())
+		}
+		w.mu.Lock()
+		o := &InventoryOffer{Dialog: DialogTaskInventoryOffered, From: somebody, Asset: c.asset,
+			Transaction: msg.UUID{9}, w: w, key: "k"}
+		if w.invOffers == nil {
+			w.invOffers = map[msg.UUID]*InventoryOffer{}
+		}
+		w.invOffers[o.Transaction] = o
+		w.mu.Unlock()
+		if err := o.Accept(context.Background(), msg.UUID{}); err == nil {
+			t.Errorf("%s: Accept said it had worked", c.name)
+		}
+		if n := len(f.Sent()); n != 0 {
+			t.Errorf("%s: sent %d messages", c.name, n)
+		}
+		if len(w.InventoryOffers()) != 1 {
+			t.Errorf("%s: the offer was forgotten", c.name)
 		}
 	}
 }

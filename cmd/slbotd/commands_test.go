@@ -174,6 +174,7 @@ func TestOffersListsWhatIsWaiting(t *testing.T) {
 // spent and the other offer is still sitting there looking identical.
 func TestAcceptAnswersTheOfferByNumber(t *testing.T) {
 	d, b, f := newTestDaemon(t)
+	withNotecardsFolder(f)
 	s := b.Session()
 	first := msg.MustParseUUID("9c847e57-7e57-c0de-8f99-11049d4de96d")
 	second := msg.MustParseUUID("9ddb7e57-7e57-c0de-5ed1-76ac971c1969")

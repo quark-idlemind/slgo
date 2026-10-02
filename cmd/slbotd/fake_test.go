@@ -82,7 +82,21 @@ type fakeEntry struct {
 	ID     msg.UUID
 	Name   string
 	Folder bool
-	Type   int
+	Type   int // an item's asset type, and a folder's preferred type when not zero
+}
+
+// testNotecards is the folder withNotecardsFolder makes, the default
+// home of the notecard every offering() offers.
+var testNotecards = msg.MustParseUUID("c9247e57-7e57-c0de-15e9-2ca5fedc4942")
+
+// withNotecardsFolder gives the fake a Notecards folder under the root,
+// which an accept with no folder named looks for, as a viewer's does.
+func withNotecardsFolder(f *fakeGrid) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.folders = map[msg.UUID][]fakeEntry{testRoot: {
+		{ID: testNotecards, Name: "Notecards", Folder: true, Type: int(sl.AssetNotecard)},
+	}}
 }
 
 func newFakeGrid() *fakeGrid {
@@ -293,7 +307,11 @@ func (f *fakeGrid) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapRes
 		if e.Folder {
 			fmt.Fprintf(&b, `<key>%s</key><map><key>category_id</key><string>%s</string>`, e.ID, e.ID)
 			fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string><key>name</key><string>%s</string>`, id, e.Name)
-			b.WriteString(`<key>type_default</key><integer>-1</integer><key>version</key><integer>1</integer></map>`)
+			preferred := -1
+			if e.Type != 0 {
+				preferred = e.Type
+			}
+			fmt.Fprintf(&b, `<key>type_default</key><integer>%d</integer><key>version</key><integer>1</integer></map>`, preferred)
 		}
 	}
 	b.WriteString(`</map><key>items</key><map>`)

@@ -1,6 +1,7 @@
 package sl
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -224,18 +225,68 @@ func (w *Session) CopyItem(ctx context.Context, item, folder msg.UUID, name stri
 // language never called it "Trash" in the first place.
 const FolderTrash = 14
 
-// TrashFolder finds the trash.
-func (w *Session) TrashFolder(ctx context.Context) (msg.UUID, error) {
+// FolderType is a folder's preferred type: the kind of thing it is the
+// default home of.  It is what makes Trash the trash, and an asset
+// type's folder is the one of the same number; see FolderTypeOf.
+type FolderType int
+
+// FolderNone is the viewer's FT_NONE: no folder at all, which is not
+// the same as an ordinary one (that is -1 on the wire too, but is
+// nobody's default).
+const FolderNone FolderType = -1
+
+// FolderRoot is the preferred type of the root of inventory, which the
+// viewer gives the number of AT_CATEGORY.
+const FolderRoot FolderType = 8
+
+// FolderTypeOf is the preferred type of the folder an item of an asset
+// type goes into by default.
+//
+// The viewer's LLFolderType::assetTypeToFolderType is a plain cast: the
+// folder type has the number of the asset type, and the only asset type
+// that has none is AT_NONE (-1), which comes back as FT_NONE.  A type
+// the folder table does not know (a link, 24, or a sound's WAV, 17) is
+// cast the same way, warned about, and then finds no folder.
+// Ported from indra/llinventory/llfoldertype.cpp:211-218 and the table
+// in llfoldertype.h:40-111, Firestorm's; not measured.
+// Why: doc/im-senders.md#what-slgo-does-with-them
+func FolderTypeOf(t AssetType) FolderType {
+	if t == AssetNone {
+		return FolderNone
+	}
+	return FolderType(t)
+}
+
+// FolderOfType finds the folder directly below the root that has a
+// preferred type, as the viewer's findCategoryUUIDForType does: the
+// root itself for FolderRoot, and the lowest id when several have it.
+// It says so when there is none, and FolderNone never has one.
+func (w *Session) FolderOfType(ctx context.Context, t FolderType) (msg.UUID, error) {
+	if t == FolderRoot {
+		return w.InventoryRoot(), nil
+	}
+	if t == FolderNone {
+		return msg.UUID{}, fmt.Errorf("sl: no folder is the default for that")
+	}
 	es, err := w.ListFolder(ctx, w.InventoryRoot(), 0)
 	if err != nil {
 		return msg.UUID{}, err
 	}
+	var found msg.UUID
 	for _, e := range es {
-		if e.Folder && e.Type == FolderTrash {
-			return e.ID, nil
+		if e.Folder && FolderType(e.Type) == t && (found.IsZero() || bytes.Compare(e.ID[:], found[:]) < 0) {
+			found = e.ID
 		}
 	}
-	return msg.UUID{}, fmt.Errorf("sl: this inventory has no trash folder")
+	if found.IsZero() {
+		return msg.UUID{}, fmt.Errorf("sl: this inventory has no folder of type %d", t)
+	}
+	return found, nil
+}
+
+// TrashFolder finds the trash.
+func (w *Session) TrashFolder(ctx context.Context) (msg.UUID, error) {
+	return w.FolderOfType(ctx, FolderTrash)
 }
 
 // PurgeFolder throws away everything inside a folder, permanently,

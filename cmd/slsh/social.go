@@ -921,8 +921,8 @@ func cmdAccept(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 	}
 	if ok {
 		// Into the folder the shell is in, so that "cd Objects; accept"
-		// puts it where it was wanted.  A zero folder would let the
-		// grid choose.
+		// puts it where it was wanted.  A zero folder would send the
+		// default one for the item's type.
 		_, folder, err := sh.resolveDir(ctx, ".")
 		if err != nil {
 			return err

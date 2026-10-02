@@ -568,9 +568,9 @@ func (w *Session) forgetOffer(t msg.UUID) {
 }
 
 // Accept takes the offer up, putting what arrives in a folder of our
-// choosing.  A zero folder means the default one for that kind of
-// thing, which is what a viewer does when the person clicks Accept
-// rather than dragging it somewhere.
+// choosing.  A zero folder means the default one for the offer's type,
+// which is what a viewer sends when the person clicks Accept rather than
+// dragging it somewhere: never an empty one.  See AcceptInventoryOffer.
 //
 // Another client of the same avatar may have answered it already, and
 // then nothing is sent and the error is an *AnsweredError saying who;
@@ -608,9 +608,17 @@ func (o *InventoryOffer) Decline(ctx context.Context) error {
 //
 // The answer has to quote the offer's transaction id, which is the only
 // thing tying it to the offer; an answer with a fresh id is ignored and
-// the offer stays open for ever.  A zero folder means the default one
-// for that kind of thing, which is what a viewer does when the person
-// clicks Accept rather than dragging it somewhere.
+// the offer stays open for ever.
+//
+// A zero folder means the default one for the offer's asset type,
+// FolderOfType(FolderTypeOf(o.Asset)), which is what a viewer sends when
+// the person clicks Accept rather than dragging it somewhere: it sets
+// the folder when the offer arrives and always writes it to the bucket.
+// A type with no folder, or an inventory without one, is an error and
+// nothing is sent; an empty bucket has never been measured to deliver.
+// Read from Firestorm's llimprocessing.cpp:1614 and
+// llviewermessage.cpp:1781, not measured.
+// Why: doc/im-senders.md#what-slgo-does-with-them
 //
 // Whether the item actually arrives is a separate question -- the
 // simulator does the moving, and says nothing about it -- so a caller
@@ -622,12 +630,17 @@ func (o *InventoryOffer) Decline(ctx context.Context) error {
 // how "answer N" in slsh came to send a second acceptance of an offer
 // already taken.
 func (w *Session) AcceptInventoryOffer(ctx context.Context, o *InventoryOffer, into msg.UUID) error {
+	if into.IsZero() {
+		ft := FolderTypeOf(o.Asset)
+		var err error
+		if into, err = w.FolderOfType(ctx, ft); err != nil {
+			return fmt.Errorf("sl: no folder to accept %q into: %w", o.Name, err)
+		}
+	}
 	m := w.im(o.From, o.answerDialog(1), "")
 	// The transaction is the offer's, not a new one.
 	m.MessageBlock.ID = o.Transaction
-	if !into.IsZero() {
-		m.MessageBlock.BinaryBucket = into[:]
-	}
+	m.MessageBlock.BinaryBucket = into[:]
 	return w.Send(ctx, m)
 }
 

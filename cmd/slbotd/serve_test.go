@@ -324,6 +324,7 @@ func TestTypingIsIgnored(t *testing.T) {
 // else, and an answer with a fresh id leaves the offer open for ever.
 func TestAnOfferFromATrustedAvatarIsAccepted(t *testing.T) {
 	_, b, f := newTestDaemon(t)
+	withNotecardsFolder(f)
 	defer serving(t, b)()
 
 	transaction := msg.MustParseUUID("9fdc7e57-7e57-c0de-37aa-b7364eeb890d")
@@ -338,6 +339,10 @@ func TestAnOfferFromATrustedAvatarIsAccepted(t *testing.T) {
 	}
 	if ims[0].MessageBlock.ToAgentID != testSender {
 		t.Errorf("answered %s", ims[0].MessageBlock.ToAgentID)
+	}
+	// Into the default folder for a notecard, never an empty bucket.
+	if string(ims[0].MessageBlock.BinaryBucket) != string(testNotecards[:]) {
+		t.Errorf("bucket %x, want the Notecards folder %s", ims[0].MessageBlock.BinaryBucket, testNotecards)
 	}
 }
 
@@ -363,6 +368,7 @@ func TestAnOfferFromAStrangerIsLeftWaiting(t *testing.T) {
 
 func TestAnyoneCanOfferWhenTheFileSaysSo(t *testing.T) {
 	d, b, f := newTestDaemon(t)
+	withNotecardsFolder(f)
 	d.cfg.AcceptInventory = AcceptAnyone
 	defer serving(t, b)()
 

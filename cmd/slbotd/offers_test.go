@@ -97,6 +97,7 @@ func TestAGiftMadeWhileTheDaemonWasAwayIsTaken(t *testing.T) {
 		keptOffer(t, "inventory:1", testSender, "Trusted Resident", trusted),
 		keptOffer(t, "inventory:2", testStranger, "Some Body", stranger),
 	)
+	withNotecardsFolder(k.fakeGrid)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

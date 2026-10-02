@@ -349,9 +349,9 @@ func (b *bot) take(ctx context.Context, offer *sl.InventoryOffer) {
 		return
 	}
 
-	// A zero folder is what a viewer sends when somebody clicks Accept
-	// rather than dragging the item somewhere: the grid files it under
-	// whatever kind of thing it is.
+	// A zero folder is filled in with the default one for the item's
+	// type, as a viewer does when somebody clicks Accept rather than
+	// dragging the item somewhere; if there is none, nothing is sent.
 	accept, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	if err := offer.Accept(accept, msg.UUID{}); err != nil {

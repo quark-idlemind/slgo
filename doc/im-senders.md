@@ -159,6 +159,14 @@ counted it as conversation. Now:
   conversation. A do-not-disturb auto response is a notice,
   `* do not disturb auto response from NAME: TEXT`.
 - `examples/greeter` does not answer one.
+- Accepting an offer (4 or 9) sends the folder as the bucket, and when
+  the caller names none it is the default folder for the item's type,
+  as a viewer's is: `FolderTypeOf` the asset type, then `FolderOfType`.
+  An empty bucket is never sent, and a type or an inventory with no
+  such folder is an error with nothing sent. That is read from
+  Firestorm's source (`llimprocessing.cpp:1614` sets the offer's
+  folder, `llviewermessage.cpp:1781` writes it to the bucket), not
+  measured; an empty bucket has never been measured either way.
 
 ## Labelling a sender
 
