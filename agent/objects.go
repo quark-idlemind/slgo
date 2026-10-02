@@ -84,7 +84,7 @@ type Object struct {
 	// ClickKnown false means no update has said.  Full and compressed
 	// updates carry it and terse ones do not, and forgetting an
 	// appearance leaves it alone.
-	// Why: doc/slate-sl-changes.md#click-action
+	// Why: doc/objects.md#the-click-action
 	Click      uint8
 	ClickKnown bool
 

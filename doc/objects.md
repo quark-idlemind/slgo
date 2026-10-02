@@ -64,6 +64,17 @@ measured on a live region, one such prim was deleted and re-created
 every minute for hours, losing its name each time and costing a fresh
 name lookup to get it back.
 
+## The click action
+
+A full `ObjectUpdate` carries a prim's click action byte (`ClickAction`),
+and a compressed update carries it in its fixed header; a terse update
+does not. The store keeps the last byte either kind gave as
+`Object.Click`, with `Object.ClickKnown` set. Zero is a real value, the
+touch action, so it cannot also mean that nothing has said:
+`ClickKnown` false is "no update has said", and a zero `Click` with it
+true is touch. Forgetting an appearance does not forget the byte. The
+values are named beside `Seen.Click` in sl (`ClickTouch` and the rest).
+
 ## The camera, as soon as it moves
 
 `lookFrom` tells the store where an agent is looking whenever the

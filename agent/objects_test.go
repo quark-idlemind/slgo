@@ -680,7 +680,7 @@ func TestAnUpdateSaysWhetherATextureAnimationRuns(t *testing.T) {
 // TestAFullUpdateKeepsTheClickAction: the byte is stored with
 // ClickKnown, and a zero is the touch action, which is not the same as
 // a prim nothing has described.
-// Why: doc/slate-sl-changes.md#click-action
+// Why: doc/objects.md#the-click-action
 func TestAFullUpdateKeepsTheClickAction(t *testing.T) {
 	t.Parallel()
 
@@ -713,7 +713,7 @@ func TestAFullUpdateKeepsTheClickAction(t *testing.T) {
 // TestACompressedUpdateKeepsTheClickAction: whole, or cut off after its
 // header, the byte in the header is what the object says, and an
 // appearance forgotten does not take it with it.
-// Why: doc/slate-sl-changes.md#click-action
+// Why: doc/objects.md#the-click-action
 func TestACompressedUpdateKeepsTheClickAction(t *testing.T) {
 	t.Parallel()
 
