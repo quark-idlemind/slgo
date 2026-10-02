@@ -1,0 +1,4 @@
+# GitHub accounts whose pull requests may be reviewed, approved and
+# merged without asking the owner first. A pull request from any other
+# account waits for the owner's permission. One account per line.
+quark-idlemind
