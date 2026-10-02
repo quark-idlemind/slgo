@@ -102,6 +102,10 @@ type compressedObject struct {
 	// click is the ClickAction byte of the fixed header.
 	click uint8
 
+	// extra is the extra-parameter field as it is laid out, count and
+	// blocks; none writes the count of zero.
+	extra []byte
+
 	// state is the State byte, and nameValues the name-values, which
 	// together say what a worn object is worn from and where.
 	state      uint8
@@ -156,7 +160,11 @@ func (c compressedObject) bytes() []byte {
 		w.u8(255)
 		w.u8(0)
 	}
-	w.u8(0) // no extra parameters
+	if c.extra == nil {
+		w.u8(0) // no extra parameters
+	} else {
+		w.raw(c.extra)
+	}
 	if c.nameValues != "" {
 		w.cstr(c.nameValues)
 	}
@@ -740,6 +748,101 @@ func TestACompressedUpdateKeepsTheClickAction(t *testing.T) {
 	o.forgetAppearance(4)
 	if got, _ := o.Get(aPrim); got.Click != 3 || !got.ClickKnown {
 		t.Errorf("click %d known %v after the appearance was forgotten", got.Click, got.ClickKnown)
+	}
+}
+
+// sculptBlock is the extra-parameter field of a prim with one sculpt
+// block: a count of one, the type 0x30, its length of 17, a texture and
+// the sculpt type byte.
+func sculptBlock(tex msg.UUID, kind uint8) []byte {
+	w := &blob{}
+	w.u8(1)
+	w.u16(0x30)
+	w.u32(17)
+	w.uuid(tex)
+	w.u8(kind)
+	return w.b
+}
+
+// TestTheSculptMarkIsWhatTheLastFullOrCompressedUpdateSaid: a sculpt and
+// a mesh are the same block with a different type byte (5 is a mesh,
+// and the top two bits are flags, not part of the kind), and an update
+// with no block says the prim is neither, as it does of a texture
+// animation.
+// Why: doc/objects.md#how-many-faces-a-prim-has
+func TestTheSculptMarkIsWhatTheLastFullOrCompressedUpdateSaid(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	a.SetLook(Look{Far: 128})
+	full := func(id msg.UUID, local uint32, extra []byte) *msg.ObjectUpdate {
+		return arriving(t, msg.ObjectUpdate_ObjectData{
+			ID: local, FullID: id, PCode: 9, ExtraParams: extra,
+			ObjectData: placement(msg.Vector3{}, msg.Quaternion{}),
+		})
+	}
+	mark := func(id msg.UUID) msg.SculptMark {
+		o, _ := a.Objects().Get(id)
+		return o.Sculpt
+	}
+
+	// 0x42 is a torus sculpt with the invert flag.
+	feed(t, a, full(aPrim, 7, sculptBlock(anItem, 0x42)))
+	if got, want := mark(aPrim), (msg.SculptMark{Kind: msg.SculptTorus, ID: anItem}); got != want {
+		t.Errorf("sculpt = %+v after a sculpt block, want %+v", got, want)
+	}
+	feed(t, a, full(aChild, 8, sculptBlock(anOwner, 5)))
+	if got, want := mark(aChild), (msg.SculptMark{Kind: msg.SculptMesh, ID: anOwner}); got != want {
+		t.Errorf("sculpt = %+v after a mesh block, want %+v", got, want)
+	}
+	feed(t, a, full(someone, 9, nil))
+	if got := mark(someone); got != (msg.SculptMark{}) {
+		t.Errorf("sculpt = %+v for an update with no block, want none", got)
+	}
+
+	// A block of kind none is no block.
+	feed(t, a, full(someone, 9, sculptBlock(anItem, 0)))
+	if got := mark(someone); got != (msg.SculptMark{}) {
+		t.Errorf("sculpt = %+v for a block of kind none, want none", got)
+	}
+
+	// The next update says it afresh: the sculpt became a plain prim.
+	feed(t, a, full(aPrim, 7, nil))
+	if got := mark(aPrim); got != (msg.SculptMark{}) {
+		t.Errorf("sculpt = %+v after an update with no block, want none", got)
+	}
+
+	// A terse update carries none of it and leaves it alone.
+	o := newObjects()
+	o.compressed(decodeCompressed(t, compressedObject{
+		id: aPrim, local: 4, pcode: 9, extra: sculptBlock(anItem, 5),
+	}), msg.Vector3{}, 0)
+	if got, _ := o.Get(aPrim); got.Sculpt != (msg.SculptMark{Kind: msg.SculptMesh, ID: anItem}) {
+		t.Errorf("sculpt = %+v after a compressed update with a mesh block", got.Sculpt)
+	}
+	if !o.moved(&msg.Terse{LocalID: 4}, nil) {
+		t.Fatal("the terse update found nothing to move")
+	}
+	if got, _ := o.Get(aPrim); got.Sculpt.Kind != msg.SculptMesh {
+		t.Errorf("sculpt = %+v after a terse update, want it kept", got.Sculpt)
+	}
+	o.compressed(decodeCompressed(t, compressedObject{id: aPrim, local: 4, pcode: 9}), msg.Vector3{}, 0)
+	if got, _ := o.Get(aPrim); got.Sculpt != (msg.SculptMark{}) {
+		t.Errorf("sculpt = %+v after a compressed update with none, want none", got.Sculpt)
+	}
+
+	// One that did not decode whole says nothing about it.
+	o.compressed(decodeCompressed(t, compressedObject{
+		id: aChild, local: 5, pcode: 9, extra: sculptBlock(anOwner, 1),
+	}), msg.Vector3{}, 0)
+	cut := compressedObject{id: aChild, local: 5, pcode: 9, text: someText}.bytes()[:84+5]
+	c, err := msg.DecodeCompressed(cut)
+	if err == nil || c == nil {
+		t.Fatalf("DecodeCompressed of a cut blob = %v, %v", c, err)
+	}
+	o.unsure(c, msg.Vector3{}, 0)
+	if got, _ := o.Get(aChild); got.Sculpt.Kind != msg.SculptSphere {
+		t.Errorf("sculpt = %+v after a cut blob, want it kept", got.Sculpt)
 	}
 }
 

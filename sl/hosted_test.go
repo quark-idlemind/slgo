@@ -620,6 +620,7 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 			TextureEntry: []byte{1, 2, 3}, TextureAnim: []byte{4, 5}, Text: "floating",
 			AttachPoint: 6, AttachItem: theChild.String(),
 			Click: 0, ClickKnown: true,
+			SculptKind: 5, SculptId: theChild.String(),
 		},
 		{Id: "not a uuid", Local: 78},
 	}
@@ -649,6 +650,9 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 	}
 	if o.Click != 0 || !o.ClickKnown {
 		t.Errorf("click %d known %v, want touch, known", o.Click, o.ClickKnown)
+	}
+	if o.Sculpt != (msg.SculptMark{Kind: msg.SculptMesh, ID: theChild}) {
+		t.Errorf("sculpt %+v, want a mesh of %s", o.Sculpt, theChild)
 	}
 
 	d.fail = errors.New("no such agent")

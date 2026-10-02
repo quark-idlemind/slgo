@@ -61,6 +61,47 @@ type Sculpt struct {
 	Type    uint8
 }
 
+// SculptKind is the kind of a sculpt block, the low bits of its type
+// byte (LL_SCULPT_TYPE_*, llvolume.h:189-199); the top two bits are the
+// invert and mirror flags and are not part of the kind.  A mesh is a
+// sculpt block of kind SculptMesh.
+type SculptKind uint8
+
+const (
+	SculptNone     SculptKind = 0
+	SculptSphere   SculptKind = 1
+	SculptTorus    SculptKind = 2
+	SculptPlane    SculptKind = 3
+	SculptCylinder SculptKind = 4
+	SculptMesh     SculptKind = 5
+	SculptGLTF     SculptKind = 6
+
+	sculptKindMask = 7
+)
+
+// SculptMark says whether a prim is a sculpt or a mesh, and what holds
+// its shape: the texture of a sculpt or the asset of a mesh.  Its zero
+// value is a prim that is neither.
+type SculptMark struct {
+	Kind SculptKind
+	ID   UUID
+}
+
+// SculptMarkOf reads the mark out of a prim's extra parameters.  A
+// block of kind none is no block, as in the viewer's isSculpt
+// (llvolume.cpp:3300).
+func SculptMarkOf(params []ExtraParam) SculptMark {
+	s, ok := SculptOf(params)
+	if !ok {
+		return SculptMark{}
+	}
+	k := SculptKind(s.Type & sculptKindMask)
+	if k == SculptNone {
+		return SculptMark{}
+	}
+	return SculptMark{Kind: k, ID: s.Texture}
+}
+
 // Light is a prim that gives off light.
 type Light struct {
 	// Colour is the first three of four colour bytes on the wire; the

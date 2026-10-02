@@ -185,6 +185,11 @@ type Seen struct {
 	Click      uint8
 	ClickKnown bool
 
+	// Sculpt marks a sculpt or a mesh, with the texture or asset that
+	// holds its shape; its zero value is a prim that is neither.  It
+	// is what Seen.FaceCount asks before counting a shape's faces.
+	Sculpt msg.SculptMark
+
 	// Shape is the prim's profile and path, still packed.  Form
 	// unpacks it into something with names.
 	Shape msg.PrimShape
@@ -547,4 +552,17 @@ func (s *Seen) Form() (Shape, bool) {
 		return Shape{}, false
 	}
 	return UnpackShape(s.Shape), true
+}
+
+// FaceCount is how many texture faces the prim has -- the number
+// llGetNumberOfSides gives -- and whether that can be said: it cannot
+// before an update has described the prim, nor for a sculpt or a mesh,
+// whose faces the shape fields do not give.  Asking Form and then
+// Shape.Faces without looking at Sculpt gets a wrong count for both.
+func (s *Seen) FaceCount() (int, bool) {
+	shape, ok := s.Form()
+	if !ok || s.Sculpt.Kind != msg.SculptNone {
+		return 0, false
+	}
+	return shape.Faces()
 }
