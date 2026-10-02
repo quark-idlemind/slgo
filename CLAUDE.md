@@ -223,6 +223,19 @@ reach.
 says what to add to `.gitignore`. If you find one already committed, it
 goes in `.gitignore` and out of the tree in the same change.
 
+## Every change reaches GitHub as a pull request
+
+`main` on GitHub is protected: nothing is pushed to it, by anybody,
+the owner included. A change is made on a branch, pushed as that
+branch, and opened with `gh pr create`, and the owner merges it. Work
+that needs another branch that has not merged yet is opened as a pull
+request based on that branch, and moved onto `main` once that one has
+merged.
+
+A tag is cut only on a commit that `main` holds, and once it is pushed
+it never moves. The Go module proxy keeps the first commit it saw for a
+version, so a moved tag never reaches anybody who has fetched it.
+
 ## The issue log
 
 If an `issues/` directory is present, it is the list of what is known
