@@ -144,14 +144,34 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 		t.Errorf("an id filter did not find the object it named: %v", got.GetObjects())
 	}
 
+	// A child sent after it is link number 2, and the root 1.
+	kid := msg.MustParseUUID("68887e57-7e57-c0de-1dc8-91c8603a504d")
+	r.sim.send(&msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{ID: 4243, ParentID: 4242, FullID: kid, PCode: 9}}}, 0)
+	waitFor(t, 5*time.Second, "the child to be recorded", func() bool {
+		return h.Agent().Objects().Count() > 1
+	})
+	linked, err := r.srv.Objects(ctx, &pb.ObjectsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range linked.GetObjects() {
+		want := map[uint32]uint32{4242: 1, 4243: 2}[o.GetLocal()]
+		if o.GetLinkNumber() != want {
+			t.Errorf("link number of local %d is %d, want %d", o.GetLocal(), o.GetLinkNumber(), want)
+		}
+		// Both arrived as new objects, so their order is known.
+		if !o.GetLinkKnown() {
+			t.Errorf("link number of local %d is not known", o.GetLocal())
+		}
+	}
 	// And emptying it, which is the client saying "I have moved, forget
 	// what you were told".
 	flushed, err := r.srv.Flush(ctx, &pb.FlushRequest{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if flushed.GetForgotten() != 1 {
-		t.Errorf("flush forgot %d objects, want 1", flushed.GetForgotten())
+	if flushed.GetForgotten() != 2 {
+		t.Errorf("flush forgot %d objects, want 2", flushed.GetForgotten())
 	}
 
 	// A message the session has no handler for is counted rather than
@@ -168,10 +188,10 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	if st.GetUnhandled()["ChatFromSimulator"] == 0 {
 		t.Errorf("unhandled = %v, want ChatFromSimulator among them", st.GetUnhandled())
 	}
-	// The object update above carried an empty placement blob, which
-	// nothing reads and which is counted all the same.
-	if got := st.GetPlacementWidths(); len(got) != 1 || got[0] != 1 {
-		t.Errorf("placement widths = %v, want the one empty blob", got)
+	// The two object updates above carried an empty placement blob
+	// each, which nothing reads and which is counted all the same.
+	if got := st.GetPlacementWidths(); len(got) != 1 || got[0] != 2 {
+		t.Errorf("placement widths = %v, want the two empty blobs", got)
 	}
 
 	// And Send refuses what sendMessage refuses, rather than reporting
@@ -492,6 +512,86 @@ func TestSendingNeedsSomethingToSend(t *testing.T) {
 	err = sendMessage(ctx, h, nil, "test", &pb.OutboundMessage{Name: "ChatFromViewer", Body: body, Reliable: true})
 	if err != nil && status.Code(err) != codes.Unavailable {
 		t.Errorf("sending on a closed circuit: %v; want Unavailable if anything", err)
+	}
+}
+
+// TestALinkSentThroughTheDaemonNamesTheOrderOfItsSet: a client of the
+// daemon sends an ObjectLink as bytes, and the session that sent it is
+// the one that knows the order it named; the region's update for the set
+// does not carry it.
+// Why: doc/objects.md#link-numbers
+func TestALinkSentThroughTheDaemonNamesTheOrderOfItsSet(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	ctx := context.Background()
+	h, _ := r.srv.Agent("example")
+
+	root := msg.MustParseUUID("25837e57-7e57-c0de-7f44-784a4a70bcb6")
+	a := msg.MustParseUUID("acec7e57-7e57-c0de-18e3-5fe4247a091f")
+	b := msg.MustParseUUID("da687e57-7e57-c0de-f481-af7902923dba")
+	c := msg.MustParseUUID("e1b67e57-7e57-c0de-4063-03649cdcfd3f")
+	r.sim.send(&msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{
+		{ID: 1, FullID: root, PCode: 9}, {ID: 2, FullID: a, PCode: 9},
+		{ID: 3, FullID: b, PCode: 9}, {ID: 4, FullID: c, PCode: 9}}}, 0)
+	waitFor(t, 5*time.Second, "the prims to be recorded", func() bool {
+		return h.Agent().Objects().Count() == 4
+	})
+
+	// Root, then B, C, A.
+	link := &msg.ObjectLink{}
+	for _, l := range []uint32{1, 3, 4, 2} {
+		link.ObjectData = append(link.ObjectData, msg.ObjectLink_ObjectData{ObjectLocalID: l})
+	}
+	body, err := link.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.srv.Send(ctx, &pb.SendRequest{
+		Message: &pb.OutboundMessage{Name: "ObjectLink", Body: body, Reliable: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// The sender hands a message to its tap after the write, and in
+	// order: once this chat is on the wire the link has been heard.
+	chat := &msg.ChatFromViewer{}
+	chat.ChatData.Message = []byte("after the link\x00")
+	cb, err := chat.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.srv.Send(ctx, &pb.SendRequest{
+		Message: &pb.OutboundMessage{Name: "ChatFromViewer", Body: cb, Reliable: true},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, 5*time.Second, "the chat to reach the simulator", func() bool {
+		return counted(r.sim, "ChatFromViewer") >= 1
+	})
+
+	// The region sends the children last made first.
+	r.sim.send(&msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{
+		{ID: 4, ParentID: 1, FullID: c, PCode: 9}, {ID: 3, ParentID: 1, FullID: b, PCode: 9},
+		{ID: 2, ParentID: 1, FullID: a, PCode: 9}}}, 0)
+	want := map[uint32]uint32{1: 1, 3: 2, 4: 3, 2: 4}
+	waitFor(t, 5*time.Second, "the set to be numbered", func() bool {
+		got, err := r.srv.Objects(ctx, &pb.ObjectsRequest{})
+		if err != nil {
+			return false
+		}
+		for _, o := range got.GetObjects() {
+			if o.GetLinkNumber() != want[o.GetLocal()] {
+				return false
+			}
+		}
+		return true
+	})
+	got, err := r.srv.Objects(ctx, &pb.ObjectsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range got.GetObjects() {
+		if !o.GetLinkKnown() || o.GetLinkNumber() != want[o.GetLocal()] {
+			t.Errorf("local %d is link %d, known %v; want %d, known", o.GetLocal(), o.GetLinkNumber(), o.GetLinkKnown(), want[o.GetLocal()])
+		}
 	}
 }
 

@@ -387,6 +387,8 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			Click:        uint8(o.Click),
 			ClickKnown:   o.ClickKnown,
 			Sculpt:       msg.SculptMark{Kind: msg.SculptKind(o.SculptKind), ID: parseUUIDOrZero(o.SculptId)},
+			LinkNumber:   int(o.LinkNumber),
+			LinkKnown:    o.LinkKnown,
 			Text:         o.Text,
 		}
 		s.Object.Name = o.Name
