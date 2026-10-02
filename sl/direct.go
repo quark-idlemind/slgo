@@ -387,6 +387,7 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			TextureAnim:  o.TextureAnim,
 			Click:        o.Click,
 			ClickKnown:   o.ClickKnown,
+			Sculpt:       o.Sculpt,
 			Shape:        o.Shape,
 			Text:         o.Text,
 			AttachPoint:  o.AttachPoint,

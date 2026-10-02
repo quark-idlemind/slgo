@@ -570,3 +570,29 @@ func TestTheClickActionsAreLindensPublishedValues(t *testing.T) {
 		}
 	}
 }
+
+// TestFaceCountIsNotGivenForASculptOrAMesh: a sculpt or a mesh sends
+// the same shape fields as a torus or a sphere and has the faces its
+// asset says, and an object nothing has described has no shape to count.
+func TestFaceCountIsNotGivenForASculptOrAMesh(t *testing.T) {
+	box := DefaultShape()
+	p, err := box.Pack()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tex := msg.MustParseUUID("17ac7e57-7e57-c0de-1e5d-e125ee89dc71")
+
+	plain := &Seen{Shape: p}
+	if n, ok := plain.FaceCount(); !ok || n != 6 {
+		t.Errorf("a plain box has %d faces, %v; want 6", n, ok)
+	}
+	for _, k := range []msg.SculptKind{msg.SculptSphere, msg.SculptMesh, msg.SculptGLTF} {
+		s := &Seen{Shape: p, Sculpt: msg.SculptMark{Kind: k, ID: tex}}
+		if n, ok := s.FaceCount(); ok {
+			t.Errorf("sculpt kind %d has %d faces counted from its shape", k, n)
+		}
+	}
+	if n, ok := (&Seen{}).FaceCount(); ok {
+		t.Errorf("an undescribed object has %d faces", n)
+	}
+}

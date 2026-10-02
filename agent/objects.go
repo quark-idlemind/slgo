@@ -88,6 +88,14 @@ type Object struct {
 	Click      uint8
 	ClickKnown bool
 
+	// Sculpt is what the sculpt block of the extra parameters says: the
+	// zero value for a prim that is neither a sculpt nor a mesh.  A
+	// full or compressed update says it afresh, as it does the
+	// animation, so one without a block says none; a terse update, and
+	// a compressed one that would not decode, leave it alone.
+	// Why: doc/objects.md#how-many-faces-a-prim-has
+	Sculpt msg.SculptMark
+
 	// AttachPoint is where a worn object is attached, and zero when it
 	// is not worn.  AttachItem is the inventory item it was worn from.
 	//
@@ -493,6 +501,10 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	v.Local, v.Parent, v.PCode, v.Scale = d.ID, d.ParentID, d.PCode, d.Scale
 	v.Shape = msg.ShapeOfUpdate(d)
 	v.Click, v.ClickKnown = d.ClickAction, true
+	// A block that does not read says nothing, so the last answer stays.
+	if params, err := msg.DecodeExtraParams(d.ExtraParams); err == nil {
+		v.Sculpt = msg.SculptMarkOf(params)
+	}
 	// A full update carries the appearance as well, and it is the only
 	// update most prims ever get: a region sends a compressed one for
 	// what it thinks is worth compressing, so waiting for one leaves
@@ -588,6 +600,7 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	v.Local, v.Parent, v.PCode = c.LocalID, parent, c.PCode
 	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
 	v.Click, v.ClickKnown = c.Click, true
+	v.Sculpt = msg.SculptMarkOf(c.ExtraParams)
 	if !c.Shape.IsZero() {
 		v.Shape = c.Shape
 	}

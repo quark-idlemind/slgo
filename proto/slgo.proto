@@ -1402,6 +1402,12 @@ message ObjectInfo {
   // touch action, so click 0 with click_known false means none has.
   uint32 click = 16;
   bool click_known = 17;
+
+  // The sculpt or mesh marker from the extra parameters: the kind
+  // (1 to 4 the sculpt types, 5 mesh, 6 glTF) and the texture or asset
+  // id. Kind 0 is neither, and then the id is empty.
+  uint32 sculpt_kind = 18;
+  string sculpt_id = 19;
 }
 
 // Quaternion is a rotation, unpacked: the wire form is three floats

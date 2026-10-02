@@ -295,3 +295,128 @@ func clamp(f, lo, hi float64) float64 {
 	}
 	return math.Max(lo, math.Min(hi, f))
 }
+
+// Faces is how many texture faces the viewer gives a prim of this
+// shape, which is what llGetNumberOfSides reports.  It is false when the
+// shape does not say: a Type the curve tables do not know, or a cut that
+// leaves nothing.  A sculpt or a mesh has the same fields as an ordinary
+// prim and a different count, so it is the caller's to rule out first
+// (Seen.FaceCount does).
+//
+// The count is the number of LLProfile::Face records the viewer's
+// LLProfile::generate makes, one per LLVolumeFace
+// (indra/llmath/llvolume.cpp:2792, getNumFaces; :2808-2823,
+// createVolumeFaces).  Each record is its own texture face, so no two
+// share an index.  They are, at a LOD where the path has at least eight
+// sides:
+//
+//	outer sides  circle and half-circle profiles 1 (:898-917, :955-964);
+//	             square and triangle one per side the cut touches,
+//	             floor(end*n + .999) - floor(begin*n) for n = 4 (:794-799)
+//	             or 3 (:851-856)
+//	inner side   1 when the hollow is above zero (addHole, :612;
+//	             called :810-831, :857-876, :919-934, :969-985)
+//	path caps    2 when the path is open (addCap, :793, :850, :907, :958,
+//	             :1007)
+//	profile ends 2 when the profile is open (:1010-1021)
+//
+// A profile is open when the cut leaves less than 0.99 of it
+// (genNGon, :571-593; a hollow profile's last genNGon is addHole's,
+// :610); the half-circle is open whenever it is cut, and when it is
+// hollow (:987-998).  A path is open when a line (LLPath::
+// generate, :1490), when twisted (:1594), and for a circle when cut,
+// skewed, tapered or radius-offset (genNGon, :1289-1293).
+// Why: doc/objects.md#how-many-faces-a-prim-has
+func (s Shape) Faces() (int, bool) {
+	c, ok := curves[s.Type]
+	if !ok {
+		return 0, false
+	}
+	profile, path := c[0], c[1]
+
+	// The cut of each curve, as the viewer unpacks it
+	// (llvolumemessage.cpp:109-128, :334-338).  Which of Shape's two
+	// cuts is which follows Pack: a line has only a profile cut, and on
+	// a circular path Cut is the path's and AdvancedCut the profile's.
+	pb, pe := s.CutBegin, s.CutEnd
+	tb, te := float32(0), float32(1)
+	if path == pathCircle {
+		tb, te = s.CutBegin, s.CutEnd
+		pb, pe = s.AdvancedCutBegin, s.AdvancedCutEnd
+	}
+	pb, pe = viewerBegin(pb), viewerEnd(pe)
+	if path == pathCircle {
+		tb, te = viewerBegin(tb), viewerPathEnd(te)
+	}
+	if pe-pb < 0.01 { // :778, generate gives up
+		return 0, false
+	}
+	hollow := s.Hollow > 0
+
+	n := 0
+	switch profile {
+	case profileSquare, profileIsoTri, profileEqualTri, profileRightTri:
+		sides := float32(4)
+		if profile != profileSquare {
+			sides = 3
+		}
+		n += int(math.Floor(float64(pe*sides)+.999)) - int(math.Floor(float64(pb*sides)))
+	case profileCircle, profileCircleHalf:
+		n++
+	}
+	if hollow {
+		n++
+	}
+
+	open := pe-pb < 0.99
+	if profile == profileCircleHalf {
+		open = pe-pb < 1 || hollow
+	}
+	if open {
+		n += 2
+	}
+
+	if s.pathOpen(path, tb, te) {
+		n += 2
+	}
+	return n, true
+}
+
+// pathOpen is LLPath::generate's mOpen, for a path of the line or the
+// circle curve with the begin and end already as the viewer has them.
+func (s Shape) pathOpen(path uint8, begin, end float32) bool {
+	if path == pathLine || s.TwistBegin != s.TwistEnd { // :1490, :1594
+		return true
+	}
+	// genNGon, :1234-1293.  The radius start is 0.5 once the path has
+	// eight sides, which every LOD but the lowest of a lightly
+	// revolved ring has.
+	skew := s.Skew
+	if skew < 0 {
+		skew = -skew
+	}
+	radius := 0.5 * (1 - s.TopSizeY)
+	if s.RadiusOffset < 0 {
+		radius *= -s.RadiusOffset
+	} else {
+		radius *= s.RadiusOffset
+	}
+	return end-begin < 1 || skew > 0.001 ||
+		s.TaperX != 0 || s.TaperY != 0 || radius > 0.001
+}
+
+// The viewer's own arithmetic on a cut: a counted quantum times
+// CUT_QUANTA in single precision (llvolume.h:75), and an end taken from 1.
+// Shape holds the same numbers worked out in double precision, so they
+// are counted again here to land on the viewer's, not a rounding off it.
+func viewerBegin(f float32) float32 {
+	return float32(math.Round(float64(f)/cutQuantum)) * float32(cutQuantum)
+}
+
+func viewerEnd(f float32) float32 {
+	return 1 - float32(50000-math.Round(float64(f)/cutQuantum))*float32(cutQuantum)
+}
+
+func viewerPathEnd(f float32) float32 {
+	return float32(math.Round(float64(f)/cutQuantum)) * float32(cutQuantum)
+}

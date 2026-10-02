@@ -386,6 +386,7 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			TextureAnim:  o.TextureAnim,
 			Click:        uint8(o.Click),
 			ClickKnown:   o.ClickKnown,
+			Sculpt:       msg.SculptMark{Kind: msg.SculptKind(o.SculptKind), ID: parseUUIDOrZero(o.SculptId)},
 			Text:         o.Text,
 		}
 		s.Object.Name = o.Name

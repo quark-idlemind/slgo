@@ -179,3 +179,64 @@ appearance is forgotten, and the object is asked for again, as
 Firestorm asks for one it finds bogus when enforcing strict object
 checks (`llvovolume.cpp:538` and `585`). Whether the region ever sends
 such a blob is not known; none has been recorded.
+
+## How many faces a prim has
+
+`Shape.Faces` is a port of what the viewer builds. A prim's texture faces
+are the records `LLProfile::generate` makes (`indra/llmath/llvolume.cpp`
+:751-1023), one `LLVolumeFace` each (`getNumFaces`, :2792, and
+`createVolumeFaces`, :2798), so no two profile faces share a texture
+face: the outer sides the cut leaves (one for a circle or a half-circle,
+one per side touched for a square or a triangle), one inner side when
+hollow, two caps when the path is open, and two profile ends when the
+profile is open. The comment on `Faces` gives each line and the rule for
+when a path or a profile is open.
+
+It was checked against the simulator's own count on 2026-10-01: 340
+shapes, the seven kinds crossed with profile cuts, path cuts, dimples,
+hollow and the four hole shapes, were set on one prim, counted with
+`llGetNumberOfSides`, and read back from the update the region sent. All
+340 agree.
+
+A second run the same day measured what opens the path: 366 shapes, 342
+distinct once read back, and all of them agree. On the torus, tube and
+ring each of twist, taper, skew, radius offset, revolutions, hole size
+and top shear was set alone and in a few combinations, and each crossed
+with no cut, a path cut, hollow and a profile cut. The sphere was given
+twist, and the three line shapes twist, top size and shear.
+
+- A twist whose begin and end differ opens a circular path and adds the
+  two ends, even at a difference of 0.02. An equal twist, 0.25 and
+  0.25, does not.
+- Any taper opens it, down to 0.02, and so do any skew and any radius
+  offset, down to 0.02. The quanta the region stores these in keep a
+  non-zero value above the rule's 0.001.
+- Hole size and top shear alone leave it closed.
+- Revolutions could not be measured alone. Asked for more than one
+  revolution with no skew, the region stored a skew as well, 0.67 at
+  2 revolutions and 0.78 at 3.5, which fit 1 - 1/(revolutions + 1) at
+  hole size X 1. A revolved ring therefore always has an open path, by
+  its skew.
+- On a line path, which is always open, twist, top size and shear
+  change nothing.
+- A path that is already open, by a cut, adds nothing more.
+
+The region also clamped one asked-for value: a radius offset of 0.5 with
+hole size Y 0.5 was stored as 0. Still unmeasured: the lowest levels of
+detail, where the viewer builds fewer path points. `llGetNumberOfSides`
+is the simulator's count and does not change with the viewer's detail.
+
+A sculpt or a mesh sends the same shape fields as an ordinary prim and
+has the faces its asset says, so a count cannot be had from the shape;
+`Seen.FaceCount` rules them out first. The store keeps which a prim is
+as `Object.Sculpt`, the sculpt or mesh block of the update's extra
+parameters with its kind and asset: a full or compressed update without
+the block says the prim is neither, and a terse update, or a compressed
+one that would not decode, leaves it as it was.
+
+The eLSL simulator's `primNumSides` agrees with the grid for a cylinder
+and a plain shape and not for the rest: it adds two for any cut to a box
+or prism, where the grid's count follows the sides the cut leaves (a box
+cut from 0.25 has seven faces, one cut at 0.5 has six), and it models
+nothing of a cut or a hollow on a torus, tube or ring, nor a sphere that
+is both hollow and cut.

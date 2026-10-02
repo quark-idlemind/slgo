@@ -4747,8 +4747,13 @@ type ObjectInfo struct {
 	TextureAnim []byte `protobuf:"bytes,15,opt,name=texture_anim,json=textureAnim,proto3" json:"texture_anim,omitempty"`
 	// The click action byte, and whether an update said it: zero is the
 	// touch action, so click 0 with click_known false means none has.
-	Click         uint32 `protobuf:"varint,16,opt,name=click,proto3" json:"click,omitempty"`
-	ClickKnown    bool   `protobuf:"varint,17,opt,name=click_known,json=clickKnown,proto3" json:"click_known,omitempty"`
+	Click      uint32 `protobuf:"varint,16,opt,name=click,proto3" json:"click,omitempty"`
+	ClickKnown bool   `protobuf:"varint,17,opt,name=click_known,json=clickKnown,proto3" json:"click_known,omitempty"`
+	// The sculpt or mesh marker from the extra parameters: the kind
+	// (1 to 4 the sculpt types, 5 mesh, 6 glTF) and the texture or asset
+	// id. Kind 0 is neither, and then the id is empty.
+	SculptKind    uint32 `protobuf:"varint,18,opt,name=sculpt_kind,json=sculptKind,proto3" json:"sculpt_kind,omitempty"`
+	SculptId      string `protobuf:"bytes,19,opt,name=sculpt_id,json=sculptId,proto3" json:"sculpt_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4900,6 +4905,20 @@ func (x *ObjectInfo) GetClickKnown() bool {
 		return x.ClickKnown
 	}
 	return false
+}
+
+func (x *ObjectInfo) GetSculptKind() uint32 {
+	if x != nil {
+		return x.SculptKind
+	}
+	return 0
+}
+
+func (x *ObjectInfo) GetSculptId() string {
+	if x != nil {
+		return x.SculptId
+	}
+	return ""
 }
 
 // Quaternion is a rotation, unpacked: the wire form is three floats
@@ -6795,7 +6814,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x0eObjectsRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
 	"\x05named\x18\x02 \x01(\tR\x05named\x12\x0e\n" +
-	"\x02id\x18\x03 \x01(\tR\x02id\"\x92\x04\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"\xd0\x04\n" +
 	"\n" +
 	"ObjectInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
@@ -6817,7 +6836,10 @@ const file_slgo_proto_rawDesc = "" +
 	"\ftexture_anim\x18\x0f \x01(\fR\vtextureAnim\x12\x14\n" +
 	"\x05click\x18\x10 \x01(\rR\x05click\x12\x1f\n" +
 	"\vclick_known\x18\x11 \x01(\bR\n" +
-	"clickKnown\"D\n" +
+	"clickKnown\x12\x1f\n" +
+	"\vsculpt_kind\x18\x12 \x01(\rR\n" +
+	"sculptKind\x12\x1b\n" +
+	"\tsculpt_id\x18\x13 \x01(\tR\bsculptId\"D\n" +
 	"\n" +
 	"Quaternion\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x02R\x01x\x12\f\n" +

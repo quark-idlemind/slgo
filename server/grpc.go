@@ -885,6 +885,8 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			TextureAnim:  o.TextureAnim,
 			Click:        uint32(o.Click),
 			ClickKnown:   o.ClickKnown,
+			SculptKind:   uint32(o.Sculpt.Kind),
+			SculptId:     attachItemString(o.Sculpt.ID),
 		})
 	}
 	return out, nil

@@ -176,3 +176,27 @@ func TestSculptAndLightAreAbsentWhenTheyAre(t *testing.T) {
 		t.Error("a 15 byte light block is missing its last float")
 	}
 }
+
+// TestSculptMarkOf: the kind is the low bits of the type byte, a mesh is
+// a sculpt block of kind five, and no block, a short one or kind none is
+// the zero value.
+func TestSculptMarkOf(t *testing.T) {
+	tex := MustParseUUID("17ac7e57-7e57-c0de-1e5d-e125ee89dc71")
+	for _, c := range []struct {
+		name   string
+		params []ExtraParam
+		want   SculptMark
+	}{
+		{"none", nil, SculptMark{}},
+		{"a light only", []ExtraParam{{Type: ExtraLight, Data: lightData(1, 2, 3, 4, 1, 1, 1)}}, SculptMark{}},
+		{"sphere", []ExtraParam{{Type: ExtraSculpt, Data: sculptData(tex, 1)}}, SculptMark{SculptSphere, tex}},
+		{"mesh", []ExtraParam{{Type: ExtraSculpt, Data: sculptData(tex, 5)}}, SculptMark{SculptMesh, tex}},
+		{"mirrored plane", []ExtraParam{{Type: ExtraSculpt, Data: sculptData(tex, 0x80|3)}}, SculptMark{SculptPlane, tex}},
+		{"kind none", []ExtraParam{{Type: ExtraSculpt, Data: sculptData(tex, 0x40)}}, SculptMark{}},
+		{"too short", []ExtraParam{{Type: ExtraSculpt, Data: []byte{1, 2, 3}}}, SculptMark{}},
+	} {
+		if got := SculptMarkOf(c.params); got != c.want {
+			t.Errorf("%s: %+v, want %+v", c.name, got, c.want)
+		}
+	}
+}
