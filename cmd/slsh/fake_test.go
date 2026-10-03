@@ -1202,11 +1202,34 @@ func (f *fakeGrid) attached(item, object msg.UUID, local uint32, point int) {
 
 // takeOff stops the fake listing the attachments worn from some items,
 // which is all that coming off looks like from outside: the object goes
-// away and the inventory item it was worn from does not.
-func (f *fakeGrid) takeOff(items ...msg.UUID) {
+// away and the inventory item it was worn from does not.  The simulator
+// also kills the attachment, which is what sl.TakeOff waits to hear.
+// Why: doc/slsh.md#deleting-straight-after-a-take-off
+func (f *fakeGrid) takeOff(items ...msg.UUID) { f.remove(true, items...) }
+
+// forget is takeOff as a reconnect does it: the region stops listing the
+// attachments and the session is told nothing.
+func (f *fakeGrid) forget(items ...msg.UUID) { f.remove(false, items...) }
+
+func (f *fakeGrid) remove(kill bool, items ...msg.UUID) {
 	if len(items) == 0 {
 		return
 	}
+	var kills []msg.KillObject_ObjectData
+	defer func() {
+		if len(kills) == 0 {
+			return
+		}
+		m := &msg.KillObject{ObjectData: kills}
+		body, err := m.Encode()
+		if err != nil {
+			return
+		}
+		select {
+		case f.msgs <- &sl.Message{ID: msg.IDOf(m), Name: m.MsgInfo().Name, Body: body, At: time.Now()}:
+		case <-time.After(5 * time.Second):
+		}
+	}()
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var keep []*sl.Seen
@@ -1217,6 +1240,10 @@ func (f *fakeGrid) takeOff(items ...msg.UUID) {
 		}
 		if !gone {
 			keep = append(keep, o)
+		} else {
+			if kill {
+				kills = append(kills, msg.KillObject_ObjectData{ID: o.Local})
+			}
 		}
 	}
 	f.objects = keep

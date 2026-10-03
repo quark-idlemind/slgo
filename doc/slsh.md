@@ -710,22 +710,66 @@ rather than being told a thing that is untrue.  And a read that fails
 prints the line without the clause: the wear worked, and it is the
 report that could not be finished.
 
-## Why detach waits and TakeOff does not
+## Why detach waits as well as TakeOff
 
 Nothing replies to a detach.  `sl.TakeOff` puts the message on the wire
-and returns, and what says the thing came off is the object no longer
-being among what is worn -- which happens some time later.  Live, that
-gap is visible: a `worn` run straight after a `detach` still listed the
-attachment on the point it had just been taken off, and only the run
-after that showed it gone.
+and waits for the simulator to kill the attachment (see
+[Deleting straight after a take off](#deleting-straight-after-a-take-off)),
+but that is the object going from the region's updates, not the region
+agreeing about what is worn: live, a `worn` run straight after a
+`detach` has listed the attachment on the point it had just been taken
+off, and only the run after that showed it gone.
 
-So `cmdDetach` polls until the region agrees, and `sl.TakeOff` is left
-as it was.  Its caller there, `Worn`, which `EnsureAttached` goes
-through, takes a thing off in order to put it straight back on and does
-its own settling; making `TakeOff` wait would slow it for a confirmation
-it throws away.  What is at stake is the command's last line -- "is no
-longer worn" is a claim the SHELL makes, and the shell is what should
-have established it before printing it.
+So `cmdDetach` still polls until the region's list agrees.  What is at
+stake is the command's last line -- "is no longer worn" is a claim the
+SHELL makes, and the shell is what should have established it before
+printing it.  `Worn`, which `EnsureAttached` goes through, takes a
+thing off in order to put it straight back on; an item the session has
+never seen worn is not waited for, so it does its own settling as
+before.
+
+## Deleting straight after a take off
+
+Measured on 2026-10-03, through slgod, with throwaway one-prim HUDs.
+`Session.TakeOff` used to send `DetachAttachmentIntoInv` and return at
+once; the item was then deleted (an AIS DELETE).
+
+- Deleting straight after the take off was refused in 4 of 20 trials,
+  with status 500 and a message beginning "Query expectation failed" and
+  naming `CategoryAPI.prune_orphan_accessories`. The trials were spread
+  over no pause after the wear and pauses of 0.5 s and 1 s. Every refused
+  delete succeeded when retried about 0.5 s later.
+- Waiting for the attachment's `KillObject` first: it arrived 78 to
+  226 ms after the take off, and the delete then succeeded first time in
+  12 of 12 trials.
+
+The cause is inferred from those counts, not seen: the delete raced the
+detach, which the grid was still carrying out.
+
+Firestorm (revision 885631b93a) sends the same message
+(`LLVOAvatarSelf::detachAttachmentIntoInventory`, llvoavatarself.cpp
+line 1806) and deletes its LSL bridge's items only after the detach has
+been seen: `FSLSLBridge::processDetach` (fslslbridge.cpp line 1057,
+called from llvoavatarself.cpp line 1733 when the attachment object is
+removed) starts `FSLSLBridgeStartCreationTimer` (fslslbridge.h line 205,
+`LLEventTimer(5.f)`) once none are left, and the cleanup follows the
+timer.
+
+slgo departs from that ordering in the extra 5 s, on the measurement:
+waiting for the kill alone was enough in 12 of 12.  So `TakeOff` of an
+attachment this session has seen worn sends, and waits for a
+`KillObject` naming its local id, for up to ten seconds (the longest
+seen was 226 ms).  A kill from before the attachment was described does
+not count: the update that described it cleared any kill of that local
+id.  A kill since then means it is already off, taken off by another
+client, and is not waited for.  An item never seen worn has no local id
+and is not waited for either.
+
+Measured again with this `TakeOff`, the same day: 8 of 8 deletes made
+straight after it succeeded first time, the take off and the delete
+together taking 288 to 611 ms.  A wait that runs out
+returns an error wrapping `ErrTimeout`; the request was sent, so the
+item is no longer recorded as worn either way.
 
 ## What worn used to leave out
 

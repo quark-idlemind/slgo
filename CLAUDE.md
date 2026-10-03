@@ -119,7 +119,8 @@ both axes; each further group gets a base of its own, anywhere in
 and the distance between groups is not kept either. In decimal a marked
 square is 43520 to 43775. Every form is worked out again from the
 invented square rather than edited by hand: the pair,
-`msg.RegionHandle(x, y)`, the decimal handle and its bytes. Linden's
+`msg.RegionHandle(x, y)`, the decimal handle, its bytes, its hex and
+its base64; `doc/identities.md` lists every form. Linden's
 sandboxes keep their real squares, and each one used is in
 `tools/known-squares` with where it was observed. `tools/check-identities`
 reads the square out of every handle it finds and refuses one that is
@@ -162,10 +163,9 @@ it out ("the parcel next to ours", "the avatar that was lent"), and not
 request, a release note, a comment and an issue title.
 
 Taking something out of the tree does not take it out of the history:
-the diff of the commit that removes it shows it. So anything that was
-ever committed is also written into the record of what the history
-holds, `public-audit-*.md`, which is untracked, by its replacement and
-never by itself, so that the rewrite before publishing catches it.
+the diff of the commit that removes it shows it, and what reaches this
+repository stays there. So a name is checked before it is committed,
+and is never left to be removed afterwards.
 
 ### Checking before a commit that adds captured output
 
@@ -338,7 +338,8 @@ here when another is shared the same way.
   long a region is given to answer `RequestRegionInfo`, 15 s, and how
   long a `ParcelInfoReply` is waited for, 5 s (`DefaultParcelTimeout`),
   and how long the first look at an object in `Faces`, `SetFace` and
-  `FacePicture` waits for the region to name it, 30 s. A
+  `FacePicture` waits for the region to name it, 30 s, and how long
+  `TakeOff` waits for the simulator to remove the attachment, 10 s. A
   test that proves one of them runs out sets it short rather than
   waiting the default out, as `sl`'s do and `shortReadBacks` does for
   `cmd/slsh`'s. A wait a test does not mean to run out gets a timeout

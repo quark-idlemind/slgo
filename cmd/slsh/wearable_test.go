@@ -287,7 +287,7 @@ func TestWornListsBothRecordsAndSaysWhereTheyDisagree(t *testing.T) {
 	// a thing that failed to rez at login looks like, and what
 	// everything looks like to a session that attached afterwards.
 	x.do(t, "wear Objects/a hat")
-	x.grid.takeOff(hat)
+	x.grid.forget(hat)
 	// And an object the region describes that the folder does not
 	// hold.
 	wearThings(x, &sl.Seen{Object: sl.Object{ID: testSomebody, Local: 10}, PCode: 9,
@@ -337,7 +337,16 @@ func TestDetachFindsWhatTheRegionNeverDescribed(t *testing.T) {
 	x.grid.AnswerAttach(t, hatWorn, 11, 1)
 	x.do(t, "wear Objects/a hat")
 	// The region forgets it, which is what a reconnect does.
-	x.grid.takeOff(hat)
+	x.grid.forget(hat)
+	// The session still has the attachment it was told of, and the
+	// simulator kills it when it is detached.
+	x.grid.mu.Lock()
+	x.grid.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.DetachAttachmentIntoInv); ok {
+			x.grid.Relay(t, &msg.KillObject{ObjectData: []msg.KillObject_ObjectData{{ID: 11}}})
+		}
+	}
+	x.grid.mu.Unlock()
 
 	if got := x.do(t, "worn"); !strings.Contains(got, "in the outfit, not described") {
 		t.Fatalf("the hat should be in the folder and unseen:\n%s", got)

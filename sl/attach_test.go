@@ -381,6 +381,7 @@ func TestTakeOffForgetsWhatWasWorn(t *testing.T) {
 	w, f := newFakeSession(t)
 	item := msg.MustParseUUID("75f27e57-7e57-c0de-3e6e-cebd8a8d72d0")
 	f.Relay(t, wornUpdate(thePrim, 4, item, HUDTop))
+	relayKillOnDetach(t, f, 4)
 
 	if err := w.TakeOff(context.Background(), item); err != nil {
 		t.Fatalf("TakeOff: %v", err)
@@ -397,6 +398,7 @@ func TestTakeOffForgetsWhatWasWorn(t *testing.T) {
 	// would have the caller waiting to be told about a wear that
 	// cannot happen while it is still attached.
 	f.Relay(t, wornUpdate(thePrim, 4, item, HUDTop))
+	f.onSend = nil
 	f.FailSends(errors.New("the circuit is gone"))
 	if err := w.TakeOff(context.Background(), item); err == nil {
 		t.Error("TakeOff reported success though nothing was sent")
@@ -404,6 +406,105 @@ func TestTakeOffForgetsWhatWasWorn(t *testing.T) {
 	if _, ok := w.WornFrom(item); !ok {
 		t.Error("a detach that was never sent was recorded as having happened")
 	}
+}
+
+// relayKillOnDetach makes the simulator kill the attachment with this
+// local id when it is told to detach, as the grid does.
+func relayKillOnDetach(t *testing.T, f *fakeBackend, local uint32) {
+	t.Helper()
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.DetachAttachmentIntoInv); ok {
+			f.Relay(t, &msg.KillObject{ObjectData: []msg.KillObject_ObjectData{{ID: local}}})
+		}
+	}
+}
+
+// TestTakeOffWaitsForTheKill: a delete sent while the grid is still
+// carrying out the detach is sometimes refused, so TakeOff returns only
+// once the attachment is killed.
+// Why: doc/slsh.md#deleting-straight-after-a-take-off
+func TestTakeOffWaitsForTheKill(t *testing.T) {
+	item := msg.MustParseUUID("75f27e57-7e57-c0de-3e6e-cebd8a8d72d0")
+
+	t.Run("not before the kill", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.Relay(t, wornUpdate(thePrim, 4, item, HUDTop))
+		done := make(chan error, 1)
+		go func() { done <- w.TakeOff(context.Background(), item) }()
+		waitSent[*msg.DetachAttachmentIntoInv](t, f)
+		select {
+		case err := <-done:
+			t.Fatalf("TakeOff returned (%v) before the attachment was killed", err)
+		case <-time.After(250 * time.Millisecond): // more than one poll of await
+		}
+		if _, ok := w.WornFrom(item); ok {
+			t.Error("still recorded as worn after the request went")
+		}
+		f.Relay(t, &msg.KillObject{ObjectData: []msg.KillObject_ObjectData{{ID: 4}}})
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("TakeOff: %v", err)
+			}
+		case <-time.After(3 * time.Second):
+			t.Fatal("TakeOff did not return after the kill")
+		}
+	})
+
+	t.Run("a kill from before it was described does not count", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		w.SetOptions(Options{TakeOffTimeout: 300 * time.Millisecond})
+		// An earlier object with local id 4 was killed; the update that
+		// describes the attachment under the same number clears that.
+		f.Relay(t, &msg.KillObject{ObjectData: []msg.KillObject_ObjectData{{ID: 4}}})
+		f.Relay(t, wornUpdate(thePrim, 4, item, HUDTop))
+		err := w.TakeOff(context.Background(), item)
+		if !errors.Is(err, ErrTimeout) {
+			t.Errorf("TakeOff = %v, want a timeout: the old kill was taken for this one", err)
+		}
+	})
+
+	t.Run("already taken off by another client", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.Relay(t, wornUpdate(thePrim, 4, item, HUDTop))
+		f.Relay(t, &msg.KillObject{ObjectData: []msg.KillObject_ObjectData{{ID: 4}}})
+		start := time.Now()
+		if err := w.TakeOff(context.Background(), item); err != nil {
+			t.Fatalf("TakeOff of an attachment already gone = %v", err)
+		}
+		if took := time.Since(start); took > time.Second {
+			t.Errorf("TakeOff waited %v for an attachment already gone", took)
+		}
+		if _, ok := w.WornFrom(item); ok {
+			t.Error("it is still recorded as worn")
+		}
+	})
+
+	t.Run("no kill", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		w.SetOptions(Options{TakeOffTimeout: 300 * time.Millisecond})
+		f.Relay(t, wornUpdate(thePrim, 4, item, HUDTop))
+		err := w.TakeOff(context.Background(), item)
+		if !errors.Is(err, ErrTimeout) {
+			t.Errorf("TakeOff = %v, want a timeout", err)
+		}
+		onlySent[*msg.DetachAttachmentIntoInv](t, f)
+		if _, ok := w.WornFrom(item); ok {
+			t.Error("a detach that was sent is still recorded as worn")
+		}
+	})
+
+	t.Run("never seen worn", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		start := time.Now()
+		if err := w.TakeOff(context.Background(), item); err != nil {
+			t.Fatalf("TakeOff: %v", err)
+		}
+		if d := time.Since(start); d > 50*time.Millisecond {
+			t.Errorf("TakeOff of an unknown item took %s", d)
+		}
+		onlySent[*msg.DetachAttachmentIntoInv](t, f)
+	})
 }
 
 // TestWornObjectsAsksWhoeverWasConnected: what THIS session has been

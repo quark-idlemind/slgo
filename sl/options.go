@@ -43,6 +43,11 @@ type Options struct {
 	// FacePicture, which read the object through ObjectByID.
 	// Why: doc/objects.md#naming-an-object
 	ObjectTimeout time.Duration
+
+	// TakeOffTimeout bounds TakeOff's wait for the simulator to remove
+	// the attachment, after which the item can be deleted at once.
+	// Why: doc/slsh.md#deleting-straight-after-a-take-off
+	TakeOffTimeout time.Duration
 }
 
 // The defaults for Options.  None of them is a measurement; each is a
@@ -63,6 +68,10 @@ const (
 	// DefaultObjectTimeout is a wide margin over the 4.5 s the slowest
 	// first look at an object took.
 	DefaultObjectTimeout = 30 * time.Second
+
+	// DefaultTakeOffTimeout is a wide margin over the 78-226 ms a
+	// detached attachment took to be removed.
+	DefaultTakeOffTimeout = 10 * time.Second
 )
 
 // SetOptions replaces the session's Options.  A call already waiting
@@ -106,6 +115,10 @@ func (w *Session) parcelInfoWait() time.Duration {
 
 func (w *Session) objectWait() time.Duration {
 	return orDefault(w.Options().ObjectTimeout, DefaultObjectTimeout)
+}
+
+func (w *Session) takeOffWait() time.Duration {
+	return orDefault(w.Options().TakeOffTimeout, DefaultTakeOffTimeout)
 }
 
 func orDefault(d, def time.Duration) time.Duration {

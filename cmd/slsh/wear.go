@@ -27,7 +27,7 @@ package main
 // Why: doc/slsh.md#why-wear-adds-rather-than-replaces
 //
 // Nothing replies to a detach, so cmdDetach polls until the region
-// stops listing the attachment; sl.TakeOff does not wait.
+// stops listing the attachment; sl.TakeOff waits only for the kill.
 
 import (
 	"context"
@@ -552,7 +552,7 @@ func (sh *Shell) detachFromOutfit(ctx context.Context, out io.Writer, want strin
 //
 // A failure here is not a failure to detach.  It is not knowing, and the
 // message says so: the request went, and the region has not agreed.
-// Why: doc/slsh.md#why-detach-waits-and-takeoff-does-not
+// Why: doc/slsh.md#why-detach-waits-as-well-as-takeoff
 func (sh *Shell) waitOff(ctx context.Context, item msg.UUID, name string, seconds int) error {
 	if seconds <= 0 {
 		seconds = 15
