@@ -120,6 +120,11 @@ type Session struct {
 	// take it away from the second.
 	animWatch int
 
+	// userInfoWatch is the same for UserInfoReply, which is borrowed
+	// only while a UserInfo call waits: it carries the account's email,
+	// and a session that did not ask is not sent it.
+	userInfoWatch int
+
 	// Replies keyed by what was asked.  created holds an entry only
 	// while CreateItem is waiting on that callback id: nil until the
 	// reply comes, and gone when the wait ends.
@@ -204,6 +209,9 @@ type Session struct {
 
 	// infoFns are who is waiting for a ParcelInfoReply; see parcelinfo.go.
 	infoFns []func(*ParcelInfo)
+
+	// userInfoFns are who is waiting for a UserInfoReply; see userinfo.go.
+	userInfoFns []func(msg.UUID, *UserInfo)
 
 	// moneySeq numbers the grid's answers about L$, moneyLog is the last
 	// few of them, and payWaits the payments waiting for theirs, oldest
@@ -741,6 +749,9 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 
 	case *msg.ParcelInfoReply:
 		w.parcelInfoReply(parcelInfoFrom(t))
+
+	case *msg.UserInfoReply:
+		w.userInfoReply(t.AgentData.AgentID, userInfoFrom(t))
 
 	case *msg.ParcelDwellReply:
 		w.dwellReply(t.Data.LocalID, t.Data.ParcelID, t.Data.Dwell)

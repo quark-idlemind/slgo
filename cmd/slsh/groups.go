@@ -156,7 +156,7 @@ var groups = []group{
 		// whether one of its sessions has been taken over -- and the
 		// question it answers, "how do I get eyes on this avatar", is
 		// asked next to status and watch.
-		members: []string{"agents", "login", "logout", "auto", "status", "watch", "viewer", "maturity"},
+		members: []string{"agents", "login", "logout", "auto", "status", "watch", "viewer", "maturity", "account"},
 	},
 	{
 		name:    "simulator",

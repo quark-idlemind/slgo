@@ -207,6 +207,9 @@ func TestDumpRoundTripsFieldNames(t *testing.T) {
 	r := rand.New(rand.NewSource(5))
 	for id := range infoByID {
 		m := New(id)
+		if Private(m.MsgInfo().Name) {
+			continue // withheld on purpose; see TestAPrivateMessageIsDumpedWithoutItsBlocks
+		}
 		fillMessage(t, m, r)
 		out := DumpMessage(m)
 
@@ -353,5 +356,25 @@ func TestDumpEmptyCString(t *testing.T) {
 
 	if got := DumpMessage(m); !strings.Contains(got, `Message: ""`) {
 		t.Errorf("a lone terminator should render as an empty string:\n%s", got)
+	}
+}
+
+// TestAPrivateMessageIsDumpedWithoutItsBlocks: the account's own email
+// is never written by a dump, whoever asks for one -- a trace, or a
+// watch of every message.
+// Why: doc/account.md#nothing-logs-it
+func TestAPrivateMessageIsDumpedWithoutItsBlocks(t *testing.T) {
+	m := &UserInfoReply{}
+	m.UserData.EMail = []byte("somebody@example.invalid\x00")
+	m.UserData.DirectoryVisibility = []byte("default\x00")
+	got := DumpMessage(m)
+	if strings.Contains(got, "example.invalid") || strings.Contains(got, "default") {
+		t.Error("the dump of a UserInfoReply carries its blocks")
+	}
+	if !strings.Contains(got, "message: UserInfoReply") || !strings.Contains(got, "withheld") {
+		t.Errorf("the dump does not say what it withheld:\n%s", got)
+	}
+	if !Private("UserInfoReply") || Private("ChatFromSimulator") {
+		t.Error("Private names the wrong messages")
 	}
 }

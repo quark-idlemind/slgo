@@ -61,6 +61,10 @@ var DefaultCaps = []string{
 	"UpdateAvatarAppearance",
 	// Answering an invitation to a group's chat.  See sl.GroupChat.Accept.
 	"ChatSessionRequest",
+	// The account's own email address and directory visibility, asked
+	// for only when a caller asks.  See sl.UserInfo.
+	// Why: doc/account.md#how-the-viewer-asks
+	"UserInfo",
 }
 
 // Caps maps a capability name to the URL that serves it.

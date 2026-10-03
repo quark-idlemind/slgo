@@ -321,7 +321,9 @@ func (t *Trace) Write(dir Direction, p *msg.Packet, what Disposition) {
 	}
 
 	var buf []byte
-	if t.bodies {
+	// A private message's blocks are withheld (msg.Private), so its
+	// entry is the one-line form even with bodies on.
+	if t.bodies && !msg.Private(name) {
 		buf = append(buf, "---\n"...)
 		buf = append(buf, "direction: "...)
 		buf = append(buf, dir.String()...)
