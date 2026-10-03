@@ -161,8 +161,8 @@ under 0.2 dark.
 
 ## Limits found drawing test pictures for buttons
 
-These were found on 2026-10-01 while drawing the pictures for tests of
-buttons found by their labels. The
+These were found on 2026-10-01 while drawing the pictures for the
+runner's button tests ([Buttons](slate-runner.md#buttons)). The
 pictures were drawn scenes, as in the tests above, and not a live HUD,
 so they say what the finder does on those and not on a product's
 interface.
@@ -172,7 +172,8 @@ interface.
 - A solid filled rectangle is not an outlined box, because a button
   box must be under 0.85 dark. A pale ellipse 160 by 50 px with a dark
   28 px bold word in it was read as both the word and a box, before and
-  after the texture's compression and on the grid, on 2026-10-01.
+  after the texture's compression and on the grid
+  ([Ninth round](slate-runner.md#ninth-round-wave-2-end-to-end)).
 - A small round letter `O`, about 5 px wide, was itself found as an
   outlined box. A `box` request therefore finds more than a button's
   outline when the text is small, and a `text ... box` button can be

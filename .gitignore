@@ -11,6 +11,7 @@
 /cmd/*/sl-host
 /cmd/*/msggen
 /cmd/*/md
+/cmd/*/slate
 /cmd/*/slpic
 /msggen
 
@@ -36,7 +37,11 @@
 /md
 !/md/
 
-# The binary from "go build ./cmd/slpic".
+# The same for slate: the binary from "go build ./cmd/slate" is not the
+# slate/ package, so the exception keeps the directory in the tree.
+# slpic has no package of its own and needs none.
+/slate
+!/slate/
 /slpic
 
 # slrun and slbench were automate and autobench until 2026-08-22.  A

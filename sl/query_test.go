@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -594,5 +595,102 @@ func TestFaceCountIsNotGivenForASculptOrAMesh(t *testing.T) {
 	}
 	if n, ok := (&Seen{}).FaceCount(); ok {
 		t.Errorf("an undescribed object has %d faces", n)
+	}
+}
+
+// TestLinksetIsTheRootAndThenItsChildrenInLinkOrder: the order is the
+// store's, and neither local ids nor the order the backend lists them in
+// say anything about it.
+func TestLinksetIsTheRootAndThenItsChildrenInLinkOrder(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	second := msg.MustParseUUID("397f7e57-7e57-c0de-28a6-d4e7227ab996")
+	f.mu.Lock()
+	f.objects = []*Seen{
+		{Object: Object{ID: theChild, Local: 78}, PCode: pcodePrim, Parent: 77, LinkNumber: 3, LinkKnown: true},
+		{Object: Object{ID: theOther, Local: 90}, PCode: pcodePrim},
+		{Object: Object{ID: thePrim, Local: 77}, PCode: pcodePrim, LinkNumber: 1, LinkKnown: true},
+		{Object: Object{ID: second, Local: 79}, PCode: pcodePrim, Parent: 77, LinkNumber: 2, LinkKnown: true},
+	}
+	f.mu.Unlock()
+
+	got, err := w.Linkset(context.Background(), &Object{ID: thePrim})
+	if err != nil {
+		t.Fatalf("Linkset: %v", err)
+	}
+	var ids []msg.UUID
+	var nums []int
+	for _, s := range got {
+		ids, nums = append(ids, s.ID), append(nums, s.LinkNumber)
+	}
+	if want := []msg.UUID{thePrim, second, theChild}; !reflect.DeepEqual(ids, want) {
+		t.Errorf("Linkset is %v, want %v", ids, want)
+	}
+	if want := []int{1, 2, 3}; !reflect.DeepEqual(nums, want) {
+		t.Errorf("link numbers %v, want %v", nums, want)
+	}
+
+	if _, err := w.Linkset(context.Background(), &Object{ID: theChild}); err == nil {
+		t.Error("a child was taken for the root of a linkset")
+	}
+	if _, err := w.Linkset(context.Background(), &Object{ID: msg.MustParseUUID("b1497e57-7e57-c0de-73d6-4ce337706aaf")}); err == nil {
+		t.Error("a prim nothing has described has a linkset")
+	}
+}
+
+// TestAWornObjectIsTheRootOfItsOwnLinkset: an attachment's root has the
+// avatar for its parent, and its children are numbered under it.
+func TestAWornObjectIsTheRootOfItsOwnLinkset(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	second := msg.MustParseUUID("397f7e57-7e57-c0de-28a6-d4e7227ab996")
+	f.mu.Lock()
+	f.objects = []*Seen{
+		{Object: Object{ID: theOther, Local: 50}, PCode: pcodeAvatar, LinkNumber: 1, LinkKnown: true},
+		{Object: Object{ID: thePrim, Local: 77}, PCode: pcodePrim, Parent: 50, LinkNumber: 2, LinkKnown: true},
+		{Object: Object{ID: theChild, Local: 78}, PCode: pcodePrim, Parent: 77, LinkNumber: 3, LinkKnown: true},
+		{Object: Object{ID: second, Local: 79}, PCode: pcodePrim, Parent: 77, LinkNumber: 2, LinkKnown: true},
+	}
+	f.mu.Unlock()
+
+	got, err := w.Linkset(context.Background(), &Object{ID: thePrim})
+	if err != nil {
+		t.Fatalf("Linkset: %v", err)
+	}
+	var ids []msg.UUID
+	for _, s := range got {
+		ids = append(ids, s.ID)
+	}
+	if want := []msg.UUID{thePrim, second, theChild}; !reflect.DeepEqual(ids, want) {
+		t.Errorf("Linkset is %v, want %v", ids, want)
+	}
+
+	// Its children say whether its order is known, not the avatar's set.
+	f.mu.Lock()
+	f.objects[2].LinkKnown, f.objects[3].LinkKnown = false, false
+	f.mu.Unlock()
+	if _, err := w.Linkset(context.Background(), &Object{ID: thePrim}); !errors.Is(err, ErrLinkOrderUnknown) {
+		t.Errorf("Linkset of a worn set of unknown order: %v", err)
+	}
+}
+
+// TestLinksetRefusesASetWhoseOrderIsNotKnown: a list in a possibly wrong
+// order is worse than none.
+func TestLinksetRefusesASetWhoseOrderIsNotKnown(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.objects = []*Seen{
+		{Object: Object{ID: thePrim, Local: 77}, PCode: pcodePrim, LinkNumber: 1},
+		{Object: Object{ID: theChild, Local: 78}, PCode: pcodePrim, Parent: 77, LinkNumber: 2},
+	}
+	f.mu.Unlock()
+
+	_, err := w.Linkset(context.Background(), &Object{ID: thePrim})
+	if !errors.Is(err, ErrLinkOrderUnknown) {
+		t.Fatalf("Linkset of an unknown set: %v, want ErrLinkOrderUnknown", err)
+	}
+	if !strings.Contains(err.Error(), thePrim.String()) {
+		t.Errorf("the error %q does not name the root", err)
 	}
 }

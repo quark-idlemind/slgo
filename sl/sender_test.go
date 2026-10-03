@@ -108,6 +108,14 @@ func bareObjectNamesIn(fset *token.FileSet, f *ast.File) []string {
 					walk(x.Fun, covered)
 					return false
 				}
+			case *ast.BinaryExpr:
+				// A comparison reads no name out: it says only whether two
+				// are the same.
+				if x.Op == token.EQL || x.Op == token.NEQ {
+					walk(x.X, true)
+					walk(x.Y, true)
+					return false
+				}
 			case *ast.SelectorExpr:
 				if pkg, ok := x.X.(*ast.Ident); ok && pkg.Name == "msg" {
 					return false // msg.ObjectName, the message
@@ -126,11 +134,12 @@ func bareObjectNamesIn(fset *token.FileSet, f *ast.File) []string {
 // TestNoObjectNameIsPrintedBare: an object's name is whatever its owner
 // typed, a person's included, so it is printed only through
 // SenderObject.Label, which says it is an object's.  A read of one in
-// sl, slsh or slbotd outside a call to Label fails this test.
+// sl, slsh, slbotd, slate or the slate command outside a call to Label,
+// or a comparison with == or !=, fails this test.
 // Why: doc/im-senders.md#labelling-a-sender
 func TestNoObjectNameIsPrintedBare(t *testing.T) {
 	fset := token.NewFileSet()
-	for _, dir := range []string{".", "../cmd/slsh", "../cmd/slbotd"} {
+	for _, dir := range []string{".", "../cmd/slsh", "../cmd/slbotd", "../slate", "../cmd/slate"} {
 		files, err := filepath.Glob(filepath.Join(dir, "*.go"))
 		if err != nil {
 			t.Fatal(err)
@@ -165,6 +174,7 @@ func a(d Dialog, m *msg.ScriptDialog) {
 	_ = Dialog{ObjectName: trimNul(m.Data.ObjectName)}
 	_ = &msg.ObjectName{}
 	fmt.Printf("%s asks", d.ObjectName)
+	_ = d.ObjectName == "lamp" || "lamp" != d.ObjectName
 	return d.ObjectName
 }
 `
@@ -173,7 +183,7 @@ func a(d Dialog, m *msg.ScriptDialog) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := strings.Join(bareObjectNamesIn(fset, f), ","), "p.go:8:24,p.go:9:9"; got != want {
+	if got, want := strings.Join(bareObjectNamesIn(fset, f), ","), "p.go:8:24,p.go:10:9"; got != want {
 		t.Errorf("found %q, want %q", got, want)
 	}
 }

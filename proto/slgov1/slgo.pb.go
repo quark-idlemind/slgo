@@ -4752,8 +4752,17 @@ type ObjectInfo struct {
 	// The sculpt or mesh marker from the extra parameters: the kind
 	// (1 to 4 the sculpt types, 5 mesh, 6 glTF) and the texture or asset
 	// id. Kind 0 is neither, and then the id is empty.
-	SculptKind    uint32 `protobuf:"varint,18,opt,name=sculpt_kind,json=sculptKind,proto3" json:"sculpt_kind,omitempty"`
-	SculptId      string `protobuf:"bytes,19,opt,name=sculpt_id,json=sculptId,proto3" json:"sculpt_id,omitempty"`
+	SculptKind uint32 `protobuf:"varint,18,opt,name=sculpt_kind,json=sculptKind,proto3" json:"sculpt_kind,omitempty"`
+	SculptId   string `protobuf:"bytes,19,opt,name=sculpt_id,json=sculptId,proto3" json:"sculpt_id,omitempty"`
+	// The viewer's link number: 0 not linked, 1 the root of a linkset
+	// with children, 2 and up a child by its place in the root's list.
+	// Why: doc/objects.md#link-numbers
+	LinkNumber uint32 `protobuf:"varint,20,opt,name=link_number,json=linkNumber,proto3" json:"link_number,omitempty"`
+	// Whether link_number can be believed: true for a prim that is not
+	// linked, and for the rest the state of its linkset, which a link made
+	// while the daemon watched leaves unknown.
+	// Why: doc/objects.md#link-numbers
+	LinkKnown     bool `protobuf:"varint,21,opt,name=link_known,json=linkKnown,proto3" json:"link_known,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4919,6 +4928,20 @@ func (x *ObjectInfo) GetSculptId() string {
 		return x.SculptId
 	}
 	return ""
+}
+
+func (x *ObjectInfo) GetLinkNumber() uint32 {
+	if x != nil {
+		return x.LinkNumber
+	}
+	return 0
+}
+
+func (x *ObjectInfo) GetLinkKnown() bool {
+	if x != nil {
+		return x.LinkKnown
+	}
+	return false
 }
 
 // Quaternion is a rotation, unpacked: the wire form is three floats
@@ -6814,7 +6837,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x0eObjectsRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
 	"\x05named\x18\x02 \x01(\tR\x05named\x12\x0e\n" +
-	"\x02id\x18\x03 \x01(\tR\x02id\"\xd0\x04\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"\x90\x05\n" +
 	"\n" +
 	"ObjectInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
@@ -6839,7 +6862,11 @@ const file_slgo_proto_rawDesc = "" +
 	"clickKnown\x12\x1f\n" +
 	"\vsculpt_kind\x18\x12 \x01(\rR\n" +
 	"sculptKind\x12\x1b\n" +
-	"\tsculpt_id\x18\x13 \x01(\tR\bsculptId\"D\n" +
+	"\tsculpt_id\x18\x13 \x01(\tR\bsculptId\x12\x1f\n" +
+	"\vlink_number\x18\x14 \x01(\rR\n" +
+	"linkNumber\x12\x1d\n" +
+	"\n" +
+	"link_known\x18\x15 \x01(\bR\tlinkKnown\"D\n" +
 	"\n" +
 	"Quaternion\x12\f\n" +
 	"\x01x\x18\x01 \x01(\x02R\x01x\x12\f\n" +

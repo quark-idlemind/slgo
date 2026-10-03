@@ -2,6 +2,7 @@ package sl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -194,6 +195,19 @@ type Seen struct {
 	// unpacks it into something with names.
 	Shape msg.PrimShape
 
+	// LinkNumber is the number a viewer gives this prim in its
+	// linkset: 0 when it is not linked, 1 for the root of one that has
+	// children, and 2 and up for a child.  It is only as good as the
+	// updates heard since the region was last flushed.
+	// Why: doc/objects.md#link-numbers
+	LinkNumber int
+
+	// LinkKnown says LinkNumber can be believed: true for a prim that is
+	// not linked, and for the rest the state of its linkset, which is
+	// unknown after a link or unlink made while the store watched.
+	// Why: doc/objects.md#link-numbers
+	LinkKnown bool
+
 	// Text is the floating text above the object.
 	Text string
 
@@ -280,6 +294,78 @@ func (w *Session) AllObjects(ctx context.Context, timeout time.Duration) ([]*See
 		return nil, err
 	}
 	return w.fetch(ctx, "", "")
+}
+
+// ErrLinkOrderUnknown is what Linkset returns for a linkset whose order
+// the store cannot vouch for: one linked or unlinked while it was
+// watching, which the region describes in an order that is not the link
+// order.  It is wrapped with the root's id; test it with errors.Is.
+// Why: doc/objects.md#link-numbers
+var ErrLinkOrderUnknown = errors.New("sl: the order of the linkset is not known")
+
+// Linkset returns root and its children, root first and then the
+// children in link order, so that each one's place in the list is its
+// LinkNumber less one.
+//
+// root has to be the root of a linkset; a prim that is linked under
+// another is refused rather than guessed at.  A prim with no children
+// is a linkset of one.  The order is the one the store kept from the
+// updates it heard, which is the viewer's; see Seen.LinkNumber.  While
+// that order is not known it returns ErrLinkOrderUnknown rather than a
+// list that may be in the wrong order.
+// Why: doc/objects.md#link-numbers
+func (w *Session) Linkset(ctx context.Context, root *Object) ([]*Seen, error) {
+	if root == nil {
+		return nil, errors.New("sl: no object to list the links of")
+	}
+	all, err := w.fetch(ctx, "", "")
+	if err != nil {
+		return nil, err
+	}
+	var top *Seen
+	for _, s := range all {
+		if s.ID == root.ID {
+			top = s
+			break
+		}
+	}
+	if top == nil {
+		return nil, fmt.Errorf("sl: %s is not in the region, or is beyond the draw distance", root.ID)
+	}
+	// A worn object's root has the avatar for its parent, and is the
+	// root of its own linkset all the same.
+	if top.Parent != 0 && !wornUnder(all, top.Parent) {
+		return nil, fmt.Errorf("sl: %s is linked under local id %d, not the root of a linkset", root.ID, top.Parent)
+	}
+	// Whether the order is known is the state of the root's own set,
+	// which each child carries; a worn root's own flag is the avatar's.
+	out := []*Seen{top}
+	for _, s := range all {
+		if s.Parent == top.Local && s.PCode != pcodeAvatar {
+			if !s.LinkKnown {
+				return nil, fmt.Errorf("%s: %w", root.ID, ErrLinkOrderUnknown)
+			}
+			if s.LinkNumber >= 2 {
+				out = append(out, s)
+			}
+		}
+	}
+	if top.Parent == 0 && len(out) == 1 && !top.LinkKnown {
+		return nil, fmt.Errorf("%s: %w", root.ID, ErrLinkOrderUnknown)
+	}
+	sort.Slice(out[1:], func(i, j int) bool { return out[1+i].LinkNumber < out[1+j].LinkNumber })
+	return out, nil
+}
+
+// wornUnder says whether the prim with this local id is an avatar, which
+// makes what is linked under it a worn object's root.
+func wornUnder(all []*Seen, local uint32) bool {
+	for _, s := range all {
+		if s.Local == local {
+			return s.PCode == pcodeAvatar
+		}
+	}
+	return false
 }
 
 // ObjectsNamed returns every object in the region with a given name.

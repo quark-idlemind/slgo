@@ -620,7 +620,7 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 			TextureEntry: []byte{1, 2, 3}, TextureAnim: []byte{4, 5}, Text: "floating",
 			AttachPoint: 6, AttachItem: theChild.String(),
 			Click: 0, ClickKnown: true,
-			SculptKind: 5, SculptId: theChild.String(),
+			SculptKind: 5, SculptId: theChild.String(), LinkNumber: 3, LinkKnown: true,
 		},
 		{Id: "not a uuid", Local: 78},
 	}
@@ -653,6 +653,12 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 	}
 	if o.Sculpt != (msg.SculptMark{Kind: msg.SculptMesh, ID: theChild}) {
 		t.Errorf("sculpt %+v, want a mesh of %s", o.Sculpt, theChild)
+	}
+	if o.LinkNumber != 3 {
+		t.Errorf("link number %d, want 3", o.LinkNumber)
+	}
+	if !o.LinkKnown {
+		t.Error("link known did not come through")
 	}
 
 	d.fail = errors.New("no such agent")

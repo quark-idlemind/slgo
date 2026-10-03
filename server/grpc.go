@@ -887,6 +887,8 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			ClickKnown:   o.ClickKnown,
 			SculptKind:   uint32(o.Sculpt.Kind),
 			SculptId:     attachItemString(o.Sculpt.ID),
+			LinkNumber:   uint32(o.LinkNumber),
+			LinkKnown:    o.LinkKnown,
 		})
 	}
 	return out, nil

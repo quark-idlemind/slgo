@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/binary"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -111,6 +112,20 @@ type Object struct {
 	AttachPoint int
 	AttachItem  msg.UUID
 
+	// LinkNumber is what a viewer calls this prim in its linkset: 0 when
+	// it is not linked, 1 for the root of a linkset that has children,
+	// and 2 and up for a child, by its place in the root's list of
+	// them.  The store fills it in on the copy it hands out; see
+	// Objects.kids.
+	// Why: doc/objects.md#link-numbers
+	LinkNumber int
+
+	// LinkKnown says LinkNumber can be believed: true for a prim that is
+	// not linked, and for the rest the state of its linkset, which a
+	// link made while the store watched leaves unknown.  See
+	// Objects.unordered.
+	LinkKnown bool
+
 	// First and Last are when the simulator first and last said
 	// anything about this object.  Last is what Trim ages an orphan by.
 	First time.Time
@@ -121,6 +136,22 @@ type Object struct {
 	// puts an object on notice rather than out of the store: see
 	// OutOfRangeGrace.
 	leaving time.Time
+
+	// listed says this object is in the child list of listedUnder, and
+	// is how an update that repeats its parent is told from one that
+	// changes it.  See Objects.kids.
+	listed      bool
+	listedUnder uint32
+
+	// heard and heardParent are the parent this object had the last time
+	// an update described it, which is what tells a prim the store held
+	// being linked or unlinked from one described afresh.  moved says
+	// its place in its parent's list is not known: it joined with others
+	// in one update, or came with a store taken from another agent.  See
+	// Objects.unordered.
+	heard       bool
+	heardParent uint32
+	moved       bool
 }
 
 // Objects is what the session has been told about the region.
@@ -142,6 +173,79 @@ type Objects struct {
 	mu      sync.RWMutex
 	byID    map[msg.UUID]*Object
 	viewers map[string]viewpoint
+
+	// kids is each parent's children, by the parent's local id, in link
+	// order: a child is 2 plus its place here, and the root 1.  A set
+	// described afresh arrives in link order, so its children are
+	// appended.  A prim the store already held that is linked while we
+	// watch goes to the front, as link 2: a link of one makes it link 2,
+	// as llCreateLink does (measured), and the region's update for a link
+	// of several is not in link order, so that set is left unknown.  A
+	// child is removed when its parent changes or it goes, and the rest
+	// close up.
+	//
+	// A parent that is not in the store yet has a list all the same,
+	// which is the viewer's orphans waiting in the order they came.
+	// Only a change of parent moves a prim: the store is shared, so
+	// the same update can arrive once for each agent in the region, and
+	// a repeat must not reorder the linkset.
+	// Why: doc/objects.md#link-numbers
+	kids map[uint32][]msg.UUID
+
+	// unordered holds the parents whose child list is not known to be
+	// in link order: a set that several prims joined in one update
+	// (joinedTogether), and the sets of a store taken from another agent,
+	// whose copies come in no order (absorb).  A parent comes back out as soon
+	// as no child in its list came that way (Object.moved), which a kill
+	// and a fresh description, or a flush, brings about.
+	// Why: doc/objects.md#link-numbers
+	unordered map[uint32]bool
+
+	// misordered holds the roots, by full id, of sets that several prims
+	// joined in one update.  The region goes on describing such a set in
+	// the same wrong order, a flush and a fresh description included
+	// (measured), so a set whose root is here stays unknown however it is
+	// described.  Flush keeps it; a kill of the root, as a delete or a
+	// take does, drops it, since a rez gives the object new ids.  It does
+	// not survive a new store, on a region change or a daemon restart.
+	// Why: doc/objects.md#link-numbers
+	misordered map[msg.UUID]bool
+
+	// links is the order an ObjectLink this session sent named a set's
+	// children in, by the root's local id, until the region's update for
+	// that set comes and uses it (namedLink).  Only the session that
+	// linked can know it.
+	// Why: doc/objects.md#link-numbers
+	links map[uint32]namedLink
+
+	// now is the clock the records in links are aged by, which a test
+	// sets.
+	now func() time.Time
+
+	// lastLive is when a prim last joined each parent live, by the
+	// parent's local id; see JoinWindow.
+	lastLive map[uint32]time.Time
+}
+
+// LinkWindow is how long the order an ObjectLink named is kept for the
+// region's update that makes it.
+// Why: doc/objects.md#link-numbers
+const LinkWindow = 20 * time.Second
+
+// JoinWindow is how close together two live joins to one parent must
+// be to count as one link of several.  A watching session was measured
+// to get a link of several split over two packets 75 microseconds apart,
+// and two agents sharing a store hear one update at nearly the same time;
+// a link of one is slower than this whatever makes it, since
+// llCreateLink sleeps its script for a second and a person links by hand.
+// Why: doc/objects.md#link-numbers
+const JoinWindow = 250 * time.Millisecond
+
+// namedLink is the children an ObjectLink named, by local id in the
+// order named, and when it was sent.
+type namedLink struct {
+	children []uint32
+	at       time.Time
 }
 
 // A viewpoint is one avatar's camera and how far it is being told
@@ -153,7 +257,11 @@ type viewpoint struct {
 }
 
 func newObjects() *Objects {
-	return &Objects{byID: map[msg.UUID]*Object{}, viewers: map[string]viewpoint{}}
+	return &Objects{byID: map[msg.UUID]*Object{}, viewers: map[string]viewpoint{},
+		kids: map[uint32][]msg.UUID{}, unordered: map[uint32]bool{},
+		misordered: map[msg.UUID]bool{}, links: map[uint32]namedLink{},
+		lastLive: map[uint32]time.Time{},
+		now:      time.Now}
 }
 
 // Watch registers where an agent is looking from.
@@ -217,12 +325,435 @@ func within(at, camera msg.Vector3, far float32) bool {
 func (o *Objects) All() []*Object {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
+	here := make(map[uint32]bool, len(o.byID))
+	for _, v := range o.byID {
+		here[v.Local] = true
+	}
 	out := make([]*Object, 0, len(o.byID))
 	for _, v := range o.byID {
 		c := *v
+		o.numberLocked(&c, func(p uint32) bool { return here[p] })
 		out = append(out, &c)
 	}
 	return out
+}
+
+// Linkset is the root with this local id and its children, in link
+// order, or nil if nothing here has that id.
+func (o *Objects) Linkset(root uint32) []*Object {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	r := o.byLocalLocked(root)
+	if r == nil {
+		return nil
+	}
+	c := *r
+	o.numberLocked(&c, func(p uint32) bool { return o.byLocalLocked(p) != nil })
+	out := []*Object{&c}
+	for i, id := range o.kids[root] {
+		if v := o.byID[id]; v != nil {
+			k := *v
+			k.LinkNumber, k.LinkKnown = 2+i, !o.unordered[root]
+			out = append(out, &k)
+		}
+	}
+	return out
+}
+
+// numberLocked fills in the link number and whether to believe it on a
+// copy of an object, given whether a local id is in the store.  A prim
+// with no parent and no children is unlinked, which is known; the rest
+// are as known as their set, which is the one under the parent, or its
+// own for a root.
+func (o *Objects) numberLocked(c *Object, parentHere func(uint32) bool) {
+	c.LinkNumber = o.linkNumberLocked(c, parentHere)
+	set := c.Parent
+	if set == 0 {
+		set = c.Local
+	}
+	c.LinkKnown = !o.unordered[set]
+}
+
+// linkNumberLocked is v's link number, given whether a local id is in
+// the store.  A child whose parent is not here is an orphan, which the
+// viewer does not number either.
+func (o *Objects) linkNumberLocked(v *Object, parentHere func(uint32) bool) int {
+	if v.Parent == 0 {
+		if len(o.kids[v.Local]) > 0 {
+			return 1
+		}
+		return 0
+	}
+	if !v.listed || !parentHere(v.Parent) {
+		return 0
+	}
+	for i, id := range o.kids[v.Parent] {
+		if id == v.ID {
+			return 2 + i
+		}
+	}
+	return 0
+}
+
+// linkLocked puts v in its parent's child list, after taking it out of
+// the one it was in.  Called with v.Parent set from an update: a prim
+// already listed under that parent stays where it is.
+//
+// An object the store already held that changes parent is a live link,
+// and goes to the front of its new list.  One described for the first
+// time, or described again under the parent it had before its list was
+// dropped, is a fresh arrival, and goes to the end.
+// Why: doc/objects.md#link-numbers
+func (o *Objects) linkLocked(v *Object) {
+	if v.listed && v.listedUnder == v.Parent {
+		return
+	}
+	live := v.heard && v.heardParent != v.Parent
+	described := !v.heard
+	left, was := v.listedUnder, v.listed
+	o.unlinkLocked(v)
+	v.heard, v.heardParent, v.moved = true, v.Parent, false
+	if was {
+		o.settleLocked(left)
+	}
+	if v.Parent == 0 {
+		// A root described afresh after its children: if its set is one
+		// the region misorders, they are not in link order either.  A
+		// root it already held says nothing new about the order.
+		if described && o.misordered[v.ID] && len(o.kids[v.Local]) > 0 {
+			o.misorderLocked(v.Local)
+		}
+		return
+	}
+	if live {
+		o.kids[v.Parent] = slices.Insert(o.kids[v.Parent], 0, v.ID)
+		// A second live join close behind another is one link of several,
+		// split over packets or shared between agents: its order is not
+		// known, however each join on its own would number it.
+		now := o.now()
+		if t, ok := o.lastLive[v.Parent]; ok && now.Sub(t) < JoinWindow {
+			o.misorderLocked(v.Parent)
+			if r := o.byLocalLocked(v.Parent); r != nil {
+				o.misordered[r.ID] = true
+			}
+		}
+		o.lastLive[v.Parent] = now
+	} else {
+		o.kids[v.Parent] = append(o.kids[v.Parent], v.ID)
+	}
+	v.listed, v.listedUnder = true, v.Parent
+	// Only a fresh description comes in the region's misordered order; a
+	// live link of one is link 2 whatever the set's history.
+	if !live {
+		if r := o.byLocalLocked(v.Parent); r != nil && o.misordered[r.ID] {
+			o.misorderLocked(v.Parent)
+		}
+	}
+}
+
+// misorderLocked marks a parent's set unknown because its root is in
+// misordered.
+func (o *Objects) misorderLocked(parent uint32) {
+	for _, id := range o.kids[parent] {
+		if c := o.byID[id]; c != nil {
+			c.moved = true
+		}
+	}
+	o.unordered[parent] = true
+}
+
+// joinedTogether records that one update linked these prims, which the
+// store already held, to one parent.  A link of several comes as one
+// update whose blocks do not follow the link order (measured), so the
+// set's order is not known; a link of one is known, at the front.  Unless
+// this session named the order in the ObjectLink it sent (Objects.links)
+// and the set is exactly the children it named, which is then the order.
+// Why: doc/objects.md#link-numbers
+func (o *Objects) joinedTogether(parent uint32, ids []msg.UUID) {
+	if parent == 0 {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	rec, named := o.namedLocked(parent)
+	// A lone prim that the record names is one of a link of several
+	// that came split; one it does not name is a link of one, and an
+	// extra child of the set the record is for.
+	part := false
+	for _, id := range ids {
+		if v := o.byID[id]; v != nil && slices.Contains(rec.children, v.Local) {
+			part = true
+		}
+	}
+	if named && !part {
+		delete(o.links, parent)
+		named = false
+	}
+	if len(ids) < 2 && !part {
+		return
+	}
+	for _, id := range ids {
+		if v := o.byID[id]; v != nil && v.listed && v.listedUnder == parent {
+			v.moved = true
+		}
+	}
+	o.unordered[parent] = true
+	if r := o.byLocalLocked(parent); r != nil {
+		o.misordered[r.ID] = true
+	}
+	if named {
+		o.applyLinkLocked(parent, rec)
+	}
+}
+
+// A move is one prim an update gives a parent.
+type move struct {
+	id     msg.UUID
+	parent uint32
+}
+
+// setJoin is the order a set takes when one whole set the store knows the
+// order of joins it in one update, worked out before the update is applied.
+type setJoin struct {
+	root  msg.UUID   // the joining set's root
+	order []msg.UUID // that root, then its children in their order
+	old   []msg.UUID // the parent's children before, in their order
+}
+
+// planJoins says, before an update is applied, which parents several
+// prims are about to join as one whole set of known order.  A set linked
+// to another by llCreateLink, or by an ObjectLink naming the two roots,
+// goes in right after the root that stays: the joining root, then its
+// children in their order, then the staying root's old children
+// (measured both ways).  The update lists the prims in another order, so
+// the order is taken from the two sets as they were.  Only a parent whose
+// movers are exactly one root and all of that root's children, with both
+// sets known, gets a plan; anything else is left to joinedTogether.
+// Why: doc/objects.md#link-numbers
+func (o *Objects) planJoins(moves []move) map[uint32]*setJoin {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	byParent := map[uint32][]*Object{}
+	for _, m := range moves {
+		v := o.byID[m.id]
+		if m.parent == 0 || v == nil || !v.heard || v.heardParent == m.parent {
+			continue
+		}
+		byParent[m.parent] = append(byParent[m.parent], v)
+	}
+	plans := map[uint32]*setJoin{}
+	for parent, vs := range byParent {
+		if len(vs) < 2 || o.unordered[parent] {
+			continue
+		}
+		var root *Object
+		for _, v := range vs {
+			if v.Parent == 0 {
+				if root != nil {
+					root = nil
+					break
+				}
+				root = v
+			}
+		}
+		if root == nil || o.unordered[root.Local] {
+			continue
+		}
+		kids := o.kids[root.Local]
+		if len(kids) != len(vs)-1 {
+			continue
+		}
+		whole := true
+		for _, v := range vs {
+			if v != root && (v.Parent != root.Local || !slices.Contains(kids, v.ID)) {
+				whole = false
+			}
+		}
+		if !whole {
+			continue
+		}
+		plans[parent] = &setJoin{
+			root:  root.ID,
+			order: append([]msg.UUID{root.ID}, kids...),
+			old:   slices.Clone(o.kids[parent]),
+		}
+	}
+	return plans
+}
+
+// applyJoin gives a parent the order planJoins worked out, once the
+// update has moved every prim of the joining set under it and nothing
+// else has joined.  It does nothing when the linking session's own record
+// already gave the order.
+func (o *Objects) applyJoin(parent uint32, j *setJoin) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if _, named := o.links[parent]; named || !o.unordered[parent] {
+		return
+	}
+	want := append(slices.Clone(j.order), j.old...)
+	have := o.kids[parent]
+	if len(have) != len(want) {
+		return
+	}
+	for _, id := range want {
+		if !slices.Contains(have, id) {
+			return
+		}
+	}
+	o.kids[parent] = want
+	for _, id := range want {
+		if v := o.byID[id]; v != nil {
+			v.moved = false
+		}
+	}
+	delete(o.unordered, parent)
+}
+
+// namedLocked is the record for a root, dropped and not returned once it
+// is older than LinkWindow.
+func (o *Objects) namedLocked(parent uint32) (namedLink, bool) {
+	rec, ok := o.links[parent]
+	if ok && o.now().Sub(rec.at) > LinkWindow {
+		delete(o.links, parent)
+		return namedLink{}, false
+	}
+	return rec, ok
+}
+
+// applyLinkLocked gives a set the order its link named, when the
+// children it holds are exactly the ones named.  Children not here yet,
+// or still loose, leave the record for the update that brings them; an
+// extra child, or one under another parent, drops it.
+func (o *Objects) applyLinkLocked(parent uint32, rec namedLink) {
+	have := o.kids[parent]
+	if len(have) > len(rec.children) {
+		delete(o.links, parent)
+		return
+	}
+	order := make([]msg.UUID, 0, len(rec.children))
+	for _, local := range rec.children {
+		v := o.byLocalLocked(local)
+		switch {
+		case v == nil || v.Parent == 0:
+		case v.Parent != parent:
+			delete(o.links, parent)
+			return
+		default:
+			order = append(order, v.ID)
+		}
+	}
+	if len(order) != len(rec.children) {
+		for _, id := range have {
+			if v := o.byID[id]; v != nil && !slices.Contains(rec.children, v.Local) {
+				delete(o.links, parent)
+				return
+			}
+		}
+		return
+	}
+	if len(have) != len(order) {
+		delete(o.links, parent)
+		return
+	}
+	o.kids[parent] = order
+	for _, id := range order {
+		o.byID[id].moved = false
+	}
+	delete(o.unordered, parent)
+	// The region's fresh descriptions of this set stay misordered, so
+	// misordered keeps the root: after a flush the set is unknown again.
+	delete(o.links, parent)
+}
+
+// linked records the order an ObjectLink named: the first block is the
+// root and the rest are the children, in the order that numbers them.
+// A link of one is not kept, since the store's front insertion is
+// already right for it.
+func (o *Objects) linked(m *msg.ObjectLink) {
+	if len(m.ObjectData) < 3 {
+		return
+	}
+	children := make([]uint32, 0, len(m.ObjectData)-1)
+	for _, d := range m.ObjectData[1:] {
+		children = append(children, d.ObjectLocalID)
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	now := o.now()
+	for root, rec := range o.links {
+		if now.Sub(rec.at) > LinkWindow {
+			delete(o.links, root)
+		}
+	}
+	o.links[m.ObjectData[0].ObjectLocalID] = namedLink{children: children, at: now}
+}
+
+// liveJoin says whether an update giving this prim this parent would be
+// a live link: the store holds it, under another parent or none.
+func (o *Objects) liveJoin(id msg.UUID, parent uint32) bool {
+	if parent == 0 {
+		return false
+	}
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	v := o.byID[id]
+	return v != nil && v.heard && v.heardParent != parent
+}
+
+// settleLocked takes a parent out of unordered once no child in its
+// list is there by a live link.
+func (o *Objects) settleLocked(parent uint32) {
+	if !o.unordered[parent] {
+		return
+	}
+	for _, id := range o.kids[parent] {
+		if c := o.byID[id]; c != nil && c.moved {
+			return
+		}
+	}
+	delete(o.unordered, parent)
+}
+
+func (o *Objects) unlinkLocked(v *Object) {
+	if !v.listed {
+		return
+	}
+	list := o.kids[v.listedUnder]
+	for i, id := range list {
+		if id == v.ID {
+			list = slices.Delete(list, i, i+1)
+			break
+		}
+	}
+	if len(list) == 0 {
+		delete(o.kids, v.listedUnder)
+		delete(o.unordered, v.listedUnder)
+	} else {
+		o.kids[v.listedUnder] = list
+	}
+	v.listed = false
+}
+
+// forgetLocked takes an object out of the store, and its child list
+// with it: a viewer's children die with their parent, and the region
+// kills them too.  What is left is unlisted, so that an update after
+// the local id is reused lists it afresh.
+func (o *Objects) forgetLocked(v *Object) {
+	under, was := v.listedUnder, v.listed
+	o.unlinkLocked(v)
+	if was {
+		o.settleLocked(under)
+	}
+	delete(o.unordered, v.Local)
+	for _, id := range o.kids[v.Local] {
+		if c := o.byID[id]; c != nil {
+			c.listed = false
+		}
+	}
+	delete(o.kids, v.Local)
+	delete(o.lastLive, v.Local)
+	delete(o.byID, v.ID)
 }
 
 // Get returns one object by id.
@@ -234,6 +765,7 @@ func (o *Objects) Get(id msg.UUID) (*Object, bool) {
 		return nil, false
 	}
 	c := *v
+	o.numberLocked(&c, func(p uint32) bool { return o.byLocalLocked(p) != nil })
 	return &c, true
 }
 
@@ -276,7 +808,15 @@ func (o *Objects) absorb(from *Objects) int {
 		if _, have := o.byID[v.ID]; have {
 			continue
 		}
+		// A copy knows no list of this store's, and the order it
+		// arrives in is only what All gave, so its set is unordered.
+		v.listed, v.heard, v.heardParent = false, false, 0
 		o.byID[v.ID] = v
+		o.linkLocked(v)
+		if v.Parent != 0 {
+			v.moved = true
+			o.unordered[v.Parent] = true
+		}
 		n++
 	}
 	return n
@@ -293,6 +833,9 @@ func (o *Objects) Flush() int {
 	defer o.mu.Unlock()
 	n := len(o.byID)
 	o.byID = map[msg.UUID]*Object{}
+	o.kids = map[uint32][]msg.UUID{}
+	o.unordered = map[uint32]bool{}
+	o.lastLive = map[uint32]time.Time{}
 	return n
 }
 
@@ -396,7 +939,7 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 	}
 
 	n := 0
-	for id, v := range o.byID {
+	for _, v := range o.byID {
 		if v.PCode == pcodeAvatar {
 			// See pcodeAvatar: people are kept whatever the distance.
 			continue
@@ -415,7 +958,7 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 			// that is there.
 			// Why: doc/objects.md#orphans
 			if time.Since(v.Last) > orphanGrace {
-				delete(o.byID, id)
+				o.forgetLocked(v)
 				n++
 			}
 			continue
@@ -425,7 +968,7 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 			continue
 		}
 		if o.goneLocked(v, now) {
-			delete(o.byID, id)
+			o.forgetLocked(v)
 			n++
 		}
 	}
@@ -499,6 +1042,7 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	v := o.seen(d.FullID)
 	o.judgedLocked(v, far)
 	v.Local, v.Parent, v.PCode, v.Scale = d.ID, d.ParentID, d.PCode, d.Scale
+	o.linkLocked(v)
 	v.Shape = msg.ShapeOfUpdate(d)
 	v.Click, v.ClickKnown = d.ClickAction, true
 	// A block that does not read says nothing, so the last answer stays.
@@ -598,6 +1142,7 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	v := o.seen(c.FullID)
 	o.judgedLocked(v, far)
 	v.Local, v.Parent, v.PCode = c.LocalID, parent, c.PCode
+	o.linkLocked(v)
 	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
 	v.Click, v.ClickKnown = c.Click, true
 	v.Sculpt = msg.SculptMarkOf(c.ExtraParams)
@@ -769,6 +1314,7 @@ func (o *Objects) byLocal(local uint32) (*Object, bool) {
 		return nil, false
 	}
 	c := *v
+	o.numberLocked(&c, func(p uint32) bool { return o.byLocalLocked(p) != nil })
 	return &c, true
 }
 
@@ -828,9 +1374,10 @@ func (o *Objects) priced(id msg.UUID, price int32) {
 func (o *Objects) kill(local uint32) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	for id, v := range o.byID {
+	for _, v := range o.byID {
 		if v.Local == local {
-			delete(o.byID, id)
+			delete(o.misordered, v.ID)
+			o.forgetLocked(v)
 			return
 		}
 	}
@@ -864,10 +1411,15 @@ func (o *Objects) forgetAppearance(locals ...uint32) int {
 // objectImage is the message that changes an appearance, looked up once.
 var objectImage = (&msg.ObjectImage{}).MsgInfo().ID
 
+// objectLink is the message that links prims, looked up once.
+var objectLink = (&msg.ObjectLink{}).MsgInfo().ID
+
 // sent is what the store makes of a message this session has just put
 // on the wire.
 //
-// Only one message matters: ObjectImage replaces every face of an
+// Two messages matter.  ObjectLink names the order a set's children are
+// numbered in, which linked keeps for the update that follows.
+// ObjectImage replaces every face of an
 // object at once, and nothing the store read described the result when
 // that was measured -- a terse update's texture entry was not read then,
 // so whether the region says nothing or said it there is open.  Without
@@ -888,28 +1440,34 @@ var objectImage = (&msg.ObjectImage{}).MsgInfo().ID
 // about both is no cache.
 // Why: doc/objects.md#an-appearance-after-objectimage
 func (o *Objects) sent(p *msg.Packet) {
-	if p == nil || p.Message == nil || p.ID != objectImage {
+	if p == nil || p.Message == nil {
 		return
 	}
-	m, ok := p.Message.(*msg.ObjectImage)
-	if !ok {
-		// A client of the daemon sends bytes rather than a type: what
-		// goes on the wire for it is a msg.Raw, and Encode gives the
-		// body back unchanged.
-		b, err := p.Message.Encode()
-		if err != nil {
+	switch p.ID {
+	case objectImage:
+		m := &msg.ObjectImage{}
+		if !sentAs(p, m) {
 			return
 		}
-		m = &msg.ObjectImage{}
-		if err := m.Decode(b); err != nil {
-			return
+		locals := make([]uint32, 0, len(m.ObjectData))
+		for i := range m.ObjectData {
+			locals = append(locals, m.ObjectData[i].ObjectLocalID)
+		}
+		o.forgetAppearance(locals...)
+	case objectLink:
+		m := &msg.ObjectLink{}
+		if sentAs(p, m) {
+			o.linked(m)
 		}
 	}
-	locals := make([]uint32, 0, len(m.ObjectData))
-	for i := range m.ObjectData {
-		locals = append(locals, m.ObjectData[i].ObjectLocalID)
-	}
-	o.forgetAppearance(locals...)
+}
+
+// sentAs reads what went out into m.  A client of the daemon sends
+// bytes rather than a type, so what goes on the wire for it is a
+// msg.Raw, and Encode gives the body back unchanged.
+func sentAs(p *msg.Packet, m interface{ Decode([]byte) error }) bool {
+	b, err := p.Message.Encode()
+	return err == nil && m.Decode(b) == nil
 }
 
 // placementWidths counts the placement blobs ObjectUpdates carry, by
@@ -955,11 +1513,27 @@ func (a *Agent) trackObjects() {
 		m := p.Message.(*msg.ObjectUpdate)
 		l := a.Look()
 		var parents []uint32
+		joined := map[uint32][]msg.UUID{}
+		store := a.Objects()
+		moves := make([]move, 0, len(m.ObjectData))
+		for i := range m.ObjectData {
+			moves = append(moves, move{m.ObjectData[i].FullID, m.ObjectData[i].ParentID})
+		}
+		plans := store.planJoins(moves)
 		for i := range m.ObjectData {
 			d := &m.ObjectData[i]
 			a.placements.count(len(d.ObjectData))
-			a.Objects().update(d, l.Center, l.Far)
+			if store.liveJoin(d.FullID, d.ParentID) {
+				joined[d.ParentID] = append(joined[d.ParentID], d.FullID)
+			}
+			store.update(d, l.Center, l.Far)
 			parents = a.orphaned(parents, d.ParentID)
+		}
+		for parent, ids := range joined {
+			store.joinedTogether(parent, ids)
+			if j := plans[parent]; j != nil {
+				store.applyJoin(parent, j)
+			}
 		}
 		a.askAfter(parents)
 	}, msg.Inline())
@@ -972,8 +1546,24 @@ func (a *Agent) trackObjects() {
 		l := a.Look()
 		var parents []uint32
 		var unsure []uint32
+		joined := map[uint32][]msg.UUID{}
+		store := a.Objects()
+		type decoded struct {
+			c   *msg.Compressed
+			err error
+		}
+		ds := make([]decoded, 0, len(m.ObjectData))
+		var moves []move
 		for i := range m.ObjectData {
 			c, err := msg.DecodeCompressed(m.ObjectData[i].Data)
+			ds = append(ds, decoded{c, err})
+			if c != nil && err == nil && c.ParentID != nil {
+				moves = append(moves, move{c.FullID, *c.ParentID})
+			}
+		}
+		plans := store.planJoins(moves)
+		for _, dc := range ds {
+			c, err := dc.c, dc.err
 			if c == nil {
 				continue
 			}
@@ -989,9 +1579,18 @@ func (a *Agent) trackObjects() {
 				}
 				continue
 			}
-			a.Objects().compressed(c, l.Center, l.Far)
+			if c.ParentID != nil && store.liveJoin(c.FullID, *c.ParentID) {
+				joined[*c.ParentID] = append(joined[*c.ParentID], c.FullID)
+			}
+			store.compressed(c, l.Center, l.Far)
 			if c.ParentID != nil {
 				parents = a.orphaned(parents, *c.ParentID)
+			}
+		}
+		for parent, ids := range joined {
+			store.joinedTogether(parent, ids)
+			if j := plans[parent]; j != nil {
+				store.applyJoin(parent, j)
 			}
 		}
 		a.askAfter(append(parents, unsure...))

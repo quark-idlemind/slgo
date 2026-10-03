@@ -1408,6 +1408,17 @@ message ObjectInfo {
   // id. Kind 0 is neither, and then the id is empty.
   uint32 sculpt_kind = 18;
   string sculpt_id = 19;
+
+  // The viewer's link number: 0 not linked, 1 the root of a linkset
+  // with children, 2 and up a child by its place in the root's list.
+  // Why: doc/objects.md#link-numbers
+  uint32 link_number = 20;
+
+  // Whether link_number can be believed: true for a prim that is not
+  // linked, and for the rest the state of its linkset, which a link made
+  // while the daemon watched leaves unknown.
+  // Why: doc/objects.md#link-numbers
+  bool link_known = 21;
 }
 
 // Quaternion is a rotation, unpacked: the wire form is three floats

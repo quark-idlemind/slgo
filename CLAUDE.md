@@ -325,9 +325,10 @@ here when another is shared the same way.
 - `Sender.Label`, in `sl/sender.go`: a name as a line prints it, with
   what it names in front -- `[Object]`, `[Group]`, `[Conference]`, `[Grid]` -- and a
   person's bare; the kind comes from `IM.Sender` or `Line.Sender`. An
-  object's name can be anybody's, so slsh and slbotd print no sender
-  any other way. `TestNoObjectNameIsPrintedBare` refuses an
-  `ObjectName` used outside `Label` in `sl`, slsh or slbotd.
+  object's name can be anybody's, so slsh, slbotd and slate print no
+  sender any other way. `TestNoObjectNameIsPrintedBare` refuses an
+  `ObjectName` used outside `Label`, or a comparison with `==` or `!=`,
+  in `sl`, slsh, slbotd, `slate` or the slate command.
 - `sl.Options`, in `sl/options.go`, set with `Session.SetOptions`: how
   long a move, a permission change and a delete are read back before
   they are reported not confirmed, 15, 15 and 10 s by default, and how
