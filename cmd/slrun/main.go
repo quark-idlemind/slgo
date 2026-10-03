@@ -247,6 +247,16 @@ func runAll(ctx context.Context, srcs []source, places int, run func(place int, 
 			// finished its share should take somebody else's rather
 			// than sit idle.
 			for i := range next {
+				// Handing out stops when the run does, but cannot
+				// promise to: a select with both cases ready picks
+				// one at random, so a script can still be handed out
+				// after the run was stopped -- about one run in 350
+				// of TestNothingIsStartedAfterTheRunIsStopped.  So
+				// a place asks too, and a script it is handed then
+				// is not started and has not got to the end.
+				if ctx.Err() != nil {
+					continue
+				}
 				got[i] = run(p, srcs[i].path, srcs[i].text)
 			}
 		}(p)

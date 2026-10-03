@@ -128,6 +128,52 @@ which carries the same uuid beside the local id and so ties the two
 namings of a parcel together. The local id is per region and short
 lived; the uuid is the grid-wide name.
 
+### A parcel anywhere, from a landmark
+
+A landmark carries a region's uuid and a position and no name. The
+parcel there can be asked about from anywhere, and its description
+carries the region's name.
+
+**Measured on 2026-10-03**, through slgod, with the owner's avatar. A
+probe took each of ten landmarks in its inventory, all in regions other
+than the one the avatar was in:
+
+- It posted `location` (the landmark's position) and `region_id` (the
+  landmark's region), and no `region_handle`, to the avatar's *current*
+  region's `RemoteParcelRequest`. All ten returned a `parcel_id`, in 99
+  to 369 ms.
+- It sent `ParcelInfoRequest` for each id. All ten were answered by a
+  `ParcelInfoReply` with the same `ParcelID`, in 89 to 112 ms.
+- Name, SimName and OwnerID were always present. Desc and SnapshotID
+  were sometimes empty or null.
+- The reply's global position was not the landmark's point: 0 to 8 m
+  off in x and y on ordinary parcels, and about 2001 m lower for a
+  skybox landmark. **Inferred, not measured:** it is the parcel's own
+  point, probably its landing point or its centre. It is kept in
+  `ParcelInfo.Global` and not printed.
+
+**Firestorm does the same chain** for its place panel
+(`indra/newview/llpanelplaceinfo.cpp:182-204`):
+`LLRemoteParcelInfoProcessor::regionParcelInfoCoro` posts the capability
+(`llremoteparcelrequest.cpp:198-222`), `sendParcelInfoRequest` sends
+`ParcelInfoRequest` (`:160-175`), and `processParcelInfoReply` (`:85`)
+hands the reply to the observers keyed by parcel id. Its `LLParcelData`
+(`llremoteparcelrequest.h`) names the fields `sl.ParcelInfo` follows.
+The only bits of `Flags` it reads are in `LLPanelPlaceProfile::
+processParcelInfo` (`llpanelplaceprofile.cpp:315-324`), where it calls
+them a hack: 0x2 is an adult region, 0x1 a mature one, and otherwise PG.
+`sl` reads those two and no others.
+
+**`region_handle` is left out**, as above. The viewer sends it when it
+knows a global position; the measurement above was made without it and
+every one answered, so `ParcelIDIn` sends `location` and `region_id`
+only.
+
+In `sl`: `ParcelIDIn`, `ParcelInfo` (waiters keyed by parcel id, so
+concurrent asks keep their own answers), `LandmarkPlace`. In `slsh`,
+`landmark NAME` prints the parcel's name, the region's name and the
+area, three seconds to each of the two steps.
+
 ### The layout arrives too, and nobody was reading it
 
 `ParcelOverlay` does arrive on the circuit, unasked, at every arrival:

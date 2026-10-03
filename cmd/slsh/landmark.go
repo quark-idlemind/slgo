@@ -221,20 +221,61 @@ func landmarkRead(ctx context.Context, sh *Shell, out io.Writer, name string) er
 	fmt.Fprintf(out, "%s\n", e.Name)
 	fmt.Fprintf(out, "  in       /%s\n", parentPath(e.Path))
 	printLandmark(out, lm, e.ID)
+	return landmarkPlace(ctx, sh, out, lm)
+}
+
+// landmarkPlaceWait is how long each of the two steps of finding a
+// landmark's place gets; both answered in 0.1 to 0.4 s when measured.
+// Why: doc/history/parcel.md#a-parcel-anywhere-from-a-landmark
+const landmarkPlaceWait = 3 * time.Second
+
+// landmarkPlace prints the parcel a landmark is in: its name, the
+// region's name and its area.  A lookup that fails costs these lines
+// and one line saying so, as look's details do.
+func landmarkPlace(ctx context.Context, sh *Shell, out io.Writer, lm *sl.Landmark) error {
+	step := func(f func(context.Context) error) error {
+		ask, cancel := context.WithTimeout(ctx, landmarkPlaceWait)
+		defer cancel()
+		err := f(ask)
+		if err != nil && ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
+			err = fmt.Errorf("no answer in %s", landmarkPlaceWait)
+		}
+		return err
+	}
+
+	var id msg.UUID
+	err := step(func(c context.Context) (err error) {
+		id, err = sh.s.ParcelIDIn(c, lm.Region, lm.Position)
+		return err
+	})
+	var p *sl.ParcelInfo
+	if err == nil {
+		err = step(func(c context.Context) (err error) {
+			p, err = sh.s.ParcelInfo(c, id)
+			return err
+		})
+	}
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		fmt.Fprintf(out, "  place    the grid did not say what is there: %v\n", err)
+		return nil
+	}
+	// One line for both: "in" above is the inventory folder.
+	fmt.Fprintf(out, "  parcel   %s, in %s\n", p.Name, p.RegionName)
+	fmt.Fprintf(out, "  area     %d m²\n", p.ActualArea)
 	return nil
 }
 
 // printLandmark prints what the asset holds, and both of the item's
 // uuids beside it.
 //
-// The region is an id and is left as one.  A landmark carries no region
-// NAME and no handle, and the only way this program has of turning one
-// into the other is a world map lookup by name -- so there is nothing to
-// look the id up by, and a line that said "region" followed by something
-// that looked like a place would be an invention.  What is there to say
-// is where you would arrive if you went, which is the point of reading
-// one; what is there is at the far end is parcel's question, asked after
-// arriving.
+// The region is printed as the id the asset holds; its name is not in
+// the asset, and landmarkPlace finds it through the parcel (the plain
+// listing does not, for the reason landmarkList gives).  The line a
+// make prints has no place after it: it was made where the avatar is.
+// Why: doc/history/parcel.md#a-parcel-anywhere-from-a-landmark
 //
 // The position is printed to two decimals because that is what the
 // asset holds: the simulator writes it from where the avatar stood, and

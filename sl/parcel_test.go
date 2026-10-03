@@ -2,10 +2,13 @@ package sl
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -311,5 +314,188 @@ func TestLandIsWhatTheSessionWasTold(t *testing.T) {
 	}
 	if _, ok := l.Overlay.At(10, 200); ok {
 		t.Error("a square from a packet that never arrived answered")
+	}
+}
+
+// infoReply builds a ParcelInfoReply for the tests below.
+func infoReply(id msg.UUID, name, region string) *msg.ParcelInfoReply {
+	r := &msg.ParcelInfoReply{}
+	r.Data.ParcelID = id
+	r.Data.OwnerID = msg.MustParseUUID("95767e57-7e57-c0de-81b9-5a74a2b29e94")
+	r.Data.Name = []byte(name + "\x00")
+	r.Data.SimName = []byte(region + "\x00")
+	r.Data.ActualArea = 512
+	r.Data.BillableArea = 480
+	r.Data.Flags = 0x1
+	r.Data.GlobalX, r.Data.GlobalY, r.Data.GlobalZ = 1000, 2000, 30
+	r.Data.SalePrice = 7
+	return r
+}
+
+// fakeParcelCap serves RemoteParcelRequest, recording each body and
+// answering with the id chosen by pick.
+func fakeParcelCap(t *testing.T, f *fakeBackend, bodies *[]string, pick func(body string) string) {
+	t.Helper()
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		*bodies = append(*bodies, string(b))
+		mu.Unlock()
+		fmt.Fprintf(rw, `<llsd><map><key>parcel_id</key><uuid>%s</uuid></map></llsd>`, pick(string(b)))
+	}))
+	t.Cleanup(srv.Close)
+	f.caps["RemoteParcelRequest"] = srv.URL
+}
+
+// TestParcelIDInPostsTheRegionGivenAndNoHandle: a point in another
+// region is asked through the same capability, by that region's id.
+// Why: doc/history/parcel.md#a-parcel-anywhere-from-a-landmark
+func TestParcelIDInPostsTheRegionGivenAndNoHandle(t *testing.T) {
+	w, f := newFakeSession(t)
+	var bodies []string
+	want := msg.MustParseUUID("a08f7e57-7e57-c0de-b173-7b785913e4fb")
+	fakeParcelCap(t, f, &bodies, func(string) string { return want.String() })
+
+	there := msg.MustParseUUID("bb817e57-7e57-c0de-e274-758a65f3d28d")
+	id, err := w.ParcelIDIn(context.Background(), there, msg.Vector3{X: 12, Y: 34, Z: 56})
+	if err != nil {
+		t.Fatalf("ParcelIDIn: %v", err)
+	}
+	if id != want {
+		t.Errorf("parcel id = %v", id)
+	}
+	if len(bodies) != 1 {
+		t.Fatalf("%d requests", len(bodies))
+	}
+	b := bodies[0]
+	if !strings.Contains(b, there.String()) || strings.Contains(b, "region_handle") {
+		t.Errorf("the request was %s", b)
+	}
+	for _, n := range []string{"12", "34", "56"} {
+		if !strings.Contains(b, n) {
+			t.Errorf("the request lacks %s: %s", n, b)
+		}
+	}
+}
+
+// TestParcelInfoAsksByIDAndReadsTheMatchingReply: a reply for another
+// parcel is not the answer.
+func TestParcelInfoAsksByIDAndReadsTheMatchingReply(t *testing.T) {
+	w, f := newFakeSession(t)
+	mine := msg.MustParseUUID("a08f7e57-7e57-c0de-b173-7b785913e4fb")
+	other := msg.MustParseUUID("d94f7e57-7e57-c0de-a0fe-890906379830")
+
+	var asked *msg.ParcelInfoRequest
+	f.onSend = func(m msg.Message) {
+		req, ok := m.(*msg.ParcelInfoRequest)
+		if !ok {
+			return
+		}
+		asked = req
+		f.Relay(t, infoReply(other, "Elsewhere", "Corbel Strand"))
+		f.Relay(t, infoReply(mine, "Grindlow Croft", "Harrowmere Ford"))
+	}
+
+	p, err := w.ParcelInfo(context.Background(), mine)
+	if err != nil {
+		t.Fatalf("ParcelInfo: %v", err)
+	}
+	if asked == nil || asked.Data.ParcelID != mine ||
+		asked.AgentData.AgentID != w.me || asked.AgentData.SessionID != w.Session() {
+		t.Errorf("asked %+v", asked)
+	}
+	if p.ID != mine || p.Name != "Grindlow Croft" || p.RegionName != "Harrowmere Ford" {
+		t.Errorf("got %+v", p)
+	}
+	if p.ActualArea != 512 || p.BillableArea != 480 || p.SalePrice != 7 ||
+		p.Global != (msg.Vector3{X: 1000, Y: 2000, Z: 30}) {
+		t.Errorf("got %+v", p)
+	}
+	if !p.Mature() || p.Adult() {
+		t.Errorf("flags %#x: mature %v adult %v", p.Flags, p.Mature(), p.Adult())
+	}
+}
+
+// TestParcelInfoTimesOutSaying: no reply is an error naming the wait.
+func TestParcelInfoTimesOutSaying(t *testing.T) {
+	w, _ := newFakeSession(t)
+	w.SetOptions(Options{ParcelInfoTimeout: 50 * time.Millisecond})
+	_, err := w.ParcelInfo(context.Background(), msg.MustParseUUID("a08f7e57-7e57-c0de-b173-7b785913e4fb"))
+	if !errors.Is(err, ErrTimeout) || !strings.Contains(err.Error(), "no ParcelInfoReply in 50ms") {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// TestConcurrentParcelInfoKeepsEachAnswerItsOwn: two asks for different
+// parcels, answered in the opposite order to the asking.
+func TestConcurrentParcelInfoKeepsEachAnswerItsOwn(t *testing.T) {
+	w, f := newFakeSession(t)
+	a := msg.MustParseUUID("a08f7e57-7e57-c0de-b173-7b785913e4fb")
+	b := msg.MustParseUUID("d94f7e57-7e57-c0de-a0fe-890906379830")
+
+	var mu sync.Mutex
+	var seen []msg.UUID
+	f.onSend = func(m msg.Message) {
+		if req, ok := m.(*msg.ParcelInfoRequest); ok {
+			mu.Lock()
+			seen = append(seen, req.Data.ParcelID)
+			both := len(seen) == 2
+			mu.Unlock()
+			if both {
+				f.Relay(t, infoReply(b, "Second", "Corbel Strand"))
+				f.Relay(t, infoReply(a, "First", "Harrowmere Ford"))
+			}
+		}
+	}
+
+	type res struct {
+		p   *ParcelInfo
+		err error
+	}
+	ca, cb := make(chan res, 1), make(chan res, 1)
+	go func() { p, err := w.ParcelInfo(context.Background(), a); ca <- res{p, err} }()
+	go func() { p, err := w.ParcelInfo(context.Background(), b); cb <- res{p, err} }()
+	ra, rb := <-ca, <-cb
+	if ra.err != nil || rb.err != nil {
+		t.Fatalf("errors %v, %v", ra.err, rb.err)
+	}
+	if ra.p.Name != "First" || rb.p.Name != "Second" {
+		t.Errorf("a got %q, b got %q", ra.p.Name, rb.p.Name)
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, fn := range w.infoFns {
+		if fn != nil {
+			t.Error("a waiter was left behind")
+		}
+	}
+}
+
+// TestLandmarkPlaceChainsTheCapabilityAndTheRequest.
+func TestLandmarkPlaceChainsTheCapabilityAndTheRequest(t *testing.T) {
+	w, f := newFakeSession(t)
+	var bodies []string
+	id := msg.MustParseUUID("a08f7e57-7e57-c0de-b173-7b785913e4fb")
+	fakeParcelCap(t, f, &bodies, func(string) string { return id.String() })
+	f.onSend = func(m msg.Message) {
+		if req, ok := m.(*msg.ParcelInfoRequest); ok {
+			f.Relay(t, infoReply(req.Data.ParcelID, "Grindlow Croft", "Harrowmere Ford"))
+		}
+	}
+
+	lm := &Landmark{
+		Region:   msg.MustParseUUID("bb817e57-7e57-c0de-e274-758a65f3d28d"),
+		Position: msg.Vector3{X: 1, Y: 2, Z: 3},
+	}
+	p, err := w.LandmarkPlace(context.Background(), lm)
+	if err != nil {
+		t.Fatalf("LandmarkPlace: %v", err)
+	}
+	if p.ID != id || p.Name != "Grindlow Croft" || p.RegionName != "Harrowmere Ford" {
+		t.Errorf("got %+v", p)
+	}
+	if len(bodies) != 1 || !strings.Contains(bodies[0], lm.Region.String()) {
+		t.Errorf("capability bodies %v", bodies)
 	}
 }

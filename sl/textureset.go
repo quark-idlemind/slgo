@@ -270,7 +270,7 @@ func (w *Session) faces(ctx context.Context, o *Object) ([]Face, bool, error) {
 	if o == nil {
 		return nil, false, fmt.Errorf("sl: nothing to look at")
 	}
-	seen, err := w.ObjectByID(ctx, o.ID, 30*time.Second)
+	seen, err := w.ObjectByID(ctx, o.ID, w.objectWait())
 	if err != nil {
 		return nil, false, err
 	}

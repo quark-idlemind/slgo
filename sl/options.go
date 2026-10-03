@@ -33,6 +33,16 @@ type Options struct {
 	// RequestRegionInfo.
 	// Why: doc/simstats.md#what-a-region-says-about-itself-regioninfo
 	RegionInfoTimeout time.Duration
+
+	// ParcelInfoTimeout bounds the wait for a ParcelInfoReply.
+	// Why: doc/history/parcel.md#a-parcel-anywhere-from-a-landmark
+	ParcelInfoTimeout time.Duration
+
+	// ObjectTimeout bounds the wait for the region to name an object
+	// the session has not asked about before, in Faces, SetFace and
+	// FacePicture, which read the object through ObjectByID.
+	// Why: doc/objects.md#naming-an-object
+	ObjectTimeout time.Duration
 }
 
 // The defaults for Options.  None of them is a measurement; each is a
@@ -49,6 +59,10 @@ const (
 	// DefaultRegionInfoTimeout is a wide margin over the 115 ms one
 	// reply took.
 	DefaultRegionInfoTimeout = 15 * time.Second
+
+	// DefaultObjectTimeout is a wide margin over the 4.5 s the slowest
+	// first look at an object took.
+	DefaultObjectTimeout = 30 * time.Second
 )
 
 // SetOptions replaces the session's Options.  A call already waiting
@@ -64,8 +78,8 @@ func (w *Session) Options() Options {
 	return Options{}
 }
 
-// moveWait, permissionsWait, deleteWait, moneyWait and regionInfoWait are the bounds in
-// force.
+// moveWait, permissionsWait, deleteWait, moneyWait, regionInfoWait,
+// parcelInfoWait and objectWait are the bounds in force.
 func (w *Session) moveWait() time.Duration {
 	return orDefault(w.Options().MoveTimeout, DefaultMoveTimeout)
 }
@@ -84,6 +98,14 @@ func (w *Session) moneyWait() time.Duration {
 
 func (w *Session) regionInfoWait() time.Duration {
 	return orDefault(w.Options().RegionInfoTimeout, DefaultRegionInfoTimeout)
+}
+
+func (w *Session) parcelInfoWait() time.Duration {
+	return orDefault(w.Options().ParcelInfoTimeout, DefaultParcelTimeout)
+}
+
+func (w *Session) objectWait() time.Duration {
+	return orDefault(w.Options().ObjectTimeout, DefaultObjectTimeout)
 }
 
 func orDefault(d, def time.Duration) time.Duration {
