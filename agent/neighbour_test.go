@@ -208,7 +208,11 @@ func TestNeighboursTurnedOffDropWhatIsHeldAndTakeNoMore(t *testing.T) {
 	sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
 
 	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
-	sim.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	// The handshake's reply is the last thing the child sends.  Sent
+	// before the turning off and read by the simulator after it, it
+	// would count below as talking to the neighbour after being turned
+	// off, so the turning off waits until the simulator has read it.
+	sim.waitSeen(t, "RegionHandshakeReply", 5*time.Second)
 	waitFor(t, "the neighbour to be listed", func() bool { return len(a.Neighbours()) == 1 })
 
 	a.SetNeighbours(false)

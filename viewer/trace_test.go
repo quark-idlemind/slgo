@@ -276,6 +276,25 @@ func TestTraceBodiesAreYAML(t *testing.T) {
 	}
 }
 
+// TestTraceBodiesLeaveOutTheAccountDetails: a trace that writes bodies
+// writes a UserInfoReply as a line, with no email in it.
+// Why: doc/account.md#nothing-logs-it
+func TestTraceBodiesLeaveOutTheAccountDetails(t *testing.T) {
+	var buf bytes.Buffer
+	tr := NewTrace(&buf, nil, true)
+	m := &msg.UserInfoReply{}
+	m.UserData.EMail = []byte("somebody@example.invalid\x00")
+	tr.Write(FromSim, packet(3, m), Forwarded)
+
+	out := buf.String()
+	if !strings.Contains(out, "UserInfoReply") {
+		t.Errorf("the entry is missing:\n%s", out)
+	}
+	if strings.Contains(out, "example.invalid") || strings.Contains(out, "EMail") {
+		t.Error("the trace wrote the email address")
+	}
+}
+
 // TestTraceNilIsUsable: a caller holds a Trace whether or not tracing
 // was asked for, so the zero case has to be silent rather than fatal.
 func TestTraceNilIsUsable(t *testing.T) {

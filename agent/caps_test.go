@@ -157,3 +157,16 @@ func TestASeedRequestNamesWhatItWants(t *testing.T) {
 		}
 	}
 }
+
+// TestTheAccountCapabilityIsAskedFor: a region offers only what the seed
+// was asked for, and sl.UserInfo prefers the capability to the circuit.
+// Why: doc/account.md#how-the-viewer-asks
+func TestTheAccountCapabilityIsAskedFor(t *testing.T) {
+	t.Parallel()
+	for _, c := range DefaultCaps {
+		if c == "UserInfo" {
+			return
+		}
+	}
+	t.Error("UserInfo is not in DefaultCaps")
+}

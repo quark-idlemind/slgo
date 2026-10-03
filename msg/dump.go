@@ -47,6 +47,16 @@ import (
 // ambiguous.  Variable fields render as a quoted string when the bytes
 // look like text, and as a quoted "0x..." hex string when they do not.
 
+// private names the messages whose blocks no dump writes: they carry
+// the account's own details, which are printed only where a person asked
+// for them.  A dump of one says so in place of its blocks.
+// Why: doc/account.md#nothing-logs-it
+var private = map[string]bool{"UserInfoReply": true}
+
+// Private reports whether a message's blocks are withheld from every
+// dump and trace.
+func Private(name string) bool { return private[name] }
+
 // DumpMessage renders a message as YAML.
 func DumpMessage(m Message) string {
 	return string(AppendMessageYAML(nil, m))
@@ -139,6 +149,10 @@ func AppendMessageYAML(dst []byte, m Message) []byte {
 	dst = append(dst, ", number: "...)
 	dst = strconv.AppendUint(dst, uint64(info.ID.Number()), 10)
 	dst = append(dst, "}\n"...)
+
+	if Private(info.Name) {
+		return append(dst, "blocks: withheld, the account's own details\n"...)
+	}
 
 	v := reflect.ValueOf(m)
 	if v.Kind() != reflect.Pointer || v.IsNil() {
