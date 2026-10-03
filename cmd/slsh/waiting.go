@@ -121,10 +121,12 @@ func (w waiter) key() string {
 }
 
 // recorded is whether it arrived before this shell attached, and is
-// known only because slgod kept it.  Dialogs and permissions never are:
-// the daemon does not keep them.
+// known only because slgod kept it.  Permissions never are: the daemon
+// does not keep them.
 func (w waiter) recorded() bool {
 	switch {
+	case w.dialog != nil:
+		return w.dialog.Recorded
 	case w.lure != nil:
 		return w.lure.Recorded
 	case w.asked != nil:
@@ -432,8 +434,8 @@ func cmdWaiting(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 // while no client was attached, and a person has no way to tell that
 // blind spot from an empty list unless the listing says which it is.
 //
-// scripts is whether the listing is one that would hold a dialog or a
-// permission request, which slgod does not keep; see server/offers.go.
+// scripts is whether the listing is one that would hold a permission
+// request, which slgod does not keep; see server/offers.go.
 func (sh *Shell) heardFrom(scripts bool) string {
 	rec, ok := sh.s.OfferRecord()
 	switch {
@@ -445,7 +447,7 @@ func (sh *Shell) heardFrom(scripts bool) string {
 				rec.Evicted, plural(rec.Evicted, "one", "ones"))
 		}
 		if scripts {
-			s += "; a script's dialog or permission request from before this shell attached is not kept"
+			s += "; a script's permission request from before this shell attached is not kept"
 		}
 		return s
 	case sh.cfg.Direct:

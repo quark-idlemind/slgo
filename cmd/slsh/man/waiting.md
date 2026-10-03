@@ -51,21 +51,22 @@ answered it, so the count at the prompt falls by one.
 Everything this shell has seen arrive, and -- through slgod -- the
 offers that arrived before it attached.
 
-slgod keeps five of the seven kinds whether or not any client is
-attached: teleports, requests for a teleport, items, friendship and
-group invitations.  A shell is handed whatever of those is still
+slgod keeps six of the seven kinds whether or not any client is
+attached: teleports, requests for a teleport, items (an object's give
+too), friendship, group invitations, and a script's dialogs and text
+boxes.  A shell is handed whatever of those is still
 waiting when it attaches, and they are listed with the rest, marked
 `(from before this shell)` because nobody saw them arrive.  Starting a
 shell says how many there are.
 
-Dialogs and permission requests are not kept.  One raised before this
-shell attached is not known here; it is waiting in the world, and a
-viewer would show it.
+Permission requests are not kept.  One raised before this shell
+attached is not known here; it is waiting in the world, and a viewer
+would show it.
 
 Nor are they listed for ever.  A dialog or a permission request nobody
 has answered leaves the listing after an hour, and no more than 32 of
-each are listed: when another arrives, the oldest goes.  A line says so
-when one goes:
+each are listed: when another arrives, the oldest goes.  slgod's record
+of dialogs follows the same two numbers.  A line says so when one goes:
 
     12:03:04 * the dialog from [Object] Example Box was forgotten after 1h unanswered by this session -- it is no longer waiting
 
@@ -77,7 +78,7 @@ So an empty listing says what it is an account of, rather than
 
     nothing waiting -- slgod has kept every offer, teleport and invitation
     made to this avatar since 09:14 and holds none unanswered; a script's
-    dialog or permission request from before this shell attached is not kept
+    permission request from before this shell attached is not kept
 
 slgod's record starts when it logged the avatar in, and keeps the
 hundred most recent; when it has had to drop older ones, the line says

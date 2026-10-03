@@ -883,13 +883,13 @@ func (h *Hosted) attach(c *Client) *pb.OfferRecord {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.clients[c] = true
-	if !c.wants(imID) {
+	if !c.wants(imID) && !c.wants(dialogID) {
 		return nil
 	}
 	if h.offers == nil {
 		h.offers = newOfferLog(time.Now())
 	}
-	return h.offers.snapshot()
+	return h.offers.snapshotFor(c.wants)
 }
 
 func (h *Hosted) detach(c *Client) {

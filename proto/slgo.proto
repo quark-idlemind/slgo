@@ -268,14 +268,15 @@ service Grid {
   // The server keeps the offers that arrive for an avatar whether or
   // not anybody is attached: a teleport offered, a request to be
   // offered one, an item handed over, an offer of friendship, an
-  // invitation into a group.  Each is answered by quoting an id that
-  // arrives once and cannot be asked for again, and the daemon is the
-  // one thing that is always there to hear it; a client that attaches
-  // later is handed what is still waiting in Attached.offers.  That
-  // makes this the second place the server reads a message body, after
-  // the teleport and seat answers it reads for itself, and for the same
-  // reason: it is the session's business whether or not anybody is
-  // listening.
+  // invitation into a group, and a script's dialog or text box.  Each
+  // is answered by quoting an id that arrives once and cannot be asked
+  // for again (a dialog is answered by its object and channel), and the
+  // daemon is the one thing that is always there to hear it; a client
+  // that attaches later is handed what is still waiting in
+  // Attached.offers.  That makes this the second place the server reads
+  // a message body, after the teleport and seat answers it reads for
+  // itself, and for the same reason: it is the session's business
+  // whether or not anybody is listening.
   //
   // A client calls it BEFORE sending its answer, and the answer says
   // whether to go on.  Two clients attached to one avatar see the same
@@ -603,8 +604,8 @@ message ServerPacket {
 
     // An offer the server was keeping has been dealt with, by this
     // client or another, and is no longer waiting.  Sent to every
-    // client that subscribed to ImprovedInstantMessage, which is what
-    // every offer arrives in.  See Handled.
+    // client that subscribed to ImprovedInstantMessage or ScriptDialog,
+    // which is what the offers arrive in.  See Handled.
     OfferHandled handled = 7;
   }
 }
@@ -631,8 +632,9 @@ message OfferHandled {
 // OfferRecord is the offers the server is keeping for an avatar, as they
 // stood when a client attached.
 message OfferRecord {
-  // Messages are the offers, each as the ImprovedInstantMessage it
-  // arrived in, oldest first, with offer and recorded set and
+  // Messages are the offers, each as the message it arrived in -- an
+  // ImprovedInstantMessage, or a ScriptDialog for a script's dialog or
+  // text box -- oldest first, with offer and recorded set and
   // received_at saying when it arrived.  A client reads them exactly as
   // it reads the ones relayed live, so that nothing about what an offer
   // is has to be understood on this side of the link.
@@ -647,7 +649,9 @@ message OfferRecord {
   // Evicted is how many unanswered offers have been dropped to make
   // room, oldest first, and limit is how many are kept.  An empty
   // record with evicted above zero is not the same answer as an empty
-  // one with evicted at zero.
+  // one with evicted at zero.  Dialogs have room of their own, are
+  // dropped for age and for room as a client drops them, and are not
+  // counted here: a client's listing loses nothing it would have kept.
   uint32 evicted = 3;
   uint32 limit = 4;
 }
@@ -751,9 +755,9 @@ message Attached {
   // this or relayed after it, and a client reading the record with a
   // separate call could miss one arriving in between.
   //
-  // Present only when the attach subscribed to ImprovedInstantMessage,
-  // and absent from a server too old to keep a record -- which a client
-  // should say, since without one it knows only what it saw arrive.
+  // Present only when the attach subscribed to ImprovedInstantMessage
+  // or ScriptDialog, and absent from a server too old to keep a record --
+  // which a client should say, since without one it knows only what it saw arrive.
   OfferRecord offers = 2;
 }
 

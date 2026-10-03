@@ -33,7 +33,7 @@ func testScriptDialog() *msg.ScriptDialog {
 
 func TestDialogDecoding(t *testing.T) {
 	w := &Session{}
-	w.dialog(testScriptDialog())
+	w.dialog(nil, testScriptDialog())
 
 	ds := w.Dialogs()
 	if len(ds) != 1 {
@@ -60,7 +60,7 @@ func TestDialogDecoding(t *testing.T) {
 
 func TestDialogButtonLookup(t *testing.T) {
 	w := &Session{}
-	w.dialog(testScriptDialog())
+	w.dialog(nil, testScriptDialog())
 	d := w.Dialogs()[0]
 
 	for _, c := range []struct {
@@ -82,7 +82,7 @@ func TestDialogButtonLookup(t *testing.T) {
 // never showed would tell the script something impossible.
 func TestAnswerRefusesUnknownButtons(t *testing.T) {
 	w := &Session{}
-	w.dialog(testScriptDialog())
+	w.dialog(nil, testScriptDialog())
 	d := w.Dialogs()[0]
 
 	if err := w.Answer(nil, d, "Perhaps"); err == nil {
@@ -104,7 +104,7 @@ func TestOnDialogIsCalled(t *testing.T) {
 	var got Dialog
 	w := &Session{}
 	w.OnDialog = func(d Dialog) { got = d }
-	w.dialog(testScriptDialog())
+	w.dialog(nil, testScriptDialog())
 	if got.Message != "pick one" {
 		t.Errorf("the callback saw %+v", got)
 	}
@@ -115,7 +115,7 @@ func TestOnDialogIsCalled(t *testing.T) {
 // to show it would show a different thing each time.
 func TestADialogPrintsAsSomethingAPersonCanAnswer(t *testing.T) {
 	w := &Session{}
-	w.dialog(testScriptDialog())
+	w.dialog(nil, testScriptDialog())
 	d := w.Dialogs()[0]
 
 	got := d.String()
@@ -234,7 +234,7 @@ func TestADialogWhoseAnswerNeverWentIsStillWaiting(t *testing.T) {
 	w := &Session{}
 	down := errors.New("the circuit is down")
 	w.sendFn = func(msg.Message) error { return down }
-	w.dialog(testScriptDialog())
+	w.dialog(nil, testScriptDialog())
 	d := w.Dialogs()[0]
 
 	if err := w.Answer(context.Background(), d, "Yes"); !errors.Is(err, down) {
@@ -291,9 +291,9 @@ func TestAnUnansweredDialogIsForgottenAfterAnHour(t *testing.T) {
 		w.mu.Unlock()
 	}
 
-	w.dialog(testScriptDialog())
+	w.dialog(nil, testScriptDialog())
 	age(0)
-	w.dialog(testScriptDialog())
+	w.dialog(nil, testScriptDialog())
 	if ds := w.Dialogs(); len(ds) != 1 || time.Since(ds[0].At) > time.Minute {
 		t.Fatalf("Dialogs = %+v, want only the one that has just arrived", ds)
 	}
@@ -326,7 +326,7 @@ func TestNoMoreThanMaxUnansweredDialogsAreKept(t *testing.T) {
 	for i := range MaxUnanswered + 1 {
 		m := testScriptDialog()
 		m.Data.Message = []byte(fmt.Sprintf("dialog %d\x00", i))
-		w.dialog(m)
+		w.dialog(nil, m)
 	}
 	ds := w.Dialogs()
 	if len(ds) != MaxUnanswered {

@@ -424,3 +424,178 @@ func TestTheKeptOffersCrossTheWire(t *testing.T) {
 		t.Fatal("the notice never came through")
 	}
 }
+
+// keptDialog is a script's dialog as the daemon hands it over, or relays
+// it: the ScriptDialog it came in, and the daemon's name for it.
+func keptDialog(t *testing.T, key string, at time.Time, object msg.UUID, channel int32, buttons ...string) *Message {
+	t.Helper()
+	m := &msg.ScriptDialog{}
+	m.Data.ObjectID = object
+	m.Data.ObjectName = []byte("Example Box\x00")
+	m.Data.FirstName = []byte("Example\x00")
+	m.Data.LastName = []byte("Resident\x00")
+	m.Data.Message = []byte("pick one\x00")
+	m.Data.ChatChannel = channel
+	for _, b := range buttons {
+		m.Buttons = append(m.Buttons, msg.ScriptDialog_Buttons{ButtonLabel: append([]byte(b), 0)})
+	}
+	body, err := m.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &Message{ID: msg.IDOf(m), Name: "ScriptDialog", Body: body, At: at, Offer: key, Recorded: true}
+}
+
+// sentReplies is the dialog answers the session put on the wire.
+func sentReplies(k *keeperBackend) []*msg.ScriptDialogReply {
+	var out []*msg.ScriptDialogReply
+	for _, s := range k.fakeBackend.Sent() {
+		if r, ok := s.Msg.(*msg.ScriptDialogReply); ok {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+var someBox = msg.MustParseUUID("086b7e57-7e57-c0de-b808-846c298934cd")
+
+// TestAKeptDialogIsListedWithTheTimeItArrivedAndIsNotNews: a dialog in the
+// attach record is waiting the moment New returns, dated by the record;
+// one put back later is listed again but, like a recorded instant message,
+// is not announced; and a live one carrying the daemon's name is.
+func TestAKeptDialogIsListedWithTheTimeItArrivedAndIsNotNews(t *testing.T) {
+	t.Parallel()
+	then := time.Now().Add(-30 * time.Minute).Truncate(time.Microsecond)
+	w, k := newKeptSession(t, &OfferRecord{Kept: 1, Limit: 100},
+		keptDialog(t, "dialog:1", then, someBox, -4242, "Yes", "No"))
+	defer k.Close()
+
+	ds := w.Dialogs()
+	if len(ds) != 1 || !ds[0].At.Equal(then) || !ds[0].Recorded || ds[0].key != "dialog:1" || ds[0].Channel != -4242 {
+		t.Fatalf("Dialogs = %+v, want the kept one dated when it arrived", ds)
+	}
+
+	var heard []Dialog
+	var mu sync.Mutex
+	w.mu.Lock()
+	w.OnDialog = func(d Dialog) {
+		mu.Lock()
+		heard = append(heard, d)
+		mu.Unlock()
+	}
+	w.mu.Unlock()
+
+	k.RelayRaw(t, keptDialog(t, "dialog:2", then, someBox, 7, "Yes"))
+	if n := len(w.Dialogs()); n != 2 {
+		t.Errorf("%d listed after one was put back, want 2", n)
+	}
+	mu.Lock()
+	if len(heard) != 0 {
+		t.Errorf("a recorded dialog was announced: %+v", heard)
+	}
+	mu.Unlock()
+
+	live := keptDialog(t, "dialog:3", time.Now(), someBox, 8, "Yes")
+	live.Recorded = false
+	k.RelayRaw(t, live)
+	mu.Lock()
+	if len(heard) != 1 || heard[0].key != "dialog:3" {
+		t.Errorf("announced %+v, want the live one under the daemon's name", heard)
+	}
+	mu.Unlock()
+}
+
+// TestAnsweringAKeptDialogAsksTheDaemonFirst: the answer says so before
+// it goes, under the daemon's name; when another client got there first
+// nothing is sent; when the send fails the claim is put back.
+func TestAnsweringAKeptDialogAsksTheDaemonFirst(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	w, k := newKeptSession(t, &OfferRecord{})
+	defer k.Close()
+	live := keptDialog(t, "dialog:4", time.Now(), someBox, -4242, "Yes", "No")
+	live.Recorded = false
+	k.RelayRaw(t, live)
+
+	if err := w.Answer(ctx, w.Dialogs()[0], "No"); err != nil {
+		t.Fatal(err)
+	}
+	if got := k.Asked(); len(got) != 1 || got[0] != "dialog:4 answered" {
+		t.Errorf("the daemon was asked %q", got)
+	}
+	if r := sentReplies(k); len(r) != 1 || r[0].Data.ChatChannel != -4242 || r[0].Data.ButtonIndex != 1 {
+		t.Errorf("sent %+v", r)
+	}
+	if n := len(w.Dialogs()); n != 0 {
+		t.Errorf("%d listed after answering", n)
+	}
+
+	// Somebody else first.
+	k.answer = func(key string) (bool, *Handled) {
+		return false, &Handled{Key: key, How: "answered", By: "slbotd", At: time.Now()}
+	}
+	live = keptDialog(t, "dialog:5", time.Now(), someBox, -4243, "Yes")
+	live.Recorded = false
+	k.RelayRaw(t, live)
+	err := w.Answer(ctx, w.Dialogs()[0], "Yes")
+	var already *AnsweredError
+	if !errors.As(err, &already) || !strings.Contains(err.Error(), "the dialog from [Object] Example Box") {
+		t.Fatalf("answered %v, want to be told another client got there first", err)
+	}
+	if n := len(sentReplies(k)); n != 1 {
+		t.Errorf("%d replies went out, want only the first", n)
+	}
+	if n := len(w.Dialogs()); n != 0 {
+		t.Errorf("%d listed after the daemon said it was answered", n)
+	}
+
+	// The send fails.
+	k.answer = nil
+	live = keptDialog(t, "dialog:6", time.Now(), someBox, -4244, "Yes")
+	live.Recorded = false
+	k.RelayRaw(t, live)
+	k.fakeBackend.FailSends(errors.New("the circuit is down"))
+	if err := w.Answer(ctx, w.Dialogs()[0], "Yes"); err == nil {
+		t.Fatal("an answer that could not be sent was reported as sent")
+	}
+	k.mu.Lock()
+	undone := append([]string(nil), k.undone...)
+	k.mu.Unlock()
+	if len(undone) != 1 || undone[0] != "dialog:6" {
+		t.Errorf("put back %q, want the dialog", undone)
+	}
+	if n := len(w.Dialogs()); n != 1 {
+		t.Errorf("%d listed after a failed answer, want it still waiting", n)
+	}
+}
+
+// TestADialogAnsweredElsewhereLeavesTheListAndIsSaid: the daemon's notice
+// drops a dialog, and a text box is called one.
+func TestADialogAnsweredElsewhereLeavesTheListAndIsSaid(t *testing.T) {
+	t.Parallel()
+	w, k := newKeptSession(t, &OfferRecord{},
+		keptDialog(t, "dialog:7", time.Now(), someBox, 1, "Yes"),
+		keptDialog(t, "dialog:8", time.Now(), someBox, 2, TextBoxToken))
+	defer k.Close()
+	var told []Handled
+	var mu sync.Mutex
+	w.mu.Lock()
+	w.OnHandled = func(h Handled) {
+		mu.Lock()
+		told = append(told, h)
+		mu.Unlock()
+	}
+	w.mu.Unlock()
+
+	k.Tell(t, &Handled{Key: "dialog:7", How: "answered", By: "slsh", At: time.Now()})
+	k.Tell(t, &Handled{Key: "dialog:8", How: "answered", By: "slsh", At: time.Now()})
+	if n := len(w.Dialogs()); n != 0 {
+		t.Errorf("%d dialogs still listed after another client answered them", n)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(told) != 2 || told[0].What != "the dialog from [Object] Example Box" ||
+		told[1].What != "the text box from [Object] Example Box" {
+		t.Errorf("told %+v", told)
+	}
+}

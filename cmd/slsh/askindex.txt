@@ -915,7 +915,7 @@ waiting:intro	waiting	intro		`waiting` lists everything that wants an answer, nu
 waiting:example:1	waiting	example		waiting
 waiting:option:-a, --all	waiting	option	-a, --all	Include the things `ignore` has set aside.  Without it they are not\nlisted and not counted at the prompt, which is what `ignore` is for.\nIf everything waiting has been ignored, the listing says so and points\nat `-a`.
 waiting:section:The number belongs to the thing	waiting	section	The number belongs to the thing	A number is handed out when a thing is first seen and kept until it\ngoes, so a number on the screen still means the same thing after\nsomething else has been answered.  Numbering by position looks\nidentical until the moment it matters -- answer the first of two and\nthe second becomes 1, and the `answer 2` already decided on is now\neither an error or, worse, something else.  The list can therefore\nlook sparse: the thing that was 2 is still 2.  When nothing is left\nwaiting the numbers start again at one.\n\nEvery kind leaves the listing as it is answered, whichever command\nanswered it, so the count at the prompt falls by one.
-waiting:section:What the listing is a record of	waiting	section	What the listing is a record of	Everything this shell has seen arrive, and -- through slgod -- the\noffers that arrived before it attached.\n\nslgod keeps five of the seven kinds whether or not any client is\nattached: teleports, requests for a teleport, items, friendship and\ngroup invitations.  A shell is handed whatever of those is still\nwaiting when it attaches, and they are listed with the rest, marked\n`(from before this shell)` because nobody saw them arrive.  Starting a\nshell says how many there are.\n\nDialogs and permission requests are not kept.  One raised before this\nshell attached is not known here; it is waiting in the world, and a\nviewer would show it.\n\nNor are they listed for ever.  A dialog or a permission request nobody\nhas answered leaves the listing after an hour, and no more than 32 of\neach are listed: when another arrives, the oldest goes.  A line says so\nwhen one goes:\n\n    12:03:04 * the dialog from [Object] Example Box was forgotten after 1h unanswered by this session -- it is no longer waiting\n\nThat answers nothing.  The script that asked for permission is still\nwaiting for an answer, and a dialog expires where it was raised.\n\nSo an empty listing says what it is an account of, rather than\n`nothing waiting` alone, which reads as an answer:\n\n    nothing waiting -- slgod has kept every offer, teleport and invitation\n    made to this avatar since 09:14 and holds none unanswered; a script's\n    dialog or permission request from before this shell attached is not kept\n\nslgod's record starts when it logged the avatar in, and keeps the\nhundred most recent; when it has had to drop older ones, the line says\nhow many.  Against a slgod too old to keep a record it says anything\noffered before the shell attached is not known here, and a shell that\nlogged in with `--direct` has seen everything since its own login.
+waiting:section:What the listing is a record of	waiting	section	What the listing is a record of	Everything this shell has seen arrive, and -- through slgod -- the\noffers that arrived before it attached.\n\nslgod keeps six of the seven kinds whether or not any client is\nattached: teleports, requests for a teleport, items (an object's give\ntoo), friendship, group invitations, and a script's dialogs and text\nboxes.  A shell is handed whatever of those is still\nwaiting when it attaches, and they are listed with the rest, marked\n`(from before this shell)` because nobody saw them arrive.  Starting a\nshell says how many there are.\n\nPermission requests are not kept.  One raised before this shell\nattached is not known here; it is waiting in the world, and a viewer\nwould show it.\n\nNor are they listed for ever.  A dialog or a permission request nobody\nhas answered leaves the listing after an hour, and no more than 32 of\neach are listed: when another arrives, the oldest goes.  slgod's record\nof dialogs follows the same two numbers.  A line says so when one goes:\n\n    12:03:04 * the dialog from [Object] Example Box was forgotten after 1h unanswered by this session -- it is no longer waiting\n\nThat answers nothing.  The script that asked for permission is still\nwaiting for an answer, and a dialog expires where it was raised.\n\nSo an empty listing says what it is an account of, rather than\n`nothing waiting` alone, which reads as an answer:\n\n    nothing waiting -- slgod has kept every offer, teleport and invitation\n    made to this avatar since 09:14 and holds none unanswered; a script's\n    permission request from before this shell attached is not kept\n\nslgod's record starts when it logged the avatar in, and keeps the\nhundred most recent; when it has had to drop older ones, the line says\nhow many.  Against a slgod too old to keep a record it says anything\noffered before the shell attached is not known here, and a shell that\nlogged in with `--direct` has seen everything since its own login.
 waiting:section:Another shell, or slbotd, on the same avatar	waiting	section	Another shell, or slbotd, on the same avatar	Every client attached to the avatar is handed the same offers, and the\nfirst to answer one is the only one that does.  When another client\nanswers something this shell is listing, it leaves the listing at once\nand a line says so:\n\n    12:03:04 * the teleport Example Resident offered was accepted by slbotd -- it is no longer waiting\n\nAnswering one that another client answered a moment before is refused\nrather than sent twice, and says who answered it and how.
 waiting:section:Examples	waiting	section	Examples	    waiting\n    waiting -a\n\nSee also: `answer`, `no`, `ignore`, `offers` for the older way to the\nfriendship and inventory offers, which appear here too, and `tp` for\ngoing somewhere without waiting to be invited.
 waiting:example:2	waiting	example	Examples	waiting -a
@@ -1448,7 +1448,7 @@ bottom	609,344,1
 bought	576
 bound	147
 bow	30
-box	1*2,36*2,5*2,1,1*2,45,75*3,42,245,78,228*2,19,8,18,42*2,67*3,4
+box	1*2,36*2,5*2,1,1*2,45,75*3,42,245,78,228*2,19,8,18,42*2,67*3,4*2
 bracket	87,706,34,103,38
 brass	155,1,55,1,10,258,1,63
 break	93*2,801,37
@@ -1838,7 +1838,7 @@ finish	20,633
 fir	47,812
 first	1,5,11,1*5,12,21,13,23,4,15,3,4,2,6,12,9,2,7,2,6,15,8,5,17,11,2,30,11,4,18,30*3,1*2,6,27,1,4,4,1,5,3,17,17,6,4,16*2,26,3,5,13,2,15,8,4*2,5,2,2*3,27,1,2,1,6,5,8,5,2,18,1,2,9,31,22,4,2*2,7,11,9,10,16*2,2,21,31*2,9,15,3,6,3,2,4,4,10,1,7,3,16,1,12,5,1,5,16,1,30*2,2,4,10,1*2,30,3,1,3,4*3,3,1,2
 fit	441,479
-fiv	15,150,128,112*2,103,221,18,96,1,34,4,33
+fiv	15,150,128,112*2,103,221,18,96,1,34,4
 fix	388,17,66,15
 flag	16*3,28,7,113,9*2,26,90,39,34,3,5,51,1*2,14*3,6,68*2,84*4,2,6,112,13,1,88*3,13,1,13,19,26*2,15,69
 flat	402,523,7
@@ -1850,7 +1850,7 @@ floater	578
 flood	262
 fly	568,1,351
 folder	4*3,3,23,8*2,31,7,1*2,1*4,2*4,1*4,32*5,2,1,12,3,1*2,1,5,1,2*3,3,4,3*2,6,8,15,2*4,1*2,20,1*2,3*4,3,4,1*2,3,5*3,13*4,9,2*2,4*4,3,45,3,26,17,1*3,50*2,1*4,3,1,1*4,1*2,2,1*4,69*2,1*8,2*2,15*3,1*3,2,1,1*13,19*3,4,86*3,6,16*2,14,1,3,39,1*2,7,1*3,11,6,57,15,26,1*3,3*3,2,2,127,4,1,2*5,22*3,4*3
-follow	18,2,10,17,29*3,43*2,38*3,8,6,2,45*3,27*3,5,4*3,69,17,4,21,35*3,51,18,4,30*2,4*2,1,105*3,47,32,12*2,2,6*3,9,23,117,50,41*2
+follow	18,2,10,17,29*3,43*2,38*3,8,6,2,45*3,27*3,5,4*3,69,17,4,21,35*3,51,18,4,30*2,4*2,1,105*3,47,32,12*2,2,6*3,9,23,117,50,4,37*2
 font	451*2,278*2,2*2,1
 foot	547,1,28
 forbid	115
@@ -1899,7 +1899,7 @@ gestur	23
 get	51,3,15*2,7,4,35,56,9,23,32,1*2,1,3,2*3,1,1,1,13,19,40,31,31*2,26,1,3,67,7,27,94,21*2,14,101,23,10*2,1,3,10*2,18,83,15,17,7,3,2,27*2
 gif	625
 gift	0,120,126,315,21
-giv	0,15,6,9,76,6,1,2,4,1,10,14,3,4,6,8*3,2,42,8,1,10,18*2,1*3,1,4*2,1,1*2,2,31,6,18,6,26,16,11,9,13,8,5,71,62,20,3,4,4*2,13,1*2,6,4,8,3,13,1,43,7,92,26,18,7,4,11,35*3,66,40,9
+giv	0,15,6,9,76,6,1,2,4,1,10,14,3,4,6,8*3,2,42,8,1,10,18*2,1*3,1,4*2,1,1*2,2,31,6,18,6,26,16,11,9,13,8,5,71,62,20,3,4,4*2,13,1*2,6,4,8,3,13,1,43,7,92,26,18,7,4,11,35*3,54,12,40,9
 given	153,11,1,2,20,51,13,57,3,29,4,14,8,39,59,14,20,19,3,3,14,50,7,6,3*2,6,35,26,8,3,6,8,13,32,37,49,4*2,19,12*2,17*2,11,6,30,5,20,18
 glanc	167,409
 glob	695
@@ -2281,9 +2281,9 @@ nowher	4,214,22,7,74,17,11,37,14,52,17,1,3,10,13,81,301
 nquark	321,1
 nther	321
 null	344,4
-number	1,3,33,1*5,4*2,2*2,7*2,36,18,1*2,3*2,16,40,18,4,12,29*3,19*3,61,3*3,6*2,11,12,4,6,7,29*2,2*3,17,22,24*2,1,5*4,2,10,1,1,2*2,10,23,23,3*2,2*3,1,2*3,18,3*2,11,8*2,6*2,26,6,3*2,7,35*2,11*2,7*2,53,13,51*2,3,28*4,18,8,8*2,2*2,5*3,11,9*5,24*2,3*5,6*2,20,1*2,6*2,9*2,5,1,3,2*3
+number	1,3,33,1*5,4*2,2*2,7*2,36,18,1*2,3*2,16,40,18,4,12,29*3,19*3,61,3*3,6*2,11,12,4,6,7,29*2,2*3,17,22,24*2,1,5*4,2,10,1,1,2*2,10,23,23,3*2,2*3,1,2*3,18,3*2,11,8*2,6*2,26,6,3*2,7,35*2,11*2,7*2,53,13,51*2,3,28*4,18,8,8*2,2*2,5*3,11,9*5,24*2,3*5,1,5*2,20,1*2,6*2,9*2,5,1,3,2*3
 obey	93,392,476
-object	4*3,4,2,28*2,12*2,1*7,2*2,1*3,1,9,4*3,1*6,3*2,4*2,2,1,4,10,20,3,2,9*2,1*3,4,3,2,7,1,5*3,1*6,2*6,1*4,3*2,1*2,1*3,6*4,1,1*3,4,1,2,13,13,3*3,1*7,2*4,2,1,2*2,6*2,1*2,22*2,5,1,1,1,4,2,23,16,11,38,11*3,1*3,3*2,1*2,1*2,19,1*7,3,1*3,1,12,1,1,2*2,3*3,5*4,1*2,71,1,1*3,1*9,3*4,1,2,2*2,2,1,1,1*8,2*3,1,1,3,5*2,8*2,3,2*3,1,1*6,20*3,1*3,1,1,2*2,1,2*3,1,1,9*2,21,4*2,6,1*5,6,1,2,1,2*2,1*7,1,2,1*2,1,1*2,31,12*2,1*2,3,2*2,13*2,1*3,4*3,3,1,2,6*6,12,5*2,3,5,29*4,2,4,1*3,2,1,1,3,2*3,1,14,6*3,1*7,2,1,2*5,1*2,3,3*5,5*3,1*5,2,1*2,1*3,2,2*2,1*11,2*3,1,1,1*4,1*3,1*5,1,1,1,6*8,3,13*5,1*2,1*2,3*2,1*4,2,3,6*3,3,21,5,5,1*3,3*3,1*5,1*2,15,5*3,24,1*2,1,1*2,2,1*2,2,1*3,1,6,3,2,4,2,1*2,2*3,1*3,1*3,1*2,2*2
+object	4*3,4,2,28*2,12*2,1*7,2*2,1*3,1,9,4*3,1*6,3*2,4*2,2,1,4,10,20,3,2,9*2,1*3,4,3,2,7,1,5*3,1*6,2*6,1*4,3*2,1*2,1*3,6*4,1,1*3,4,1,2,13,13,3*3,1*7,2*4,2,1,2*2,6*2,1*2,22*2,5,1,1,1,4,2,23,16,11,38,11*3,1*3,3*2,1*2,1*2,19,1*7,3,1*3,1,12,1,1,2*2,3*3,5*4,1*2,71,1,1*3,1*9,3*4,1,2,2*2,2,1,1,1*8,2*3,1,1,3,5*2,8*2,3,2*3,1,1*6,20*3,1*3,1,1,2*2,1,2*3,1,1,9*2,21,4*2,6,1*5,6,1,2,1,2*2,1*7,1,2,1*2,1,1*2,31,12*2,1*2,3,2*2,13*2,1*3,4*3,3,1,2,6*6,12,5*2,3,5,29*4,2,4,1*3,2,1,1,3,2*3,1,14,6*3,1*7,2,1,2*5,1*2,3,3*5,5*3,1*5,2,1*2,1*3,2,2*2,1*11,2*3,1,1,1*4,1*3,1*5,1,1,1,6*8,3,13*5,1*2,1*2,3*2,1*4,2,3,6*3,3,21,5,5,1*3,3*3,1*5,1*2,15*2,5*3,24,1*2,1,1*2,2,1*2,2,1*3,1,6,3,2,4,2,1*2,2*3,1*3,1*3,1*2,2*2
 objectupdat	796,142,4,1
 obscurely	366
 obstacl	929
@@ -2489,7 +2489,7 @@ recently	396,89
 recognis	76,81,88,9,359,99
 reconnect	20,1
 reconnection	21,774
-record	7*2,157,157,100,1*2,141,84,31,6,46*3,185*3,35,24*3,1*2
+record	7*2,157,157,100,1*2,141,84,31,6,46*3,185*4,35,24*3,1*2
 recoverabl	90
 red	453,379,11*2
 redirect	93,347,1,203,52,34,37
@@ -2569,7 +2569,7 @@ saf	362,111,287
 safety	183
 said	45*3,45*3,1,18,36,8,48,5,52,46,6,18*2,20,2,28,1,35,59,35,15,53,10,8,2,19,2,54,43*2,16,18,12,9,28,47,45,58,15
 sal	575
-sam	1*3,3,2,2,10*2,12,3,12,2,8,7,3*3,4,7,11*2,4,2,13,2,7,6*2,3*2,1,8,9,5,6,4,14,39,7*4,1*2,10,11,6,9,7,1,11,12,2,6,11*2,24*2,11,3,2*2,2*4,2*2,1,13*2,8,9*3,5,4*2,4,8*2,2,4*2,35,1,10*2,7,5,5*2,2*2,2,3*2,29,3,2*2,7,17,1,14,16,4,8,9,1*2,9,11,2*2,4,31,3,4*2,20,5,7,11,14,4,14,1,1,3*3,9*2,4,16,7,7,3,12,7*2,20*2,10,1,22,4,8,12,5*5,1*2,2,4,14,8,7,2*2,14,1,14,2,2,1*4,2*2,4*2,3*3,10,5,5
+sam	1*3,3,2,2,10*2,12,3,12,2,8,7,3*3,4,7,11*2,4,2,13,2,7,6*2,3*2,1,8,9,5,6,4,14,39,7*4,1*2,10,11,6,9,7,1,11,12,2,6,11*2,24*2,11,3,2*2,2*4,2*2,1,13*2,8,9*3,5,4*2,4,8*2,2,4*2,35,1,10*2,7,5,5*2,2*2,2,3*2,29,3,2*2,7,17,1,14,16,4,8,9,1*2,9,11,2*2,4,31,3,4*2,20,5,7,11,14,4,14,1,1,3*3,9*2,4,16,7,7,3,12,7*2,20*2,10,1,22,4,8,12,5*5,1*2,2,4,14,8,7,1,1*2,14,1,14,2,2,1*4,2*2,4*2,3*3,10,5,5
 sampl	859
 sat	757*2
 sav	65,4*2,7,78,4,77*2,1,91,190,7,181,1*2,1,1,1,1*2,1,1
@@ -2580,7 +2580,7 @@ scan	543
 scatter	446
 screen	65,28*2,348*6,10,86,20,19,2,136,16*2,59,37,80,1,4*2,3,53
 screenful	441*2
-script	38*2,12,1*3,11,6*2,1*6,1,3,77,1,1,2*3,1,16,32,8,12,1,1,20,13*2,46,84,18*5,1,1*3,1,4*2,1*2,9*2,62,31*3,1*4,2*2,1,1,2*4,1*2,2*2,3,33,6,1,16,2,52,5,16*5,16,3,3*2,1*2,10,12*2,1,2*2,1,1,1,5,1*5,1*2,21*3,1*2,1,3*2,1,1*9,28,9*4,1*9,3*5,1,1*7,1,11*4,1*6,3,1*4,2,19,22,10,1,2,1,48,4*2,15*5,31*9
+script	38*2,12,1*3,11,6*2,1*6,1,3,77,1,1,2*3,1,16,32,8,12,1,1,20,13*2,46,84,18*5,1,1*3,1,4*2,1*2,9*2,62,31*3,1*4,2*2,1,1,2*4,1*2,2*2,3,33,6,1,16,2,52,5,16*5,16,3,3*2,1*2,10,12*2,1,2*2,1,1,1,5,1*5,1*2,21*3,1*2,1,3*2,1,1*9,28,9*4,1*9,3*5,1,1*7,1,11*4,1*6,3,1*4,2,19,22,10,1,2,1,48,4*3,15*5,31*9
 scrollback	441
 sculpt	164
 sea	471*5
@@ -2649,7 +2649,7 @@ sinc	1,3*2,14,33,25,14*2,1,2,28,7,4,1,9,9,6,36,13,12,27,2,7,8,17,6,25,1,12,34,8,
 singl	141,30,108,14,61,25,127,165,43,7,141,33,4,7*2
 sit	18,18,106,51,330,229*4,1*5,1,1,1,1*5,1*2,2*6,1,2*6,1,1,8,1*2,2,1*3,2*2,47,104,26*3,3*12,18,1
 situation	20
-six	757,19,11*2,39,18*2,88
+six	757,19,11*2,39,18*2,71,17
 sixteen	449,2*2
 sixty	446,61
 siz	241,210,174,12,94,13
@@ -2666,7 +2666,7 @@ slbench	51*2
 slbotd	6,118,169,72,551*2,36
 sleep	414*2,8,324
 slgo	258,63,189,220*2
-slgod	6,39,79,134,107,145,19,34*4,1,14,8,1*2,143,173,3,9*5
+slgod	6,39,79,134,107,145,19,34*4,1,14,8,1*2,143,173,3,9*6
 slid	835,26
 slider	861
 slip	498
@@ -2788,7 +2788,7 @@ terraform	378
 terrain	378,1*3
 test	182,15,124,410,129
 testvill	379,351,10,17,199
-text	37*3,5*2,1,1*3,17,7,1*3,20*2,4,3,11*2,63*2,3,23,18*2,1*2,7,33,7*3,2,43,14,64,28,13,14,1*4,88,14,11,61,4,5,4,85,4,94,16*3,84*3,60
+text	37*3,5*2,1,1*3,17,7,1*3,20*2,4,3,11*2,63*2,3,23,18*2,1*2,7,33,7*3,2,43,14,64,28,13,14,1*4,88,14,11,61,4,5,4,85,4,94,16*3,84*3,4,56
 textur	69*2,7,78,10*2,3,68*2,1*5,1,1,1*2,1*3,1*2,1*2,2,54,108,111,107*2,1*2,4,10,3,20,21,146*2,1*2,1,2,12*4,1,1,5,1,7,1*6,2
 thank	583,1,5,2
 their	555,63
@@ -2856,7 +2856,7 @@ tweak	731
 twelv	51*2,90
 twenty	144,3,299*2,9,28,24*2
 twic	131,11,3,2,6*2,127,62,15,5,89,3,24,86,22,140,69,66,17,7,31,33*2,27
-two	1*3,4*2,13*2,2,44,1,4,7,5*4,10,15,7,3,5,4,3,3,10,1,2,9,1,3,14*2,16,17,24,13,4,2*2,3*3,4,6,1,1,17*2,1*3,13,17*3,11,2*2,5,12,4*3,2*3,3*3,1,4,4,4,13,4*3,12,14,1,2,38,2,4,5,12,1,1*3,2,5*2,20*2,9*4,16,32,7,2,12*3,33,4,6,6,7*2,19,6,3,1,10,7*2,15*2,1*2,12*2,6,14,4,10,4,3*4,15,5,29,6*2,9,5,14,10,3,14,4,1*2,16*2,5,1,1,14,12,3,6*3,9,3,17*2,1,11,13*2,1,1*2
+two	1*3,4*2,13*2,2,44,1,4,7,5*4,10,15,7,3,5,4,3,3,10,1,2,9,1,3,14*2,16,17,24,13,4,2*2,3*3,4,6,1,1,17*2,1*3,13,17*3,11,2*2,5,12,4*3,2*3,3*3,1,4,4,4,13,4*3,12,14,1,2,38,2,4,5,12,1,1*3,2,5*2,20*2,9*4,16,32,7,2,12*3,33,4,6,6,7*2,19,6,3,1,10,7*2,15*2,1*2,12*2,6,14,4,10,4,3*4,15,5,29,6*2,9,5,14,10,3,14,4,1*2,16*2,5,1,1,14,12,3,1,5*3,9,3,17*2,1,11,13*2,1,1*2
 txt	44*2,4,1,393,2,80,1,181,1,3
 typ	1,3,10,28,2,1*3,2,29,4,6,3*3,1,1,2*2,28,36,7*2,1,66,14,9,7,16,7,1*4,3,1,21,7,6,1,20,1,20*2,21*2,2,2*2,1,22,1*3,5*4,3*3,16,3,12,30,25,36,11,9,14,16,2,7,10,2,3*3,33,2*2,16,37*2,6,5,4*2,6,40,57*2,2*2,47,10*2,1,3*2,1,18,5*2,18,38
 typo	279,49*2,29,486

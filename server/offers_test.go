@@ -16,16 +16,20 @@ import (
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 // Invented, like everybody in this tree who is not Quark.
 var (
-	aLurer   = msg.MustParseUUID("41497e57-7e57-c0de-8e40-535e4340746b")
-	aGiver   = msg.MustParseUUID("9bf57e57-7e57-c0de-acac-5c71d05f9c65")
-	aGroup   = msg.MustParseUUID("e86b7e57-7e57-c0de-7369-7fbb4c3ea183")
-	aLure    = msg.MustParseUUID("0d817e57-7e57-c0de-3eb0-2dd03720cbb5")
-	aTxn     = msg.MustParseUUID("77c67e57-7e57-c0de-0877-a368e2c13bb1")
-	aGroupTx = msg.MustParseUUID("366d7e57-7e57-c0de-65d1-3e37922ac4d3")
+	aLurer     = msg.MustParseUUID("41497e57-7e57-c0de-8e40-535e4340746b")
+	aGiver     = msg.MustParseUUID("9bf57e57-7e57-c0de-acac-5c71d05f9c65")
+	aGroup     = msg.MustParseUUID("e86b7e57-7e57-c0de-7369-7fbb4c3ea183")
+	aLure      = msg.MustParseUUID("0d817e57-7e57-c0de-3eb0-2dd03720cbb5")
+	aTxn       = msg.MustParseUUID("77c67e57-7e57-c0de-0877-a368e2c13bb1")
+	aGroupTx   = msg.MustParseUUID("366d7e57-7e57-c0de-65d1-3e37922ac4d3")
+	aBox       = msg.MustParseUUID("086b7e57-7e57-c0de-b808-846c298934cd")
+	anotherBox = msg.MustParseUUID("0e927e57-7e57-c0de-0223-666d3534b8dc")
+	aTaskTxn   = msg.MustParseUUID("6b0e7e57-7e57-c0de-3ce7-0da3d8e20ee2")
 )
 
 // instantMessage is one the way the simulator sends it.
@@ -37,6 +41,30 @@ func instantMessage(from msg.UUID, name string, dialog uint8, id msg.UUID, text 
 	m.MessageBlock.FromAgentName = append([]byte(name), 0)
 	m.MessageBlock.Message = append([]byte(text), 0)
 	m.MessageBlock.BinaryBucket = bucket
+	return m
+}
+
+// scriptDialog is one the way the simulator sends it.
+func scriptDialog(object msg.UUID, channel int32, text string, buttons ...string) *msg.ScriptDialog {
+	m := &msg.ScriptDialog{}
+	m.Data.ObjectID = object
+	m.Data.FirstName = []byte("Example\x00")
+	m.Data.LastName = []byte("Resident\x00")
+	m.Data.ObjectName = []byte("Example Box\x00")
+	m.Data.Message = append([]byte(text), 0)
+	m.Data.ChatChannel = channel
+	for _, b := range buttons {
+		m.Buttons = append(m.Buttons, msg.ScriptDialog_Buttons{ButtonLabel: append([]byte(b), 0)})
+	}
+	return m
+}
+
+// scriptReply is the answer this avatar sends to a dialog.
+func scriptReply(object msg.UUID, channel int32, label string) *msg.ScriptDialogReply {
+	m := &msg.ScriptDialogReply{}
+	m.Data.ObjectID = object
+	m.Data.ChatChannel = channel
+	m.Data.ButtonLabel = append([]byte(label), 0)
 	return m
 }
 
@@ -383,5 +411,196 @@ func TestStartAgentWatchesWhatTheAvatarSends(t *testing.T) {
 	}
 	if n := len(h.offerLog().snapshot().GetMessages()); n != 0 {
 		t.Errorf("the record still holds %d after the avatar took the lure", n)
+	}
+}
+
+// TestAnObjectsGiveIsKeptAsAnItemIs: an object handing over an item is
+// dialog 9, answered by 10 or 11 quoting the transaction, and waits on a
+// person exactly as an avatar's offer does.  Its bucket need only name the
+// asset type, where an avatar's names the item as well.
+func TestAnObjectsGiveIsKeptAsAnItemIs(t *testing.T) {
+	t.Parallel()
+	h := &Hosted{Name: "example", clients: map[*Client]bool{}}
+	c, _ := imClient(h)
+
+	give := instantMessage(aGiver, "Example Box", imTaskInventoryOffered, aTaskTxn, "'a lantern'  (Example Place)", []byte{6})
+	h.relay(arrived(give, 1))
+	if m := <-c.out; m.GetMessage().GetOffer() != offerKey(offerInventory, aTaskTxn) {
+		t.Errorf("relayed with offer %q", m.GetMessage().GetOffer())
+	}
+	// Too short to say what is given: no client would list it.
+	h.noteOffer(arrived(instantMessage(aGiver, "Example Box", imTaskInventoryOffered, aLure, "", nil), 2))
+	if n := len(h.offerLog().snapshot().GetMessages()); n != 1 {
+		t.Fatalf("kept %d, want the one give and not the one without a bucket", n)
+	}
+
+	h.noteSent(arrived(instantMessage(aGiver, "", imTaskInventoryAccepted, aTaskTxn, "", itemBucket(aBox)), 0))
+	if n := len(h.offerLog().snapshot().GetMessages()); n != 0 {
+		t.Errorf("accepted, and %d still kept", n)
+	}
+	if n := (<-c.out).GetHandled(); n.GetOffer() != offerKey(offerInventory, aTaskTxn) || n.GetHow() != "accepted" {
+		t.Errorf("told %v", n)
+	}
+
+	h.noteOffer(arrived(give, 3))
+	h.noteSent(arrived(instantMessage(aGiver, "", imTaskInventoryDeclined, aTaskTxn, "", nil), 0))
+	if n := len(h.offerLog().snapshot().GetMessages()); n != 0 {
+		t.Errorf("declined, and %d still kept", n)
+	}
+	if n := (<-c.out).GetHandled(); n.GetHow() != "declined" {
+		t.Errorf("told %v", n)
+	}
+}
+
+// TestAScriptsDialogIsKeptAsTheMessageItArrivedIn: a dialog is handed
+// back as a ScriptDialog and not as an instant message, a retransmission
+// is the same dialog, and a second from the same object is another.
+func TestAScriptsDialogIsKeptAsTheMessageItArrivedIn(t *testing.T) {
+	t.Parallel()
+	h := &Hosted{Name: "example", clients: map[*Client]bool{}}
+
+	first := scriptDialog(aBox, -4242, "Pick one", "Yes", "No")
+	h.noteOffer(arrived(first, 20))
+	h.noteOffer(arrived(first, 20))
+	h.noteOffer(arrived(scriptDialog(aBox, -4242, "Pick again", "Yes", "No"), 21))
+	// A permission request is not kept.
+	h.noteOffer(arrived(&msg.ScriptQuestion{}, 22))
+
+	got := h.offerLog().snapshot().GetMessages()
+	if len(got) != 2 {
+		t.Fatalf("kept %d, want the two dialogs and the retransmission once", len(got))
+	}
+	for _, g := range got {
+		if g.GetId() != uint32(msg.IDOf(&msg.ScriptDialog{})) || g.GetName() != "ScriptDialog" || !g.GetRecorded() {
+			t.Errorf("handed back as id %d %q recorded=%v", g.GetId(), g.GetName(), g.GetRecorded())
+		}
+	}
+	var m msg.ScriptDialog
+	if err := m.Decode(got[0].GetBody()); err != nil || m.Data.ObjectID != aBox || len(m.Buttons) != 2 {
+		t.Errorf("the kept body does not read back as the dialog: %v", err)
+	}
+	if got[0].GetOffer() == got[1].GetOffer() || got[0].GetOffer() == "" {
+		t.Errorf("keys %q and %q, want two that differ", got[0].GetOffer(), got[1].GetOffer())
+	}
+}
+
+// TestADialogUnderAReusedSequenceNumberIsAnother: a new circuit numbers
+// its packets from the start again, so a later dialog from the same
+// object can arrive under a kept one's number; it is another dialog.
+func TestADialogUnderAReusedSequenceNumberIsAnother(t *testing.T) {
+	t.Parallel()
+	h := &Hosted{Name: "example", clients: map[*Client]bool{}}
+
+	h.noteOffer(arrived(scriptDialog(aBox, -4242, "Pick one", "Yes", "No"), 20))
+	h.noteOffer(arrived(scriptDialog(aBox, -4242, "Pick from the menu", "Back"), 20))
+
+	if got := h.offerLog().snapshot().GetMessages(); len(got) != 2 {
+		t.Fatalf("kept %d, want both dialogs: the second is not a retransmission of the first", len(got))
+	}
+}
+
+// TestAnAnswerTakesOutTheDialogsOfThatObjectOnThatChannel: a reply names
+// the object and the channel and no dialog, so every dialog of that pair
+// goes, and clients are told for each.
+func TestAnAnswerTakesOutTheDialogsOfThatObjectOnThatChannel(t *testing.T) {
+	t.Parallel()
+	h := &Hosted{Name: "example", clients: map[*Client]bool{}}
+	c, _ := imClient(h)
+	c.setSubs(&pb.Subscribe{Add: []string{"ScriptDialog"}})
+
+	h.noteOffer(arrived(scriptDialog(aBox, -4242, "one", "Yes"), 1))
+	h.noteOffer(arrived(scriptDialog(aBox, -4242, "two", "Yes"), 2))
+	h.noteOffer(arrived(scriptDialog(aBox, 7, "other channel", "Yes"), 3))
+	h.noteOffer(arrived(scriptDialog(anotherBox, -4242, "other object", "Yes"), 4))
+	h.noteOffer(arrived(instantMessage(aLurer, "Example Lurer", imLureUser, aLure, "", nil), 5))
+
+	h.noteSent(arrived(scriptReply(aBox, -4242, "Yes"), 0))
+
+	rec := h.offerLog().snapshot().GetMessages()
+	if len(rec) != 3 {
+		t.Fatalf("kept %d, want the other channel's, the other object's and the lure", len(rec))
+	}
+	for range 2 {
+		select {
+		case p := <-c.out:
+			if n := p.GetHandled(); n == nil || n.GetHow() != "answered" {
+				t.Errorf("told %v, want answered", p)
+			}
+		default:
+			t.Fatal("the client was not told of every dialog taken out")
+		}
+	}
+	select {
+	case p := <-c.out:
+		t.Errorf("told of a third: %v", p)
+	default:
+	}
+}
+
+// TestADialogWaitsForAnAnswerForAnHourAndNoMoreThanThirtyTwo: sl's rule for
+// its own list, applied to the record, which leaves the offers alone.
+func TestADialogWaitsForAnAnswerForAnHourAndNoMoreThanThirtyTwo(t *testing.T) {
+	t.Parallel()
+	h := &Hosted{Name: "example", clients: map[*Client]bool{}}
+
+	old := arrived(scriptDialog(aBox, 1, "old", "Yes"), 1)
+	old.At = time.Now().Add(-dialogKeptFor - time.Minute)
+	h.noteOffer(old)
+	if n := len(h.offerLog().snapshot().GetMessages()); n != 0 {
+		t.Errorf("a dialog from over an hour ago is kept: %d", n)
+	}
+
+	// Aged while it was kept.
+	aging := arrived(scriptDialog(aBox, 2, "aging", "Yes"), 2)
+	aging.At = time.Now().Add(-dialogKeptFor + time.Minute)
+	h.noteOffer(aging)
+	if n := len(h.offerLog().snapshot().GetMessages()); n != 1 {
+		t.Fatalf("kept %d, want the dialog from 59 minutes ago", n)
+	}
+	h.offerLog().mu.Lock()
+	h.offerLog().kept[0].at = time.Now().Add(-dialogKeptFor)
+	h.offerLog().mu.Unlock()
+	if n := len(h.offerLog().snapshot().GetMessages()); n != 0 {
+		t.Errorf("a dialog an hour old is kept: %d", n)
+	}
+
+	h.noteOffer(arrived(instantMessage(aLurer, "Example Lurer", imLureUser, aLure, "", nil), 3))
+	for i := range dialogLimit + 3 {
+		h.noteOffer(arrived(scriptDialog(aBox, int32(i), "many", "Yes"), uint32(100+i)))
+	}
+	rec := h.offerLog().snapshot()
+	var dialogs int
+	var lure bool
+	for _, m := range rec.GetMessages() {
+		if m.GetName() == "ScriptDialog" {
+			dialogs++
+		} else {
+			lure = true
+		}
+	}
+	if dialogs != dialogLimit || !lure {
+		t.Errorf("kept %d dialogs and lure=%v, want %d and the lure", dialogs, lure, dialogLimit)
+	}
+	if rec.GetEvicted() != 0 {
+		t.Errorf("evicted = %d, want dialogs dropped for room left out of it", rec.GetEvicted())
+	}
+	var d msg.ScriptDialog
+	for _, m := range rec.GetMessages() {
+		if m.GetName() == "ScriptDialog" {
+			d.Decode(m.GetBody())
+			break
+		}
+	}
+	if d.Data.ChatChannel != 3 {
+		t.Errorf("the oldest dialog kept is on channel %d, want 3: the oldest go first", d.Data.ChatChannel)
+	}
+}
+
+// TestDialogsAreKeptAsLongAsTheClientKeepsThem: the numbers here are sl's,
+// copied because this package does not import sl outside its tests.
+func TestDialogsAreKeptAsLongAsTheClientKeepsThem(t *testing.T) {
+	if dialogKeptFor != sl.UnansweredFor || dialogLimit != sl.MaxUnanswered {
+		t.Errorf("the record keeps %d dialogs for %v, sl keeps %d for %v",
+			dialogLimit, dialogKeptFor, sl.MaxUnanswered, sl.UnansweredFor)
 	}
 }

@@ -1480,8 +1480,8 @@ type ServerPacket_Granted struct {
 type ServerPacket_Handled struct {
 	// An offer the server was keeping has been dealt with, by this
 	// client or another, and is no longer waiting.  Sent to every
-	// client that subscribed to ImprovedInstantMessage, which is what
-	// every offer arrives in.  See Handled.
+	// client that subscribed to ImprovedInstantMessage or ScriptDialog,
+	// which is what the offers arrive in.  See Handled.
 	Handled *OfferHandled `protobuf:"bytes,7,opt,name=handled,proto3,oneof"`
 }
 
@@ -1580,8 +1580,9 @@ func (x *OfferHandled) GetAt() int64 {
 // stood when a client attached.
 type OfferRecord struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Messages are the offers, each as the ImprovedInstantMessage it
-	// arrived in, oldest first, with offer and recorded set and
+	// Messages are the offers, each as the message it arrived in -- an
+	// ImprovedInstantMessage, or a ScriptDialog for a script's dialog or
+	// text box -- oldest first, with offer and recorded set and
 	// received_at saying when it arrived.  A client reads them exactly as
 	// it reads the ones relayed live, so that nothing about what an offer
 	// is has to be understood on this side of the link.
@@ -1594,7 +1595,9 @@ type OfferRecord struct {
 	// Evicted is how many unanswered offers have been dropped to make
 	// room, oldest first, and limit is how many are kept.  An empty
 	// record with evicted above zero is not the same answer as an empty
-	// one with evicted at zero.
+	// one with evicted at zero.  Dialogs have room of their own, are
+	// dropped for age and for room as a client drops them, and are not
+	// counted here: a client's listing loses nothing it would have kept.
 	Evicted       uint32 `protobuf:"varint,3,opt,name=evicted,proto3" json:"evicted,omitempty"`
 	Limit         uint32 `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2036,9 +2039,9 @@ type Attached struct {
 	// this or relayed after it, and a client reading the record with a
 	// separate call could miss one arriving in between.
 	//
-	// Present only when the attach subscribed to ImprovedInstantMessage,
-	// and absent from a server too old to keep a record -- which a client
-	// should say, since without one it knows only what it saw arrive.
+	// Present only when the attach subscribed to ImprovedInstantMessage
+	// or ScriptDialog, and absent from a server too old to keep a record --
+	// which a client should say, since without one it knows only what it saw arrive.
 	Offers        *OfferRecord `protobuf:"bytes,2,opt,name=offers,proto3" json:"offers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
