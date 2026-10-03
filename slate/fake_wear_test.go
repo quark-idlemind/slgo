@@ -89,7 +89,16 @@ func (g *wearGrid) attached(t *testing.T, item msg.UUID, point int) {
 	}
 }
 
+// dropped removes the attachment worn from item, and tells the session
+// the simulator killed it, which is what Session.TakeOff waits to hear.
+// Why: doc/slsh.md#deleting-straight-after-a-take-off
 func (g *wearGrid) dropped(item msg.UUID) {
+	var kill msg.KillObject
+	defer func() {
+		if len(kill.ObjectData) > 0 {
+			g.f.relay(&kill)
+		}
+	}()
 	g.f.mu.Lock()
 	defer g.f.mu.Unlock()
 	var keep []*sl.Seen
@@ -97,6 +106,7 @@ func (g *wearGrid) dropped(item msg.UUID) {
 	for _, o := range g.f.objects {
 		if o.AttachItem == item {
 			gone[o.Local] = true
+			kill.ObjectData = append(kill.ObjectData, msg.KillObject_ObjectData{ID: o.Local})
 		}
 	}
 	for _, o := range g.f.objects {

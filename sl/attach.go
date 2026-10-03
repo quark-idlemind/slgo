@@ -499,17 +499,47 @@ func (w *Session) dropRezzed(ctx context.Context, o *Object) error {
 	return nil
 }
 
-// TakeOff detaches a worn item back into inventory.
+// TakeOff detaches a worn item back into inventory and returns once the
+// simulator has removed the attachment (its KillObject), so the item can
+// be deleted at once: an AIS delete sent while the grid is still
+// carrying out the detach is sometimes refused with a 500.  An item this
+// session never saw worn has no local id to wait for, and the request is
+// sent and returned from.  A wait that runs out wraps ErrTimeout; the
+// request was sent either way, and the item is no longer recorded as worn.
+// Why: doc/slsh.md#deleting-straight-after-a-take-off
 func (w *Session) TakeOff(ctx context.Context, item msg.UUID) error {
 	m := &msg.DetachAttachmentIntoInv{}
 	m.ObjectData.AgentID = w.me
 	m.ObjectData.ItemID = item
+
+	// The update that described the attachment cleared any earlier kill
+	// of its local id (see handle), so a kill recorded since means it is
+	// already off -- another client took it off -- and there is nothing
+	// to wait for.
+	var local uint32
+	var gone bool
+	w.mu.Lock()
+	a, known := w.attach[item]
+	if known {
+		local = a.Object.Local
+		gone = w.killed[local]
+	}
+	w.mu.Unlock()
+
 	if err := w.Send(ctx, m); err != nil {
 		return err
 	}
 	w.mu.Lock()
 	delete(w.attach, item)
 	w.mu.Unlock()
+	if !known || gone {
+		return nil
+	}
+	if err := w.await(ctx, w.takeOffWait(), "the simulator removing the detached attachment", func() bool {
+		return w.killed[local]
+	}); err != nil {
+		return fmt.Errorf("sl: detach of %s sent, but not seen to finish: %w", item, err)
+	}
 	return nil
 }
 
