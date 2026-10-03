@@ -473,8 +473,5 @@ avatar, and its own children are numbered under it.
 
 **Measured.** None of local ids, the store's order or positions gives
 the numbers; they are the linking history, so the order has to be kept
-as updates arrive. Seven prims, each with a script that said
-`llGetLinkNumber`, were linked five ways on 2026-10-01: linked all at
-once the children took the order the link named them in, and grown one
-at a time each new prim became link 2, while local ids followed the rez
-order and the store's listing order and the positions followed nothing.
+as updates arrive. The evidence is in
+[doc/slate-runner.md](slate-runner.md#twelfth-round-link-numbers).

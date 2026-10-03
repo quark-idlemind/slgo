@@ -66,6 +66,7 @@ case.
     cmd/slgod/          holds grid connections, serves clients
     cmd/slrun/       runs LSL scripts, prints what they said
     cmd/slbench/      measures what LSL constructs cost in memory
+    cmd/slate/          runs a Slate test file against a product, and makes the bridge item
     cmd/slbotd/         attends several avatars, driven by instant message
     cmd/slbotd/chat.go  answering conversation with a local model, and keeping it
     cmd/msggen/         fetches message_template.msg, writes Go

@@ -1,0 +1,820 @@
+// Package slate parses a Slate 1 script.
+//
+// Parse is the lexer and the grammar. Check is the static rules in the
+// Slate specification. Expand lists each test's steps as a runner runs
+// them. None of them dials a region. A file that fails Parse or Check is
+// exit 2 for the command, and the process has not looked at the grid.
+// Run (run.go) drives a checked script against an sl.Session.
+package slate
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/quark-idlemind/slgo/sl"
+)
+
+// DefaultTimeout is the deadline when the script has no timeout header
+// and an expectation has no within.
+const DefaultTimeout = 10 * time.Second
+
+// Duration bounds. A shorter deadline can expire between the send and
+// the first read. The cap stops a stray unit from becoming an hour.
+const (
+	MinDuration = 100 * time.Millisecond
+	MaxDuration = 120 * time.Second
+)
+
+// maxSay is the chat field. Session.Say does not enforce it; a
+// non-negative say is checked here so the line is not cut. A negative
+// say uses sl.MaxDialogReply, because that path is sayNegative.
+const maxSay = 1023
+
+// maxListens is the most listen channels a script may name. The bridge
+// script opens one listen for its control channel and one per listen
+// channel; 65 is the published per-script limit, and one is kept spare.
+const maxListens = 63
+
+// nullKey is the UUID the wire sends when key is omitted or written null.
+const nullKey = "00000000-0000-0000-0000-000000000000"
+
+// nonceHex is the width of a probe nonce. The value is substituted at
+// install; only the length matters to the static relay-line check.
+const nonceHex = "0000000000000000"
+
+// LinkWords are the link targets written as words. The numbers are the
+// LSL constants LINK_SET, LINK_ALL_OTHERS, LINK_ALL_CHILDREN, LINK_THIS,
+// and LINK_ROOT.
+var LinkWords = map[string]int32{
+	"all":      -1,
+	"others":   -2,
+	"children": -3,
+	"this":     -4,
+	"root":     1,
+}
+
+// ClickBytes maps a click name to PRIM_CLICK_ACTION. touch and none are
+// both zero. The values are Linden's published constants.
+var ClickBytes = map[string]uint8{
+	"touch":    sl.ClickTouch,
+	"none":     sl.ClickTouch,
+	"sit":      sl.ClickSit,
+	"buy":      sl.ClickBuy,
+	"pay":      sl.ClickPay,
+	"open":     sl.ClickOpen,
+	"play":     sl.ClickPlay,
+	"media":    sl.ClickOpenMedia,
+	"zoom":     sl.ClickZoom,
+	"disabled": sl.ClickDisabled,
+}
+
+// Error is a lexical, grammatical, or static failure at one byte.
+// The text is the exit-2 line: filename:line:column: reason.
+type Error struct {
+	File   string
+	Line   int
+	Column int
+	Msg    string
+}
+
+func (e *Error) Error() string {
+	if e.Line == 0 {
+		return e.Msg
+	}
+	if e.File == "" {
+		return fmt.Sprintf("%d:%d: %s", e.Line, e.Column, e.Msg)
+	}
+	return fmt.Sprintf("%s:%d:%d: %s", e.File, e.Line, e.Column, e.Msg)
+}
+
+// Span is a half-open byte range of Script.Src. Line and Column are
+// 1-based and count bytes, at the first byte of the range.
+type Span struct {
+	Start, End int
+	Line, Col  int
+}
+
+func cover(a, b Span) Span {
+	if a.Line == 0 {
+		return b
+	}
+	if b.Line == 0 {
+		return a
+	}
+	return Span{Start: a.Start, End: b.End, Line: a.Line, Col: a.Col}
+}
+
+// Ident is a script name, not an in-world name. In-world names are strings.
+type Ident struct {
+	Text string
+	Span Span
+}
+
+// Int is an integer token. OK is false when the digits do not fit in int64.
+// A channel still has to fit in int32, and that is checked at the use.
+type Int struct {
+	Span  Span
+	Text  string
+	Value int64
+	OK    bool
+}
+
+// Number is a float, or an integer used where a float is legal.
+// Zero is true for 0 and 0.0, the values placeTouches treats as not given.
+// Exact is false when an integer has no exact float64 value.
+type Number struct {
+	Span  Span
+	Value float64
+	Zero  bool
+	Exact bool
+}
+
+// Duration is a timeout, a within, or a drag's over.
+// Bad is the form with a dot, such as 1.5s, which is not a duration token.
+type Duration struct {
+	Span  Span
+	Value time.Duration
+	Bad   bool
+}
+
+// Script is one Slate 1 file. Check has not been applied unless the
+// caller ran it; Parse only lexes and parses. A file of plain steps has
+// one implicit Test and nothing else; a suite has Tests in file order and
+// any before each, after each and sequences.
+type Script struct {
+	File string
+	Src  []byte
+
+	Timeouts  []Duration
+	Allows    []Span
+	Objects   []Object
+	Items     []Item
+	Probes    []Probe
+	Listens   []Listen
+	Tests     []Test
+	Befores   []Block // Check allows at most one
+	Afters    []Block // Check allows at most one
+	Sequences []Sequence
+}
+
+// Before is the before each block, or nil. It is meaningful after Check.
+func (s *Script) Before() *Block {
+	if s == nil || len(s.Befores) == 0 {
+		return nil
+	}
+	return &s.Befores[0]
+}
+
+// After is the after each block, or nil. It is meaningful after Check.
+func (s *Script) After() *Block {
+	if s == nil || len(s.Afters) == 0 {
+		return nil
+	}
+	return &s.Afters[0]
+}
+
+// Sequence returns the sequence called name, or nil.
+func (s *Script) Sequence(name string) *Sequence {
+	for i := range s.Sequences {
+		if s.Sequences[i].Name.Text == name {
+			return &s.Sequences[i]
+		}
+	}
+	return nil
+}
+
+// Test is one test. In a file of plain steps it is the only one, Implicit
+// is true and Name is the file's base name without .slate; Span is then
+// the whole body.
+type Test struct {
+	Span     Span
+	Name     string
+	NameSpan Span
+	Implicit bool
+	Steps    []Step
+}
+
+// Block is a before each or after each block. Span covers the keywords
+// through the closing brace.
+type Block struct {
+	Span  Span
+	Steps []Step
+}
+
+// Sequence is a named list of steps that do inlines.
+type Sequence struct {
+	Span  Span
+	Name  Ident
+	Steps []Step
+}
+
+// Do is the step do NAME.
+type Do struct {
+	Span Span
+	Name Ident
+}
+
+// Capture is a captured value written $name: a binding on an expectation
+// (as $name) or a use in a value position. Name is without the $. A
+// capture is data and is never a pattern.
+// Why: doc/slate-language.md#lexical-grammar
+type Capture struct {
+	Span Span
+	Name string
+}
+
+func (c Capture) String() string { return "$" + c.Name }
+
+// CaptureType is what a capture holds, the type of the place that bound it.
+type CaptureType int
+
+const (
+	CapText   CaptureType = iota // a line, a message, an item name, a group, a label
+	CapUUID                      // a texture reading
+	CapPair                      // an offset or repeats reading
+	CapNumber                    // a rotation, glow or alpha reading
+	CapClick                     // a click action reading
+	CapTriple                    // a colour reading
+	CapOnOff                     // a fullbright reading
+)
+
+func (t CaptureType) String() string {
+	switch t {
+	case CapText:
+		return "text"
+	case CapUUID:
+		return "uuid"
+	case CapPair:
+		return "pair"
+	case CapNumber:
+		return "number"
+	case CapClick:
+		return "click"
+	case CapTriple:
+		return "colour triple"
+	case CapOnOff:
+		return "on or off"
+	default:
+		return "value"
+	}
+}
+
+// Text is a literal string, a pattern when written matching "RE", or a
+// capture. Span covers the whole phrase; ValueSpan is the string or
+// capture token. A Pattern is Go RE2 syntax, unanchored, and is compiled
+// by Check. When Capture is set Value is empty and Pattern is false.
+type Text struct {
+	Span      Span
+	ValueSpan Span
+	Value     string
+	Pattern   bool
+	Capture   *Capture
+}
+
+// StateKind is the comparison word of a state expectation.
+type StateKind int
+
+const (
+	StateIs      StateKind = iota // is VALUE
+	StateBecomes                  // becomes VALUE
+	StateChanges                  // changes, which takes no value
+)
+
+// State is is, becomes or changes. When Kind is StateChanges there is no
+// value and Original is false. Original means the value is original.
+type State struct {
+	Span     Span
+	Kind     StateKind
+	Original bool
+}
+
+// Source returns the bytes of sp. The caller must not modify Src.
+func (s *Script) Source(sp Span) string {
+	if s == nil || sp.Start < 0 || sp.End > len(s.Src) || sp.Start > sp.End {
+		return ""
+	}
+	return string(s.Src[sp.Start:sp.End])
+}
+
+// TimeoutDuration is the header, or DefaultTimeout when the header is absent.
+// It is meaningful after Check has accepted the script.
+func (s *Script) TimeoutDuration() time.Duration {
+	if s == nil || len(s.Timeouts) == 0 || s.Timeouts[0].Bad {
+		return DefaultTimeout
+	}
+	return s.Timeouts[0].Value
+}
+
+// Object is one object header. Name is the script binding. World is the
+// prim name ObjectsNamed matches, exactly, in the case it has. With
+// HasDesc, Desc keeps only the matches whose description it fits: the
+// qualifier that tells apart objects of one name.
+type Object struct {
+	Span      Span
+	Name      Ident
+	World     string
+	WorldSpan Span
+	HasDesc   bool
+	Desc      Text
+}
+
+// Item is one item header: an inventory item, by name, in a top-level
+// folder. Name is the script binding, which only wear uses.
+type Item struct {
+	Span       Span
+	Name       Ident
+	World      string // the item's name in inventory
+	WorldSpan  Span
+	Folder     string
+	FolderSpan Span
+}
+
+// Probe is one probe header: the object that gets a probe script.
+type Probe struct {
+	Span Span
+	Name Ident
+}
+
+// Listen is one listen header: a channel the viewer does not deliver,
+// forwarded by the bridge.
+type Listen struct {
+	Span    Span
+	Channel Int
+}
+
+// Step is one stimulus and the expectations armed with it, an
+// expectation-only step, or a do call. Then is true when the step was
+// opened with then. A nil Stimulus is the expectation-only form, whose
+// failure line is stimulus: (none). When Do is set the step is only the
+// call: no stimulus, no expectations.
+type Step struct {
+	Span     Span
+	Then     bool
+	Stimulus *Stimulus
+	Expect   []Expect
+	Do       *Do
+}
+
+// Stimulus is one action. Exactly one field is set.
+type Stimulus struct {
+	Span    Span
+	Touch   *Touch
+	Drag    *Drag
+	Say     *Say
+	Pay     *Pay
+	Sit     *Sit
+	Stand   *Stand
+	Choose  *Choose
+	Answer  *Answer
+	Send    *Send
+	Wear    *Wear
+	TakeOff *TakeOff
+}
+
+// Wear is wear ITEM on "point" as NAME. As is a new object binding, the
+// worn root; it is usable by the step's own expectations.
+type Wear struct {
+	Item      Ident
+	Point     string // an attachment point name, which Check resolves
+	PointSpan Span
+	As        Ident
+}
+
+// TakeOff is take off NAME: the binding stops being usable.
+type TakeOff struct{ Name Ident }
+
+// Touch is touch OBJ, then anywhere, a link, a face, or a button.
+// A link with no further refine is the zero touch on that prim.
+type Touch struct {
+	Name     Ident
+	Link     *Int
+	Anywhere bool
+	Face     *Int
+	At       *ST
+	Button   *Button
+	Showing  *Showing // touch OBJ showing ...; Check refuses it beside any other target
+	Guard    *Span    // if shown, after a button; Check allows it in before each and after each only
+}
+
+// Showing is the refine "showing" uuidval ( "at" number number )?: touch
+// the one face of the binding's linkset that shows a texture. Exactly one
+// of ID and Use is set.
+type Showing struct {
+	Span Span
+	ID   string   // canonical lowercase UUID
+	Use  *Capture // a uuid capture
+	At   *ST
+}
+
+// ST is a pair of surface coordinates. Both zero is the static origin error.
+type ST struct {
+	Span Span
+	S, T Number
+}
+
+// Button is the finder request for a touch. Nth is 1-based when set.
+// Face restricts the search; without it every face of the prim is searched.
+type Button struct {
+	Nth   *Int
+	Parts []Part
+	Face  *Int
+}
+
+// PartKind is one piece of a button.
+type PartKind int
+
+const (
+	PartText PartKind = iota
+	PartPattern
+	PartSymbol
+	PartImage
+	PartBox
+	PartCircle
+	PartOval
+)
+
+// Part is one button part, in the order the author wrote them.
+type Part struct {
+	Span    Span
+	Kind    PartKind
+	Text    string
+	Capture *Capture // PartText only: text $name, whose value is Text
+}
+
+// Drag is one segment. A nil Over means the runner moves for 500ms.
+type Drag struct {
+	Name Ident
+	Link *Int
+	Face Int
+	From ST
+	To   ST
+	Over *Duration
+}
+
+// Say is the tester speaking. A nil As is the tester, the default.
+type Say struct {
+	Text     string
+	TextSpan Span
+	Channel  Int
+	As       *Speaker
+}
+
+// SpeakerKind is who speaks a say, or who an expectation attributes it to.
+type SpeakerKind int
+
+const (
+	SpeakTester SpeakerKind = iota
+	SpeakOwner
+	SpeakAvatar
+	SpeakObject
+	SpeakAnyone
+)
+
+// Speaker is an as or from clause. Name is set for the owner and for an
+// object. Avatar is the displayed name, matched with EqualFold of the whole
+// string. Anyone is an expectation only.
+type Speaker struct {
+	Span   Span
+	Kind   SpeakerKind
+	Name   Ident
+	Avatar string
+	Link   *Int // from object OBJ link N; SpeakObject only
+}
+
+// Pay is one payment. The header allow pay is the file half of the gate;
+// the process flag is not visible here.
+type Pay struct {
+	Name       Ident
+	Amount     Int
+	Linden     bool
+	Reason     string
+	HasReason  bool
+	ReasonSpan Span
+}
+
+// Sit seats the tester on Name.
+type Sit struct{ Name Ident }
+
+// Stand stands the tester up. It names no object.
+type Stand struct{}
+
+// ChooseKind is how choose names the button.
+type ChooseKind int
+
+const (
+	ChooseLiteral  ChooseKind = iota // choose "Red"
+	ChooseMatching                   // choose matching "RE"
+	ChooseButton                     // choose button N
+	ChooseCapture                    // choose $x
+)
+
+// Choose presses a dialog button. Label is the string of a literal or of
+// matching (empty otherwise); Index is the N of button N; Use is the
+// capture of choose $x.
+type Choose struct {
+	Kind      ChooseKind
+	Label     string
+	LabelSpan Span
+	Index     *Int
+	Use       *Capture
+	Name      Ident
+}
+
+// Answer types into a text box.
+type Answer struct {
+	Text     string
+	TextSpan Span
+	Name     Ident
+}
+
+// Send asks a probe to llMessageLinked. A nil Key is the null key.
+type Send struct {
+	Name     Ident
+	From     Int
+	To       LinkTarget
+	Num      Int
+	Text     string
+	TextSpan Span
+	// TextCapture is set for text $name; Text is then empty.
+	TextCapture *Capture
+	Key         *Key
+}
+
+// LinkTarget is an integer or one of LinkWords.
+type LinkTarget struct {
+	Span Span
+	Word string
+	Int  Int
+}
+
+// Key is a UUID, null, or a uuid capture. ID is the canonical lowercase
+// form for the first two and empty for a capture, which is in Use.
+type Key struct {
+	Span Span
+	Null bool
+	ID   string
+	Use  *Capture
+}
+
+// Expect is one expectation. Neg is expect no. Exactly one body is set.
+type Expect struct {
+	Span       Span
+	Neg        bool
+	Within     *Duration
+	As         *Capture // as $name after within; Check allows it on a positive state, say, dialog, textbox or give
+	Say        *SayExp
+	Dialog     *DialogExp
+	TextBox    *BoxExp
+	Texture    *TextureExp
+	Offset     *VecExp
+	Repeats    *VecExp
+	Rot        *RotExp
+	Click      *ClickExp
+	Fullbright *FullbrightExp
+	Glow       *GlowExp
+	Colour     *ColourExp
+	Alpha      *AlphaExp
+	Give       *GiveExp
+	Rez        *RezExp
+	Link       *LinkExp
+	Button     *ButtonExp
+	Attached   *AttachExp
+}
+
+// SayExp is expect say. The order in the file is text, channel, speaker.
+type SayExp struct {
+	Text    Text
+	Channel ExpectChan
+	From    Speaker
+}
+
+// ChanKind is how an expectation names a channel.
+type ChanKind int
+
+const (
+	ChanNumber ChanKind = iota
+	ChanPublic
+	ChanOwner
+	ChanDebug
+	ChanDirect
+)
+
+// ExpectChan is on public, on owner, on debug, on direct, or on an integer.
+// The integer 0 is public chat. The integer 2147483647 is debug chat.
+type ExpectChan struct {
+	Span Span
+	Kind ChanKind
+	Int  Int
+}
+
+// DialogExp is a dialog offered to the tester. Only rejects extra buttons.
+// HasText is false when no text clause was written: any message matches.
+// Clauses are the button clauses in source order. Buttons is the legacy
+// list: the value of each clause that is a plain literal with no number.
+// Count is the N of count N, when written.
+type DialogExp struct {
+	Name    Ident
+	Link    *Int
+	Text    Text
+	HasText bool
+	Buttons []string
+	Clauses []DButton
+	Only    bool
+	Count   *Int
+
+	// Ordered is the word ordered, with its span for the static check;
+	// Sorted is sorted and its optional pattern.
+	Ordered     bool
+	OrderedSpan Span
+	Sorted      *Sorted
+}
+
+// Sorted is sorted ( matching "RE" )?. Without a pattern every label is
+// compared; with one only the labels it matches, by its group when it has one.
+type Sorted struct {
+	Span        Span
+	Matching    bool
+	Pattern     string
+	PatternSpan Span
+}
+
+// DButton is one button clause: button integer? text, where text is a
+// literal, matching "RE", or a capture. Nth is 1-based when set.
+type DButton struct {
+	Span Span
+	Nth  *Int
+	Text Text
+}
+
+// BoxExp is a text box. It has no button list.
+type BoxExp struct {
+	Name Ident
+	Link *Int
+	Text Text
+}
+
+// TextureExp is one face's texture id, canonical lowercase. With
+// State.Original set, ID is empty.
+//
+// Face is the number; with FaceAll set (face all) it is the zero Int whose
+// Span is the word all. Any is is any, a reading that matches anything;
+// Use is a uuid capture in the place of the UUID.
+type TextureExp struct {
+	Name    Ident
+	Link    *Int
+	Face    Int
+	FaceAll bool
+	State   State
+	ID      string
+	Any     bool
+	Use     *Capture
+}
+
+// VecExp is offset or repeats. Both components are floats; with
+// State.Original or StateChanges they are zero.
+// FaceAll, Any and Use are as for TextureExp; Use is a pair capture.
+type VecExp struct {
+	Name    Ident
+	Link    *Int
+	Face    Int
+	FaceAll bool
+	State   State
+	S, T    Number
+	Any     bool
+	Use     *Capture
+}
+
+// RotExp is a rotation as a fraction of a turn, in [-1, 1].
+// FaceAll, Any and Use are as for TextureExp; Use is a number capture.
+type RotExp struct {
+	Name    Ident
+	Link    *Int
+	Face    Int
+	FaceAll bool
+	State   State
+	Turns   Number
+	Any     bool
+	Use     *Capture
+}
+
+// ClickExp names a PRIM_CLICK_ACTION. The byte is ClickBytes[Action];
+// Action is empty for changes and original.
+// Any and Use are as for TextureExp; Use is a click capture.
+type ClickExp struct {
+	Name   Ident
+	Link   *Int
+	State  State
+	Action string
+	Any    bool
+	Use    *Capture
+}
+
+// FullbrightExp is expect fullbright OBJ link? faceall changes / is on|off.
+// On is the value for on and off; the other values are State.Original,
+// Any (is any, with as) and Use, an on-or-off capture. FaceAll is
+// face all, with Face as for TextureExp.
+type FullbrightExp struct {
+	Name    Ident
+	Link    *Int
+	Face    Int
+	FaceAll bool
+	State   State
+	On      bool
+	Any     bool
+	Use     *Capture
+}
+
+// GlowExp is a face's glow, 0 to 1. Value is the literal; Use is a
+// number capture. The other fields are as for FullbrightExp.
+type GlowExp struct {
+	Name    Ident
+	Link    *Int
+	Face    Int
+	FaceAll bool
+	State   State
+	Value   Number
+	Any     bool
+	Use     *Capture
+}
+
+// ColourExp is a face's colour, three numbers 0 to 1. Use is a triple
+// capture. The other fields are as for FullbrightExp.
+type ColourExp struct {
+	Name    Ident
+	Link    *Int
+	Face    Int
+	FaceAll bool
+	State   State
+	R, G, B Number
+	Any     bool
+	Use     *Capture
+}
+
+// AlphaExp is a face's opacity, 0 to 1, as GlowExp.
+type AlphaExp struct {
+	Name    Ident
+	Link    *Int
+	Face    Int
+	FaceAll bool
+	State   State
+	Value   Number
+	Any     bool
+	Use     *Capture
+}
+
+// GiveExp is an inventory offer of Item from Name.
+type GiveExp struct {
+	Item Text
+	From Ident
+}
+
+// RezExp is a new root. As is set on a positive rez and absent on a negative one.
+type RezExp struct {
+	Name    Text
+	HasDesc bool
+	Desc    Text
+	From    Ident
+	As      Ident
+}
+
+// LinkExp is a probe report. A nil Key is the null key. A nil HeardBy
+// accepts the first prim in the linkset that reports the message.
+type LinkExp struct {
+	Name    Ident
+	From    Int
+	Num     Int
+	Text    Text
+	Key     *Key
+	HeardBy *Int
+}
+
+// ButtonValKind is the value word of a button reading.
+type ButtonValKind int
+
+const (
+	ButtonShown ButtonValKind = iota // one tuple or more
+	ButtonGone                       // no tuple
+	ButtonCount                      // exactly Count tuples
+)
+
+// ButtonExp is expect button OBJ link? parts face? and a state. The
+// search is a touch's: Button.Nth is for Check to refuse. With State
+// changes, or State.Original, there is no value; otherwise Val says which,
+// and Count is the N of count N.
+type ButtonExp struct {
+	Name    Ident
+	Link    *Int
+	Button  *Button
+	State   State
+	Val     ButtonValKind
+	ValSpan Span
+	Count   Int
+}
+
+// AttachExp is attached OBJ on "point" or attached OBJ off.
+type AttachExp struct {
+	Name      Ident
+	Off       bool
+	Point     string
+	PointSpan Span
+}
