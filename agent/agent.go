@@ -755,6 +755,7 @@ func (a *Agent) register() {
 	a.keepScriptControls()
 	a.keepTeleportStart()
 	a.keepHealth()
+	a.logAlerts()
 	a.keepPickers()
 	a.keepPrices()
 	a.followCrossings()
