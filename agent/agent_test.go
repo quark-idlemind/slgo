@@ -30,6 +30,10 @@ type fakeSim struct {
 	position msg.Vector3
 	handle   uint64
 
+	// handled is the numbers of the packets acted on, so that a
+	// retransmission of one is not acted on again.
+	handled map[uint32]bool
+
 	// Set to skip a step, to test the timeouts.
 	silent      bool
 	noMovement  bool
@@ -172,6 +176,21 @@ func (f *fakeSim) run() {
 		}
 		if h.Reliable() {
 			f.ack(h.Sequence)
+		}
+		// A retransmission is acknowledged again and not acted on
+		// again, as a real simulator suppresses it: answering a resent
+		// UseCircuitCode with a second RegionHandshake is how a move
+		// test once took the region left's handshake for the
+		// destination's.
+		f.mu.Lock()
+		again := h.Flags&msg.FlagResent != 0 && f.handled[h.Sequence]
+		if f.handled == nil {
+			f.handled = map[uint32]bool{}
+		}
+		f.handled[h.Sequence] = true
+		f.mu.Unlock()
+		if again {
+			continue
 		}
 		f.react(name)
 	}

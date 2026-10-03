@@ -258,7 +258,7 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 		capsDue.fire()
 	}()
 	a.mu.Lock()
-	a.entering = &arrival{}
+	a.entering = &arrival{from: conn.RemoteAddr().(*net.UDPAddr)}
 	a.mu.Unlock()
 
 	old, ok := a.sock.swap(conn)
