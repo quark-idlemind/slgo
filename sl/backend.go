@@ -219,6 +219,12 @@ type Backend interface {
 	// attached a moment ago was not listening.
 	SimStats(ctx context.Context) (*SimStats, error)
 
+	// LastRegionDetails is the last RegionInfo heard in the region the
+	// avatar is in, nil if there is none, and how many RegionInfo the
+	// session has heard in all, which a caller compares with a count it
+	// took earlier to tell a reply from what was already held.
+	LastRegionDetails(ctx context.Context) (*RegionDetails, uint64, error)
+
 	// Land is what the session was told about the ground under the
 	// avatar: the parcel it was pushed when it arrived, and the
 	// region's parcel overlay.

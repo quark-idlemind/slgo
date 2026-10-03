@@ -28,6 +28,11 @@ type Options struct {
 	// chat, or a conference, has started.
 	// Why: doc/group-chat.md#joining-a-groups-chat-when-the-user-asks
 	GroupChatTimeout time.Duration
+
+	// RegionInfoTimeout bounds the wait for a region to answer
+	// RequestRegionInfo.
+	// Why: doc/simstats.md#what-a-region-says-about-itself-regioninfo
+	RegionInfoTimeout time.Duration
 }
 
 // The defaults for Options.  None of them is a measurement; each is a
@@ -40,6 +45,10 @@ const (
 
 	// DefaultGroupChatTimeout is the viewer's own, SESSION_INITIALIZATION_TIMEOUT.
 	DefaultGroupChatTimeout = 30 * time.Second
+
+	// DefaultRegionInfoTimeout is a wide margin over the 115 ms one
+	// reply took.
+	DefaultRegionInfoTimeout = 15 * time.Second
 )
 
 // SetOptions replaces the session's Options.  A call already waiting
@@ -55,7 +64,7 @@ func (w *Session) Options() Options {
 	return Options{}
 }
 
-// moveWait, permissionsWait, deleteWait and moneyWait are the bounds in
+// moveWait, permissionsWait, deleteWait, moneyWait and regionInfoWait are the bounds in
 // force.
 func (w *Session) moveWait() time.Duration {
 	return orDefault(w.Options().MoveTimeout, DefaultMoveTimeout)
@@ -71,6 +80,10 @@ func (w *Session) deleteWait() time.Duration {
 
 func (w *Session) moneyWait() time.Duration {
 	return orDefault(w.Options().MoneyTimeout, DefaultMoneyTimeout)
+}
+
+func (w *Session) regionInfoWait() time.Duration {
+	return orDefault(w.Options().RegionInfoTimeout, DefaultRegionInfoTimeout)
 }
 
 func orDefault(d, def time.Duration) time.Duration {

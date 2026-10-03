@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -87,6 +88,10 @@ type fakeDaemon struct {
 	// what it answers.  See walk_test.go.
 	walk   []*pb.MoveEvent
 	walked chan *pb.MoveRequest
+
+	// regionDetails is what RegionDetails answers, under regionMu.
+	regionMu      sync.Mutex
+	regionDetails *pb.RegionDetailsResponse
 
 	// posture is what Posture answers; nil answers Unimplemented, as a
 	// daemon from before it existed would.
@@ -239,6 +244,15 @@ func (d *fakeDaemon) Region(context.Context, *pb.RegionRequest) (*pb.RegionInfo,
 // worth having as a fake at all: the set is applied before the list is
 // read, and turning them off drops the circuits rather than only
 // refusing the next offer.
+func (d *fakeDaemon) RegionDetails(context.Context, *pb.RegionDetailsRequest) (*pb.RegionDetailsResponse, error) {
+	d.regionMu.Lock()
+	defer d.regionMu.Unlock()
+	if d.regionDetails == nil {
+		return &pb.RegionDetailsResponse{}, nil
+	}
+	return d.regionDetails, nil
+}
+
 func (d *fakeDaemon) Neighbours(_ context.Context, r *pb.NeighboursRequest) (*pb.NeighboursResponse, error) {
 	if d.fail != nil {
 		return nil, d.fail

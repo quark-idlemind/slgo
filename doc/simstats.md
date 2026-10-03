@@ -97,3 +97,83 @@ Afterwards the whole path was run against the live grid with this
 tree's slgod and slsh: `simstats -g` printed the minute with all five
 columns and the graph, `look` printed the capacity, and `SimStats` was
 gone from the list of messages `status` has no handler for.
+
+## What a region says about itself (RegionInfo)
+
+`SimStats` repeats a region's flags and nothing else about it.  The rest
+-- the estate, how many avatars and objects it may hold, how high its
+water is, how far it lets the ground be raised and lowered, its object
+bonus, how far chat carries -- comes in `RegionInfo` (Low 142), and a
+region sends one when asked with `RequestRegionInfo` (Low 141, an
+`AgentData` block and nothing else).  `agent/regioninfo.go` keeps the
+last one, `Session.RegionDetails` (`sl/regioninfo.go`) asks and waits,
+and `look` prints some of it.
+
+### Measured
+
+On 2026-10-02, through a daemon, an ordinary avatar -- not an estate
+manager, on Linden mainland -- sent `RequestRegionInfo` and was answered
+with a `RegionInfo` in 115 ms.  Every block was present: `RegionInfo`,
+`RegionInfo2`, one `RegionInfo3` (the extended flags), one `RegionInfo5`
+(the three chat ranges and offsets, and the chat flags) and one
+`CombatSettings`, and `MaxAgents32` carried the same agent limit as the
+U8 `MaxAgents`.  So asking needs no estate rights.  Not measured: how
+the answer differs for an estate manager, whether the message ever
+arrives unasked, and whether `MaxAgents32` ever differs from
+`MaxAgents` in another region.  No value from that reply is written down here.
+
+### What the viewer does
+
+- **It asks when the Region/Estate floater opens.**
+  `LLFloaterRegionInfo::requestRegionInfo`
+  (`newview/llfloaterregioninfo.cpp:374-395`) sends `RequestRegionInfo`,
+  with the comment "Must allow anyone to request the RegionInfo data so
+  non-owners/non-gods can see the values".
+- **It takes every `RegionInfo` that arrives**, asked for or not:
+  `LLViewerRegion::processRegionInfo` (`newview/llviewerregion.cpp:1153`),
+  registered at `newview/llstartup.cpp:3810`, hands it to
+  `LLRegionInfoModel::update` (`newview/llregioninfomodel.cpp`) and the
+  two floaters.
+- **`update` starts from nothing** and reads the name, both estate ids,
+  `SimAccess`, the U8 `MaxAgents`, the object bonus, billable factor,
+  water height, terrain limits, price per metre, the redirect grid and
+  the estate sun.  `HardMaxAgents` comes from `RegionInfo2`; the
+  viewer's default of 100 stands when it is not read.  The flags are
+  `RegionFlagsExtended` when a `RegionInfo3` block is present and the
+  plain `RegionFlags` otherwise.  The chat block is read and only
+  logged.  The product name is kept when the SKU or the name is
+  non-empty.
+- **It never reads `MaxAgents32` or `HardMaxObjects`.**  Nothing in the
+  viewer does; the floater's agent limit is the U8.
+
+### What slgo does
+
+- **Every `RegionInfo` on the root circuit is kept**, decoded, with the
+  time it arrived, and a count of how many this session has heard.
+  Only the latest is kept.  The message does not name its region, so it
+  is kept as the one the avatar is in when it arrives; a reply to a
+  request made just before a move could therefore be filed under the
+  next region.  That is inferred, not measured.
+- **A region change leaves it not current.**  As with the statistics,
+  what is kept belongs to a handle, and `Agent.RegionInfo` returns
+  nothing when the avatar is in another region.
+- **Flags** are as the viewer reads them: `Extended` is the
+  `RegionInfo3` value when there is one and the plain flags widened
+  when there is not.  `Chat` is absent without a `RegionInfo5`.
+- **The agent limit is the U8 `MaxAgents`**, as the viewer reads it;
+  the agent keeps `MaxAgents32` beside it, unused, and in the one region
+  measured the two were the same.
+- **`Session.RegionDetails` asks and waits for a reply heard after the
+  question**, counted rather than timed, so a message from before it
+  does not satisfy it and neither clock matters when the session is
+  hosted.  It waits `Options.RegionInfoTimeout`, 15 s by default: the
+  one reply took 115 ms and this is a wide margin, as the other
+  defaults are.  After that it returns `ErrTimeout`, and never the
+  old message.
+- **slgod serves the last one** as `RegionDetails` in
+  `proto/slgo.proto`, with its age in milliseconds rather than a time.
+- **`look`** asks, and prints the agent limit, object bonus and
+  terraform limits beside what the handshake gave (water, access,
+  product).  It waits 3 s for the answer, against the 115 ms measured,
+  and when the region does not answer in that time it says so on a
+  `details` line and prints everything else.

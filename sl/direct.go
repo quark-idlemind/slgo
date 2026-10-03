@@ -431,6 +431,34 @@ func (d *Direct) Region(ctx context.Context) (*Region, bool, error) {
 	}, known, nil
 }
 
+// LastRegionDetails reads the RegionInfo this process's own agent kept.
+func (d *Direct) LastRegionDetails(ctx context.Context) (*RegionDetails, uint64, error) {
+	k, heard := d.a.RegionInfo()
+	if k == nil {
+		return nil, heard, nil
+	}
+	out := &RegionDetails{
+		Name: k.Name, EstateID: k.EstateID, ParentEstateID: k.ParentEstateID,
+		Flags: k.Flags, Extended: k.Extended, Access: k.Access,
+		AgentLimit:     uint32(k.MaxAgents),
+		HardAgentLimit: k.HardMaxAgents, HardObjectLimit: k.HardMaxObjects,
+		ObjectBonus: k.ObjectBonus, BillableFactor: k.BillableFactor,
+		WaterHeight:       k.WaterHeight,
+		TerrainRaiseLimit: k.TerrainRaiseLimit, TerrainLowerLimit: k.TerrainLowerLimit,
+		PricePerMeter: k.PricePerMeter,
+		ProductSKU:    k.ProductSKU, ProductName: k.ProductName,
+		Heard: k.At,
+	}
+	if c := k.Chat; c != nil {
+		out.Chat = &ChatRanges{
+			Whisper: c.Whisper, Normal: c.Normal, Shout: c.Shout,
+			WhisperOffset: c.WhisperOffset, NormalOffset: c.NormalOffset, ShoutOffset: c.ShoutOffset,
+			Flags: c.Flags,
+		}
+	}
+	return out, heard, nil
+}
+
 // SimStats reads the history this process's own agent keeps.
 func (d *Direct) SimStats(ctx context.Context) (*SimStats, error) {
 	handle, samples := d.a.SimStats()

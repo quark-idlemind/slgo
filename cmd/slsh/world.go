@@ -37,7 +37,7 @@ var worldCommands = map[string]*command{
 	"look": {
 		flags:    func() any { return new(helpOnly) },
 		brief:    "what the simulator said about the region",
-		keywords: "region information describe owner water height rating access product estate",
+		keywords: "region information describe owner water height rating access product estate agent limit avatars object bonus terraform terrain limits",
 		man:      "look",
 		run:      cmdLook,
 	},
@@ -216,6 +216,11 @@ func cmdWho(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	return nil
 }
 
+// lookDetailsWait is how long look waits for the region to describe
+// itself: the one answer measured took 115 ms, and look is not worth
+// holding up for longer than this on a region that stays silent.
+const lookDetailsWait = 3 * time.Second
+
 func cmdLook(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
 	args, done, err := subOptions("look", &o, out, args)
@@ -239,6 +244,23 @@ func cmdLook(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	// the first two seconds in a region.
 	if r.ObjectCapacity > 0 {
 		fmt.Fprintf(out, "  capacity %d objects\n", r.ObjectCapacity)
+	}
+	// Asked for, since the region says these only when asked.  A region
+	// that does not answer costs these lines and nothing else, after at
+	// most lookDetailsWait rather than the session's whole timeout.
+	// Why: doc/simstats.md#what-a-region-says-about-itself-regioninfo
+	ask, cancel := context.WithTimeout(ctx, lookDetailsWait)
+	d, err := sh.s.RegionDetails(ask)
+	cancel()
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		fmt.Fprintf(out, "  details  the region did not describe itself: %v\n", err)
+	} else {
+		fmt.Fprintf(out, "  agents   up to %d\n", d.AgentLimit)
+		fmt.Fprintf(out, "  bonus    %.2fx objects\n", d.ObjectBonus)
+		fmt.Fprintf(out, "  terrain  raise %.1fm, lower %.1fm\n", d.TerrainRaiseLimit, d.TerrainLowerLimit)
 	}
 	if n, err := sh.s.Known(ctx); err == nil {
 		fmt.Fprintf(out, "  objects  %d described so far\n", n)

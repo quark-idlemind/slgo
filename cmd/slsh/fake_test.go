@@ -152,6 +152,13 @@ type fakeGrid struct {
 	neighbours    sl.Neighbours
 	neighboursErr error
 
+	// regionDetails is what the region says to RequestRegionInfo,
+	// regionHeard counts what it has said, and regionSilent makes it
+	// say nothing.
+	regionDetails *sl.RegionDetails
+	regionHeard   uint64
+	regionSilent  bool
+
 	// simStats is what SimStats answers; nil is none heard yet.
 	simStats    *sl.SimStats
 	simStatsErr error
@@ -277,6 +284,10 @@ func newFakeGrid(t *testing.T) *fakeGrid {
 			Access:      13,
 			WaterHeight: 20,
 			ProductName: "Estate / Full Region",
+		},
+		regionDetails: &sl.RegionDetails{
+			Name: "Test Region", AgentLimit: 40, ObjectBonus: 1.5,
+			TerrainRaiseLimit: 80, TerrainLowerLimit: -40,
 		},
 		inv: &invDir{
 			ID: testRoot, Name: "My Inventory",
@@ -1795,6 +1806,9 @@ func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error
 	if err == nil {
 		f.sent = append(f.sent, m)
 		f.moveLocked(m)
+		if _, ok := m.(*msg.RequestRegionInfo); ok && !f.regionSilent && f.regionDetails != nil {
+			f.regionHeard++
+		}
 	}
 	f.mu.Unlock()
 	if err != nil {
@@ -1883,6 +1897,12 @@ func (f *fakeGrid) Region(ctx context.Context) (*sl.Region, bool, error) {
 		return nil, false, f.regionErr
 	}
 	return f.region, true, nil
+}
+
+func (f *fakeGrid) LastRegionDetails(ctx context.Context) (*sl.RegionDetails, uint64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.regionDetails, f.regionHeard, nil
 }
 
 func (f *fakeGrid) SimStats(ctx context.Context) (*sl.SimStats, error) {

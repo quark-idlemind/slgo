@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
@@ -135,6 +136,7 @@ func TestLookIsWhatTheSimulatorSaidAboutItself(t *testing.T) {
 	for _, want := range []string{
 		"Test Region", "  access   general", "  water    20.0m",
 		"Estate / Full Region", "  capacity 15000 objects", "1 described so far",
+		"  agents   up to 40", "  bonus    1.50x objects", "  terrain  raise 80.0m, lower -40.0m",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("look should mention %q:\n%s", want, got)
@@ -144,6 +146,28 @@ func TestLookIsWhatTheSimulatorSaidAboutItself(t *testing.T) {
 	x.grid.regionErr = errors.New("the handshake never arrived")
 	if got := x.do(t, "look"); !strings.Contains(got, "the handshake never arrived") {
 		t.Errorf("look should report the failure, got %q", got)
+	}
+}
+
+// TestLookCarriesOnWhenTheRegionDoesNotDescribeItself: it asks the
+// region for its details, and a region that does not answer costs the
+// lines they would have been and nothing else.
+func TestLookCarriesOnWhenTheRegionDoesNotDescribeItself(t *testing.T) {
+	x := newTestShell(t)
+	x.grid.region.ObjectCapacity = 15000
+	x.grid.regionSilent = true
+	x.s.SetOptions(sl.Options{RegionInfoTimeout: 300 * time.Millisecond})
+
+	got := x.do(t, "look")
+	for _, want := range []string{"Test Region", "  access   general", "  capacity 15000 objects", "  details  the region did not describe itself"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("look should still print %q:\n%s", want, got)
+		}
+	}
+	for _, not := range []string{"agents", "bonus", "terrain"} {
+		if strings.Contains(got, "  "+not) {
+			t.Errorf("look printed %q for a region that did not answer:\n%s", not, got)
+		}
 	}
 }
 

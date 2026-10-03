@@ -109,6 +109,12 @@ service Grid {
   // and a client that was not listening can be told it only from here.
   rpc SimStats(SimStatsRequest) returns (SimStatsResponse);
 
+  // RegionDetails is the last RegionInfo the region sent, with its age:
+  // its estate, agent and object limits, terraform limits, object bonus
+  // and chat ranges.  It says nothing until one has been heard, and one
+  // is heard when anybody asks the region with RequestRegionInfo.
+  rpc RegionDetails(RegionDetailsRequest) returns (RegionDetailsResponse);
+
   // Land is what the session was told about the ground it is on: the
   // parcel it was pushed on arrival, and the region's parcel overlay.
   //
@@ -1521,6 +1527,52 @@ message SimStatsSample {
 message SimStat {
   uint32 id = 1;
   float value = 2;
+}
+
+message RegionDetailsRequest { string agent = 1; }
+
+message RegionDetailsResponse {
+  // Known is false when no RegionInfo has been heard in the region the
+  // avatar is in; the rest is then zero.  Heard counts every RegionInfo
+  // the daemon's session has heard, whatever region, and rises with each.
+  bool known = 1;
+  uint64 heard = 2;
+
+  uint64 handle = 3;
+  // Age_ms is how long before this answer the message arrived.
+  int64 age_ms = 4;
+
+  string name = 5;
+  uint32 estate_id = 6;
+  uint32 parent_estate_id = 7;
+  uint32 flags = 8;
+  uint64 flags_extended = 9;
+  uint32 access = 10;
+  uint32 max_agents = 11;
+  uint32 max_agents32 = 12;
+  uint32 hard_max_agents = 13;
+  uint32 hard_max_objects = 14;
+  float object_bonus = 15;
+  float billable_factor = 16;
+  float water_height = 17;
+  float terrain_raise_limit = 18;
+  float terrain_lower_limit = 19;
+  int32 price_per_meter = 20;
+  string product_sku = 21;
+  string product_name = 22;
+
+  // Chat is absent when the message had no RegionInfo5 block.
+  RegionChat chat = 23;
+}
+
+message RegionChat {
+  float whisper = 1;
+  float normal = 2;
+  float shout = 3;
+  float whisper_offset = 4;
+  float normal_offset = 5;
+  float shout_offset = 6;
+  uint32 flags = 7;
 }
 
 // ---------------------------------------------------------------- land

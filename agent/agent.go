@@ -122,6 +122,9 @@ type Agent struct {
 	// it is doing.  See simstats.go.
 	stats simStats
 
+	// info is the last RegionInfo heard.  See regioninfo.go.
+	info regionInfoKept
+
 	// prices is what the session has been told that says what a
 	// purchase costs, and names.  See prices.go.
 	prices prices
@@ -752,6 +755,7 @@ func (a *Agent) register() {
 	a.keepOffers()
 	a.keepMoney()
 	a.keepSimStats()
+	a.keepRegionInfo()
 	a.keepScriptControls()
 	a.keepTeleportStart()
 	a.keepHealth()

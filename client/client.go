@@ -1048,6 +1048,13 @@ func (c *Conn) SimStats(ctx context.Context) (*pb.SimStatsResponse, error) {
 	return c.grid.SimStats(ctx, &pb.SimStatsRequest{Agent: c.agentName()})
 }
 
+// RegionDetails asks for the last RegionInfo the region sent.  It does
+// not ask the region: sending RequestRegionInfo is a message, and goes
+// by Send.
+func (c *Conn) RegionDetails(ctx context.Context) (*pb.RegionDetailsResponse, error) {
+	return c.grid.RegionDetails(ctx, &pb.RegionDetailsRequest{Agent: c.agentName()})
+}
+
 // Land is what the session was told about the ground it is on: the
 // parcel it was pushed on arrival, and the region's parcel overlay.
 //
