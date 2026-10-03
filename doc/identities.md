@@ -261,6 +261,31 @@ it is rarely written one way.
 - **A timestamp together with a region**, which places somebody at a
   moment.
 
+## Images
+
+An image carries two things, and only one of them is checked by machine.
+
+What it carries besides its pixels is: a screenshot or a photograph keeps
+the machine, the software, the time and sometimes the place in its
+metadata -- PNG text chunks, Exif and XMP, colour profiles named after a
+display, a JPEG comment.  `tools/scan-images` recognises PNG, JPEG, GIF and
+WebP by their first bytes, whatever the file is called, and names every
+kind it finds beyond what drawing the image needs; `check-identities`
+refuses the image and suggests `exiftool -all= FILE`.  Allowed are a PNG's
+critical chunks, transparency, its colour space and APNG's animation
+chunks; a JPEG's JFIF and Adobe headers and what decoding needs; a GIF's
+frames, graphic control and animation loop; a WebP's bitstreams, alpha,
+extended header and animation.  Everything else is reported, and so is
+data after the image ends.  It needs nothing but perl.  TIFF is not read:
+its metadata is spread through its tag directories, and nothing here uses
+it.
+
+Go's `image/png`, `image/jpeg` and `image/gif` encoders write none of it,
+so an image a Go program generated goes in as it is.
+
+What it shows is not checked by anything: a name tag, a chat line, a
+minimap, a window title.  Every image is looked at before it is committed.
+
 ## How each is enforced
 
 | What | Enforced by |
@@ -272,6 +297,8 @@ it is rarely written one way.
 | id as two uint64s or a big integer, or derived by arithmetic | review |
 | grid square | the square rule: `0xAA` marked, or listed in `tools/known-squares` |
 | address | the address rule |
+| an image's metadata | `tools/scan-images`, run by `tools/check-identities` and tested in `tools/identities_test.go` |
+| what an image shows | review: every image is looked at before it is committed |
 | avatar, region, parcel, group, landmark names in the places listed above | `tools/scan-names` against `tools/known-names`, run by `tools/check-identities` and by `go test ./tools` |
 | the same names in prose, object and inventory names, other disguises | the local list of real names kept off the tree (a backstop), and review: the allowlist is not consulted for these |
 | host names, email addresses, real-life names, tokens, serials | the local list, and review |

@@ -1,5 +1,6 @@
 // Package tools tests the scripts in this directory that keep real
-// identifiers out of the tree: scan-ids, new-id and check-identities.
+// identifiers out of the tree: scan-ids, scan-images, new-id and
+// check-identities.
 // They are perl and sh, so these tests run them rather than call them, and
 // skip where perl is not installed.
 package tools
@@ -7,7 +8,14 @@ package tools
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
+	"hash/crc32"
+	"image"
+	"image/color"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -421,5 +429,183 @@ func TestCheckIdentitiesRefusesAnUnlistedName(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	if err == nil || !strings.Contains(string(out), "these names are not on tools/known-names") {
 		t.Errorf("check-identities passed or said the wrong thing (%v): %s", err, out)
+	}
+}
+
+// ---------------------------------------------------------------- images
+
+// scanImage writes b to a file called name and runs scan-images --check on
+// it, returning what it printed and whether it refused.
+func scanImage(t *testing.T, name string, b []byte) (string, bool) {
+	t.Helper()
+	f := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(f, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("perl", "scan-images", "--check", f).CombinedOutput()
+	return string(out), err != nil
+}
+
+func encoded(t *testing.T, enc func(*bytes.Buffer) error) []byte {
+	t.Helper()
+	var b bytes.Buffer
+	if err := enc(&b); err != nil {
+		t.Fatal(err)
+	}
+	return b.Bytes()
+}
+
+func smallImage() *image.RGBA {
+	m := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	m.Set(1, 1, color.RGBA{R: 200, A: 255})
+	return m
+}
+
+// pngWith puts a chunk straight after IHDR, as an editor would.
+func pngWith(t *testing.T, typ string, data []byte) []byte {
+	t.Helper()
+	b := encoded(t, func(w *bytes.Buffer) error { return png.Encode(w, smallImage()) })
+	var c bytes.Buffer
+	_ = binary.Write(&c, binary.BigEndian, uint32(len(data)))
+	c.WriteString(typ)
+	c.Write(data)
+	_ = binary.Write(&c, binary.BigEndian, crc32.ChecksumIEEE(append([]byte(typ), data...)))
+	at := 8 + 8 + 13 + 4 // signature, then IHDR
+	return append(append(append([]byte{}, b[:at]...), c.Bytes()...), b[at:]...)
+}
+
+// jpegWith puts a segment straight after SOI.
+func jpegWith(t *testing.T, marker byte, data []byte) []byte {
+	t.Helper()
+	b := encoded(t, func(w *bytes.Buffer) error { return jpeg.Encode(w, smallImage(), nil) })
+	seg := []byte{0xff, marker, byte((len(data) + 2) >> 8), byte(len(data) + 2)}
+	seg = append(seg, data...)
+	return append(append(append([]byte{}, b[:2]...), seg...), b[2:]...)
+}
+
+// gifWith puts an extension block before the first frame.
+func gifWith(t *testing.T, ext []byte) []byte {
+	t.Helper()
+	b := encoded(t, func(w *bytes.Buffer) error { return gif.Encode(w, smallImage(), nil) })
+	at := 13
+	if b[10]&0x80 != 0 {
+		at += 3 << ((b[10] & 7) + 1)
+	}
+	return append(append(append([]byte{}, b[:at]...), ext...), b[at:]...)
+}
+
+// webp is a RIFF WebP of the chunks given; the bitstream is not decoded,
+// only walked.
+func webp(chunks ...string) []byte {
+	var body bytes.Buffer
+	body.WriteString("WEBP")
+	for _, typ := range chunks {
+		data := []byte("abcd")
+		body.WriteString(typ)
+		_ = binary.Write(&body, binary.LittleEndian, uint32(len(data)))
+		body.Write(data)
+	}
+	var b bytes.Buffer
+	b.WriteString("RIFF")
+	_ = binary.Write(&b, binary.LittleEndian, uint32(body.Len()))
+	b.Write(body.Bytes())
+	return b.Bytes()
+}
+
+// TestScanImagesPassesWhatGoWrites: an image a Go program generates carries
+// nothing but what drawing it needs, transparency and an animation loop
+// included, so it goes in as it is.
+// Why: doc/identities.md#images
+func TestScanImagesPassesWhatGoWrites(t *testing.T) {
+	needPerl(t)
+	pal := image.NewPaletted(image.Rect(0, 0, 4, 4), color.Palette{color.Transparent, color.Black})
+	anim := &gif.GIF{Image: []*image.Paletted{pal, pal}, Delay: []int{10, 10}, LoopCount: 0}
+	for name, b := range map[string][]byte{
+		"plain.png":        encoded(t, func(w *bytes.Buffer) error { return png.Encode(w, smallImage()) }),
+		"transparent.png":  encoded(t, func(w *bytes.Buffer) error { return png.Encode(w, pal) }),
+		"plain.jpg":        encoded(t, func(w *bytes.Buffer) error { return jpeg.Encode(w, smallImage(), nil) }),
+		"jfif.jpg":         jpegWith(t, 0xe0, []byte("JFIF\x00\x01\x02\x00\x00\x01\x00\x01\x00\x00")),
+		"plain.gif":        encoded(t, func(w *bytes.Buffer) error { return gif.Encode(w, smallImage(), nil) }),
+		"animated.gif":     encoded(t, func(w *bytes.Buffer) error { return gif.EncodeAll(w, anim) }),
+		"plain.webp":       webp("VP8L"),
+		"not-an-image.png": []byte("this is text, whatever it is called\n"),
+	} {
+		if out, refused := scanImage(t, name, b); refused {
+			t.Errorf("%s was refused: %s", name, out)
+		}
+	}
+}
+
+// TestScanImagesRefusesMetadata: each kind a screenshot, a photograph or an
+// editor adds is named, in whichever format, and an image is recognised
+// by its content whatever it is called.
+// Why: doc/identities.md#images
+func TestScanImagesRefusesMetadata(t *testing.T) {
+	needPerl(t)
+	for _, c := range []struct {
+		name string
+		b    []byte
+		want string
+	}{
+		{"text.png", pngWith(t, "tEXt", []byte("Author\x00Example Author")), "PNG tEXt chunk"},
+		{"itxt.png", pngWith(t, "iTXt", []byte("XML:com.adobe.xmp\x00\x00\x00\x00\x00<x/>")), "PNG iTXt chunk"},
+		{"ztxt.png", pngWith(t, "zTXt", []byte("Comment\x00\x00Example comment")), "PNG zTXt chunk"},
+		{"exif.png", pngWith(t, "eXIf", []byte("MM\x00*")), "PNG eXIf chunk"},
+		{"time.png", pngWith(t, "tIME", []byte{0x07, 0xea, 10, 3, 12, 0, 0}), "PNG tIME chunk"},
+		{"icc.png", pngWith(t, "iCCP", []byte("Example Profile\x00\x00x")), "PNG iCCP chunk"},
+		{"phys.png", pngWith(t, "pHYs", make([]byte, 9)), "PNG pHYs chunk"},
+		{"named-as-text.txt", pngWith(t, "tEXt", []byte("Software\x00Example Software /example/path")), "PNG tEXt chunk"},
+		{"trailing.png", append(encoded(t, func(w *bytes.Buffer) error { return png.Encode(w, smallImage()) }), []byte("hidden")...), "data after the PNG ends"},
+		{"exif.jpg", jpegWith(t, 0xe1, []byte("Exif\x00\x00MM")), "JPEG Exif (APP1)"},
+		{"xmp.jpg", jpegWith(t, 0xe1, []byte("http://ns.adobe.com/xap/1.0/\x00<x/>")), "JPEG XMP (APP1)"},
+		{"icc.jpg", jpegWith(t, 0xe2, []byte("ICC_PROFILE\x00\x01\x01")), "JPEG ICC profile (APP2)"},
+		{"iptc.jpg", jpegWith(t, 0xed, []byte("Photoshop 3.0\x00")), "JPEG Photoshop/IPTC (APP13)"},
+		{"comment.jpg", jpegWith(t, 0xfe, []byte("Example comment from /example/path")), "JPEG comment (COM)"},
+		{"trailing.jpg", append(encoded(t, func(w *bytes.Buffer) error { return jpeg.Encode(w, smallImage(), nil) }), []byte("hidden")...), "data after the JPEG ends"},
+		{"comment.gif", gifWith(t, []byte("\x21\xfe\x07Example\x00")), "GIF comment"},
+		{"xmp.gif", gifWith(t, append([]byte("\x21\xff\x0bXMP DataXMP"), 0x01, 'x', 0x00)), "GIF application extension (XMP DataXMP)"},
+		{"exif.webp", webp("VP8X", "VP8L", "EXIF"), "WebP EXIF chunk"},
+		{"xmp.webp", webp("VP8X", "VP8L", "XMP "), "WebP XMP chunk"},
+	} {
+		out, refused := scanImage(t, c.name, c.b)
+		if !refused || !strings.Contains(out, c.want) {
+			t.Errorf("%s: refused %v, said %q, want %q", c.name, refused, out, c.want)
+		}
+	}
+}
+
+// TestCheckIdentitiesRefusesAnImageWithMetadata runs the whole check, as a
+// commit would, over an image that carries a text chunk.
+func TestCheckIdentitiesRefusesAnImageWithMetadata(t *testing.T) {
+	needPerl(t)
+	probe := "zz_image_probe.png"
+	if err := os.WriteFile(filepath.Join("..", probe), pngWith(t, "tEXt", []byte("Software\x00Example Software /example/path")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(filepath.Join("..", probe))
+	cmd := exec.Command("sh", "tools/check-identities", probe)
+	cmd.Dir = ".."
+	cmd.Env = append(os.Environ(), "SLGO_IDENTITIES=/nonexistent")
+	out, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "these images carry metadata") || !strings.Contains(string(out), "exiftool -all=") {
+		t.Errorf("check-identities passed or said the wrong thing (%v): %s", err, out)
+	}
+}
+
+// TestCheckIdentitiesPassesACleanImageOnItsOwn: a change that is only an
+// image is checked, not skipped as having no text, and one Go wrote passes.
+func TestCheckIdentitiesPassesACleanImageOnItsOwn(t *testing.T) {
+	needPerl(t)
+	probe := "zz_clean_image_probe.png"
+	if err := os.WriteFile(filepath.Join("..", probe), encoded(t, func(w *bytes.Buffer) error { return png.Encode(w, smallImage()) }), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(filepath.Join("..", probe))
+	cmd := exec.Command("sh", "tools/check-identities", probe)
+	cmd.Dir = ".."
+	cmd.Env = append(os.Environ(), "SLGO_IDENTITIES=/nonexistent")
+	out, err := cmd.CombinedOutput()
+	if err != nil || strings.Contains(string(out), "nothing to check") {
+		t.Errorf("a clean image on its own: %v: %s", err, out)
 	}
 }
