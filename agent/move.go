@@ -104,6 +104,12 @@ func (s *socket) SetReadDeadline(t time.Time) error {
 
 func (s *socket) local() net.Addr { return s.conn.Load().LocalAddr() }
 
+// remote is the simulator the circuit is on now.
+func (s *socket) remote() *net.UDPAddr {
+	a, _ := s.conn.Load().RemoteAddr().(*net.UDPAddr)
+	return a
+}
+
 // Close closes the connection in use, once; a second call does nothing.
 // A connection a move replaced is the mover's to close, not this.
 func (s *socket) Close() error {
@@ -209,6 +215,19 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 	case <-a.done:
 		return a.moveRefused(addr)
 	default:
+	}
+
+	// A move to the simulator this circuit is already on is not a move.
+	// The viewer keeps one circuit to a host and finds the region it
+	// already has there (LLWorld::addRegion); here it would be a second
+	// socket to the same simulator, a relog to where the avatar stands,
+	// and the old socket's queued packets would come from the very
+	// address the forgetting below waits for.  Refused before anything
+	// changes, so nothing is left half moved.  The callers refuse it
+	// earlier by handle; this holds when a message carries none.
+	// Why: doc/history/teleport.md#a-move-to-the-simulator-already-on
+	if a.alreadyOn(addr) {
+		return fmt.Errorf("agent: move to %s: the circuit is already on that simulator", addr)
 	}
 
 	timeout := a.opts.Timeout
@@ -320,6 +339,12 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 		a.startEventQueue(a.runCtx, a.opts.OnEvent)
 	}
 	return nil
+}
+
+// alreadyOn reports whether addr is the simulator the circuit is on now.
+func (a *Agent) alreadyOn(addr *net.UDPAddr) bool {
+	cur := a.sock.remote()
+	return cur != nil && cur.IP.Equal(addr.IP) && cur.Port == addr.Port
 }
 
 // moveRefused is the error for a move asked of a session that is over.

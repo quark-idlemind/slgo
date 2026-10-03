@@ -813,3 +813,26 @@ Unverified: it is a reading of the source, not a measurement.
   the inventory root come from login, not from a region, and survive a
   teleport untouched. This is worth stating because it is the reason a
   teleport is cheaper than the relog it replaces.
+
+## A move to the simulator already on
+
+A `TeleportFinish` or a `CrossedRegion` that names the region the
+session is in is not a move, and both callers of `moveTo` skip one by
+its handle.  A message that carries no readable handle reached `moveTo`
+all the same, which dialled a second socket to the simulator already on
+the other end of the circuit: a relog to where the avatar stands.  Since
+the move forgets duplicate numbers on the first packet from the new
+address, a packet still queued from the old socket, from that same
+address, would also have been taken for the new simulator's first.
+
+The viewer keeps one circuit per host.  On a `TeleportFinish`,
+`LLWorld::addRegion` finds a region it already has, alive, on the same
+host and keeps it (Firestorm 885631b93a, `newview/llworld.cpp:536-540`).
+So `moveTo` now refuses an address equal to the circuit's own, whatever
+the handle says, before it changes anything: nothing is dialled, nothing
+is forgotten, and the session stays where it was.
+
+Not seen on the grid: every `TeleportFinish` and `CrossedRegion`
+measured so far has carried its handle.  The viewer goes on to send
+`UseCircuitCode` on the circuit it already has; slgo sends nothing,
+which is a departure inferred to be harmless and not measured.
