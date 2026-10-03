@@ -508,6 +508,61 @@ func TestALinksetIsFoundByIDBeforeLocalID(t *testing.T) {
 	}
 }
 
+// TestAWornObjectIsNotTheAvatarWearingIt: a worn root's parent is the
+// avatar, and describing the object must stop at the object -- not take
+// in the avatar and every other attachment it wears.
+func TestAWornObjectIsNotTheAvatarWearingIt(t *testing.T) {
+	another := msg.MustParseUUID("1f307e57-7e57-c0de-1f0f-ded56ffbda6c")
+	standing := msg.MustParseUUID("d9a37e57-7e57-c0de-547e-78feda6a2022")
+	all := []*Seen{
+		{Object: Object{ID: testAgentID, Local: 4}, PCode: pcodeAvatar},
+		{Object: Object{ID: thePrim, Local: 5}, Parent: 4, AttachPoint: HUDCenter2},
+		{Object: Object{ID: another, Local: 6}, Parent: 4, AttachPoint: 1},
+		{Object: Object{ID: theChild, Local: 7}, Parent: 5},
+		{Object: Object{ID: standing, Local: 9}},
+	}
+	for _, named := range []msg.UUID{thePrim, theChild} {
+		parts, err := linkset(all, &Object{ID: named})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(parts) != 2 || parts[0].ID != thePrim || parts[1].ID != theChild {
+			var got []msg.UUID
+			for _, p := range parts {
+				got = append(got, p.ID)
+			}
+			t.Errorf("naming %s found %v, want the worn root and its child", named, got)
+		}
+	}
+	if parts, err := linkset(all, &Object{ID: testAgentID}); err == nil {
+		t.Errorf("an avatar was described as an object of %d prims", len(parts))
+	}
+}
+
+// TestASittingAvatarIsNotPartOfTheSeat: the region makes an avatar that
+// sits on an object a child of the object's root, and describing the
+// object must not write the sitter out as one of its prims.
+func TestASittingAvatarIsNotPartOfTheSeat(t *testing.T) {
+	all := []*Seen{
+		{Object: Object{ID: thePrim, Local: 5}},
+		{Object: Object{ID: theChild, Local: 7}, Parent: 5},
+		{Object: Object{ID: testAgentID, Local: 4}, Parent: 5, PCode: pcodeAvatar},
+	}
+	for _, named := range []msg.UUID{thePrim, theChild} {
+		parts, err := linkset(all, &Object{ID: named})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(parts) != 2 || parts[0].ID != thePrim || parts[1].ID != theChild {
+			var got []msg.UUID
+			for _, p := range parts {
+				got = append(got, p.ID)
+			}
+			t.Errorf("naming %s found %v, want the seat's two prims and not the sitter", named, got)
+		}
+	}
+}
+
 // rawLocalsIn finds a local id taken straight off something and put
 // into a message: inside a composite literal of one of msg's types,
 // assigned to a field named for a local id, or handed to selectMsg or

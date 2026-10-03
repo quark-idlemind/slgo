@@ -10,6 +10,11 @@ The object is named by the word the region calls it or by its key, and
 the whole linkset is described, root first -- so naming any prim of an
 object describes all of it.
 
+A worn object is described as the object it is, and not with the
+avatar wearing it or anything else the avatar wears; its positions are
+in its attachment point's frame, as the region gives them.  An avatar
+is refused, and anyone sitting on the object is not part of it.
+
 ## Options
 
 **-o, --out** *FILE*

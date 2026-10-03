@@ -35,6 +35,9 @@ var taskTypeNames = map[string]string{
 // Properties are asked for per prim, because description, creator and
 // the permission masks are on no update and arrive only when asked.
 //
+// A worn object is the object alone, in its attachment point's frame:
+// its root's position is what the region says, relative to the point.
+//
 // Every prim comes out with a shape, because the format gives no way
 // to leave one unsaid.  Two kinds of prim have none to give: one that
 // nothing has described yet, and a mesh or a sculpt, whose profile and
@@ -364,6 +367,12 @@ func saysShape(p PrimJSON) bool {
 //
 // An object with an id is found by it and by nothing else: its local id
 // may be another region's, and would find a stranger here first.
+//
+// A worn object's root hangs off the avatar wearing it, which is not part
+// of the object: the walk up stops there, or it would take in the avatar
+// and everything else it wears.  An avatar is refused for the same reason,
+// and one sitting on the object, which the region makes a child of the
+// seat's root, is not one of its prims.
 func linkset(all []*Seen, o *Object) ([]*Seen, error) {
 	var root *Seen
 	for _, s := range all {
@@ -375,7 +384,10 @@ func linkset(all []*Seen, o *Object) ([]*Seen, error) {
 	if root == nil {
 		return nil, fmt.Errorf("sl: %s is not among the objects in range", o)
 	}
-	if root.Parent != 0 {
+	if root.IsAvatar() {
+		return nil, fmt.Errorf("sl: %s is an avatar, not an object", o)
+	}
+	if root.Parent != 0 && !wornUnder(all, root.Parent) {
 		for _, s := range all {
 			if s.Local == root.Parent {
 				root = s
@@ -385,7 +397,7 @@ func linkset(all []*Seen, o *Object) ([]*Seen, error) {
 	}
 	parts := []*Seen{root}
 	for _, s := range all {
-		if s.Parent == root.Local && s.ID != root.ID {
+		if s.Parent == root.Local && s.ID != root.ID && !s.IsAvatar() {
 			parts = append(parts, s)
 		}
 	}
