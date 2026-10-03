@@ -144,6 +144,10 @@ part        = "text" ( string / capture )
 
 drag        = "drag" binding ("link" integer)? "face" integer
               "from" number number "to" number number ("over" duration)?
+            / "drag" binding "on" "screen" "from" screenpoint
+              ("to" / "by") number number ("over" duration)? "settle"?
+screenpoint = number number
+            / ("link" integer)? "face" integer "at" number number
 say         = "say" string "on" integer ("as" stimspeaker)?
 stimspeaker = "tester" / "owner" "of" binding / "avatar" string
 pay         = "pay" binding amount ("reason" string)?
@@ -251,6 +255,8 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Levels | A glow, alpha or colour literal lies in [0, 1]; each of the three numbers of a colour is checked alone. The error names the property and the number: `glow 1.5 is outside 0 to 1`. |
 | Origin | `at 0 0` is an error (on `face` and on `showing` alike), and so is a drag whose `from` or `to` is `0 0`, whether written `0` or `0.0`. The error is `at 0 0 is the middle of the face; placeTouches treats a zero ST as not given (sl/touch.go)`. The touch at 0 0 is treated as the middle of the face, so it is rejected. `at 0 0.5` is legal. |
 | Drag | A `drag … over D` must fit its step's budget: `D` is at most the longest `within` in the step, or the `timeout` when it has none, because the drag blocks for `D` and the step gives a blocking stimulus no more than that. |
+| Drag on the screen | The same budget holds for `drag OBJ on screen`, and `settle` adds the longest it may wait for the HUD to change, `Options.HUDChangeTimeout`, which is 5 s unless a session is given another: `D` (500 ms when `over` is omitted) plus 5 s must fit. `drag h on screen ... over 6s settle` in a step that allows 8 s is refused, with `drag over 6s and settle (up to 5s) can take 11s, which is longer than the step's budget of 8s`. The origin rule does not apply: 0 0 is a corner of the screen, and `at 0 0` a corner of a face. |
+| Binding on a HUD point | `drag OBJ on screen` needs an object worn on a HUD point (attachment points 31 to 38). Where the file says how the binding was put on, that is refused when it is checked: a binding `wear` put on a point that is not a HUD one (`h is worn on chest; drag on screen needs an object worn on a HUD point`), and one a `rez` expectation bound (`made is rezzed in the world; ...`). A header binding, which may be worn or not, is judged when the step runs ([Drag on the screen](#stimuli)). |
 | Money | A pay amount is an integer of at least 1. A reason is at most 127 bytes. |
 | Dialog buttons | A `button N` in a dialog expectation, and in `choose button N`, is 1 to 12, the most buttons `llDialog` accepts (published, not measured). `count` is 1 to 12. When `count` is written, the number of `button` clauses is at most `count`, since each clause needs a button of its own. Two clauses may not be pinned to the same `N`. With `only` and `count N` there are exactly N clauses, because `only` gives every button to a clause. |
 | Ordered and sorted | `ordered` needs at least two button clauses. A `sorted matching` pattern compiles and has at most one capturing group, the text to compare. A named group of a `sorted` pattern binds nothing. |
@@ -380,6 +386,15 @@ A face the search refuses (planar, animated, a finder error, `image` or `oval`) 
 **Touch showing.** `touch OBJ showing UUID` touches the face that shows a texture, and `touch OBJ showing $tile` the face that shows the texture a capture holds. It is for a palette with one picture on each face, where the label that a button search would use is not there. The runner first asks the region to describe every prim of `OBJ`'s linkset again and reads their faces, because the store can keep an old texture for seconds after a script changes a face ([Texture](slate-runner.md#texture)). It then looks at every face of every prim of the linkset for the texture: exactly the faces a prim has, counted from its shape ([How many faces a prim has](objects.md#how-many-faces-a-prim-has)), or, for a sculpt or a mesh, the faces its texture entry names. Exactly one (prim, face) must show it, and that face is touched at its middle, or at `S T` when `at S T` follows. A texture shown nowhere, or on two or more faces, fails the step before any touch is sent, and the failure lists each prim and face ([Reading the result](#reading-the-result)). `OBJ` needs no probe: the touch goes to the prim found by its id. For a sculpt or a mesh the face count is not known, and a face the entry does not name shows the default texture, which can make a search for that texture ambiguous; see [Known limitations](#known-limitations).
 
 **Drag.** `drag OBJ face N from S0 T0 to S1 T1 over D` presses at the first point, moves to the second over `D` (500 ms if `over` is omitted) and releases. The release is always sent, even if the step is cancelled. The step starts its expectations only after the drag returns. `link N` selects the prim as a touch does. One segment is the whole path.
+
+**Drag on the screen.** `drag OBJ on screen from POINT (to X Y | by DX DY) [over D] [settle]` is the drag a mouse makes on a worn HUD: the cursor is pressed on the screen where the start is, moved to the end over `D` (500 ms if `over` is omitted), and released. The viewer sends the touch of whatever prim is in front at the start, and the rest of the drag is on that prim alone, so a HUD that moves or resizes by the change in `llDetectedTouchPos` sees what it sees under a mouse ([Where a worn HUD is on the screen](hud-screen.md#a-drag)). The start is one of
+
+- `X Y`, a point in the world view, in pixels from its top left corner, X to the right and Y down; decimals are allowed; or
+- `[link N] face F at S T`, the point on face `F` of the binding's linkset (of its root unless `link N` names a prim) that `S T` is, turned into pixels when the step is prepared. It spares the author from knowing pixels: `drag hud on screen from face 0 at 0.5 0.9 by 300 200` grabs the HUD by the lower middle of its background wherever the HUD is.
+
+The end is `to X Y`, a point in the same pixels, or `by DX DY`, a distance from the start, so that "move it 300 pixels right" needs no pixels at all. A negative number is a move left or up. `settle` waits after the press, up to `Options.HUDChangeTimeout` (5 s), for the region to say the prim pressed has changed, before the cursor moves: a HUD that grows a transparent prim over the screen when pressed to keep the cursor on it needs it, and without it the cursor leaves the prim at once. A HUD that does not change fails the step after that wait. The release is always sent.
+
+The pixels are those of a virtual world view, which the run states and not the file: `--screen WxH` (1920x1025 unless said, a 1920x1080 window less Firestorm's menu bar) and `--hud-zoom Z` (1 unless said) ([Package and command](slate-runner.md#package-and-command)). Pixels, and not fractions of the screen, because where a HUD sits depends on the world view's shape ([The world view](hud-screen.md#the-world-view)), so a fraction would not make a test independent of the screen; a stated size of screen is honest, and it is what a screenshot and the measurements are in. The face form is for a test that wants none of it. `OBJ` must be worn on a HUD point; one that is not fails the step with `slate: step N: "<name>" is worn on chest; a drag on the screen needs an object worn on a HUD point, and nothing was sent`, or `is not worn`. A face the prim cannot show, or a shape the runner cannot place (only a plain box or cylinder can be), fails it with a sentence too, and nothing is sent.
 
 **Pay.** `pay OBJ L$5 reason "tip"` pays the object. The amount is an integer of at least 1. Omitting `reason` sends the object's name, as the viewer does. Before paying the runner prints `pay L$<amount> to "<name>" <uuid> reason "<reason>"`. A payment the balance cannot cover is refused before it is sent. A refused or unconfirmed payment fails the step with that message, which says whether the balance moved, and the expectations do not run. A payment is never sent twice.
 
@@ -988,6 +1003,39 @@ drag slider face 0 from 0.1 0.5 to 0.9 0.5 over 500ms
 expect offset slider face 0 is 0.4 0 within 10s
 ```
 
+### Move and resize a HUD by its glass
+
+[ExampleHUD](https://github.com/quark-idlemind/ExampleHUD) is a HUD that moves and resizes with the mouse. Its background is dragged to move it, and its glass, a transparent prim that grows over the screen when pressed, keeps the cursor on the HUD. The coordinates below are invented for the example.
+
+```slate
+slate 1
+timeout 20s
+
+item hud_item is "ExampleHUD" in "Objects"
+
+before each {
+  wear hud_item on "HUD centre 2" as hud
+  expect attached hud on "HUD centre 2" within 10s
+}
+
+after each {
+  take off hud
+  expect attached hud off within 5s
+}
+
+test "moves and resizes" {
+  # Grab the background low in the middle and take it 300 pixels right and
+  # 200 down; the glass grows when pressed, so wait for it.
+  drag hud on screen from face 0 at 0.5 0.9 by 300 200 over 800ms settle
+
+  # The resize corner is a point on the screen, here in the default
+  # 1920x1025 view.
+  drag hud on screen from 1480 640 by -150 100 over 800ms settle
+}
+```
+
+The test passes when both drags are sent and released. The HUD's new position and size are not read ([Known limitations](#known-limitations)), so what the HUD did with them is not yet an expectation.
+
 ### Anywhere, a link and a face
 
 The first two says may come from any prim of the panel's linkset. The child answers, and `from object panel link 3` requires that one prim. This file has a probe on the panel, so the probe's report numbers link 3; without the `probe` line the store would, and the file would be the same.
@@ -1371,7 +1419,8 @@ Each is discussed under [Open questions](slate-runner.md#open-questions).
 - The finder reads labels in the style it was tuned on, dark type on a lighter button: a word inside a dark outlined frame is not read, and a solid rectangle is not a `box` ([Limits found drawing test pictures for buttons](imgfind.md#limits-found-drawing-test-pictures-for-buttons)).
 - A button reading is the finder's count. A label the finder never reads is a count of 0, which is why `becomes gone` is the form to write. A planar or animated face is no reading.
 - A guarded touch takes no `button N`: two tuples fail the step, and it is not a way to choose one.
-- `wear` takes an item from a top-level folder by name. A worn HUD's screen position and size are not read, and the runner does not take off what a test wore.
+- `wear` takes an item from a top-level folder by name. A worn HUD's screen position and size are not read, so a drag on the screen has nothing of that kind to expect, and the runner does not take off what a test wore.
+- `touch ... button` does not use `Pick` yet: a button hidden behind another prim of a worn HUD is not reported as hidden, because the finder reads the picture of the face and does not ask what the viewer would press at that point.
 - A child prim is named with `link N`, whose numbers come from the object store when there is no probe. The store cannot give the order of a set that several prims joined in one update while it watched, nor one it took from another agent, and `link N` on such a set fails with `the link order of "<name>" is not known; a probe, or taking and rezzing it, gives it`. A probe gives the order, but only in a product the tester owns; taking the object and rezzing it again makes the store know it ([Link numbers](objects.md#link-numbers)). A daemon older than the link numbers reports every order as not known. The link messages `send` and `expect link` always need a probe.
 - One avatar is driven. Any wait is capped at 120 s.
 - The bridge item is made once where the tester may build (`slate -make-bridge`).

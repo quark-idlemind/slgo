@@ -1,7 +1,8 @@
 // Command slate runs a Slate test file against a product in Second Life,
 // and makes the one item it needs once.
 //
-//	slate [-addr ADDR] [-agent NAME] [--pay] [-run REGEX] FILE
+//	slate [-addr ADDR] [-agent NAME] [--pay] [-run REGEX]
+//	      [--screen WxH] [--hud-zoom Z] FILE
 //	slate -make-bridge [-addr ADDR] [-agent NAME]
 //
 // A Slate file says what a person does to an object (touches it, sits on
@@ -16,6 +17,10 @@
 // are not printed. --pay lets the file spend Linden dollars: a file that
 // pays must say "allow pay" and the process must be given --pay, and
 // without it a payment fails the step before anything is sent.
+//
+// --screen WxH and --hud-zoom Z describe the world view a drag on the
+// screen is given in: 1920x1025 and 1 unless said. A value that is not
+// above 0, or not of that shape, is a usage error.
 //
 // -addr is where slgod is, and $SLGO_ADDR is that same answer when the
 // flag is empty. With neither set, where slgod runs is a question for
@@ -63,8 +68,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,7 +107,8 @@ func dial(ctx context.Context, addr, agent string) (*sl.Session, error) {
 	return sl.DialWeak(dctx, at, agent)
 }
 
-const usageText = `usage: slate [-addr ADDR] [-agent NAME] [--pay] [-run REGEX] FILE
+const usageText = `usage: slate [-addr ADDR] [-agent NAME] [--pay] [-run REGEX]
+             [--screen WxH] [--hud-zoom Z] FILE
        slate -make-bridge [-addr ADDR] [-agent NAME]
 
 slate runs the tests in FILE against the products it names, as the avatar
@@ -108,6 +116,9 @@ slgod holds. The run is printed to standard output as it happens.
 
   -run REGEX     run only the tests whose names match (RE2)
   --pay          allow the file's pay steps to spend Linden dollars
+  --screen WxH   the world view a drag on the screen is given in, in pixels
+                 (default 1920x1025: a 1920x1080 window less the menu bar)
+  --hud-zoom Z   the zoom HUDs are drawn at (default 1)
   -make-bridge   make the "slate bridge" item once, where the avatar may build
   -addr ADDR     where slgod is; empty asks sl-host, and a machine without
                  sl-host uses localhost:7807 ($SLGO_ADDR is the same as -addr)
@@ -125,6 +136,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, dial dial
 	agent := fs.String("agent", "", "which avatar")
 	pay := fs.Bool("pay", false, "allow the file's pay steps to spend Linden dollars")
 	runRE := fs.String("run", "", "run only the tests whose names match")
+	screen := fs.String("screen", fmt.Sprintf("%dx%d", slate.DefaultScreenWidth, slate.DefaultScreenHeight), "the world view a drag on the screen is given in, WxH pixels")
+	zoom := fs.Float64("hud-zoom", 1, "the zoom HUDs are drawn at")
 	bridge := fs.Bool("make-bridge", false, "make the slate bridge item")
 	showVersion := fs.Bool("version", false, "print the version")
 	if err := fs.Parse(args); err != nil {
@@ -141,12 +154,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, dial dial
 	if *bridge {
 		var extra []string
 		fs.Visit(func(f *flag.Flag) {
-			if f.Name == "pay" || f.Name == "run" {
+			if f.Name == "pay" || f.Name == "run" || f.Name == "screen" || f.Name == "hud-zoom" {
 				extra = append(extra, "-"+f.Name)
 			}
 		})
 		if len(extra) > 0 || fs.NArg() > 0 {
-			fmt.Fprintln(stderr, "slate: -make-bridge takes no FILE, --pay or -run")
+			fmt.Fprintln(stderr, "slate: -make-bridge takes no FILE, --pay, -run, --screen or --hud-zoom")
 			fs.Usage()
 			return 4
 		}
@@ -156,6 +169,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, dial dial
 	if fs.NArg() != 1 {
 		fmt.Fprintln(stderr, "slate: need exactly one FILE")
 		fs.Usage()
+		return 4
+	}
+	view, err := hudView(*screen, *zoom)
+	if err != nil {
+		fmt.Fprintf(stderr, "slate: %v\n", err)
 		return 4
 	}
 	file := fs.Arg(0)
@@ -203,7 +221,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, dial dial
 	}
 	defer sess.Close()
 
-	res, err := slate.Run(ctx, sess, script, slate.Options{Pay: *pay, Run: re, Out: stdout})
+	res, err := slate.Run(ctx, sess, script, slate.Options{Pay: *pay, Run: re, Out: stdout, Screen: view})
 	if err != nil {
 		// A setup failure is already in the transcript on stdout; say it
 		// again on stderr only when it is not.
@@ -218,6 +236,21 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, dial dial
 		return 1
 	}
 	return 0
+}
+
+// hudView is the world view the run's --screen and --hud-zoom describe.
+// Why: doc/slate-runner.md#a-drag-on-the-screen
+func hudView(screen string, zoom float64) (sl.HUDView, error) {
+	w, h, ok := strings.Cut(strings.ToLower(screen), "x")
+	wn, werr := strconv.Atoi(w)
+	hn, herr := strconv.Atoi(h)
+	if !ok || werr != nil || herr != nil || wn <= 0 || hn <= 0 {
+		return sl.HUDView{}, fmt.Errorf("--screen %q: want WIDTHxHEIGHT in pixels, both above 0, such as 1920x1025", screen)
+	}
+	if !(zoom > 0) || math.IsInf(zoom, 0) {
+		return sl.HUDView{}, fmt.Errorf("--hud-zoom %v: want a number above 0", zoom)
+	}
+	return sl.HUDView{Width: wn, Height: hn, Zoom: zoom}, nil
 }
 
 // bridgeMaker is slate.MakeBridge, which a test replaces.

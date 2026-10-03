@@ -282,6 +282,14 @@ type Agent struct {
 // one lock anything reading them takes.
 // Why: doc/history/teleport.md#open-questions
 type arrival struct {
+	// from is the simulator being arrived at.  Only what it sends is
+	// the arrival: a handshake or a movement from another address --
+	// the region being left, a packet of its still in the queue -- is
+	// not, as the viewer applies a handshake to the region at the
+	// sender's address (process_region_handshake).
+	// Why: doc/history/teleport.md#only-the-destination-arrives
+	from *net.UDPAddr
+
 	// named says the handshake has come, and region is what it said.
 	named  bool
 	region Region
@@ -642,6 +650,16 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	return a, nil
 }
 
+// fromElsewhereDuringMove reports whether a move is arriving somewhere
+// and p was not sent from there: a handshake or movement that is not the
+// destination's, and so neither its arrival nor this circuit's region.
+func (a *Agent) fromElsewhereDuringMove(p *msg.Packet) bool {
+	a.mu.RLock()
+	e := a.entering
+	a.mu.RUnlock()
+	return e != nil && e.from != nil && !sentBy(p, e.from)
+}
+
 // sentBy reports whether a packet came from addr.
 func sentBy(p *msg.Packet, addr *net.UDPAddr) bool {
 	from, ok := p.Addr.(*net.UDPAddr)
@@ -860,6 +878,9 @@ func (a *Agent) register() {
 	}, msg.Inline())
 
 	a.Disp.MustHandle("RegionHandshake", func(p *msg.Packet) {
+		if a.fromElsewhereDuringMove(p) {
+			return
+		}
 		m := p.Message.(*msg.RegionHandshake)
 		r := regionFromHandshake(m)
 		var moved *msg.AgentMovementComplete
@@ -901,6 +922,9 @@ func (a *Agent) register() {
 	}, msg.Inline())
 
 	a.Disp.MustHandle("AgentMovementComplete", func(p *msg.Packet) {
+		if a.fromElsewhereDuringMove(p) {
+			return
+		}
 		a.arrive(p.Message.(*msg.AgentMovementComplete))
 	}, msg.Inline())
 
@@ -1039,6 +1063,7 @@ func (a *Agent) register() {
 func (a *Agent) arrive(m *msg.AgentMovementComplete) {
 	a.mu.Lock()
 	r, known := a.here, a.introduced
+	completes := false
 	if e := a.entering; e != nil {
 		if !e.named {
 			e.moved = m
@@ -1047,6 +1072,7 @@ func (a *Agent) arrive(m *msg.AgentMovementComplete) {
 		}
 		r, known = e.region, true
 		a.entering = nil
+		completes = true
 	}
 	r.Handle = m.Data.RegionHandle
 	// was is the handle held until now, which is what says whether the
@@ -1060,8 +1086,11 @@ func (a *Agent) arrive(m *msg.AgentMovementComplete) {
 	a.setCenter(m.Data.Position)
 	a.inRegion.fire()
 	// A move is waiting for this one rather than for the first one
-	// ever, which inRegion has already answered.
-	if s := a.arrived.Load(); s != nil {
+	// ever, which inRegion has already answered -- and only for the
+	// arrival that completes it.  One that comes as the move is being
+	// set up, before it is entering anywhere, is the region left's.
+	// Why: doc/history/teleport.md#only-the-destination-arrives
+	if s := a.arrived.Load(); s != nil && completes {
 		s.fire()
 	}
 	a.regionChanged(was, r.Handle, r.Name, cause)

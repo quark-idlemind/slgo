@@ -836,3 +836,32 @@ Not seen on the grid: every `TeleportFinish` and `CrossedRegion`
 measured so far has carried its handle.  The viewer goes on to send
 `UseCircuitCode` on the circuit it already has; slgo sends nothing,
 which is a departure inferred to be harmless and not measured.
+
+## Only the destination arrives
+
+A move waits for the destination's `RegionHandshake` and
+`AgentMovementComplete`.  Until 2026-10-03 the handlers took any
+handshake or movement that arrived during a move as the destination's,
+whoever sent it.  A soak of the move tests under the race detector with
+a full test run alongside caught one failing in its second ten runs: a
+move to a region that never sent its handshake succeeded.  The region
+left had sent a second handshake -- the test simulator answered the
+session's retransmitted `UseCircuitCode` with another one -- and it was
+dispatched after the move had begun.  On the grid a late packet from the
+region left would do the same; that is inferred, not seen.
+
+The viewer applies a handshake to the region at the sender's address
+(`process_region_handshake`, Firestorm 885631b93a,
+`newview/llworld.cpp:1728`).  So now a move records where it is
+arriving, and while it is under way a handshake or movement from any
+other address is ignored: it is neither the arrival nor this circuit's
+region.  The test simulator, for its part, no longer acts again on a
+retransmission it has already handled, as a real simulator suppresses
+one.
+
+A second soak of that fix failed the same test once more, in its
+fifteenth ten runs.  A move installs the signal it waits on a moment
+before it records where it is entering, and an `AgentMovementComplete`
+dispatched between the two was handled as an ordinary arrival -- in the
+region left -- and fired the move's signal on the way.  Now only the
+arrival that completes the move it was entering fires it.

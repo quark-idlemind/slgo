@@ -20,6 +20,9 @@ const badDuration = "write 1500ms, not 1.5s; a duration is whole digits and a un
 // placeTouches treats a zero ST as not given and substitutes the middle.
 const originError = "at 0 0 is the middle of the face; placeTouches treats a zero ST as not given (sl/touch.go)"
 
+// notWorn is wornAt for a binding a rez made: in the world, not on anyone.
+const notWorn = -1
+
 // Check applies the static rules. It does not dial a region.
 // A failure is a *Error at the offending token. The step rules run on each
 // test's expanded steps: before each, the test, after each, with every do
@@ -35,6 +38,7 @@ func Check(s *Script) error {
 		bound:    map[string]Span{},
 		names:    map[string]Span{},
 		hidden:   map[string]Span{},
+		wornAt:   map[string]int{},
 		world:    map[string][]worldUse{},
 		items:    map[string]Span{},
 		gone:     map[string]Span{},
@@ -65,6 +69,7 @@ type checker struct {
 	declared map[string]bool        // header bindings, whatever order the headers are in
 	bound    map[string]Span        // visible in the step being checked
 	hdr      map[string]Span        // the header bindings, copied into bound per test
+	wornAt   map[string]int         // the attachment point a binding is known to be worn on, or notWorn
 	names    map[string]Span        // every name bound in this test, visible or not
 	hidden   map[string]Span        // bound in the body: after each cannot see them
 	capType  map[string]CaptureType // the type each capture of this test was bound with
@@ -162,6 +167,7 @@ func (c *checker) test(et ExpandedTest) error {
 	c.gone = map[string]Span{}
 	c.capType = map[string]CaptureType{}
 	c.capAll = map[string]bool{}
+	c.wornAt = map[string]int{}
 	defer func() { c.suffix = "" }()
 	var snap map[string]Span // what the body starts with
 	phase := Phase(-1)
@@ -408,10 +414,13 @@ func (c *checker) step(st Step) error {
 	if g := guardOf(&st); g != nil && len(st.Expect) > 0 {
 		return c.err(st.Expect[0].Span, "a guarded touch has no expectations; put them in the next step")
 	}
-	if d := st.Stimulus; d != nil && d.Drag != nil && d.Drag.Over != nil && !d.Drag.Over.Bad {
+	if d := st.Stimulus; d != nil && d.Drag != nil && d.Drag.Screen == nil && d.Drag.Over != nil && !d.Drag.Over.Bad {
 		if budget := c.budget(st); d.Drag.Over.Value > budget {
 			return c.err(d.Drag.Over.Span, "drag over %s is longer than the step's budget of %s, the longest within or the timeout", c.s.Source(d.Drag.Over.Span), budget)
 		}
+	}
+	if err := c.screenBudget(st); err != nil {
+		return err
 	}
 	seenAs := map[string]Span{}
 	for _, e := range st.Expect {
@@ -425,6 +434,7 @@ func (c *checker) step(st Step) error {
 		}
 		c.bound[name] = seenAs[name]
 		c.names[name] = seenAs[name]
+		c.wornAt[name] = notWorn
 	}
 	for _, b := range caps {
 		c.bound["$"+b.name] = b.span
@@ -509,6 +519,9 @@ func (c *checker) wear(w *Wear, same map[string]bool) error {
 	}
 	c.bound[as] = w.As.Span
 	c.names[as] = w.As.Span
+	if point, ok := sl.AttachPointNamed(w.Point); ok {
+		c.wornAt[as] = point
+	}
 	return nil
 }
 
@@ -647,9 +660,84 @@ func (c *checker) button(b *Button, same map[string]bool) error {
 	return nil
 }
 
+// screenBudget is the budget rule of a drag on the screen: its move, and
+// the wait for the HUD to change when it settles, must fit the step.
+// Why: doc/slate-language.md#static-checks
+func (c *checker) screenBudget(st Step) error {
+	d := st.Stimulus
+	if d == nil || d.Drag == nil || d.Drag.Screen == nil {
+		return nil
+	}
+	sd, over := d.Drag.Screen, defaultDragOver
+	if d.Drag.Over != nil {
+		if d.Drag.Over.Bad {
+			return nil
+		}
+		over = d.Drag.Over.Value
+	}
+	if d.Drag.Over == nil && !sd.Settle {
+		return nil
+	}
+	total, what := over, "drag over "+over.String()
+	if sd.Settle {
+		total += sl.DefaultHUDChangeTimeout
+		what += " and settle (up to " + sl.DefaultHUDChangeTimeout.String() + ")"
+	}
+	if budget := c.budget(st); total > budget {
+		return c.err(sd.Span, "%s can take %s, which is longer than the step's budget of %s, the longest within or the timeout", what, total, budget)
+	}
+	return nil
+}
+
+// screenDrag checks drag OBJ on screen: the binding is worn on a HUD
+// point when the script says how it was put on, and the numbers are
+// finite.
+// Why: doc/slate-language.md#static-checks
+func (c *checker) screenDrag(d *Drag, sd *ScreenDrag) error {
+	if at, ok := c.wornAt[d.Name.Text]; ok && !sl.IsHUDPoint(at) {
+		if at == notWorn {
+			return c.err(d.Name.Span, "%s is rezzed in the world; drag on screen needs an object worn on a HUD point", d.Name.Text)
+		}
+		return c.err(d.Name.Span, "%s is worn on %s; drag on screen needs an object worn on a HUD point", d.Name.Text, sl.AttachPointName(at))
+	}
+	if sd.Face != nil {
+		if _, err := c.fit(*sd.Face, "face"); err != nil {
+			return err
+		}
+		if sd.Link != nil {
+			if err := c.linkRange(*sd.Link); err != nil {
+				return err
+			}
+		}
+		for _, n := range []Number{sd.At.S, sd.At.T} {
+			if err := c.exact(n); err != nil {
+				return err
+			}
+		}
+	} else {
+		for _, n := range []Number{sd.FromPixels.S, sd.FromPixels.T} {
+			if err := c.exact(n); err != nil {
+				return err
+			}
+		}
+	}
+	for _, n := range []Number{sd.To.S, sd.To.T} {
+		if err := c.exact(n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *checker) drag(d *Drag, same map[string]bool) error {
 	if err := c.ref(d.Name, same); err != nil {
 		return err
+	}
+	if d.Screen != nil {
+		if err := c.screenDrag(d, d.Screen); err != nil {
+			return err
+		}
+		return c.duration(d.Over)
 	}
 	if d.Link != nil {
 		if err := c.linkRange(*d.Link); err != nil {

@@ -25,6 +25,11 @@ type Options struct {
 	Pay bool           // the --pay flag
 	Run *regexp.Regexp // the -run flag; nil runs every test
 	Out io.Writer      // when set, each transcript line is written to it as it happens
+
+	// Screen is the world view a drag on the screen is given in. A zero
+	// Width or Height is DefaultScreenWidth by DefaultScreenHeight, and a
+	// zero Zoom is 1.
+	Screen sl.HUDView
 }
 
 // TestResult is one test that ran.
