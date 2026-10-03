@@ -555,10 +555,10 @@ func (s *Server) streamRecv(ctx context.Context, stream pb.Grid_StreamServer, c 
 	}
 }
 
-// attachItemString leaves a not-worn object's item empty rather than
-// spelling out a zero uuid, so that "is it worn" is a test on the
-// field being set.
-func attachItemString(id msg.UUID) string {
+// uuidOrEmpty spells out a uuid, and leaves a zero one empty, so that
+// whether there is one (a worn object's item, a sculpt's asset) is a
+// test on the field being set.
+func uuidOrEmpty(id msg.UUID) string {
 	if id.IsZero() {
 		return ""
 	}
@@ -879,14 +879,14 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			TextureEntry: o.TextureEntry,
 			Text:         o.Text,
 			AttachPoint:  uint32(o.AttachPoint),
-			AttachItem:   attachItemString(o.AttachItem),
+			AttachItem:   uuidOrEmpty(o.AttachItem),
 			Rotation:     quat(o.Rotation),
 			Shape:        shape(o.Shape),
 			TextureAnim:  o.TextureAnim,
 			Click:        uint32(o.Click),
 			ClickKnown:   o.ClickKnown,
 			SculptKind:   uint32(o.Sculpt.Kind),
-			SculptId:     attachItemString(o.Sculpt.ID),
+			SculptId:     uuidOrEmpty(o.Sculpt.ID),
 			LinkNumber:   uint32(o.LinkNumber),
 			LinkKnown:    o.LinkKnown,
 		})

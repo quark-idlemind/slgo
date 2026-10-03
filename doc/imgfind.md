@@ -12,8 +12,9 @@ what the thresholds rest on.
 ## What the numbers were measured on
 
 Every threshold below was measured on one sample image, one 1024 by
-1024 HUD texture, and on the scenes the package's own tests draw. The sample is not in the
-repository, because it shows a product's interface and the rules of this
+1024 HUD texture, and on the scenes the package's own tests draw. The
+sample is not in the repository, because it shows a product's interface
+and the rules of this
 repository keep that out. A number below that says "the sample" was
 read off it and has not been checked on any other image. The drawn
 scenes are in `imgfind/find_test.go`: a ring, three triangles, a
@@ -58,9 +59,9 @@ the top-left of the image and Y increases downward.
 
 Errors start with `imgfind:`. A nil request, blank text, a pattern that
 does not compile, an unknown drawing and an unknown kind fail before
-the file is opened or the image looked at. The image is decoded once, and tesseract is run
-only when some request is text or a pattern. A drawing or a box is read
-from the pixels and needs nothing installed.
+the file is opened or the image looked at. The image is decoded once,
+and tesseract is run only when some request is text or a pattern. A
+drawing or a box is read from the pixels and needs nothing installed.
 
 ## How text is read
 
@@ -178,7 +179,6 @@ interface.
   outlined box. A `box` request therefore finds more than a button's
   outline when the text is small, and a `text ... box` button can be
   ambiguous because of it.
-
 - On 2026-10-01 a live face picture, read from the grid, misread one
   label that the full texture read correctly, so a label's reading can
   depend on how much of the texture the face shows.
@@ -225,10 +225,11 @@ one, and writes `DIR/N.png` for each textured face from
 `Faces` and `TextureImage`. A face with no texture is left out of the
 list of paths it prints, and an object with no texture at all is an
 error. A planar face or one whose texture is animating is an error,
-except with `-raw`. `find` runs `FindFile`; a request that matches nothing prints
-nothing and the command succeeds. Each match is one tab-separated line:
-the kind, the query, the contents, the top-left, the width, the height
-and the centre, with the query and the contents quoted.
+except with `-raw`. `find` runs `FindFile`; a request that matches
+nothing prints nothing and the command succeeds. Each match is one
+tab-separated line: the kind, the query, the contents, the top-left,
+the width, the height and the centre, with the query and the contents
+quoted.
 
 `-addr` is where slgod is, and `$SLGO_ADDR` is the same answer when the
 flag is empty. With neither, `sl-host` is asked about the avatar

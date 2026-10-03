@@ -113,9 +113,9 @@ func (b *binding) named(name string) bool {
 	return b.nameIs(func(n string) bool { return n == name })
 }
 
-// nameIs says whether a prim of the binding has a name is accepts. An
-// object's name from a message is compared through it and never read
-// out, since only Sender.Label may print one.
+// nameIs says whether a prim of the binding has a name that the function
+// is accepts. An object's name from a message is compared through it and
+// never read out, since only Sender.Label may print one.
 // Why: doc/im-senders.md#labelling-a-sender
 func (b *binding) nameIs(is func(string) bool) bool {
 	for _, p := range b.prims() {

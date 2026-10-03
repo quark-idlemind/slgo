@@ -297,11 +297,11 @@ func TestARelayEncodesWhatItWasNotGivenTheBytesOf(t *testing.T) {
 func TestAnItemIsNamedOnlyWhenSomethingIsWorn(t *testing.T) {
 	t.Parallel()
 
-	if got := attachItemString(msg.UUID{}); got != "" {
-		t.Errorf("attachItemString(zero) = %q, want empty", got)
+	if got := uuidOrEmpty(msg.UUID{}); got != "" {
+		t.Errorf("uuidOrEmpty(zero) = %q, want empty", got)
 	}
-	if got := attachItemString(aFriend); got != aFriend.String() {
-		t.Errorf("attachItemString(%v) = %q", aFriend, got)
+	if got := uuidOrEmpty(aFriend); got != aFriend.String() {
+		t.Errorf("uuidOrEmpty(%v) = %q", aFriend, got)
 	}
 }
 
