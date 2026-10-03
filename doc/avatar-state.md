@@ -229,3 +229,35 @@ brought another, also 100, about a third of a second after the
 Not measured: what a region with damage enabled sends as an avatar is
 hurt, how often, or whether a region without it ever sends one after
 login.
+
+## AlertMessage
+
+`AlertMessage` is the simulator's general channel for telling the avatar
+something: a refusal to sit, a notice, and the warning that the region
+is about to restart.  The text is in `AlertData`; a warning the viewer
+acts on also carries `AlertInfo` blocks, each a notification name and
+its parameters as serialized LLSD.  For a restart the name is
+`RegionRestartMinutes` or `RegionRestartSeconds`, with `MINUTES` or
+`SECONDS` in the parameters.  `attempt_standard_notification` in
+`newview/llviewermessage.cpp` reads them: at Firestorm 4ae31a7ad6 the
+name at :6445, the parameters at :6478, and the countdown from `MINUTES`
+or `SECONDS` at :6551-6561 (at d1f415d442, :6424, :6457 and
+:6530-6545).
+
+`sl` has always kept the text (`Session.Alerts`, `OnAlert`) and never
+read `AlertInfo`.  `agent/alert.go` now logs every alert as it comes,
+text and each `AlertInfo` block, quoted:
+
+    alert: "TEXT" info "NAME" "PARAMETERS"
+
+so that the daemon's log has a restart warning on record when one
+happens.  Clients are unaffected: they get every alert through the tap,
+whatever handles it in the agent.
+
+### Not yet measured
+
+No restart warning has been seen.  No region is available to restart
+on demand, so the measurement waits for a region an avatar is in to
+restart on its own, for a rolling update or otherwise.  Until
+then what a warning carries, how many come and how far apart, and what
+follows the last of them, are read from Firestorm and not seen.
