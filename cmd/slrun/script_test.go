@@ -268,9 +268,10 @@ func TestSeveralScriptsTakeOneObjectAndASingleScriptTakesNone(t *testing.T) {
 		t.Errorf("several scripts held %d groups, want the one they all run in", n)
 	}
 	done()
-	if n := heldGroups(t, c); n != 0 {
-		t.Errorf("%d groups were still held after the run", n)
-	}
+	// The lease is the stream, and the backend lets go when it hears the
+	// stream end, a moment after Close (measured: 9 ms at most in 300
+	// runs under load), so this waits rather than looks once.
+	until(t, "the group coming free", func() bool { return heldGroups(t, c) == 0 })
 }
 
 // TestAnObjectByNameIsNotSomethingABackendHas: the contract says nothing
