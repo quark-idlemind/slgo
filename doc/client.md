@@ -66,3 +66,44 @@ the replacement reaches the new session; one made while the old is
 still in place is answered 404 again, and it is the caller's own
 retrying -- slbotd's outfit passes, every 20 seconds for five minutes
 -- that outlasts it.
+
+## A connection that comes back
+
+slgod proves a transport connection, not a gRPC channel: it refuses
+every method but Login with `Unauthenticated`, "not authenticated: call
+Login on this connection first", on a connection that has not run the
+handshake, and the handshake is bound to that connection's TLS session.
+`Dial` made one channel and logged in once. A gRPC channel with no calls
+for its idle timeout, 30 minutes by default and not changed here, goes
+idle and closes its transport; the next call opens a new one, with a new
+TLS session that has never logged in. A transport re-established after
+a network blip would be the same; that is inferred, not measured. That
+the idle one does this was measured on
+2026-10-02 against a running slgod, with a probe that dialled, called
+`ListAgents`, waited and called again:
+
+    22:29:19 at once: agents=8 code=OK err=<nil>
+    23:00:19 after 31m0s: agents=0 code=Unauthenticated err=rpc error: code = Unauthenticated desc = not authenticated: call Login on this connection first
+    23:00:19 again: agents=0 code=Unauthenticated err=rpc error: code = Unauthenticated desc = not authenticated: call Login on this connection first
+
+After 5 seconds idle, the same probe's second call was answered. The
+effect seen in production on 2026-10-01 was slbotd's control
+connection, dialled once, refusing every `Host` from then on, so that an
+avatar needing to be hosted again never was until slbotd restarted.
+
+So a `Conn` from `Dial` now logs in again when a call is refused
+`Unauthenticated`: it runs the handshake on the same channel, which
+binds to the new TLS session, and makes the call once more. The retry is
+safe for every method, those that change something included, because
+slgod's interceptor refuses before the handler runs; that is read from
+the code, not measured. Calls refused together cause one login between
+them: each notes a count of logins before it calls, and one that finds
+the count moved on has been logged in for already and only retries. If
+logging in again fails, the call returns the refusal, with the reason
+added, and `status.Code` still says `Unauthenticated`.
+
+Streams are not retried. A stream on a lost transport ends and the
+`Conn` finishes as it always did; whoever dialled attaches again. A
+login that fails is also why slbotd drops its control connection on
+`Unauthenticated` as it does on `Unavailable`: the next call dials
+afresh.

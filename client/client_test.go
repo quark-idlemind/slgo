@@ -30,7 +30,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/auth"
@@ -94,6 +97,15 @@ type fakeDaemon struct {
 	shortChallenge bool
 	refuseProof    bool
 	wrongProof     bool
+
+	// loginMu guards the three that follow: loggedIn is the TLS
+	// sessions that finished the handshake, which the interceptor in
+	// authDaemon checks every other method against as slgod does,
+	// logins counts them, and denyLogin refuses the proof from now on.
+	loginMu   sync.Mutex
+	loggedIn  map[string]bool
+	logins    int
+	denyLogin bool
 
 	// attachFail refuses the attach outright -- a daemon not holding
 	// the session that was asked for -- and answerAttachWith replaces
@@ -191,7 +203,30 @@ func authDaemon(t *testing.T) (*fakeDaemon, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return d, d.serve(t, grpc.Creds(creds))
+	return d, d.serve(t, grpc.Creds(creds), grpc.UnaryInterceptor(d.requireLogin))
+}
+
+// requireLogin refuses every method but Login on a TLS session that has
+// not finished the handshake, as server.AuthInterceptors does.
+func (d *fakeDaemon) requireLogin(ctx context.Context, req any, info *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
+	if info.FullMethod != pb.Grid_Login_FullMethodName {
+		b, err := auth.BindingFromContext(ctx)
+		d.loginMu.Lock()
+		ok := err == nil && d.loggedIn[string(b)]
+		d.loginMu.Unlock()
+		if !ok {
+			return nil, status.Error(codes.Unauthenticated,
+				"not authenticated: call Login on this connection first")
+		}
+	}
+	return h(ctx, req)
+}
+
+// loginCount is how many handshakes the daemon has finished.
+func (d *fakeDaemon) loginCount() int {
+	d.loginMu.Lock()
+	defer d.loginMu.Unlock()
+	return d.logins
 }
 
 // writeSecret puts a shared secret where LoadSecret will find it, in a
@@ -299,13 +334,23 @@ func (d *fakeDaemon) Login(ctx context.Context, req *pb.LoginRequest) (*pb.Login
 		}
 		return &pb.LoginResponse{Challenge: challenge}, nil
 	}
-	if d.refuseProof {
+	d.loginMu.Lock()
+	deny := d.denyLogin
+	d.loginMu.Unlock()
+	if d.refuseProof || deny {
 		return nil, errors.New("that is not the secret")
 	}
 	proof, _, err := d.auth.Answer(req.GetChallenge(), req.GetProof(), binding)
 	if err != nil {
 		return nil, err
 	}
+	d.loginMu.Lock()
+	if d.loggedIn == nil {
+		d.loggedIn = map[string]bool{}
+	}
+	d.loggedIn[string(binding)] = true
+	d.logins++
+	d.loginMu.Unlock()
 	if d.wrongProof {
 		proof = append([]byte(nil), proof...)
 		proof[0]++
@@ -571,6 +616,113 @@ func TestTheHandshakeProvesBothEnds(t *testing.T) {
 	got, err := conn.ListAgents(ctx)
 	if err != nil || len(got) != 1 {
 		t.Errorf("ListAgents = %v, %v", got, err)
+	}
+}
+
+// ---------------------------------------- a connection that comes back
+
+// idleDial dials the real handshake with a channel that goes idle after
+// a moment, and waits until it has, which closes its transport.  It
+// returns how long that took.
+func idleDial(t *testing.T, ctx context.Context, addr string) (*Conn, time.Duration) {
+	t.Helper()
+	conn, err := dial(ctx, addr, true, grpc.WithIdleTimeout(300*time.Millisecond))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	t.Cleanup(func() { conn.Close() })
+	start := time.Now()
+	for s := conn.cc.GetState(); s != connectivity.Idle; s = conn.cc.GetState() {
+		if !conn.cc.WaitForStateChange(ctx, s) {
+			t.Fatalf("the channel never went idle: still %v", s)
+		}
+	}
+	return conn, time.Since(start)
+}
+
+// TestACallAfterTheChannelWentIdleLogsInAgain: the channel's transport
+// is closed when it goes idle and the next call opens another, which
+// slgod has not seen log in.  Without the client's own re-login that
+// call is refused for ever.
+// Why: doc/client.md#a-connection-that-comes-back
+func TestACallAfterTheChannelWentIdleLogsInAgain(t *testing.T) {
+	d, addr := authDaemon(t)
+	d.agents = []*pb.AgentInfo{{Name: "quark"}}
+	// The idle wait is 300 ms; 60 s is far past anything a handshake
+	// and a call take, so it only ends a hang.
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// A TLS session that never logged in is refused, which is what the
+	// idle channel's next transport is.
+	creds, _ := auth.ClientTLS()
+	raw, err := grpc.NewClient(addr, grpc.WithTransportCredentials(creds))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := pb.NewGridClient(raw).ListAgents(ctx, &pb.ListAgentsRequest{}); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("a transport that never logged in got %v, want Unauthenticated", err)
+	}
+
+	conn, took := idleDial(t, ctx, addr)
+	t.Logf("the channel went idle after %v", took)
+	if got, err := conn.ListAgents(ctx); err != nil || len(got) != 1 {
+		t.Fatalf("ListAgents after idle = %v, %v", got, err)
+	}
+	if n := d.loginCount(); n != 2 {
+		t.Errorf("the daemon saw %d logins, want the first and one more", n)
+	}
+}
+
+// TestCallsRefusedTogetherCauseOneLogin: every call that was waiting on
+// the lost transport is refused at once, and each logging in again
+// would be a handshake apiece.
+func TestCallsRefusedTogetherCauseOneLogin(t *testing.T) {
+	d, addr := authDaemon(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	conn, _ := idleDial(t, ctx, addr)
+
+	const callers = 8
+	start := make(chan struct{})
+	errs := make(chan error, callers)
+	for i := 0; i < callers; i++ {
+		go func() {
+			<-start
+			_, err := conn.ListAgents(ctx)
+			errs <- err
+		}()
+	}
+	close(start)
+	for i := 0; i < callers; i++ {
+		if err := <-errs; err != nil {
+			t.Errorf("a caller got %v", err)
+		}
+	}
+	if n := d.loginCount(); n != 2 {
+		t.Errorf("the daemon saw %d logins for %d callers, want the first and one more", n, callers)
+	}
+}
+
+// TestALoginThatFailsAgainStillReadsAsUnauthenticated: callers and
+// slbotd tell a lost login by the code, so logging in again failing must
+// not change it.
+func TestALoginThatFailsAgainStillReadsAsUnauthenticated(t *testing.T) {
+	d, addr := authDaemon(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	conn, _ := idleDial(t, ctx, addr)
+
+	d.loginMu.Lock()
+	d.denyLogin = true
+	d.loginMu.Unlock()
+	_, err := conn.ListAgents(ctx)
+	if status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("ListAgents = %v (%v), want Unauthenticated", err, status.Code(err))
+	}
+	if !strings.Contains(err.Error(), "logging in again") {
+		t.Errorf("ListAgents = %v, want it to say the second login failed", err)
 	}
 }
 
