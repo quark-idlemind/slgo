@@ -146,6 +146,10 @@ type Agent struct {
 	handshook signal
 	loggedOut signal
 
+	// loggingOut is set when Logout begins, before the request goes.
+	// See ending.
+	loggingOut atomic.Bool
+
 	// arrived, when a move has installed one, is fired when the
 	// avatar has arrived in the new region: when both its
 	// RegionHandshake and its AgentMovementComplete have come, in
@@ -793,6 +797,7 @@ func (a *Agent) register() {
 	a.trackPosture()
 	a.keepOffers()
 	a.keepMoney()
+	a.keepOutfit()
 	a.keepSimStats()
 	a.keepRegionInfo()
 	a.keepScriptControls()
@@ -1363,6 +1368,7 @@ func (a *Agent) Logout(ctx context.Context, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = 10 * time.Second
 	}
+	a.loggingOut.Store(true)
 	out := &msg.LogoutRequest{}
 	out.AgentData.AgentID = a.Account.AgentID
 	out.AgentData.SessionID = a.Account.SessionID

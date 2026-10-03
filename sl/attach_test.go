@@ -962,3 +962,44 @@ func TestEnsureAttachedSaysWhichStepFailed(t *testing.T) {
 		}
 	})
 }
+
+// TestAnAttachmentTheRegionKillsIsNoLongerWorn: a script's detach ends
+// in a KillObject for the attachment, and the record of what is worn
+// has to follow it. A teleport sends no kill and describes the
+// attachment again under a new local id, which is still worn.
+// Why: doc/outfit.md#an-attachment-that-takes-itself-off
+func TestAnAttachmentTheRegionKillsIsNoLongerWorn(t *testing.T) {
+	item := msg.MustParseUUID("75f27e57-7e57-c0de-3e6e-cebd8a8d72d0")
+
+	t.Run("killed", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.Relay(t, wornUpdate(thePrim, 4, item, HUDTop))
+		f.Relay(t, &msg.KillObject{ObjectData: []msg.KillObject_ObjectData{{ID: 9}}})
+		if _, ok := w.WornFrom(item); !ok {
+			t.Fatal("the kill of another local id took the attachment off")
+		}
+		f.Relay(t, &msg.KillObject{ObjectData: []msg.KillObject_ObjectData{{ID: 4}}})
+		if _, ok := w.WornFrom(item); ok {
+			t.Error("a killed attachment is still reported worn")
+		}
+		if n := len(w.Attachments()); n != 0 {
+			t.Errorf("%d attachments after the kill", n)
+		}
+	})
+
+	t.Run("described again", func(t *testing.T) {
+		w, f := newFakeSession(t)
+		f.Relay(t, wornUpdate(thePrim, 4, item, HUDTop))
+		f.Relay(t, wornUpdate(thePrim, 11, item, HUDTop))
+		got, ok := w.WornFrom(item)
+		if !ok || got.Object.Local != 11 {
+			t.Errorf("WornFrom = %+v, %v; want worn under local id 11", got, ok)
+		}
+		// The old local id is gone from the region; killing it must not
+		// take the new description with it.
+		f.Relay(t, &msg.KillObject{ObjectData: []msg.KillObject_ObjectData{{ID: 4}}})
+		if _, ok := w.WornFrom(item); !ok {
+			t.Error("the kill of the old local id took the redescribed attachment off")
+		}
+	})
+}

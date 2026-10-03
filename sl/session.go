@@ -744,6 +744,16 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.mu.Lock()
 		for _, d := range t.ObjectData {
 			w.killed[d.ID] = true
+			// A worn attachment that the region kills is no longer
+			// worn: a script's llDetachFromAvatar, or our own take-off.
+			// A teleport sends no kill for it and describes it again
+			// under a new local id, which replaces the entry.
+			// Why: doc/outfit.md#an-attachment-that-takes-itself-off
+			for item, at := range w.attach {
+				if at.Object.Local == d.ID {
+					delete(w.attach, item)
+				}
+			}
 		}
 		w.mu.Unlock()
 
