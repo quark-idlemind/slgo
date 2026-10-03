@@ -1,0 +1,201 @@
+#!/usr/bin/perl
+# scan-images finds images that carry metadata beyond what drawing them
+# needs, and says which kinds each carries.
+#
+# An image is recognised by its first bytes, whatever it is called: PNG,
+# JPEG, GIF and WebP.  Anything else is not an image here and is passed
+# over.  What drawing an image needs is allowed; everything else -- text,
+# Exif, XMP, colour profiles, timestamps, comments, application blocks,
+# and data after the image ends -- is reported, because a screenshot or a
+# photograph carries the machine, the software, the time and sometimes
+# the place in exactly those.
+#
+# What this cannot see is what the pixels show: a name tag, a chat line, a
+# map.  That is read by hand.  See doc/identities.md.
+#
+#   scan-images --check FILE...   one line per image that carries any:
+#                                 "FILE: kind, kind"; exit 1 if any did
+#
+# Go's image/png, image/jpeg and image/gif encoders write none of these, so
+# an image a Go program generated passes as it is.
+use strict;
+use warnings;
+
+my @files = grep { $_ ne '--check' } @ARGV;
+my $found = 0;
+
+for my $f (@files) {
+	open(my $fh, '<:raw', $f) or next;
+	local $/;
+	my $b = <$fh>;
+	close $fh;
+	next unless defined $b;
+	my @kinds;
+	if (substr($b, 0, 8) eq "\x89PNG\r\n\x1a\n") {
+		@kinds = png($b);
+	} elsif (substr($b, 0, 3) eq "\xff\xd8\xff") {
+		@kinds = jpeg($b);
+	} elsif (substr($b, 0, 6) eq 'GIF87a' || substr($b, 0, 6) eq 'GIF89a') {
+		@kinds = gif($b);
+	} elsif (substr($b, 0, 4) eq 'RIFF' && substr($b, 8, 4) eq 'WEBP') {
+		@kinds = webp($b);
+	} else {
+		next;
+	}
+	next unless @kinds;
+	my %seen;
+	@kinds = grep { !$seen{$_}++ } @kinds;
+	print "$f: ", join(', ', @kinds), "\n";
+	$found = 1;
+}
+exit($found ? 1 : 0);
+
+# png walks the chunks.  The critical ones, transparency, the colour space
+# and APNG's animation chunks are what drawing needs; any other ancillary
+# chunk is reported by its name.
+sub png {
+	my ($b) = @_;
+	my %ok = map { $_ => 1 } qw(IHDR PLTE IDAT IEND tRNS gAMA cHRM sRGB sBIT acTL fcTL fdAT);
+	my @k;
+	my $p = 8;
+	while ($p + 8 <= length $b) {
+		my ($len, $type) = unpack('N a4', substr($b, $p, 8));
+		push @k, "PNG $type chunk" unless $ok{$type};
+		$p += 12 + $len;
+		if ($type eq 'IEND') {
+			push @k, 'data after the PNG ends' if $p < length $b;
+			return @k;
+		}
+	}
+	push @k, 'a PNG that does not end' ;
+	return @k;
+}
+
+# jpeg walks the segments up to each scan and the markers within it.  The
+# JFIF and Adobe headers and what decoding needs are allowed; every other
+# APPn (Exif, XMP, ICC, IPTC), a comment, and data after the end are
+# reported.
+sub jpeg {
+	my ($b) = @_;
+	my @k;
+	my $n = length $b;
+	my $p = 2;
+	while ($p + 2 <= $n) {
+		if (substr($b, $p, 1) ne "\xff") {
+			push @k, 'a JPEG that does not parse';
+			return @k;
+		}
+		my $m = ord(substr($b, $p + 1, 1));
+		if ($m == 0xff) { $p++; next }    # fill byte
+		if ($m == 0xd9) {                 # EOI
+			$p += 2;
+			push @k, 'data after the JPEG ends' if $p < $n;
+			return @k;
+		}
+		if ($m >= 0xd0 && $m <= 0xd7) { $p += 2; next }    # RSTn
+		return (@k, 'a JPEG that does not parse') if $p + 4 > $n;
+		my $len = unpack('n', substr($b, $p + 2, 2));
+		my $data = substr($b, $p + 4, $len - 2);
+		if ($m >= 0xe0 && $m <= 0xef) {
+			my $app = $m - 0xe0;
+			if ($app == 0 && ($data =~ /^JFIF\0/ || $data =~ /^JFXX\0/)) {
+			} elsif ($app == 14 && $data =~ /^Adobe/) {
+			} elsif ($app == 1 && $data =~ /^Exif\0/) {
+				push @k, 'JPEG Exif (APP1)';
+			} elsif ($app == 1 && $data =~ m{^http://ns\.adobe\.com/xap/}) {
+				push @k, 'JPEG XMP (APP1)';
+			} elsif ($app == 2 && $data =~ /^ICC_PROFILE\0/) {
+				push @k, 'JPEG ICC profile (APP2)';
+			} elsif ($app == 13) {
+				push @k, 'JPEG Photoshop/IPTC (APP13)';
+			} else {
+				push @k, "JPEG APP$app segment";
+			}
+		} elsif ($m == 0xfe) {
+			push @k, 'JPEG comment (COM)';
+		}
+		$p += 2 + $len;
+		if ($m == 0xda) {    # SOS: entropy-coded data until the next marker
+			while ($p + 1 < $n) {
+				if (substr($b, $p, 1) eq "\xff") {
+					my $x = ord(substr($b, $p + 1, 1));
+					last if $x != 0 && !($x >= 0xd0 && $x <= 0xd7);
+				}
+				$p++;
+			}
+		}
+	}
+	push @k, 'a JPEG that does not end';
+	return @k;
+}
+
+# gif walks the blocks.  Frames, graphic control and the animation loop's
+# application extension are allowed; a comment, plain text drawn from a
+# block, any other application extension, and data after the trailer are
+# reported.
+sub gif {
+	my ($b) = @_;
+	my @k;
+	my $n = length $b;
+	my $flags = ord(substr($b, 10, 1));
+	my $p = 13;
+	$p += 3 * (2 ** (($flags & 7) + 1)) if $flags & 0x80;
+	my $subblocks = sub {
+		while ($p < $n) {
+			my $s = ord(substr($b, $p, 1));
+			$p += 1 + $s;
+			last if $s == 0;
+		}
+	};
+	while ($p < $n) {
+		my $t = ord(substr($b, $p, 1));
+		if ($t == 0x3b) {
+			$p++;
+			push @k, 'data after the GIF ends' if $p < $n;
+			return @k;
+		} elsif ($t == 0x2c) {
+			my $f = ord(substr($b, $p + 9, 1));
+			$p += 10;
+			$p += 3 * (2 ** (($f & 7) + 1)) if $f & 0x80;
+			$p++;    # LZW minimum code size
+			$subblocks->();
+		} elsif ($t == 0x21) {
+			my $label = ord(substr($b, $p + 1, 1));
+			if ($label == 0xfe) {
+				push @k, 'GIF comment';
+			} elsif ($label == 0x01) {
+				push @k, 'GIF plain text block';
+			} elsif ($label == 0xff) {
+				my $id = substr($b, $p + 3, 11);
+				push @k, "GIF application extension ($id)"
+				    unless $id eq 'NETSCAPE2.0' || $id eq 'ANIMEXTS1.0';
+			}
+			$p += 2;
+			$subblocks->();
+		} else {
+			push @k, 'a GIF that does not parse';
+			return @k;
+		}
+	}
+	push @k, 'a GIF that does not end';
+	return @k;
+}
+
+# webp walks the RIFF chunks: the bitstreams, alpha, the extended header and
+# animation are allowed; EXIF, XMP, an ICC profile and anything unknown are
+# reported.
+sub webp {
+	my ($b) = @_;
+	my %ok = map { $_ => 1 } ('VP8 ', 'VP8L', 'VP8X', 'ALPH', 'ANIM', 'ANMF');
+	my @k;
+	my $p = 12;
+	while ($p + 8 <= length $b) {
+		my ($type, $len) = unpack('a4 V', substr($b, $p, 8));
+		unless ($ok{$type}) {
+			(my $name = $type) =~ s/ +$//;
+			push @k, "WebP $name chunk";
+		}
+		$p += 8 + $len + ($len & 1);
+	}
+	return @k;
+}

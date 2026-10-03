@@ -181,13 +181,16 @@ been. `objects --owner` names people.
     tools/check-identities --install-hook   before every commit and message
 
 Every check runs and the exit status says if any found something: a
-compiled binary, a network address, an id without the signature, a grid
+compiled binary, an image carrying metadata (Exif, XMP, text chunks, a
+comment), a network address, an id without the signature, a grid
 square that is not marked, a name that is not on `tools/known-names`, a
 name on the local list. Only the last needs the list kept off the tree;
 the others need nothing, and run for everybody. An id in a file
 name, a tag or a commit message is as written down as one in a file, and
 `doc/identities.md` catalogues every form an identifier or a name takes
-here and which check, if any, sees it.
+here and which check, if any, sees it. What an image shows -- a name
+tag, a chat line, a map -- is not checked by anything: look at every
+image before committing it.
 
 It reads the list of real names from `~/.config/slgo/identities.tsv`,
 or from `$SLGO_IDENTITIES`. That list is deliberately not in this

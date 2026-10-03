@@ -30,9 +30,10 @@
 # Every check runs, whatever an earlier one found: it prints the file and line
 # of everything it finds, and what to write instead, and the exit status is 1
 # at the end if any of them found something, 0 if none did.  The checks are:
-# a compiled binary, a network address, a 128-bit identifier that does not
-# carry the signature (tools/scan-ids, which doc/identities.md describes), a
-# grid square that is not marked, a name that is not on tools/known-names, and
+# a compiled binary, an image carrying metadata (tools/scan-images), a
+# network address, a 128-bit identifier that does not carry the signature
+# (tools/scan-ids, which doc/identities.md describes), a grid square that is
+# not marked, a name that is not on tools/known-names, and
 # the list of real names above.  Only the last needs a list kept off the tree;
 # the others need nothing.
 
@@ -110,7 +111,10 @@ else
 		[ -f "$root/$f" ] && idfiles="$idfiles $root/$f"
 	done
 fi
-[ -n "$text" ] || { echo "check-identities: nothing to check"; exit 0; }
+# No text is not nothing to check: a binary or an image on its own is still
+# checked below, and the text checks are given an empty file to read rather
+# than the standard input a grep with no files would wait on.
+[ -n "$text" ] || text=/dev/null
 
 # Nothing compiled belongs in the repository.  A Go binary also carries
 # whatever string constants the source had when it was built, so it is a copy
@@ -141,6 +145,28 @@ and in the root list if it is built by path -- and take it out of the change.
 A binary committed once stays in the history for as long as the history does.
 BIN
 	failed=1
+fi
+
+# An image carries more than its pixels: a screenshot or a photograph keeps
+# the machine, the software, the time and sometimes the place in text
+# chunks, Exif and XMP.  tools/scan-images reads PNG, JPEG, GIF and WebP by
+# their content and names what each carries beyond what drawing it needs.
+# What the pixels show is not something it can see; that is read by hand.
+# See doc/identities.md.
+if [ -n "$idfiles" ]; then
+	images=$("$root/tools/scan-images" --check $idfiles 2>&1 || true)
+	if [ -n "$images" ]; then
+		echo "check-identities: these images carry metadata, which can name the machine,"
+		echo "the software, the time or the place they were made:"
+		echo
+		printf '%s\n' "$images" | sed "s|^$root/|  |"
+		cat <<'IMG'
+
+Strip it with "exiftool -all= FILE" (or write the image again with Go's
+encoders, which add none), and look at what the picture itself shows.
+IMG
+		failed=1
+	fi
 fi
 
 # A simulator's address says which machine a real region was running on.
