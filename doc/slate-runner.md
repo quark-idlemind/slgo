@@ -1,6 +1,6 @@
 # The Slate runner
 
-Status: built. PRs 1 and 3 to 8 are in the development clone's `slate` branch, and the `slate` command has run end to end on the grid ([Fourth round, the runner end to end](#fourth-round-the-runner-end-to-end)). Wave 1 (contextual words, open dialogs, captured values, face properties with `face all`, and `touch ... showing`) is PRs 9 to 13 in the same branch, and wave 2 (button observations and the guarded touch, `ordered` and `sorted` dialogs, items with `wear`, `take off` and `attached`, and the `description` qualifier) is PRs 14 to 19. Both waves have run end to end on the grid ([Sixth round, wave 1 end to end](#sixth-round-wave-1-end-to-end), [Ninth round, wave 2 end to end](#ninth-round-wave-2-end-to-end)). The [PR plan](#pr-plan) says which parts each PR holds. The image finder, `imgfind`, and the picture a face shows, `Session.FacePicture`, are in the repository ([slate-sl-changes.md](slate-sl-changes.md#imgfind), [what a face shows](slate-sl-changes.md#what-a-face-shows)). The runner drives the `sl` API as it stands, plus the two changes in [slate-sl-changes.md](slate-sl-changes.md): the click-action byte ([click action](slate-sl-changes.md#click-action)) and the exported `Session.ScriptsBlocked` ([ScriptsBlocked](slate-sl-changes.md#scriptsblocked)).
+Status: built. All of Slate's PRs are in the repository, public since b1c37bc, and the `slate` command has run end to end on the grid ([Fourth round, the runner end to end](#fourth-round-the-runner-end-to-end)). Wave 1 (contextual words, open dialogs, captured values, face properties with `face all`, and `touch ... showing`) is PRs 9 to 13, and wave 2 (button observations and the guarded touch, `ordered` and `sorted` dialogs, items with `wear`, `take off` and `attached`, and the `description` qualifier) is PRs 14 to 19. Both waves have run end to end on the grid ([Sixth round, wave 1 end to end](#sixth-round-wave-1-end-to-end), [Ninth round, wave 2 end to end](#ninth-round-wave-2-end-to-end)). The [PR plan](#pr-plan) says which parts each PR holds. The image finder, `imgfind`, and the picture a face shows, `Session.FacePicture`, are in the repository ([slate-sl-changes.md](slate-sl-changes.md#imgfind), [what a face shows](slate-sl-changes.md#what-a-face-shows)). The runner drives the `sl` API as it stands, plus the two changes in [slate-sl-changes.md](slate-sl-changes.md): the click-action byte ([click action](slate-sl-changes.md#click-action)) and the exported `Session.ScriptsBlocked` ([ScriptsBlocked](slate-sl-changes.md#scriptsblocked)).
 
 This is the document for the engineer who implements the runner. The language itself, which is what a test author reads, is [slate-language.md](slate-language.md): the lexical grammar ([lexical grammar](slate-language.md#lexical-grammar)), the PEG ([syntactic grammar](slate-language.md#syntactic-grammar)), the static checks ([static checks](slate-language.md#static-checks)), tests, sequences and `before each` / `after each` ([tests](slate-language.md#tests-sequences-before-and-after)), the rules a step follows as an author sees them ([steps and timing](slate-language.md#steps-and-timing)), the exit codes, failure block and transcript line shapes ([reading the result](slate-language.md#reading-the-result)), and the worked examples ([worked examples](slate-language.md#worked-examples)). This document does not repeat them. Where the runner must print a sentence exactly, the sentence is here or there, never in both.
 
@@ -356,6 +356,19 @@ If no dialog is held for that object, the step fails before sending. If the held
 `Wear` returns after about 0.2 s, and the product's own `on_rez` and `attach()` reach it about 2 s after `Wear` returns ([Eighth round](#eighth-round)). The step's `within` has to cover that gap, which the default 10 s does. The one exception to the rule that a name bound in a step is usable from the next step is this name, and the References static check is extended for it. The runner does not take off what a test wore: that is `after each`'s job. A run that was killed can leave the product worn, and the next `wear` then fails with the sentence of step 1.
 
 **Take off.** `take off NAME` is `Session.TakeOff` with the item `NAME` was worn from: the one `wear` recorded, or, for a header object that is worn, the item its `Seen.AttachItem` names. A binding with no item fails the step with `NAME is not worn`. The stimulus is complete when the store no longer lists the worn root: it reads the object by id on the object poll (250 ms) under the stimulus budget, and past the budget fails with `"<item>" is still in the store <budget> after the take off`. The store dropped the root about 0.1 s after the request ([Eighth round](#eighth-round)), and `attach(NULL_KEY)` arrived about 75 ms after the request, before that, so waiting on the store is enough. When it returns it takes one more object poll, so that an `attached NAME off` in the same step has its reading. A name that was taken off is not usable from the next step on, by static check.
+
+### A drag on the screen
+
+`drag OBJ on screen from POINT (to X Y | by DX DY) [over D] [settle]` ([the language](slate-language.md#stimuli)) is `Session.DragOnScreen` with the binding's root and a `sl.ScreenDrag` of two points. It is a blocking stimulus, with the stimulus budget as `drag` has: `Move` is `D`, 500 ms if omitted, and `Press`, `Dwell` and `Rate` are left at `sl`'s, as the face drag leaves them. `DragOnScreen` always lets go, cancellation included, and the runner does nothing to undo that.
+
+1. In prepare, before anything is sent: the root of the binding's linkset must have an attachment point that is a HUD point (`sl.IsHUDPoint`, 31 to 38), else the step fails with `slate: step N: "<name>" is not worn; a drag on the screen needs an object worn on a HUD point, and nothing was sent` (`is worn on <point>` for another point). The checker has already refused a binding it knows is not on one ([Static checks](slate-language.md#static-checks)); a header binding is known only here, from the store.
+2. A start given as a face is turned into pixels with `HUDView.PointOf` over the linkset as `Session.Linkset` reads it now (link N, or the root), so a HUD that moved since the last step is found where it is. A face the prim does not have, or a shape that cannot be placed (`sl.ErrShapeNotPlaced`: only a plain box or cylinder can), fails the step with a sentence and nothing sent. A start in pixels is used as written.
+3. `by DX DY` is added to the start in pixels; `to X Y` is used as written.
+4. `settle` is `ScreenDrag.Settle`. It waits for the region to say the prim pressed has changed, for `Options.HUDChangeTimeout` at most, 5 s by default, and a HUD that does not change fails the step with `<prim> to change when pressed` and a timeout, after letting go. The static check adds that wait to the drag's time against the step's budget, because the stimulus is bounded by the budget as a whole. The check uses the default, as the runner sets no other.
+
+The world view is virtual, and given by the run, not the file: `Options.Screen`, an `sl.HUDView` whose zero width or height is 1920 by 1025 (`DefaultScreenWidth`, `DefaultScreenHeight`: a 1920x1080 window less the viewer's menu bar) and whose zero zoom is 1. `slate` sets it from `--screen WxH` and `--hud-zoom Z`. The reason pixels are the unit and not fractions: where a HUD sits on the screen depends on the shape of the world view ([The world view](hud-screen.md#the-world-view)), so a fraction would not free a test from the screen, and pixels in a stated screen are honest and match screenshots and the measurements; the face form is for a test that wants no pixels. What the run is told is not measured against the viewer's real window, which is the tester's to state.
+
+Not built: the effect of a drag on a worn HUD, its position and size, is not an expectation. There is no observation of a worn root's attachment offset or scale in Slate today.
 
 ## Expectations
 
@@ -1118,14 +1131,16 @@ type Result struct {
 The command line:
 
 ```text
-slate [-addr ADDR] [-agent NAME] [--pay] [-run REGEX] FILE
+slate [-addr ADDR] [-agent NAME] [--pay] [-run REGEX] [--screen WxH] [--hud-zoom Z] FILE
 slate -make-bridge [-addr ADDR] [-agent NAME]
 slate -version
 ```
 
 `-version` prints the version and exits 0, and `-h` prints the usage and exits 0; an unknown flag prints the usage to standard error and exits 4.
 
-`-make-bridge` is a separate mode. It takes no `FILE`, `--pay` or `-run` (given one, it is exit 4), runs once per account where the tester may build, and exits 0 when the item is in the Objects folder, whether it made it or it was already there, and 3 when a step failed. `Options` and `Result` do not change.
+`--screen WxH` and `--hud-zoom Z` are the world view a `drag ... on screen` is given in ([A drag on the screen](#a-drag-on-the-screen)): 1920x1025 and 1 unless given. A `--screen` that is not two integers above 0 joined by `x`, or a `--hud-zoom` that is not above 0, is exit 4 with nothing dialled.
+
+`-make-bridge` is a separate mode. It takes no `FILE`, `--pay`, `-run`, `--screen` or `--hud-zoom` (given one, it is exit 4), runs once per account where the tester may build, and exits 0 when the item is in the Objects folder, whether it made it or it was already there, and 3 when a step failed. `Options` and `Result` do not change.
 
 `-addr` is where slgod is; `$SLGO_ADDR` is the same value when the flag is empty. With neither set, `slhost.ResolveFor` asks `sl-host` about the avatar, the way `slpic` asks, and a machine without `sl-host` uses `localhost:7807`. The dial itself is limited to 30 s, and a failed dial is `slate: dial: <error>` on standard error, exit 3. `-agent` is passed to `sl.DialWeak`, which reads `$SLGO_AGENT` when the flag is empty; that is the dial `slpic faces` uses. `-run` is compiled as RE2 into `Options.Run` and selects tests by name. `--pay` is the process half of the pay gate and is off by default; no change adds a configuration file that turns it on. The exit codes are in [Reading the result](slate-language.md#reading-the-result).
 
@@ -1448,7 +1463,7 @@ These are not measurements that are missing. The design has no answer yet.
 
 ## PR plan
 
-Status: PRs 1 and 3 to 8 are in the development clone's `slate` branch, and the `slate` command has run end to end on the grid ([Fourth round, the runner end to end](#fourth-round-the-runner-end-to-end)). PRs 9 to 13, wave 1, are in the same branch and build on PR 8. PRs 14 to 19, wave 2, are in the same branch and build on PR 13.
+Status: all of these PRs are in the repository, public since b1c37bc, and the `slate` command has run end to end on the grid ([Fourth round, the runner end to end](#fourth-round-the-runner-end-to-end)). PRs 9 to 13, wave 1, build on PR 8. PRs 14 to 19, wave 2, build on PR 13.
 
 Each PR compiles on its own and is reviewable on its own. Paths are relative to the module root. `slate` is a new package, and `imgfind` and `sl`'s face pictures are not modified. The finder gap for `image` and `oval` stays a runtime failure until someone extends `imgfind.Find` on purpose. `--pay` stays off by default throughout.
 
@@ -1460,7 +1475,7 @@ Changes to slgo itself ship independently and are specified in [slate-sl-changes
 | Export `Session.ScriptsBlocked` | [ScriptsBlocked](slate-sl-changes.md#scriptsblocked) | PR 7 |
 | The picture a face shows (`Face.Picture`, `Session.FacePicture`), in the repository | [What a face shows](slate-sl-changes.md#what-a-face-shows) | PR 5 |
 | The picture finder `imgfind` and `cmd/slpic`, in the repository | [imgfind](slate-sl-changes.md#imgfind) | PR 5 |
-| Accept an object's give (`InventoryOffer.Accept`), already in the development clone | [Accepting an object's give](slate-sl-changes.md#accepting-an-objects-give) | PR 6 |
+| Accept an object's give (`InventoryOffer.Accept`), already in the repository | [Accepting an object's give](slate-sl-changes.md#accepting-an-objects-give) | PR 6 |
 | agent, sl: link numbers (`Seen.LinkNumber`, `Seen.LinkKnown`, `Session.Linkset`, `ErrLinkOrderUnknown`) | [Link numbers](objects.md#link-numbers) | PR 20 |
 
 ### PR 1: slate, grammar and parser

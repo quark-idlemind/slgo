@@ -67,6 +67,9 @@ func (s *stepRun) touchStimulus(t *Touch) (*stimulus, error) {
 // dragStimulus presses at the first point, moves to the second and
 // releases, on the stimulus budget. Drag always sends the release.
 func (s *stepRun) dragStimulus(d *Drag) (*stimulus, error) {
+	if d.Screen != nil {
+		return s.screenDragStimulus(d)
+	}
 	b, resolve, err := s.target(d.Name, d.Link)
 	if err != nil {
 		return nil, err

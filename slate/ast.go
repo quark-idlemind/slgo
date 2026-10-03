@@ -441,14 +441,39 @@ type Part struct {
 	Capture *Capture // PartText only: text $name, whose value is Text
 }
 
-// Drag is one segment. A nil Over means the runner moves for 500ms.
+// Drag is one segment. A nil Over means the runner moves for 500ms. A
+// drag given on the screen has Screen set, and then Link, Face, From and
+// To are unused.
 type Drag struct {
-	Name Ident
-	Link *Int
-	Face Int
-	From ST
-	To   ST
-	Over *Duration
+	Name   Ident
+	Link   *Int
+	Face   Int
+	From   ST
+	To     ST
+	Over   *Duration
+	Screen *ScreenDrag
+}
+
+// ScreenDrag is the rest of drag OBJ on screen from ...: where it starts,
+// where it ends, and whether to settle after the press.
+// Why: doc/slate-language.md#stimuli
+type ScreenDrag struct {
+	Span Span
+
+	// The start is a point in pixels (Face nil; S is X and T is Y), or a
+	// point on a face of the binding's linkset (Face set; a nil Link is
+	// the root, and At is S,T).
+	FromPixels ST
+	Link       *Int
+	Face       *Int
+	At         ST
+
+	// To is X,Y in pixels from the top left of the world view; with By
+	// it is the distance from the start instead.
+	To ST
+	By bool
+
+	Settle bool
 }
 
 // Say is the tester speaking. A nil As is the tester, the default.

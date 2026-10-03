@@ -22,6 +22,7 @@ var (
 	testSession = msg.MustParseUUID("4f127e57-7e57-c0de-a2a6-2f8e224733d0")
 	testRegion  = msg.MustParseUUID("5f5e7e57-7e57-c0de-2bef-e55b67d8b14f")
 	testInvRoot = msg.MustParseUUID("99267e57-7e57-c0de-55c2-b0e23ccf1e53")
+	idPane      = msg.MustParseUUID("adb37e57-7e57-c0de-ccaf-c554c41e4c8a")
 	idSign      = msg.MustParseUUID("a12e7e57-7e57-c0de-1f13-2165984b7290")
 )
 
@@ -143,4 +144,31 @@ func (f *fakeGrid) Close() error {
 		close(f.done)
 	})
 	return nil
+}
+
+// withPane wears a half-metre box on HUD centre 2, in front of anything
+// else worn.
+func (f *fakeGrid) withPane() {
+	shape, err := sl.DefaultShape().Pack()
+	if err != nil {
+		panic(err)
+	}
+	f.objects = append(f.objects, &sl.Seen{
+		Object: sl.Object{ID: idPane, Local: 301, Name: "Example Panel"}, Owner: testMe, PCode: 9,
+		Parent: 1, AttachPoint: sl.HUDCenter2, Shape: shape,
+		Position: msg.Vector3{X: -0.5}, Scale: msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5},
+	})
+}
+
+// grabs is how many times the pane was pressed.
+func (f *fakeGrid) grabs() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	n := 0
+	for _, m := range f.sent {
+		if _, ok := m.(*msg.ObjectGrab); ok {
+			n++
+		}
+	}
+	return n
 }

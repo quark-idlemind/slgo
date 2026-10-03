@@ -64,6 +64,14 @@ func TestNothingDialledBeforeTheFileIsGood(t *testing.T) {
 		{"run matches no test", []string{"-run", "^nothing$", good}, "", 4, "matches no test"},
 		{"parse error", nil, "slate 1\nbogus\n", 2, "t.slate:2:1:"},
 		{"check error", nil, "slate 1\ntest \"x\" {\n  touch ghost anywhere\n}\n", 2, "t.slate:3:"},
+		{"screen without an x", []string{"--screen", "1920"}, passing, 4, "--screen"},
+		{"screen not a number", []string{"--screen", "wide x tall"}, passing, 4, "--screen"},
+		{"screen of no height", []string{"--screen", "1920x0"}, passing, 4, "--screen"},
+		{"screen negative", []string{"--screen=-1920x1025"}, passing, 4, "--screen"},
+		{"zoom zero", []string{"--hud-zoom", "0"}, passing, 4, "--hud-zoom"},
+		{"zoom negative", []string{"--hud-zoom=-2"}, passing, 4, "--hud-zoom"},
+		{"zoom not a number", []string{"--hud-zoom", "big"}, passing, 4, "invalid value"},
+		{"make-bridge with --screen", []string{"-make-bridge", "--screen", "1x1"}, "", 4, "takes no FILE"},
 		{"make-bridge with a file", []string{"-make-bridge", good}, "", 4, "takes no FILE"},
 		{"make-bridge with -run", []string{"-make-bridge", "-run", "x"}, "", 4, "takes no FILE"},
 		{"make-bridge with --pay", []string{"-make-bridge", "--pay"}, "", 4, "takes no FILE"},
@@ -200,5 +208,39 @@ func TestMakeBridgeFailureIsExit3(t *testing.T) {
 	}
 	if f.said() != nil {
 		t.Errorf("said %q", f.said())
+	}
+}
+
+// TestScreenAndHudZoomReachTheDrag: a press at the middle of a 3840x2050
+// world view is on the pane only when the run is told that is the size
+// of the view, and a press that misses it at zoom 1 hits it at zoom 2.
+func TestScreenAndHudZoomReachTheDrag(t *testing.T) {
+	const hdr = "slate 1\nobject hud is \"Example Panel\"\n"
+	step := func(from string) string {
+		return hdr + "test \"moves\" {\n  drag hud on screen from " + from + " by 5 5 over 100ms\n}\n"
+	}
+	for _, c := range []struct {
+		name  string
+		args  []string
+		from  string
+		grabs int
+		code  int
+	}{
+		{"default view, the middle of a bigger one", nil, "1920 1025", 0, 1},
+		{"default view, its own middle", nil, "960 512.5", 1, 0},
+		{"the bigger view", []string{"--screen", "3840x2050"}, "1920 1025", 1, 0},
+		{"zoom 1", []string{"--hud-zoom", "1"}, "1360 512.5", 0, 1},
+		{"zoom 2", []string{"--hud-zoom", "2"}, "1360 512.5", 1, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newGrid(t)
+			f.withPane()
+			dial := func(context.Context, string, string) (*sl.Session, error) { return f.session(t), nil }
+			args := append(append([]string{}, c.args...), writeFile(t, step(c.from)))
+			code, out, errw := do(t, dial, args...)
+			if code != c.code || f.grabs() != c.grabs {
+				t.Errorf("exit %d (want %d), %d grabs (want %d)\n%s\n%s", code, c.code, f.grabs(), c.grabs, out, errw)
+			}
+		})
 	}
 }

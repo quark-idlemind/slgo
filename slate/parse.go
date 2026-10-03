@@ -795,6 +795,9 @@ func (p *parser) drag() (*Drag, error) {
 		return nil, err
 	}
 	d := &Drag{Name: name}
+	if p.kw("on") {
+		return p.screenDrag(d)
+	}
 	if p.kw("link") {
 		if err := p.next(); err != nil {
 			return nil, err
@@ -839,6 +842,83 @@ func (p *parser) drag() (*Drag, error) {
 		}
 		d.Over = &dur
 	}
+	return d, nil
+}
+
+// screenDrag reads what follows drag OBJ: on screen from POINT (to X Y |
+// by DX DY) [over D] [settle].
+func (p *parser) screenDrag(d *Drag) (*Drag, error) {
+	start := p.tok.span
+	if err := p.want("on"); err != nil {
+		return nil, err
+	}
+	if err := p.want("screen"); err != nil {
+		return nil, err
+	}
+	if err := p.want("from"); err != nil {
+		return nil, err
+	}
+	sd := &ScreenDrag{}
+	var err error
+	if p.kw("link") || p.kw("face") {
+		if p.kw("link") {
+			if err := p.next(); err != nil {
+				return nil, err
+			}
+			n, err := p.integer()
+			if err != nil {
+				return nil, err
+			}
+			sd.Link = &n
+		}
+		if err := p.want("face"); err != nil {
+			return nil, err
+		}
+		f, err := p.integer()
+		if err != nil {
+			return nil, err
+		}
+		sd.Face = &f
+		if err := p.want("at"); err != nil {
+			return nil, err
+		}
+		if sd.At, err = p.pair(); err != nil {
+			return nil, err
+		}
+	} else if sd.FromPixels, err = p.pair(); err != nil {
+		return nil, err
+	}
+	switch {
+	case p.kw("to"):
+	case p.kw("by"):
+		sd.By = true
+	default:
+		return nil, p.unexpected("expected to or by")
+	}
+	if err := p.next(); err != nil {
+		return nil, err
+	}
+	if sd.To, err = p.pair(); err != nil {
+		return nil, err
+	}
+	if p.kw("over") {
+		if err := p.next(); err != nil {
+			return nil, err
+		}
+		dur, err := p.duration()
+		if err != nil {
+			return nil, err
+		}
+		d.Over = &dur
+	}
+	if p.kw("settle") {
+		sd.Settle = true
+		if err := p.next(); err != nil {
+			return nil, err
+		}
+	}
+	sd.Span = cover(start, p.prev.span)
+	d.Screen = sd
 	return d, nil
 }
 
