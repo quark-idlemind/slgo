@@ -28,7 +28,14 @@ Everything after the number is the answer:
 
     answer 4 the north gate
 
-With nothing after the number it opens the multi-line form.  Lines are
+An empty word is an empty answer, which is how a text box is
+submitted blank -- some scripts ask for exactly that, to keep a
+setting as it is:
+
+    answer 4 ""
+
+With nothing after the number it opens the multi-line form, where
+`^D` on an empty first line sends an empty answer too.  Lines are
 typed until `^D` at the end of one ends them -- in front of anything,
 `^D` deletes forward as it does at the prompt.  ESC starts the answer
 again and `^C` sends nothing.
@@ -42,7 +49,8 @@ were offered against the 254 there was room for.
 **--file** *PATH*
 
 Answer a text box from this file, newlines and all.  It is refused on
-anything that is not a text box.  Without it the answer is typed after
+anything that is not a text box.  An empty file is an empty answer.
+Without it the answer is typed after
 the number, or as several lines at the prompt.  A file is the way to
 send newlines; it is not a way to send more than 254 bytes.
 

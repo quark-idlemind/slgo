@@ -494,6 +494,9 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		return err
 	}
 	rest := strings.TrimSpace(strings.Join(args[1:], " "))
+	// Anything after the number is the answer, an empty word included:
+	// `answer 4 ""` submits a text box blank, as the viewer can.
+	given := len(args) > 1
 	if o.File != "" {
 		if w.dialog == nil || !w.dialog.IsTextBox() {
 			return fmt.Errorf("--file answers a text box; %d is a %s", w.n, w.kind)
@@ -503,13 +506,14 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 			return err
 		}
 		// Kept as it is, including a trailing newline if the file has
-		// one: what a person put in the file is the answer.
-		rest = string(b)
+		// one: what a person put in the file is the answer, and an
+		// empty file is an empty answer.
+		rest, given = string(b), true
 	}
 
 	switch {
 	case w.dialog != nil && w.dialog.IsTextBox():
-		if rest == "" {
+		if !given {
 			// Nothing typed on the line means the long way: lines
 			// until Ctrl-D, which is the only way to send more than
 			// one from a prompt that reads one at a time.
@@ -518,6 +522,10 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 				"^C sends nothing\n")
 			sh.collect(*w.dialog, w.who(), w.n)
 			return nil
+		}
+		if rest == "" {
+			// Said, as the form says it: blank is an answer.
+			fmt.Fprintf(out, "sending an empty answer to %s\n", w.who())
 		}
 		if err := sh.s.AnswerText(ctx, *w.dialog, rest); err != nil {
 			return err
