@@ -63,7 +63,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/quark-idlemind/slgo/auth"
-	"google.golang.org/grpc/credentials"
 	"io"
 	"net/http"
 	"sync"
@@ -71,6 +70,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -288,13 +288,28 @@ func (e *Event) Decode() (map[string]any, error) {
 //
 // Passing explicit dial options skips all of it, which is for tests that
 // bring up a server in the same process.
+//
+// A channel that sat idle, or whose transport was lost, comes back on a
+// new transport that has not logged in; the calls on this connection
+// log in again by themselves.  Streams are not retried.
+// Why: doc/client.md#a-connection-that-comes-back
 func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, error) {
-	authenticate := len(opts) == 0
-	var binding func() ([]byte, error)
+	return dial(ctx, addr, len(opts) == 0, opts...)
+}
+
+// dial is Dial with the choice made by the caller: authenticate takes
+// the real handshake, and extra then adds to the options it builds
+// rather than replacing them, which is how a test shortens the idle
+// timeout and still logs in.
+func dial(ctx context.Context, addr string, authenticate bool, opts ...grpc.DialOption) (*Conn, error) {
+	var re *relogin
 	if authenticate {
-		var creds credentials.TransportCredentials
-		creds, binding = auth.ClientTLS()
-		opts = []grpc.DialOption{grpc.WithTransportCredentials(creds)}
+		creds, binding := auth.ClientTLS()
+		re = &relogin{addr: addr, binding: binding}
+		opts = append([]grpc.DialOption{
+			grpc.WithTransportCredentials(creds),
+			grpc.WithChainUnaryInterceptor(re.intercept),
+		}, opts...)
 	}
 	// Ping an idle connection, so that a server or a network that has
 	// gone away is noticed in seconds rather than whenever TCP says
@@ -310,7 +325,8 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 		return nil, err
 	}
 	if authenticate {
-		if err := login(ctx, cc, addr, binding); err != nil {
+		re.cc = cc
+		if err := login(ctx, cc, addr, re.binding); err != nil {
 			cc.Close()
 			return nil, err
 		}
@@ -327,6 +343,57 @@ func Dial(ctx context.Context, addr string, opts ...grpc.DialOption) (*Conn, err
 		done:      make(chan struct{}),
 		relayDone: make(chan struct{}),
 	}, nil
+}
+
+// relogin is what a connection keeps to log in again on a new transport.
+type relogin struct {
+	addr    string
+	binding func() ([]byte, error)
+	cc      *grpc.ClientConn
+
+	// gen counts the logins made again, under mu, so that calls refused
+	// together cause one login between them.
+	mu  sync.Mutex
+	gen uint64
+}
+
+// intercept makes a call that slgod refused as not logged in once more
+// after logging in again.
+//
+// slgod proves a transport, not a channel, and a call refused for that
+// never reached its handler, so the retry is safe for every method.
+// Why: doc/client.md#a-connection-that-comes-back
+func (r *relogin) intercept(ctx context.Context, method string, req, reply any, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+	if method == pb.Grid_Login_FullMethodName {
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+	r.mu.Lock()
+	seen := r.gen
+	r.mu.Unlock()
+	err := invoker(ctx, method, req, reply, cc, opts...)
+	if status.Code(err) != codes.Unauthenticated {
+		return err
+	}
+	if lerr := r.again(ctx, seen); lerr != nil {
+		// The refusal stays the code; why logging in failed is added.
+		return fmt.Errorf("%w (logging in again: %v)", err, lerr)
+	}
+	return invoker(ctx, method, req, reply, cc, opts...)
+}
+
+// again logs in, unless another call has logged in since the
+// generation seen.
+func (r *relogin) again(ctx context.Context, seen uint64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.gen != seen {
+		return nil
+	}
+	if err := login(ctx, r.cc, r.addr, r.binding); err != nil {
+		return err
+	}
+	r.gen++
+	return nil
 }
 
 // Name is what this program calls itself to slgod.

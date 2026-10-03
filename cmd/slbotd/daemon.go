@@ -301,8 +301,11 @@ func (d *daemon) hostThroughSlgod(ctx context.Context, name string, force bool) 
 			return true, err
 		}
 		// Anything that is not slgod answering is slgod not being
-		// there, and the connection goes with it.
-		if status.Code(err) == codes.Unavailable {
+		// there, and the connection goes with it.  So is a refusal as
+		// not logged in, which the client has already tried to cure by
+		// logging in again.
+		// Why: doc/client.md#a-connection-that-comes-back
+		if code := status.Code(err); code == codes.Unavailable || code == codes.Unauthenticated {
 			d.dropControl(c)
 		}
 		return false, err

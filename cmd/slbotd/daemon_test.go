@@ -3,15 +3,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/quark-idlemind/slgo/auth"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -268,4 +273,85 @@ func TestAnAvatarStartedAgainIsPickedUp(t *testing.T) {
 	}
 	cancel()
 	<-done
+}
+
+// loginSlgod is a slgod over TLS that does the handshake and then
+// answers every Host with err, which is all hostThroughSlgod needs of it.
+type loginSlgod struct {
+	pb.UnimplementedGridServer
+	a   *auth.Server
+	err error
+}
+
+func (s *loginSlgod) Login(ctx context.Context, req *pb.LoginRequest) (*pb.LoginResponse, error) {
+	if len(req.GetProof()) == 0 {
+		c, err := s.a.Begin("test")
+		return &pb.LoginResponse{Challenge: c}, err
+	}
+	bind, err := auth.BindingFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	proof, _, err := s.a.Answer(req.GetChallenge(), req.GetProof(), bind)
+	return &pb.LoginResponse{Proof: proof}, err
+}
+
+func (s *loginSlgod) Host(context.Context, *pb.HostRequest) (*pb.HostResponse, error) {
+	return nil, s.err
+}
+
+// A control connection slgod refuses as not logged in is dropped, like
+// one it cannot be reached over, so the next host dials and logs in
+// afresh; a refusal that is slgod answering leaves it be.
+// Why: doc/client.md#a-connection-that-comes-back
+func TestAControlConnectionRefusedAsNotLoggedInIsDropped(t *testing.T) {
+	// The handshake reads its secret from $HOME, so this cannot be parallel.
+	home := t.TempDir()
+	dir := filepath.Join(home, ".config", "slrun")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "secret"), []byte("a secret for a test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	a, err := auth.New("a secret for a test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	creds, err := auth.ServerTLS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	slgod := &loginSlgod{a: a}
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := grpc.NewServer(grpc.Creds(creds))
+	pb.RegisterGridServer(srv, slgod)
+	go srv.Serve(lis)
+	t.Cleanup(srv.Stop)
+
+	d, _, _ := newTestDaemon(t)
+	d.addr = lis.Addr().String()
+	t.Cleanup(d.closeControl)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	slgod.err = status.Error(codes.FailedPrecondition, "logged out on purpose")
+	if deliberate, _ := d.hostThroughSlgod(ctx, "example", false); !deliberate {
+		t.Fatal("a deliberate refusal was not reported as one")
+	}
+	if d.ctl == nil {
+		t.Fatal("slgod answering dropped the control connection")
+	}
+
+	slgod.err = status.Error(codes.Unauthenticated, "not authenticated: call Login on this connection first")
+	if _, err := d.hostThroughSlgod(ctx, "example", false); status.Code(err) != codes.Unauthenticated {
+		t.Fatalf("hostThroughSlgod = %v, want the refusal passed on", err)
+	}
+	if d.ctl != nil {
+		t.Error("the control connection was kept after slgod refused it as not logged in")
+	}
 }
