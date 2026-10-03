@@ -422,6 +422,10 @@ func (f *fakeGrid) SimStats(ctx context.Context) (*sl.SimStats, error) {
 	return &sl.SimStats{}, nil
 }
 
+func (f *fakeGrid) LastRegionDetails(context.Context) (*sl.RegionDetails, uint64, error) {
+	return nil, 0, nil
+}
+
 func (f *fakeGrid) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, error) {
 	return &sl.Neighbours{}, nil
 }

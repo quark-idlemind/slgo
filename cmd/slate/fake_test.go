@@ -114,7 +114,11 @@ func (f *fakeGrid) Region(context.Context) (*sl.Region, bool, error) {
 	return &sl.Region{ID: testRegion, Name: "Test Region", Handle: 1099511628032}, true, nil
 }
 func (f *fakeGrid) SimStats(context.Context) (*sl.SimStats, error) { return nil, nil }
-func (f *fakeGrid) Land(context.Context) (*sl.Land, error)         { return nil, nil }
+
+func (f *fakeGrid) LastRegionDetails(context.Context) (*sl.RegionDetails, uint64, error) {
+	return nil, 0, nil
+}
+func (f *fakeGrid) Land(context.Context) (*sl.Land, error) { return nil, nil }
 func (f *fakeGrid) Ground(context.Context, float32, float32, float32, float32) (float32, bool, error) {
 	return 0, false, nil
 }

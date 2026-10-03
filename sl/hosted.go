@@ -418,6 +418,38 @@ func (h *Hosted) Region(ctx context.Context) (*Region, bool, error) {
 	}, r.Known, nil
 }
 
+// LastRegionDetails reads the RegionInfo the daemon kept.  It comes with
+// its age, and is placed by this machine's clock.
+func (h *Hosted) LastRegionDetails(ctx context.Context) (*RegionDetails, uint64, error) {
+	r, err := h.conn.RegionDetails(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !r.Known {
+		return nil, r.Heard, nil
+	}
+	out := &RegionDetails{
+		Name: r.Name, EstateID: r.EstateId, ParentEstateID: r.ParentEstateId,
+		Flags: r.Flags, Extended: r.FlagsExtended, Access: uint8(r.Access),
+		AgentLimit:     r.MaxAgents,
+		HardAgentLimit: r.HardMaxAgents, HardObjectLimit: r.HardMaxObjects,
+		ObjectBonus: r.ObjectBonus, BillableFactor: r.BillableFactor,
+		WaterHeight:       r.WaterHeight,
+		TerrainRaiseLimit: r.TerrainRaiseLimit, TerrainLowerLimit: r.TerrainLowerLimit,
+		PricePerMeter: r.PricePerMeter,
+		ProductSKU:    r.ProductSku, ProductName: r.ProductName,
+		Heard: time.Now().Add(-time.Duration(r.AgeMs) * time.Millisecond),
+	}
+	if c := r.Chat; c != nil {
+		out.Chat = &ChatRanges{
+			Whisper: c.Whisper, Normal: c.Normal, Shout: c.Shout,
+			WhisperOffset: c.WhisperOffset, NormalOffset: c.NormalOffset, ShoutOffset: c.ShoutOffset,
+			Flags: c.Flags,
+		}
+	}
+	return out, r.Heard, nil
+}
+
 // SimStats reads the daemon's history.  Each report comes with its age
 // rather than its time, and is placed by this machine's clock.
 func (h *Hosted) SimStats(ctx context.Context) (*SimStats, error) {

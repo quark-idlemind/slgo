@@ -45,6 +45,7 @@ const (
 	Grid_Attachments_FullMethodName      = "/slgo.v1.Grid/Attachments"
 	Grid_Region_FullMethodName           = "/slgo.v1.Grid/Region"
 	Grid_SimStats_FullMethodName         = "/slgo.v1.Grid/SimStats"
+	Grid_RegionDetails_FullMethodName    = "/slgo.v1.Grid/RegionDetails"
 	Grid_Land_FullMethodName             = "/slgo.v1.Grid/Land"
 	Grid_Ground_FullMethodName           = "/slgo.v1.Grid/Ground"
 	Grid_Neighbours_FullMethodName       = "/slgo.v1.Grid/Neighbours"
@@ -144,6 +145,11 @@ type GridClient interface {
 	// the last minute.  It says it every two seconds to whoever is there,
 	// and a client that was not listening can be told it only from here.
 	SimStats(ctx context.Context, in *SimStatsRequest, opts ...grpc.CallOption) (*SimStatsResponse, error)
+	// RegionDetails is the last RegionInfo the region sent, with its age:
+	// its estate, agent and object limits, terraform limits, object bonus
+	// and chat ranges.  It says nothing until one has been heard, and one
+	// is heard when anybody asks the region with RequestRegionInfo.
+	RegionDetails(ctx context.Context, in *RegionDetailsRequest, opts ...grpc.CallOption) (*RegionDetailsResponse, error)
 	// Land is what the session was told about the ground it is on: the
 	// parcel it was pushed on arrival, and the region's parcel overlay.
 	//
@@ -434,6 +440,16 @@ func (c *gridClient) SimStats(ctx context.Context, in *SimStatsRequest, opts ...
 	return out, nil
 }
 
+func (c *gridClient) RegionDetails(ctx context.Context, in *RegionDetailsRequest, opts ...grpc.CallOption) (*RegionDetailsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegionDetailsResponse)
+	err := c.cc.Invoke(ctx, Grid_RegionDetails_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Land(ctx context.Context, in *LandRequest, opts ...grpc.CallOption) (*LandInfo, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(LandInfo)
@@ -675,6 +691,11 @@ type GridServer interface {
 	// the last minute.  It says it every two seconds to whoever is there,
 	// and a client that was not listening can be told it only from here.
 	SimStats(context.Context, *SimStatsRequest) (*SimStatsResponse, error)
+	// RegionDetails is the last RegionInfo the region sent, with its age:
+	// its estate, agent and object limits, terraform limits, object bonus
+	// and chat ranges.  It says nothing until one has been heard, and one
+	// is heard when anybody asks the region with RequestRegionInfo.
+	RegionDetails(context.Context, *RegionDetailsRequest) (*RegionDetailsResponse, error)
 	// Land is what the session was told about the ground it is on: the
 	// parcel it was pushed on arrival, and the region's parcel overlay.
 	//
@@ -884,6 +905,9 @@ func (UnimplementedGridServer) Region(context.Context, *RegionRequest) (*RegionI
 }
 func (UnimplementedGridServer) SimStats(context.Context, *SimStatsRequest) (*SimStatsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method SimStats not implemented")
+}
+func (UnimplementedGridServer) RegionDetails(context.Context, *RegionDetailsRequest) (*RegionDetailsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegionDetails not implemented")
 }
 func (UnimplementedGridServer) Land(context.Context, *LandRequest) (*LandInfo, error) {
 	return nil, status.Error(codes.Unimplemented, "method Land not implemented")
@@ -1134,6 +1158,24 @@ func _Grid_SimStats_Handler(srv interface{}, ctx context.Context, dec func(inter
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GridServer).SimStats(ctx, req.(*SimStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Grid_RegionDetails_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegionDetailsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).RegionDetails(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_RegionDetails_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).RegionDetails(ctx, req.(*RegionDetailsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1447,6 +1489,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SimStats",
 			Handler:    _Grid_SimStats_Handler,
+		},
+		{
+			MethodName: "RegionDetails",
+			Handler:    _Grid_RegionDetails_Handler,
 		},
 		{
 			MethodName: "Land",

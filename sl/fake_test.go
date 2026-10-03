@@ -72,6 +72,10 @@ type fakeBackend struct {
 
 	info *Info
 
+	// regionDetails and regionHeard are what LastRegionDetails answers.
+	regionDetails *RegionDetails
+	regionHeard   uint64
+
 	// refreshed counts the asks and refreshErr makes one fail, for
 	// the tests about a session that was rebuilt underneath.
 	refreshed  int
@@ -886,6 +890,20 @@ func (f *fakeBackend) Neighbours(ctx context.Context, set *bool) (*Neighbours, e
 	n := f.neighbours
 	n.Held = append([]Neighbour(nil), f.neighbours.Held...)
 	return &n, nil
+}
+
+func (f *fakeBackend) LastRegionDetails(ctx context.Context) (*RegionDetails, uint64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.regionDetails, f.regionHeard, nil
+}
+
+// hearRegionDetails is the region describing itself.
+func (f *fakeBackend) hearRegionDetails(d *RegionDetails) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.regionDetails = d
+	f.regionHeard++
 }
 
 func (f *fakeBackend) SimStats(ctx context.Context) (*SimStats, error) {

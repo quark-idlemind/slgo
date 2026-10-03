@@ -712,6 +712,63 @@ func TestTheNewRegionsNameIsNotTakenBeforeTheAvatarIsThere(t *testing.T) {
 	}
 }
 
+// TestWhatTheRegionLeftHadQueuedHidesNothingOfTheNewOnes: packets from
+// the region left can still be waiting for the dispatcher when the
+// socket moves.  A move that forgot the sequence numbers on the first of
+// those, rather than on the new simulator's first packet, put their
+// numbers back, and the new simulator's packets under the same numbers
+// were dropped as duplicates.  It was seen as
+// TestTheNewRegionsNameIsNotTakenBeforeTheAvatarIsThere failing
+// twice in 1000 runs, both times with the new region's
+// AgentMovementComplete dropped as a duplicate under number 5.  Here the
+// dispatcher is held so that eight of them are queued, numbered from one
+// as the new simulator numbers its own.
+func TestWhatTheRegionLeftHadQueuedHidesNothingOfTheNewOnes(t *testing.T) {
+	var holding atomic.Bool
+	held := make(chan struct{})
+	release := make(chan struct{})
+	a, from, to := twoRegions(t, Options{SkipCaps: true, Tap: func(*msg.Packet) {
+		if holding.CompareAndSwap(true, false) {
+			close(held)
+			<-release
+		}
+	}})
+	var once sync.Once
+	letGo := func() { once.Do(func() { close(release) }) }
+	t.Cleanup(letGo)
+
+	const queued = 8
+	read := a.Recv.Stats().Packets
+	holding.Store(true)
+	from.sim.mu.Lock()
+	from.sim.seq = 0
+	from.sim.mu.Unlock()
+	for range queued {
+		from.sim.send(&msg.AgentPause{}, 0)
+	}
+	select {
+	case <-held:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the dispatcher was never held")
+	}
+	waitFor(t, "the region left's packets to be read", func() bool {
+		return a.Recv.Stats().Packets >= read+queued
+	})
+
+	moved := make(chan error, 1)
+	go func() { moved <- a.moveTo(context.Background(), to.sim.addr(), to.seed()) }()
+	// The socket has moved before anything goes out on it.
+	to.sim.waitSeen(t, "UseCircuitCode", 5*time.Second)
+	letGo()
+
+	if err := <-moved; err != nil {
+		t.Fatalf("moveTo: %v", err)
+	}
+	if got := a.RegionName(); got != to.sim.regionNm {
+		t.Errorf("region = %q after the move, want %q", got, to.sim.regionNm)
+	}
+}
+
 // TestTheNewRegionsCoarseLocationWaitsForTheArrival: the new simulator
 // starts saying where the avatar is as soon as the circuit is open, and
 // it may say so before the arrival has been put together.  Taken then,

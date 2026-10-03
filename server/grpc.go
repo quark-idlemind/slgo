@@ -937,6 +937,42 @@ func (s *Server) SimStats(ctx context.Context, req *pb.SimStatsRequest) (*pb.Sim
 	return out, nil
 }
 
+// RegionDetails answers the last RegionInfo the region sent, with its
+// age.  Why: doc/simstats.md#what-a-region-says-about-itself-regioninfo
+func (s *Server) RegionDetails(ctx context.Context, req *pb.RegionDetailsRequest) (*pb.RegionDetailsResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	d, heard := h.Agent().RegionInfo()
+	out := &pb.RegionDetailsResponse{Heard: heard}
+	if d == nil {
+		return out, nil
+	}
+	out.Known = true
+	out.Handle = d.Handle
+	out.AgeMs = time.Since(d.At).Milliseconds()
+	out.Name = d.Name
+	out.EstateId, out.ParentEstateId = d.EstateID, d.ParentEstateID
+	out.Flags, out.FlagsExtended = d.Flags, d.Extended
+	out.Access = uint32(d.Access)
+	out.MaxAgents, out.MaxAgents32 = uint32(d.MaxAgents), d.MaxAgents32
+	out.HardMaxAgents, out.HardMaxObjects = d.HardMaxAgents, d.HardMaxObjects
+	out.ObjectBonus, out.BillableFactor = d.ObjectBonus, d.BillableFactor
+	out.WaterHeight = d.WaterHeight
+	out.TerrainRaiseLimit, out.TerrainLowerLimit = d.TerrainRaiseLimit, d.TerrainLowerLimit
+	out.PricePerMeter = d.PricePerMeter
+	out.ProductSku, out.ProductName = d.ProductSKU, d.ProductName
+	if c := d.Chat; c != nil {
+		out.Chat = &pb.RegionChat{
+			Whisper: c.Whisper, Normal: c.Normal, Shout: c.Shout,
+			WhisperOffset: c.WhisperOffset, NormalOffset: c.NormalOffset, ShoutOffset: c.ShoutOffset,
+			Flags: c.Flags,
+		}
+	}
+	return out, nil
+}
+
 // Land answers what the session was told about the ground it is on.
 //
 // The overlay is the reason this exists: four packets on arrival and

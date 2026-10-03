@@ -402,6 +402,10 @@ func TestEveryCallSaysWhichAgentItCouldNotFind(t *testing.T) {
 			_, err := empty.SimStats(ctx, &pb.SimStatsRequest{Agent: n})
 			return err
 		},
+		"RegionDetails": func(n string) error {
+			_, err := empty.RegionDetails(ctx, &pb.RegionDetailsRequest{Agent: n})
+			return err
+		},
 		"Attachments": func(n string) error {
 			_, err := empty.Attachments(ctx, &pb.AttachmentsRequest{Agent: n})
 			return err
@@ -1095,6 +1099,51 @@ func TestNeighboursAreAskedAboutAndTurnedOverThroughTheOneCall(t *testing.T) {
 	if got.GetOn() || len(got.GetNeighbours()) != 0 {
 		t.Errorf("neighbours = %v, on=%v after being turned off",
 			got.GetNeighbours(), got.GetOn())
+	}
+}
+
+// TestRegionDetailsAreHandedOverWithTheirAge: the last RegionInfo the
+// region sent, decoded, and nothing before one has come.
+func TestRegionDetailsAreHandedOverWithTheirAge(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	ctx := context.Background()
+	h, _ := r.srv.Agent("example")
+
+	got, err := r.srv.RegionDetails(ctx, &pb.RegionDetailsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetKnown() || got.GetHeard() != 0 {
+		t.Fatalf("known %v, %d heard, before any RegionInfo", got.GetKnown(), got.GetHeard())
+	}
+
+	m := &msg.RegionInfo{}
+	m.RegionInfo.SimName = []byte("Testville\x00")
+	m.RegionInfo.EstateID = 101
+	m.RegionInfo.SimAccess = 13
+	m.RegionInfo.MaxAgents = 40
+	m.RegionInfo.WaterHeight = 21.5
+	m.RegionInfo2.MaxAgents32 = 60
+	m.RegionInfo2.HardMaxObjects = 22000
+	m.RegionInfo5 = []msg.RegionInfo_RegionInfo5{{ChatShoutRange: 100}}
+	r.sim.send(m, 0)
+	waitFor(t, 5*time.Second, "the RegionInfo to be kept", func() bool {
+		d, _ := h.Agent().RegionInfo()
+		return d != nil
+	})
+
+	got, err = r.srv.RegionDetails(ctx, &pb.RegionDetailsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.GetKnown() || got.GetHeard() != 1 || got.GetHandle() != testvilleHandle ||
+		got.GetName() != "Testville" || got.GetEstateId() != 101 || got.GetAccess() != 13 ||
+		got.GetMaxAgents() != 40 || got.GetMaxAgents32() != 60 || got.GetHardMaxObjects() != 22000 ||
+		got.GetWaterHeight() != 21.5 || got.GetChat().GetShout() != 100 {
+		t.Errorf("served %v", got)
+	}
+	if age := got.GetAgeMs(); age < 0 || age > 5000 {
+		t.Errorf("age %d ms, want a moment", age)
 	}
 }
 

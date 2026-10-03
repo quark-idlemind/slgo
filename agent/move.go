@@ -137,10 +137,11 @@ func (s *socket) Close() error {
 //     session exactly where it was.
 //  2. Swap the socket, so that the sender writes to the new simulator
 //     and the receiver reads it.
-//  3. Forget.  The dispatcher's remembered sequence numbers go because
-//     the new simulator numbers from one and its handshake would be
-//     dropped as a retransmission of the old one's -- the bug abaa2af
-//     fixed one level up, for a viewer re-attaching.  The sender's
+//  3. Forget.  The dispatcher's remembered sequence numbers go, as the
+//     new simulator's first packet reaches it, because the new
+//     simulator numbers from one and its handshake would be dropped as
+//     a retransmission of the old one's -- the bug abaa2af fixed one
+//     level up, for a viewer re-attaching.  The sender's
 //     unacknowledged packets go because they were composed for a
 //     simulator that will never acknowledge them, and retransmitting
 //     them into the new region is worse than losing them.
@@ -222,8 +223,9 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 
 	// Both of these are in place before the socket moves, so that they
 	// are ready for the new simulator's first packet rather than racing
-	// it.
-	a.forgetSeen.Store(true)
+	// it.  The address is the one the connection reports, which is how
+	// socket.ReadFrom will report every packet from it.
+	a.forgetFrom.Store(conn.RemoteAddr().(*net.UDPAddr))
 	arrived := newSignal()
 	a.arrived.Store(&arrived)
 	defer a.arrived.Store(nil)

@@ -1,6 +1,8 @@
 What the simulator said about the region when the avatar arrived: its
 name and key, who owns it, its access rating, the height of the water,
-which product it runs as, and how many objects it can hold.  `where` is the same question asked about
+which product it runs as, how many objects it can hold, and what it says
+when asked: how many avatars it admits, its object bonus, and how far the
+ground can be raised and lowered.  `where` is the same question asked about
 the avatar rather than about the land, and `objects` is what is
 standing on it.
 
@@ -12,6 +14,9 @@ standing on it.
       water    20.0m
       product  Estate / Full Region
       capacity 15000 objects
+      agents   up to 40
+      bonus    1.50x objects
+      terrain  raise 80.0m, lower -40.0m
       objects  195 described so far
 
 The access rating is printed in the words a viewer shows -- general,
@@ -25,6 +30,18 @@ shell attached to a daemon therefore gets the same answer as one that
 logged in itself, and a shell that attached an hour late gets it too.
 A refusal here means the handshake has not arrived yet, which happens
 for a second or two after a login and not otherwise.
+
+The agent limit, object bonus and terrain limits are asked for each
+time: `look` sends `RequestRegionInfo` and prints what the region
+answers with.  Any avatar may ask; an estate manager is not needed.
+The limit is the one the viewer shows, the single-byte figure.  The
+terrain limits are in metres, like the water beside them; that is read
+from how the viewer lays them out, not measured.  A region that does
+not answer within three seconds is not an error here: the line
+
+      details  the region did not describe itself: ...
+
+stands in their place, with the reason, and everything else is printed.
 
 The capacity is the exception.  It comes in the report the simulator
 sends every two seconds, the one `simstats` reads, and not in the

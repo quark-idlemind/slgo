@@ -201,6 +201,9 @@ func (b *fakeBackend) Objects(ctx context.Context, named, id string) ([]*sl.Seen
 func (b *fakeBackend) Region(ctx context.Context) (*sl.Region, bool, error) {
 	return &sl.Region{Name: "Nowhere"}, true, nil
 }
+func (b *fakeBackend) LastRegionDetails(context.Context) (*sl.RegionDetails, uint64, error) {
+	return nil, 0, nil
+}
 func (b *fakeBackend) SimStats(ctx context.Context) (*sl.SimStats, error) {
 	return &sl.SimStats{}, nil
 }
