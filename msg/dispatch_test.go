@@ -41,6 +41,13 @@ func pkt(seq uint32, m Message) *Packet {
 	}
 }
 
+// resend is pkt as a retransmission arrives: reliable and flagged RESENT.
+func resend(seq uint32, m Message) *Packet {
+	p := pkt(seq, m)
+	p.Header.Flags |= FlagResent
+	return p
+}
+
 func TestDispatchToHandler(t *testing.T) {
 	d := NewDispatcher()
 	var got atomic.Int64
@@ -149,15 +156,57 @@ func TestDispatchSuppressesDuplicates(t *testing.T) {
 	// would arrive.
 	feed(t, d,
 		pkt(7, &CompletePingCheck{}),
-		pkt(7, &CompletePingCheck{}),
+		resend(7, &CompletePingCheck{}),
 		pkt(8, &CompletePingCheck{}),
-		pkt(7, &CompletePingCheck{}),
+		resend(7, &CompletePingCheck{}),
 	)
 	if n.Load() != 2 {
 		t.Errorf("handler ran %d times, want 2", n.Load())
 	}
 	if st := d.Stats(); st.Duplicates != 2 {
 		t.Errorf("stats = %+v", st)
+	}
+}
+
+// TestAnUnflaggedPacketUnderAKnownNumberIsHandled: the viewer drops only
+// a packet flagged RESENT, so one that reuses a number without the flag
+// -- a peer whose numbering started again -- is a new packet.  Its
+// retransmission, flagged, is then a duplicate.
+// Why: doc/duplicates.md
+func TestAnUnflaggedPacketUnderAKnownNumberIsHandled(t *testing.T) {
+	d := NewDispatcher()
+	var n atomic.Int64
+	d.MustHandle("CompletePingCheck", func(p *Packet) { n.Add(1) })
+
+	feed(t, d,
+		pkt(5, &CompletePingCheck{}),
+		pkt(5, &CompletePingCheck{}),
+		resend(5, &CompletePingCheck{}),
+	)
+	if n.Load() != 2 {
+		t.Errorf("the handler ran %d times, want 2: the unflagged reuse handled, the resend not", n.Load())
+	}
+	if st := d.Stats(); st.Duplicates != 1 {
+		t.Errorf("stats = %+v, want 1 duplicate", st)
+	}
+}
+
+// TestAnUnreliablePacketsNumberIsNotRemembered: only a reliable packet is
+// ever resent, so only its number is kept, as the viewer keeps it.
+// Why: doc/duplicates.md
+func TestAnUnreliablePacketsNumberIsNotRemembered(t *testing.T) {
+	d := NewDispatcher()
+	var n atomic.Int64
+	d.MustHandle("CompletePingCheck", func(p *Packet) { n.Add(1) })
+
+	unreliable := pkt(6, &CompletePingCheck{})
+	unreliable.Header.Flags = 0
+	feed(t, d, unreliable, resend(6, &CompletePingCheck{}))
+	if n.Load() != 2 {
+		t.Errorf("the handler ran %d times, want 2: an unreliable packet's number was remembered", n.Load())
+	}
+	if st := d.Stats(); st.Duplicates != 0 {
+		t.Errorf("stats = %+v, want nothing suppressed", st)
 	}
 }
 
@@ -173,7 +222,7 @@ func TestDispatchDedupeEvicts(t *testing.T) {
 		pkt(3, &CompletePingCheck{}),
 		pkt(4, &CompletePingCheck{}),
 		pkt(5, &CompletePingCheck{}),
-		pkt(1, &CompletePingCheck{}),
+		resend(1, &CompletePingCheck{}),
 	)
 	if n.Load() != 6 {
 		t.Errorf("handler ran %d times, want 6 once 1 has been evicted", n.Load())
@@ -242,8 +291,8 @@ func TestForgetDoesNotTurnDuplicateSuppressionOff(t *testing.T) {
 	d.Forget()
 	feed(t, d,
 		pkt(1, &CompletePingCheck{}),
-		pkt(1, &CompletePingCheck{}),
-		pkt(1, &CompletePingCheck{}),
+		resend(1, &CompletePingCheck{}),
+		resend(1, &CompletePingCheck{}),
 	)
 	if n.Load() != 2 {
 		t.Errorf("the handler ran %d times, want 2: one before forgetting and one after", n.Load())
@@ -543,7 +592,7 @@ func TestRelaySkipsWhatATapWouldRepeat(t *testing.T) {
 	feed(t, d,
 		pkt(1, m),
 		pkt(2, m),
-		pkt(2, m), // a duplicate
+		resend(2, m), // a duplicate
 		&Packet{Header: Header{Sequence: 3}, Err: ErrShort},     // would not decode
 		&Packet{Header: Header{Sequence: 4}, Acks: []uint32{5}}, // nothing but acks
 	)
@@ -574,7 +623,7 @@ func TestOnDuplicateSeesWhatTheRelayIsNotOffered(t *testing.T) {
 	)
 
 	m := &CompletePingCheck{}
-	feed(t, d, pkt(1, m), pkt(2, m), pkt(2, m), pkt(3, m), pkt(1, m), pkt(2, m))
+	feed(t, d, pkt(1, m), pkt(2, m), resend(2, m), pkt(3, m), resend(1, m), resend(2, m))
 
 	if got, want := fmt.Sprint(relayed), "[1 2 3]"; got != want {
 		t.Errorf("the relay saw %s, want %s", got, want)
@@ -656,9 +705,9 @@ func TestTapSeesEverything(t *testing.T) {
 
 	m := &CompletePingCheck{}
 	feed(t, d,
-		pkt(1, m), // nothing is registered for it
-		pkt(2, m), //
-		pkt(2, m), // a duplicate
+		pkt(1, m),    // nothing is registered for it
+		pkt(2, m),    //
+		resend(2, m), // a duplicate
 		&Packet{Header: Header{Sequence: 3}, Err: ErrShort}, // and one that did not decode
 	)
 

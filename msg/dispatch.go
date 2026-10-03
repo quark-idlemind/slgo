@@ -346,7 +346,7 @@ func (d *Dispatcher) one(ctx context.Context, p *Packet) {
 		return
 	}
 
-	if d.duplicate(p.Header.Sequence) {
+	if d.duplicate(&p.Header) {
 		d.duplicates.Add(1)
 		if d.onDuplicate != nil {
 			d.onDuplicate(p)
@@ -414,15 +414,27 @@ func (d *Dispatcher) drain() {
 	}
 }
 
-// duplicate reports whether this sequence number has been handled
-// recently, remembering it either way.  Retransmissions are normal:
-// anything reliable arrives again if our acknowledgement is lost.
-func (d *Dispatcher) duplicate(seq uint32) bool {
+// duplicate reports whether this packet is a retransmission of one
+// already handled, the viewer's rule: only a packet flagged RESENT is
+// one, and only under the number of a reliable packet handled recently.
+// Only reliable packets are remembered, since only they are resent.  An
+// unflagged packet under a remembered number is a new packet -- a peer
+// whose numbering started again -- and is handled.
+// Why: doc/duplicates.md
+func (d *Dispatcher) duplicate(h *Header) bool {
 	if d.seen == nil {
 		return false
 	}
+	seq := h.Sequence
 	if _, ok := d.seen[seq]; ok {
-		return true
+		if h.Flags&FlagResent != 0 {
+			return true
+		}
+		// Not a resend: handled, and already remembered.
+		return false
+	}
+	if !h.Reliable() {
+		return false
 	}
 	// Once the ring has wrapped, the slot we are about to reuse
 	// holds the oldest sequence number, which stops being
@@ -445,10 +457,11 @@ func (d *Dispatcher) duplicate(seq uint32) bool {
 // It exists for a circuit whose peer has been replaced.  A sequence
 // number belongs to a conversation and not to a socket: a viewer numbers
 // its own packets from 1, so the second one to attach to a session opens
-// with the numbers the first one used, and duplicate suppression -- which
-// has no way to tell the two apart -- throws its handshake away.  Nothing
-// else asks to forget, because for a peer that has not changed a repeated
-// sequence number really is a retransmission.
+// with the numbers the first one used.  Its first sending of each is not
+// flagged RESENT and is handled anyway, but its retransmission of one
+// would be taken for the first peer's and dropped.  Nothing else asks to
+// forget, because for a peer that has not changed a RESENT packet under a
+// remembered number really is a retransmission.
 //
 // Safe from the dispatch goroutine and nowhere else, which means from a
 // gate, a tap, an inline handler or the relay hook.  d.seen and the ring are

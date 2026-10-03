@@ -136,6 +136,12 @@ func (a *Agent) crossTo(addr *net.UDPAddr, seed string, handle uint64) {
 	if handle != 0 && handle == a.RegionHandle() {
 		return
 	}
+	// The same with no handle to go by, before anything below is
+	// spent on it; moveTo would refuse it too.
+	// Why: doc/history/teleport.md#a-move-to-the-simulator-already-on
+	if a.alreadyOn(addr) {
+		return
+	}
 
 	// Walking over a border sends no TeleportStart, so any that is
 	// kept belongs to a teleport that ended some other way, and is not

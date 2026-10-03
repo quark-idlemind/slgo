@@ -303,8 +303,11 @@ func TestRelayIgnoresAViewerRetransmission(t *testing.T) {
 
 	uc := &msg.UseCircuitCode{}
 	uc.CircuitCode.Code = 42
-	for i := 0; i < 3; i++ {
-		v.sendSeq(uc, msg.FlagReliable, 1) // the same packet, thrice
+	// The same packet, thrice: sent, then resent twice, flagged RESENT
+	// as a viewer flags a retransmission.
+	v.sendSeq(uc, msg.FlagReliable, 1)
+	for i := 0; i < 2; i++ {
+		v.sendSeq(uc, msg.FlagReliable|msg.FlagResent, 1)
 	}
 
 	waitRecorded(t, census, "UseCircuitCode", FromViewer, 5*time.Second)

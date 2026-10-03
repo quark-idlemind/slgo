@@ -1100,3 +1100,47 @@ func TestWaitCapsFailsWhenTheMoveEndedTheSession(t *testing.T) {
 		t.Errorf("WaitCaps after the move ended the session = %v", caps.Names())
 	}
 }
+
+// TestAMoveToTheSimulatorAlreadyOnIsRefused: a finish or a crossing that
+// names the simulator this circuit is on, with no handle to say so, is
+// not a move.  Nothing is dialled and the session stays where it is.
+// Why: doc/history/teleport.md#a-move-to-the-simulator-already-on
+func TestAMoveToTheSimulatorAlreadyOnIsRefused(t *testing.T) {
+	a, from, to := twoRegions(t, Options{})
+	region := a.RegionName()
+
+	err := a.moveTo(context.Background(), from.sim.addr(), from.seed())
+	if err == nil || !strings.Contains(err.Error(), "already on that simulator") {
+		t.Fatalf("moveTo the simulator already on = %v, want a refusal", err)
+	}
+	if n := from.count("UseCircuitCode"); n != 1 {
+		t.Errorf("the simulator already on saw UseCircuitCode %d times, want once, at login", n)
+	}
+	if a.forgetFrom.Load() != nil {
+		t.Error("the refused move left a forgetting armed")
+	}
+	if got := a.RegionName(); got != region {
+		t.Errorf("region = %q after a refused move, want %q", got, region)
+	}
+
+	// The callers' road: a crossing whose message carries no handle.
+	// It spends nothing, not even a teleport's kept cause.
+	a.teleports.note(16, time.Now())
+	a.crossTo(from.sim.addr(), from.seed(), 0)
+	if got := a.teleports.take(time.Now()); got != 16 {
+		t.Errorf("a refused crossing spent the kept TeleportStart: take = %d, want 16", got)
+	}
+	if n := from.count("UseCircuitCode"); n != 1 {
+		t.Errorf("a crossing with no handle to the simulator already on dialled it again: UseCircuitCode %d times", n)
+	}
+	select {
+	case <-a.Done():
+		t.Fatalf("the session ended: %v", a.Err())
+	default:
+	}
+
+	// And a real move still works afterwards.
+	if err := a.moveTo(context.Background(), to.sim.addr(), to.seed()); err != nil {
+		t.Fatalf("moveTo the other simulator after a refusal: %v", err)
+	}
+}
