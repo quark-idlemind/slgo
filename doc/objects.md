@@ -241,6 +241,54 @@ cut from 0.25 has seven faces, one cut at 0.5 has six), and it models
 nothing of a cut or a hollow on a torus, tube or ring, nor a sphere that
 is both hollow and cut.
 
+## Naming an object
+
+An `ObjectUpdate` carries no name, so a name comes only by asking, and
+there are two ways to ask. `RequestObjectPropertiesFamily` takes one
+object and is answered with its name and owner; `ObjectSelect` takes
+many and is answered with `ObjectProperties`, and the selection is given
+back with `ObjectDeselect` straight after.
+
+**The family request is not answered for a child.** Measured on Agni: a
+child prim of a linkset stayed nameless through the whole of a resolve,
+and one `ObjectSelect` named it at once. Measured again on 2026-10-01
+([the ninth round](slate-runner.md#ninth-round-wave-2-end-to-end)): the
+first `Faces` or `ObjectByID` on an attachment the avatar had just worn
+took 4.517 s on both of two tries -- the region did not answer the
+properties request, four quiet seconds went by, and then selection named
+it -- and 2 ms on the next call. An attachment's root prim has the
+avatar's local id for a parent, so it is not a root in the world either.
+That the request is answered only for a root standing in the world is
+inferred from those two; no other kind of object was tried.
+
+**What slgo does.** `resolve` reads the store first. An object with a
+parent that is not an avatar -- a child of a linkset, or an attachment --
+is selected at once and sent no family request. A root, an avatar, and an
+object the store does not hold are asked by the family request, as
+before, and selected after the wait only if that went unanswered; so is
+a child the selection did not name. This is what Firestorm does: it
+sends the family request only for a root it is selecting ("request
+properties on root objects", `if (objectp->isRootEdit())`,
+`indra/newview/llselectmgr.cpp:1394`; hover asks for `getRootEdit()`,
+lines 1199-1216) and names what it selects from the `ObjectProperties`
+the selection brings.
+
+**Measured.** On 2026-10-02, through slgod, a probe made a 0.1 m prim,
+took it into inventory, wore it on the HUD point Center 2 (31), and
+timed the first `ObjectByID` on the worn object; then it took it off and
+deleted the item. Twice with the family request first and twice with
+the selection first, each with a fresh prim:
+
+| resolve | first `ObjectByID` | second |
+|---|---|---|
+| family request, then the wait, then selection | 4.516 s, 4.514 s | 0 ms, 1 ms |
+| selection at once | 0.515 s, 0.516 s | 1 ms, 1 ms |
+
+The half second is the time a selection is given to be answered
+before it is given back. The tests in `sl/names_by_select_test.go` show
+the same against a fake that never answers a family request for a
+child.
+
 ## Link numbers
 
 `Object.LinkNumber`, `Seen.LinkNumber` and `Session.Linkset` give a

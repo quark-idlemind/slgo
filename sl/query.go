@@ -425,22 +425,72 @@ const resolveBatch = 40
 
 // resolve asks for the names of these objects and waits for the
 // answers to stop arriving.
+//
+// How it asks depends on what the object is.  A family request is
+// answered for a root standing in the world and not for a child of a
+// linkset or an attachment, so a child (Parent != 0, not an avatar) is
+// named by selecting it at once and no family request goes out for it;
+// a root, an avatar, and anything the store does not hold are asked by
+// the family request and, if that goes unanswered, selected after the
+// wait.  A child the selection did not name falls into that wait too.
+// Why: doc/objects.md#naming-an-object
 func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Duration) error {
 	if len(want) == 0 {
 		return nil
 	}
-	for i := 0; i < len(want); i += resolveBatch {
-		end := min(i+resolveBatch, len(want))
-		for _, id := range want[i:end] {
+	deadline := time.Now().Add(timeout)
+
+	seen, err := w.fetch(ctx, "", "")
+	if err != nil {
+		return err
+	}
+	child := map[msg.UUID]bool{}
+	for _, s := range seen {
+		if s.Parent != 0 && !s.IsAvatar() {
+			child[s.ID] = true
+		}
+	}
+	var roots, children []msg.UUID
+	for _, id := range want {
+		if child[id] {
+			children = append(children, id)
+		} else {
+			roots = append(roots, id)
+		}
+	}
+
+	// pending is what the wait below is for: the roots, and any child
+	// the selection did not name.
+	pending := append([]msg.UUID(nil), roots...)
+	if len(children) > 0 {
+		if err := w.selectForNames(ctx, children, deadline); err != nil {
+			return err
+		}
+		w.mu.Lock()
+		for _, id := range children {
+			if _, ok := w.objectNames[id]; !ok {
+				pending = append(pending, id)
+			}
+		}
+		w.mu.Unlock()
+	}
+
+	// Only roots are asked by the family request.
+	for i := 0; i < len(roots); i += resolveBatch {
+		end := min(i+resolveBatch, len(roots))
+		for _, id := range roots[i:end] {
 			if err := w.Send(ctx, w.familyRequest(id)); err != nil {
 				return err
 			}
 		}
-		if end < len(want) {
+		if end < len(roots) {
 			if err := w.Settle(ctx, 300*time.Millisecond); err != nil {
 				return err
 			}
 		}
+	}
+	if len(pending) == 0 {
+		return nil
 	}
 
 	// Wait for as many as are going to come.  Some never will -- an
@@ -453,18 +503,17 @@ func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Dur
 	// nothing new in it stops before anything has arrived at all,
 	// which looks exactly like a region full of nameless objects.
 	const quietRounds = 4
-	deadline := time.Now().Add(timeout)
 	last, quiet := -1, 0
 	for time.Now().Before(deadline) {
 		w.mu.Lock()
 		have := 0
-		for _, id := range want {
+		for _, id := range pending {
 			if _, ok := w.objectNames[id]; ok {
 				have++
 			}
 		}
 		w.mu.Unlock()
-		if have == len(want) {
+		if have == len(pending) {
 			return nil
 		}
 		if have == last {
@@ -483,7 +532,7 @@ func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Dur
 			return err
 		}
 	}
-	return w.selectForNames(ctx, want, deadline)
+	return w.selectForNames(ctx, pending, deadline)
 }
 
 // selectByBatch is how many objects one ObjectSelect names at a time.
@@ -498,7 +547,10 @@ const selectByBatch = 64
 // for a child of a linkset -- measured: a child prim stayed nameless
 // through the whole resolve, and one ObjectSelect named it
 // "HearthEmbers" immediately.  That is the difference between what
-// "objects" could see and what "dump" could: dump selects.
+// "objects" could see and what "dump" could: dump selects.  resolve
+// now selects a child first and without asking, and uses this after
+// the wait for whatever a root's family request left nameless.
+// Why: doc/objects.md#naming-an-object
 //
 // Selecting is cheaper here than asking, since one message carries
 // many objects where the family request carries one.  What it is not
