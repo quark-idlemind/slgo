@@ -828,10 +828,10 @@ func TestARetransmissionFromTheSameViewerIsStillSuppressed(t *testing.T) {
 	v.waitSeen(t, "AgentMovementComplete", 5*time.Second)
 
 	// The same packet, from the same socket, under the number it went
-	// out with.
+	// out with, flagged RESENT as a viewer flags a retransmission.
 	cam := &msg.CompleteAgentMovement{}
 	cam.AgentData.CircuitCode = testCircuitCode
-	v.sendSeq(cam, msg.FlagReliable, 2)
+	v.sendSeq(cam, msg.FlagReliable|msg.FlagResent, 2)
 
 	// Long enough for a second answer to have been composed had the
 	// duplicate been acted on.

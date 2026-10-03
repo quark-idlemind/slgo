@@ -1131,12 +1131,13 @@ func TestARetransmissionIsTracedWithAViewerAttached(t *testing.T) {
 		msg.WithRelay(vh.relayFor("example")),
 		msg.OnDuplicate(simRepeat("example", vh, census, trace)),
 	)
-	// A ping, sent and then sent again under its own number, which a
-	// circuit absorbs on the spot, so its record is made in passing.
+	// A ping, sent and then resent under its own number, flagged RESENT
+	// as a sender flags a retransmission, which a circuit absorbs on the
+	// spot, so its record is made in passing.
 	arrives := func(seq uint32) {
 		in := make(chan *msg.Packet, 2)
-		for range 2 {
-			in <- &msg.Packet{Header: msg.Header{Sequence: seq, Flags: msg.FlagReliable},
+		for _, flags := range []uint8{msg.FlagReliable, msg.FlagReliable | msg.FlagResent} {
+			in <- &msg.Packet{Header: msg.Header{Sequence: seq, Flags: flags},
 				ID: msg.IDOf(&msg.StartPingCheck{}), Message: &msg.StartPingCheck{}, At: time.Now()}
 		}
 		close(in)
