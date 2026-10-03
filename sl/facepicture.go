@@ -147,11 +147,11 @@ func (w *Session) FacePicture(ctx context.Context, o *Object, face int) (image.I
 	f := faces[face]
 	switch {
 	case f.Texture == (msg.UUID{}):
-		return nil, fmt.Errorf("face %d of %s: %w", face, o, ErrNoTexture)
+		return nil, fmt.Errorf("sl: face %d of %s: %w", face, o, ErrNoTexture)
 	case f.Planar():
-		return nil, fmt.Errorf("face %d of %s: %w", face, o, ErrPlanarFace)
+		return nil, fmt.Errorf("sl: face %d of %s: %w", face, o, ErrPlanarFace)
 	case animated(seen.TextureAnim, face, len(faces)):
-		return nil, fmt.Errorf("face %d of %s: %w", face, o, ErrAnimatedFace)
+		return nil, fmt.Errorf("sl: face %d of %s: %w", face, o, ErrAnimatedFace)
 	}
 	tex, err := w.TextureImage(ctx, f.Texture)
 	if err != nil {
@@ -159,7 +159,7 @@ func (w *Session) FacePicture(ctx context.Context, o *Object, face int) (image.I
 	}
 	pic, err := f.Picture(tex)
 	if err != nil {
-		return nil, fmt.Errorf("face %d of %s: %w", face, o, err)
+		return nil, fmt.Errorf("sl: face %d of %s: %w", face, o, err)
 	}
 	return pic, nil
 }
