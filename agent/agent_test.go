@@ -49,6 +49,11 @@ type fakeSim struct {
 	// handshake and the arrival that a real simulator leaves too short
 	// to look into.
 	lateMovement bool
+
+	// hushed is a peer this simulator has stopped writing to, and wrote
+	// counts the packets it has written; see hush.
+	hushed *net.UDPAddr
+	wrote  int
 }
 
 // waitSeen blocks until the simulator has received a message, or the
@@ -269,11 +274,28 @@ func (f *fakeSim) packet(m msg.Message, flags uint8) []byte {
 func (f *fakeSim) write(out []byte) {
 	f.mu.Lock()
 	peer := f.peer
+	quiet := peer == nil || f.hushed != nil &&
+		peer.Port == f.hushed.Port && peer.IP.Equal(f.hushed.IP)
+	if !quiet {
+		f.wrote++
+	}
 	f.mu.Unlock()
-	if peer == nil {
+	if quiet {
 		return
 	}
 	f.conn.WriteToUDP(out, peer)
+}
+
+// hush stops this simulator writing to the circuit it is talking to now,
+// and says how many packets it wrote before it stopped.  Unlike silent
+// it holds for an answer already under way, so once the circuit has
+// heard that many packets it will hear nothing more.  A circuit dialled
+// afterwards, from another socket, is answered as usual.
+func (f *fakeSim) hush() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.hushed = f.peer
+	return f.wrote
 }
 
 func testAccount(f *fakeSim) *Account {

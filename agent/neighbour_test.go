@@ -902,6 +902,12 @@ func TestAReOfferAtAnotherAddressReplacesTheChild(t *testing.T) {
 // viewer replaces a region whose circuit died.  The child is made silent
 // by hand, well inside the watchdog's first look, so it is the offer
 // that finds it dead.
+//
+// By hand, but silent in fact too: the simulator stops writing to the
+// child, and everything it wrote is heard, before the child is made to
+// look as if it had heard nothing for that long.  An acknowledgement of
+// the RegionHandshakeReply still on its way made it heard from again,
+// and the offer a repeat that dialled nothing.
 func TestAReOfferOfASilentChildReplacesIt(t *testing.T) {
 	var said logLines
 	a, from, _ := twoRegions(t, Options{
@@ -915,6 +921,12 @@ func TestAReOfferOfASilentChildReplacesIt(t *testing.T) {
 	sim.waitSeen(t, "RegionHandshakeReply", 5*time.Second)
 	waitFor(t, "the neighbour to be held", func() bool { return len(a.Neighbours()) == 1 })
 	conn := childConn(t, a, handle)
+	wrote := uint64(sim.hush())
+	waitFor(t, "everything the simulator wrote to be heard", func() bool {
+		a.neighMu.Lock()
+		defer a.neighMu.Unlock()
+		return a.neighbours[handle].heard.Load() >= wrote
+	})
 	a.neighMu.Lock()
 	a.neighbours[handle].lastHeard.Store(time.Now().Add(-2 * NeighbourTimeout).UnixNano())
 	a.neighMu.Unlock()

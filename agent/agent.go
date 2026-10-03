@@ -174,10 +174,18 @@ type Agent struct {
 	// move above is to another simulator, and is not this.
 	walker walker
 
-	// forgetSeen asks the dispatch goroutine to forget the sequence
-	// numbers it has seen.  msg.Dispatcher.Forget is safe on that
-	// goroutine and nowhere else, and the tap is that goroutine.
-	forgetSeen atomic.Bool
+	// forgetFrom asks the dispatch goroutine to forget the sequence
+	// numbers it has seen, when the first packet from this address
+	// reaches it.  msg.Dispatcher.Forget is safe on that goroutine and
+	// nowhere else, and the tap is that goroutine.
+	//
+	// The address is what tells the two simulators apart, as the viewer
+	// keeps a circuit, and its record of packets seen, for each host it
+	// hears from (llmessage/message.cpp, LLMessageSystem::checkMessages).
+	// A move to the address the session is already at could not be told
+	// apart, but both callers of moveTo refuse a move to the region the
+	// session is in.
+	forgetFrom atomic.Pointer[net.UDPAddr]
 
 	eq eventQueue
 
@@ -543,10 +551,17 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 		msg.WithConcurrency(opts.Concurrency),
 		msg.WithTap(func(p *msg.Packet) {
 			// A move asks here because this runs on the dispatch
-			// goroutine, ahead of duplicate suppression: whatever
-			// packet carries this out, the new simulator's own
-			// packets are all judged against an empty ring.
-			if a.forgetSeen.CompareAndSwap(true, false) {
+			// goroutine, ahead of duplicate suppression.  It is the
+			// new simulator's first packet that carries it out, not
+			// whichever comes next: packets the region left sent
+			// can still be queued behind the move, and one of those
+			// handled after the forgetting would put its sequence
+			// number back, for the new simulator's packet under the
+			// same number to be dropped as a duplicate.  Nothing
+			// queued from the region left comes after the first
+			// from the new one; see socket.ReadFrom.
+			if from := a.forgetFrom.Load(); from != nil && sentBy(p, from) {
+				a.forgetFrom.CompareAndSwap(from, nil)
 				a.Disp.Forget()
 			}
 			a.lastPacket.Store(time.Now().UnixNano())
@@ -625,6 +640,12 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 		a.startEventQueue(runCtx, opts.OnEvent)
 	}
 	return a, nil
+}
+
+// sentBy reports whether a packet came from addr.
+func sentBy(p *msg.Packet, addr *net.UDPAddr) bool {
+	from, ok := p.Addr.(*net.UDPAddr)
+	return ok && from.Port == addr.Port && from.IP.Equal(addr.IP)
 }
 
 // LastPacket is when anything last arrived from the simulator.
