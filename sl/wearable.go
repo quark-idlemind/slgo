@@ -102,7 +102,7 @@ const WearableSlotMask = 0xff
 // By type and not by name, for the reason the trash is found by type:
 // the folder can be renamed, and an account made through a viewer in
 // another language never called it "Current Outfit" in the first place.
-const FolderCurrentOutfit = 46
+const FolderCurrentOutfit = agent.FolderCurrentOutfit
 
 // IsWearable says whether an asset type is a system wearable, which is
 // the thing that cannot be attached.

@@ -125,7 +125,7 @@ func offlineSession(t *testing.T) (*Agent, *sentPackets) {
 	a.register()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	a.cancel = cancel
+	a.runCtx, a.cancel = ctx, cancel
 	go func() { _ = a.Send.Run(ctx) }()
 	t.Cleanup(cancel)
 

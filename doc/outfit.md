@@ -111,3 +111,110 @@ A duplicate is visible and costs a detach. A garment silently lost is
 neither. So it adds, which is also what the viewer does down the same
 path -- `addAttachmentRequest(item, 0, add=true)` from
 `userAttachMultipleAttachments`, `llagentwearables.cpp:1610`.
+
+## An attachment that takes itself off
+
+A worn attachment can take itself off: a script calls
+`llDetachFromAvatar`. The item goes back into inventory, but its link
+stays in the Current Outfit folder, and the folder is what a viewer
+wears at the next login, so the object came back then. Seen on Agni on
+2026-10-03 with a product box that handed over a folder and detached
+itself.
+
+### What the viewer does
+
+Whenever an attachment object leaves the avatar, however it left,
+`LLVOAvatarSelf::detachObject` calls
+`LLAppearanceMgr::unregisterAttachment`, which takes the item's links
+out of the folder (`removeCOFItemLinks`) if `mAttachmentInvLinkEnabled`
+is set (Firestorm 885631b93a, llvoavatarself.cpp:1742-1771 and
+llappearancemgr.cpp:4904-4917). The flag is false until inventory has
+been fetched at login (llstartup.cpp:643 and 4067,
+llagentwearablesfetch.cpp:146) and is set false again at shutdown, so
+that destroying objects on the way out does not strip the outfit
+(llappviewer.cpp:6840). The viewer never kills its own avatar
+(`LLViewerObjectList::killObject`, llviewerobjectlist.cpp:1606-1611).
+So a viewer cleans up after a self-detach; a daemon with no viewer
+attached did not.
+
+### What was measured
+
+2026-10-03, the test avatar on a second daemon, an observer logging
+every message:
+
+- A self-detach: `KillObject` for the attachment's local id 7.2 s after
+  the wear; then `SaveAssetIntoInventory`, naming the item
+  (`InventoryData.ItemID`), 86 ms later; then a `BulkUpdateInventory`
+  event 46 ms after that. The folder's link stayed. `WornFrom` still
+  reported the item worn 15 s afterwards, because the session's record
+  of worn objects ignored `KillObject`.
+- A teleport to another region and back, wearing a box: no `KillObject`
+  for it and no `SaveAssetIntoInventory`. It was not described on
+  arrival, and was described again under a new local id about 0.2 s
+  after `TeleportFinish`. The link must stay, and is not touched.
+- A walk over a border and back, with neighbour circuits open, wearing
+  one box on the chest and one on a HUD point: no `KillObject` for
+  either and no `SaveAssetIntoInventory`, either way. The new region
+  described both under new local ids about 0.1 s after
+  `AgentMovementComplete`, before `CrossedRegion` reached the client.
+  Both links stayed through 15 s in each region.
+- Our own take-off (`DetachAttachmentIntoInv`): `KillObject` and
+  `SaveAssetIntoInventory`, as for a self-detach.
+- A logout wearing a box: no `KillObject` or `SaveAssetIntoInventory`
+  reached a client through the daemon before the session ended. Whether
+  the agent itself hears one at logout is not known.
+
+### The signal
+
+`SaveAssetIntoInventory` naming an item is the region saying that
+item's attachment went back into inventory. It came for a self-detach
+and for a take-off and never for a teleport or a walk over a border.
+`KillObject` alone is not used: it names a local id, not an item, and
+read alone it is the same message as any object leaving view, where the
+save names the item and says where it went.
+
+This is not the viewer's trigger. The viewer removes the links when its
+own avatar object loses an attachment (`detachObject`, above), and its
+handler for `SaveAssetIntoInventory` only refreshes the item and does
+nothing with outfit links (`LLInventoryModel::processSaveAssetIntoInventory`,
+Firestorm 885631b93a, llinventorymodel.cpp:4133). The agent keeps no
+avatar object with attachments of its own to lose, and the save is the
+one message that names the item, so slgo acts on that.
+
+### What slgo does
+
+In the agent (`agent/selfdetach.go`), so once per avatar in the daemon
+and not once per attached client, on a `SaveAssetIntoInventory`:
+
+1. nothing, if the session is logging out or over (`Agent.Logout` has
+   begun, the reply came, or the session ended). That is the viewer's
+   shutdown guard, and covers a save the agent hears at logout;
+2. nothing, if an attachment from that item is still described in the
+   object store, which covers a re-wear racing the save. The measured
+   order was kill first, then save, so the store has already dropped a
+   detached object when the save comes;
+3. otherwise, off the dispatch goroutine, it reads the Current Outfit
+   folder over AIS (found by preferred type 46 among the root's
+   children) and deletes every link whose `linked_id` is the item. A
+   link that answers 404 is already gone, which is success: a viewer
+   attached through the daemon, or `detach` in slsh, may have removed
+   it first. One log line says the item id and how many links went, or
+   why nothing was done; the agent logs no item names.
+
+`sl.Session` now drops a worn attachment from its record when the
+region kills its local id, so `WornFrom` and `Attachments` stop
+reporting it. A teleport or a crossing sends no kill, and the entry is
+replaced when the attachment is described again under its new local id.
+
+### What is not known
+
+Whether the agent hears a `SaveAssetIntoInventory` at logout; the guard
+is there so that the answer does not matter.
+
+Measured again with the fix, the same day and the same way: the
+self-detached box's link was gone within a few seconds, and the box worn
+through a teleport away and back kept its link throughout, as did the
+two boxes walked over a border and back (above, measured with the fix
+running and logging nothing for them until they were taken off).  A take-off
+asked for by slgo itself is saved the same way, so its link goes by
+the same path; removing it a second time finds it already gone.
