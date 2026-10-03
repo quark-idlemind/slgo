@@ -414,13 +414,26 @@ func (c *checker) step(st Step) error {
 	if g := guardOf(&st); g != nil && len(st.Expect) > 0 {
 		return c.err(st.Expect[0].Span, "a guarded touch has no expectations; put them in the next step")
 	}
-	if d := st.Stimulus; d != nil && d.Drag != nil && d.Drag.Screen == nil && d.Drag.Over != nil && !d.Drag.Over.Bad {
+	if d := st.Stimulus; d != nil && d.Drag != nil && d.Drag.Screen == nil && d.Drag.Over != nil && !d.Drag.Over.Bad &&
+		d.Drag.Press == nil && d.Drag.Dwell == nil {
 		if budget := c.budget(st); d.Drag.Over.Value > budget {
 			return c.err(d.Drag.Over.Span, "drag over %s is longer than the step's budget of %s, the longest within or the timeout", c.s.Source(d.Drag.Over.Span), budget)
 		}
 	}
+	if d := st.Stimulus; d != nil && d.Drag != nil && d.Drag.Screen == nil && (d.Drag.Press != nil || d.Drag.Dwell != nil) {
+		if total, what, ok := dragTotal(d.Drag); ok {
+			if budget := c.budget(st); total > budget {
+				return c.err(d.Span, "%s can take %s, which is longer than the step's budget of %s, the longest within or the timeout", what, total, budget)
+			}
+		}
+	}
 	if err := c.screenBudget(st); err != nil {
 		return err
+	}
+	if w := st.Stimulus; w != nil && w.Wait != nil && !w.Wait.For.Bad {
+		if budget := c.budget(st); w.Wait.For.Value > budget {
+			return c.err(w.Wait.For.Span, "wait %s is longer than the step's budget of %s, the longest within or the timeout", c.s.Source(w.Wait.For.Span), budget)
+		}
 	}
 	seenAs := map[string]Span{}
 	for _, e := range st.Expect {
@@ -481,6 +494,8 @@ func (c *checker) stimulus(s *Stimulus, same map[string]bool) error {
 		return c.ref(s.Sit.Name, same)
 	case s.Stand != nil:
 		return nil
+	case s.Wait != nil:
+		return c.duration(&s.Wait.For)
 	case s.Choose != nil:
 		return c.choose(s.Choose, same)
 	case s.Answer != nil:
@@ -668,17 +683,14 @@ func (c *checker) screenBudget(st Step) error {
 	if d == nil || d.Drag == nil || d.Drag.Screen == nil {
 		return nil
 	}
-	sd, over := d.Drag.Screen, defaultDragOver
-	if d.Drag.Over != nil {
-		if d.Drag.Over.Bad {
-			return nil
-		}
-		over = d.Drag.Over.Value
-	}
-	if d.Drag.Over == nil && !sd.Settle {
+	sd := d.Drag.Screen
+	if d.Drag.Over == nil && d.Drag.Press == nil && d.Drag.Dwell == nil && !sd.Settle {
 		return nil
 	}
-	total, what := over, "drag over "+over.String()
+	total, what, ok := dragTotal(d.Drag)
+	if !ok {
+		return nil
+	}
 	if sd.Settle {
 		total += sl.DefaultHUDChangeTimeout
 		what += " and settle (up to " + sl.DefaultHUDChangeTimeout.String() + ")"
@@ -737,7 +749,7 @@ func (c *checker) drag(d *Drag, same map[string]bool) error {
 		if err := c.screenDrag(d, d.Screen); err != nil {
 			return err
 		}
-		return c.duration(d.Over)
+		return c.dragTimes(d)
 	}
 	if d.Link != nil {
 		if err := c.linkRange(*d.Link); err != nil {
@@ -753,7 +765,17 @@ func (c *checker) drag(d *Drag, same map[string]bool) error {
 	if err := c.origin(d.To); err != nil {
 		return err
 	}
-	return c.duration(d.Over)
+	return c.dragTimes(d)
+}
+
+// dragTimes checks a drag's over, press and dwell.
+func (c *checker) dragTimes(d *Drag) error {
+	for _, t := range []*Duration{d.Over, d.Press, d.Dwell} {
+		if err := c.duration(t); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *checker) sayStim(s *Say, same map[string]bool) error {
@@ -1649,4 +1671,31 @@ func relayLine(from, target, num int32, key, text string) string {
 		k = msg.Zero // the length is the same; the parser reports a bad key
 	}
 	return relayCommand(nonceHex, msg.Zero, math.MinInt32, sendInner(nonceHex, from, target, num, k, text))
+}
+
+// dragTotal is how long a drag blocks for: its over (500 ms unless said),
+// press and dwell, and those words for an error.  False when one of them
+// is a duration that did not read, which has its own error.
+func dragTotal(d *Drag) (time.Duration, string, bool) {
+	total, what := defaultDragOver, "drag over "+defaultDragOver.String()
+	if d.Over != nil {
+		if d.Over.Bad {
+			return 0, "", false
+		}
+		total, what = d.Over.Value, "drag over "+d.Over.Value.String()
+	}
+	for _, t := range []struct {
+		word string
+		d    *Duration
+	}{{"press", d.Press}, {"dwell", d.Dwell}} {
+		if t.d == nil {
+			continue
+		}
+		if t.d.Bad {
+			return 0, "", false
+		}
+		total += t.d.Value
+		what += ", " + t.word + " " + t.d.Value.String()
+	}
+	return total, what, true
 }

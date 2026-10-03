@@ -367,6 +367,7 @@ type Stimulus struct {
 	Pay     *Pay
 	Sit     *Sit
 	Stand   *Stand
+	Wait    *Wait
 	Choose  *Choose
 	Answer  *Answer
 	Send    *Send
@@ -448,13 +449,17 @@ type Part struct {
 // drag given on the screen has Screen set, and then Link, Face, From and
 // To are unused.
 type Drag struct {
-	Name   Ident
-	Link   *Int
-	Face   Int
-	From   ST
-	To     ST
-	Over   *Duration
-	Screen *ScreenDrag
+	Name Ident
+	Link *Int
+	Face Int
+	From ST
+	To   ST
+	Over *Duration
+	// Press is how long to hold still where the drag starts before
+	// moving, and Dwell how long at the end before letting go; nil is
+	// none.
+	Press, Dwell *Duration
+	Screen       *ScreenDrag
 }
 
 // ScreenDrag is the rest of drag OBJ on screen from ...: where it starts,
@@ -525,6 +530,11 @@ type Sit struct{ Name Ident }
 
 // Stand stands the tester up. It names no object.
 type Stand struct{}
+
+// Wait does nothing for a while: what a product needs between one touch
+// and the next, which it ignores when they come too close together.
+// Why: doc/slate-language.md#stimuli
+type Wait struct{ For Duration }
 
 // ChooseKind is how choose names the button.
 type ChooseKind int

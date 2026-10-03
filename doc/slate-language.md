@@ -73,8 +73,8 @@ No word is reserved. The words below have a meaning, and each has it only where 
 ```text
 slate timeout allow pay object is probe listen
 touch anywhere link face at button text pattern symbol image box circle oval
-drag from to over say on as tester owner of avatar anyone
-public debug direct sit stand choose answer send num key
+drag from to over press dwell say on as tester owner of avatar anyone
+public debug direct sit stand wait choose answer send num key
 expect no within then dialog textbox texture offset repeats rotation
 position size click give rez name description heard by reason only null
 all others children this root
@@ -118,7 +118,7 @@ step        = stimulus expectation*
             / call
 call        = "do" ident
 
-stimulus    = touch / drag / say / pay / sit / stand / choose / answer / send
+stimulus    = touch / drag / say / pay / sit / stand / choose / answer / send / wait
             / wear / takeoff
 
 touch       = "touch" binding target guard?
@@ -143,9 +143,10 @@ part        = "text" ( string / capture )
             / "oval"
 
 drag        = "drag" binding ("link" integer)? "face" integer
-              "from" number number "to" number number ("over" duration)?
+              "from" number number "to" number number dragtimes
             / "drag" binding "on" "screen" "from" screenpoint
-              ("to" / "by") number number ("over" duration)? "settle"?
+              ("to" / "by") number number dragtimes "settle"?
+dragtimes   = ("over" duration)? ("press" duration)? ("dwell" duration)?
 screenpoint = number number
             / ("link" integer)? "face" integer "at" number number
 say         = "say" string "on" integer ("as" stimspeaker)?
@@ -154,6 +155,7 @@ pay         = "pay" binding amount ("reason" string)?
 amount      = "L$"? integer
 sit         = "sit" binding
 stand       = "stand"
+wait        = "wait" duration
 choose      = "choose" chooselabel "on" binding
 chooselabel = string / "matching" string / "button" integer / capture
 answer      = "answer" string "on" binding
@@ -258,8 +260,9 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Position and size | A `position` or `size` literal is three numbers. A position may be any number, negative or zero. Each of the three numbers of a size is above 0: `size 0 is not above 0`. `link N` is checked as on every expectation, and neither has a `face`. |
 | Levels | A glow, alpha or colour literal lies in [0, 1]; each of the three numbers of a colour is checked alone. The error names the property and the number: `glow 1.5 is outside 0 to 1`. |
 | Origin | `at 0 0` is an error (on `face` and on `showing` alike), and so is a drag whose `from` or `to` is `0 0`, whether written `0` or `0.0`. The error is `at 0 0 is the middle of the face; placeTouches treats a zero ST as not given (sl/touch.go)`. The touch at 0 0 is treated as the middle of the face, so it is rejected. `at 0 0.5` is legal. |
-| Drag | A `drag … over D` must fit its step's budget: `D` is at most the longest `within` in the step, or the `timeout` when it has none, because the drag blocks for `D` and the step gives a blocking stimulus no more than that. |
-| Drag on the screen | The same budget holds for `drag OBJ on screen`, and `settle` adds the longest it may wait for the HUD to change, `Options.HUDChangeTimeout`, which is 5 s unless a session is given another: `D` (500 ms when `over` is omitted) plus 5 s must fit. `drag h on screen ... over 6s settle` in a step that allows 8 s is refused, with `drag over 6s and settle (up to 5s) can take 11s, which is longer than the step's budget of 8s`. The origin rule does not apply: 0 0 is a corner of the screen, and `at 0 0` a corner of a face. |
+| Drag | A `drag … over D` must fit its step's budget: `D` is at most the longest `within` in the step, or the `timeout` when it has none, because the drag blocks for `D` and the step gives a blocking stimulus no more than that. With `press` or `dwell` the three together must fit (`over` counting 500 ms when omitted): `drag a face 0 from 0.1 0.5 to 0.9 0.5 over 4s press 4s dwell 4s` in a step that allows 10 s is refused with `drag over 4s, press 4s, dwell 4s can take 12s, which is longer than the step's budget of 10s, ...`. |
+| Wait | `wait D` is a duration in the usual range, and must fit its step's budget as a drag's `over` does: `wait 12s` in a step that allows 10 s is refused with `wait 12s is longer than the step's budget of 10s, ...`. |
+| Drag on the screen | The same budget holds for `drag OBJ on screen`, and `settle` adds the longest it may wait for the HUD to change, `Options.HUDChangeTimeout`, which is 5 s unless a session is given another: `D` (500 ms when `over` is omitted), any `press` and `dwell`, plus 5 s must fit. `drag h on screen ... over 6s settle` in a step that allows 8 s is refused, with `drag over 6s and settle (up to 5s) can take 11s, which is longer than the step's budget of 8s`. The origin rule does not apply: 0 0 is a corner of the screen, and `at 0 0` a corner of a face. |
 | Binding on a HUD point | `drag OBJ on screen` needs an object worn on a HUD point (attachment points 31 to 38). Where the file says how the binding was put on, that is refused when it is checked: a binding `wear` put on a point that is not a HUD one (`h is worn on chest; drag on screen needs an object worn on a HUD point`), and one a `rez` expectation bound (`made is rezzed in the world; ...`). A header binding, which may be worn or not, is judged when the step runs ([Drag on the screen](#stimuli)). |
 | Money | A pay amount is an integer of at least 1. A reason is at most 127 bytes. |
 | Dialog buttons | A `button N` in a dialog expectation, and in `choose button N`, is 1 to 12, the most buttons `llDialog` accepts (published, not measured). `count` is 1 to 12. When `count` is written, the number of `button` clauses is at most `count`, since each clause needs a button of its own. Two clauses may not be pinned to the same `N`. With `only` and `count N` there are exactly N clauses, because `only` gives every button to a clause. |
@@ -292,7 +295,7 @@ This section states the timing rules once. [Step lifecycle](slate-runner.md#step
 
 **Timeouts.** The default is 10 seconds, from the `timeout` header or the built-in value. `within D` replaces it for that expectation only. A step's deadline is its start time, plus the time any blocking stimulus actually blocked on the way to success, plus the longest expectation duration in the step. A positive expectation still unmatched when its own duration has elapsed fails the step at that moment, even if another has time left. A negative expectation fails the step the moment the forbidden event is seen.
 
-**Stimulus budget.** A blocking stimulus (`drag`, `sit`, `stand`, `pay`, `wear`, `take off`) may take the longest `within` in its step, or the default if there is none; a step with no expectations passes when the stimulus returns inside that budget. If the stimulus fails, the step fails at once. Setup, the tester-position read and the 30 s click wait are not on the step's deadline; setup budgets are under [Reading the result](#reading-the-result).
+**Stimulus budget.** A blocking stimulus (`drag`, `sit`, `stand`, `wait`, `pay`, `wear`, `take off`) may take the longest `within` in its step, or the default if there is none; a step with no expectations passes when the stimulus returns inside that budget. If the stimulus fails, the step fails at once. Setup, the tester-position read and the 30 s click wait are not on the step's deadline; setup budgets are under [Reading the result](#reading-the-result).
 
 **When a step passes.** With only positive expectations, as soon as all have matched. With any negative expectation, after the positives have matched and every negative window has elapsed. A step with no expectations passes when the stimulus succeeds; one with only negative expectations passes when its windows elapse. A step with a positive `rez` waits one more 250 ms object poll before passing, and a second prim that matches the same claim in that wait fails the step. A click expectation on a name bound with `as` makes the rez step wait up to 30 s to read the click action; see [Step lifecycle](slate-runner.md#step-lifecycle).
 
@@ -391,6 +394,8 @@ A face the search refuses (planar, animated, a finder error, `image` or `oval`) 
 
 **Drag.** `drag OBJ face N from S0 T0 to S1 T1 over D` presses at the first point, moves to the second over `D` (500 ms if `over` is omitted) and releases. The release is always sent, even if the step is cancelled. The step starts its expectations only after the drag returns. `link N` selects the prim as a touch does. One segment is the whole path.
 
+`press D` holds still at the first point for `D` before moving, and `dwell D` at the last before letting go; without them the drag moves at once and lets go at once. A script that reads a drag from its touch events, as many that move or stretch a picture do, sees the cursor stop only if it dwells: without a dwell the last updates can be lost to the release, and the amount the script works out comes up short. Each is a duration like `over`'s, and the three together count against the stimulus budget.
+
 **Drag on the screen.** `drag OBJ on screen from POINT (to X Y | by DX DY) [over D] [settle]` is the drag a mouse makes on a worn HUD: the cursor is pressed on the screen where the start is, moved to the end over `D` (500 ms if `over` is omitted), and released. The viewer sends the touch of whatever prim is in front at the start, and the rest of the drag is on that prim alone, so a HUD that moves or resizes by the change in `llDetectedTouchPos` sees what it sees under a mouse ([Where a worn HUD is on the screen](hud-screen.md#a-drag)). The start is one of
 
 - `X Y`, a point in the world view, in pixels from its top left corner, X to the right and Y down; decimals are allowed; or
@@ -403,6 +408,8 @@ The pixels are those of a virtual world view, which the run states and not the f
 **Pay.** `pay OBJ L$5 reason "tip"` pays the object. The amount is an integer of at least 1. Omitting `reason` sends the object's name, as the viewer does. Before paying the runner prints `pay L$<amount> to "<name>" <uuid> reason "<reason>"`. A payment the balance cannot cover is refused before it is sent. A refused or unconfirmed payment fails the step with that message, which says whether the balance moved, and the expectations do not run. A payment is never sent twice.
 
 Both `allow pay` in the file and the `--pay` flag on the process are required. The header without the flag fails at the pay step with `paying is off`. The flag without the header is the static error. A copied script does not pay because the process was started with the flag, and a process started without the flag does not pay because the script asked.
+
+**Wait.** `wait D` does nothing for `D` and sends nothing: it is for a product that ignores a touch coming too soon after the last one, or a script that has to finish something first. It is a blocking stimulus, so `D` must fit the step's budget, and expectations in its step start when it returns. A wait says what it is for where `expect no ... within D` would read as a check.
 
 **Sit and stand.** `sit OBJ` succeeds when the avatar has been seated on the object, and leaves it seated until a `stand`. A refusal fails with the simulator's text; a timeout fails with a message that the sit may have taken. `stand` succeeds when the request returns without error, including when the avatar was already standing.
 

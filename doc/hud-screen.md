@@ -102,11 +102,22 @@ cylinder's side is a curved band, not a convex polygon.
 
 A plain box or a plain cylinder: no path cut, hollow, twist, taper,
 top size or shear, and no sculpt or mesh. These are the shapes whose
-faces were measured above. Anything else is `ErrShapeNotPlaced`, since
-a cut or a hollow adds faces and moves their numbers
-([How many faces a prim has](objects.md#how-many-faces-a-prim-has)). Most
-HUD panels and buttons are flattened boxes, and a round button is a
-cylinder seen end on.
+faces were measured above. Most HUD panels and buttons are flattened
+boxes, and a round button is a cylinder seen end on.
+
+Any other prim's faces are not known here, since a cut or a hollow adds
+faces and moves their numbers
+([How many faces a prim has](objects.md#how-many-faces-a-prim-has)). It
+is not left out either: it stands for the box it fits in, which is in
+the way of whatever is behind it. So a click where such a prim is in
+front is refused with `ErrShapeNotPlaced`, and so is asking where one of
+its faces is or what a point on it is (`PointOf`, `PickOn`); a click on
+the plain prims anywhere else is answered as before, and a drag held on
+a plain prim goes on reading that prim whatever passes in front of it.
+`Faces`, which promises every face, refuses a linkset with such a prim.
+The box is larger than the prim inside it, so near a cut or a hollow the
+refusal is cautious: it may refuse a point where the viewer would have
+hit what is behind.
 
 ## Where S and T lie
 
