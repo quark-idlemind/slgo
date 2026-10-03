@@ -1223,6 +1223,10 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.vecExp(e, true)
 	case p.kw("rotation"):
 		return p.rotExp(e)
+	case p.kw("position"):
+		return p.vec3Exp(e, false)
+	case p.kw("size"):
+		return p.vec3Exp(e, true)
 	case p.kw("click"):
 		return p.clickExp(e)
 	case p.kw("fullbright"):
@@ -1660,6 +1664,47 @@ func (p *parser) vecExp(e *Expect, repeats bool) error {
 		e.Repeats = v
 	} else {
 		e.Offset = v
+	}
+	return nil
+}
+
+func (p *parser) vec3Exp(e *Expect, size bool) error {
+	word := "position"
+	if size {
+		word = "size"
+	}
+	if err := p.want(word); err != nil {
+		return err
+	}
+	name, err := p.ident()
+	if err != nil {
+		return err
+	}
+	link, err := p.optLink()
+	if err != nil {
+		return err
+	}
+	st, err := p.state()
+	if err != nil {
+		return err
+	}
+	v := &VecExp3{Name: name, Link: link, State: st}
+	if st.Kind != StateChanges && !st.Original {
+		if v.Any, v.Use, err = p.reading(); err != nil {
+			return err
+		}
+		if !v.Any && v.Use == nil {
+			for _, n := range []*Number{&v.X, &v.Y, &v.Z} {
+				if *n, err = p.number(); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	if size {
+		e.Size = v
+	} else {
+		e.Position = v
 	}
 	return nil
 }

@@ -236,6 +236,7 @@ const (
 	CapClick                     // a click action reading
 	CapTriple                    // a colour reading
 	CapOnOff                     // a fullbright reading
+	CapVector                    // a position or size reading
 )
 
 func (t CaptureType) String() string {
@@ -254,6 +255,8 @@ func (t CaptureType) String() string {
 		return "colour triple"
 	case CapOnOff:
 		return "on or off"
+	case CapVector:
+		return "vector"
 	default:
 		return "value"
 	}
@@ -599,6 +602,8 @@ type Expect struct {
 	Glow       *GlowExp
 	Colour     *ColourExp
 	Alpha      *AlphaExp
+	Position   *VecExp3
+	Size       *VecExp3
 	Give       *GiveExp
 	Rez        *RezExp
 	Link       *LinkExp
@@ -718,6 +723,18 @@ type RotExp struct {
 	FaceAll bool
 	State   State
 	Turns   Number
+	Any     bool
+	Use     *Capture
+}
+
+// VecExp3 is position or size of a prim: three numbers, with no face. With
+// State.Original or StateChanges they are zero. Any and Use are as for
+// TextureExp; Use is a vector capture.
+type VecExp3 struct {
+	Name    Ident
+	Link    *Int
+	State   State
+	X, Y, Z Number
 	Any     bool
 	Use     *Capture
 }

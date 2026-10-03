@@ -1,6 +1,6 @@
 package slate
 
-// State expectations (texture, offset, repeats, rotation, click, fullbright, glow, colour, alpha) and what
+// State expectations (texture, offset, repeats, rotation, click, fullbright, glow, colour, alpha, position, size) and what
 // reads them: the object poll, the readings it logs, the baseline and
 // `original` they are judged against, the click describe, and observe,
 // the one hook the step loop calls for everything that is not a heard
@@ -65,6 +65,11 @@ const (
 	rotTol     = 2.0 / 32768
 )
 
+// vecTol is the tolerance of a position and a size, in metres on each
+// axis, and the 1e-9 is for the float arithmetic.
+// Why: doc/slate-runner.md#position-and-size
+const vecTol = 0.001 + 1e-9
+
 type stateKind int
 
 const (
@@ -78,6 +83,8 @@ const (
 	kColour
 	kAlpha
 	kButton // the count of a button search (buttonexp.go)
+	kPosition
+	kSize
 )
 
 // clickFace is the face of the key that reads a prim's click byte, and
@@ -85,6 +92,9 @@ const (
 const (
 	clickFace = -1
 	allFace   = -2
+	// primFace is the face of a key that reads the prim itself: its
+	// position or its size.
+	primFace = -3
 )
 
 // levelTol is the tolerance of glow, colour and alpha: one step of the
@@ -116,6 +126,7 @@ type reading struct {
 	rep   [2]float64
 	turns float64
 	click uint8
+	vec   [3]float64 // a position or a size, each a float32 held whole
 
 	bright bool
 	glow   float64    // Glow / 255
@@ -196,6 +207,11 @@ func (t *testRun) faceCount(name string, step int, o *sl.Seen) (int, bool) {
 	return 0, false
 }
 
+// vec3 is a vector as a reading holds it: float32 values, kept whole.
+func vec3(v msg.Vector3) [3]float64 {
+	return [3]float64{float64(v.X), float64(v.Y), float64(v.Z)}
+}
+
 func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
 
 // equal is the comparison of a kind: exact for a texture, a click and
@@ -212,6 +228,8 @@ func (k stateKind) equal(a, b *reading) bool {
 		return true
 	}
 	switch k {
+	case kPosition, kSize:
+		return near(a.vec[0], b.vec[0], vecTol) && near(a.vec[1], b.vec[1], vecTol) && near(a.vec[2], b.vec[2], vecTol)
 	case kButton:
 		if b.atLeast {
 			return a.count >= b.count
@@ -272,6 +290,8 @@ func (k stateKind) capType() CaptureType {
 		return CapOnOff
 	case kColour:
 		return CapTriple
+	case kPosition, kSize:
+		return CapVector
 	}
 	return CapClick
 }
@@ -296,6 +316,8 @@ func (k stateKind) text(r *reading) string {
 	switch k {
 	case kButton:
 		return r.label
+	case kPosition, kSize:
+		return g3(r.vec)
 	case kTexture:
 		return r.tex.String()
 	case kOffset:
@@ -328,6 +350,9 @@ func (k stateKind) show(key readKey, r *reading) string {
 	if k == kButton {
 		return r.label
 	}
+	if k == kPosition || k == kSize {
+		return fmt.Sprintf("%s %s %s", map[stateKind]string{kPosition: "position", kSize: "size"}[k], key.name, g3(r.vec))
+	}
 	word := [...]string{kTexture: "texture", kOffset: "offset", kRepeats: "repeats", kRotation: "rotation",
 		kFullbright: "fullbright", kGlow: "glow", kColour: "colour", kAlpha: "alpha"}[k]
 	face := fmt.Sprintf("%d", key.face)
@@ -346,6 +371,9 @@ func (k stateKind) show(key readKey, r *reading) string {
 func (k stateKind) value(r *reading) capValue {
 	if k == kButton {
 		return capValue{typ: CapNumber, num: float64(r.count)}
+	}
+	if k == kPosition || k == kSize {
+		return capValue{typ: CapVector, vec: r.vec}
 	}
 	if r.all != nil {
 		v := capValue{typ: k.capType(), all: true}
@@ -386,6 +414,8 @@ func (k stateKind) want(v capValue) *reading {
 	}
 	r := &reading{}
 	switch k {
+	case kPosition, kSize:
+		r.vec = v.vec
 	case kTexture:
 		r.tex = v.id
 	case kOffset:
@@ -466,6 +496,10 @@ func stateKeyOf(e *Expect) (readKey, stateKind, bool) {
 		return readKey{keyName(x.Name, x.Link), face(x.FaceAll, x.Face), kAlpha}, kAlpha, true
 	case e.Click != nil:
 		return readKey{keyName(e.Click.Name, e.Click.Link), clickFace, kClick}, kClick, true
+	case e.Position != nil:
+		return readKey{keyName(e.Position.Name, e.Position.Link), primFace, kPosition}, kPosition, true
+	case e.Size != nil:
+		return readKey{keyName(e.Size.Name, e.Size.Link), primFace, kSize}, kSize, true
 	}
 	return readKey{}, 0, false
 }
@@ -652,6 +686,10 @@ func (w *watcher) poll(ctx context.Context, force bool) error {
 				}
 				continue
 			}
+		case k.kind == kPosition:
+			rd = &reading{at: at, vec: vec3(o.Position)}
+		case k.kind == kSize:
+			rd = &reading{at: at, vec: vec3(o.Scale)}
 		case k.face == clickFace:
 			if !o.ClickKnown {
 				continue
@@ -825,6 +863,10 @@ func (s *stepRun) stateExpect(x *expState) error {
 		base, link, st = e.Alpha.Name, e.Alpha.Link, e.Alpha.State
 	case e.Click != nil:
 		base, link, st = e.Click.Name, e.Click.Link, e.Click.State
+	case e.Position != nil:
+		base, link, st = e.Position.Name, e.Position.Link, e.Position.State
+	case e.Size != nil:
+		base, link, st = e.Size.Name, e.Size.Link, e.Size.State
 	}
 	if err := s.linkKnown(base, link, k.name); err != nil {
 		return err
@@ -842,6 +884,12 @@ func (s *stepRun) stateExpect(x *expState) error {
 	x.match = never
 	x.eval = func(ctx context.Context) error { return s.evalState(ctx, x, se) }
 	return nil
+}
+
+// lit3 is the literal of a position or size as float32, which is what the
+// store holds.
+func lit3(v *VecExp3) [3]float64 {
+	return [3]float64{float64(float32(v.X.Value)), float64(float32(v.Y.Value)), float64(float32(v.Z.Value))}
 }
 
 // stateWant makes what a state expectation with a value compares with.
@@ -866,11 +914,16 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		use = e.Alpha.Use
 	case e.Click != nil:
 		use = e.Click.Use
+	case e.Position != nil:
+		use = e.Position.Use
+	case e.Size != nil:
+		use = e.Size.Use
 	}
 	switch {
 	case e.Texture != nil && e.Texture.Any, e.Offset != nil && e.Offset.Any, e.Repeats != nil && e.Repeats.Any,
 		e.Rot != nil && e.Rot.Any, e.Click != nil && e.Click.Any, e.Fullbright != nil && e.Fullbright.Any,
-		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any:
+		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any,
+		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any:
 		se.any = true
 	case use != nil:
 		v, err := s.captureOrTuple(use, se.kind.capType())
@@ -899,6 +952,10 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		se.want.turns = e.Rot.Turns.Value
 	case e.Click != nil:
 		se.want.click = ClickBytes[e.Click.Action]
+	case e.Position != nil:
+		se.want.vec = lit3(e.Position)
+	case e.Size != nil:
+		se.want.vec = lit3(e.Size)
 	case e.Fullbright != nil:
 		se.want.bright = e.Fullbright.On
 	case e.Glow != nil:
@@ -953,6 +1010,11 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 			what = "click"
 		case allFace:
 			what = "face all"
+		case primFace:
+			what = "position"
+			if se.kind == kSize {
+				what = "size"
+			}
 		}
 		if se.kind == kButton {
 			what = "button"

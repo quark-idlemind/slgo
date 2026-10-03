@@ -114,10 +114,12 @@ test "moves and resizes" {
   # Grab the background low in the middle and take it 300 pixels right and
   # 200 down; the glass grows when pressed, so wait for it.
   drag hud on screen from face 0 at 0.5 0.9 by 300 200 over 800ms settle
+  expect position hud changes within 10s
 
   # The resize corner is a point on the screen, here in the default
   # 1920x1025 view.
   drag hud on screen from 1480 640 by -150 100 over 800ms settle
+  expect size hud becomes 0.8146 0.4073 0.1629 within 10s
 }
 `)
 }

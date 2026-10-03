@@ -8,6 +8,7 @@ package slate
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ type capValue struct {
 	num    float64    // CapNumber
 	click  uint8      // CapClick
 	triple [3]float64 // CapTriple
+	vec    [3]float64 // CapVector
 	on     bool       // CapOnOff
 	step   int        // the step that bound it
 
@@ -56,6 +58,8 @@ func (v capValue) String() string {
 		return fmt.Sprintf("%d", v.click)
 	case CapTriple:
 		return fmt.Sprintf("%g %g %g", v.triple[0], v.triple[1], v.triple[2])
+	case CapVector:
+		return g3(v.vec)
 	case CapOnOff:
 		if v.on {
 			return "on"
@@ -63,6 +67,13 @@ func (v capValue) String() string {
 		return "off"
 	}
 	return "?"
+}
+
+// g3 is three coordinates as the transcript says them. They are float32s
+// held in float64s, so each is formatted as the float32 it is.
+func g3(v [3]float64) string {
+	f := func(x float64) string { return strconv.FormatFloat(x, 'g', -1, 32) }
+	return f(v[0]) + " " + f(v[1]) + " " + f(v[2])
 }
 
 // namedVal is a value and the capture it is bound to.
