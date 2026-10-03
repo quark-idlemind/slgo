@@ -337,7 +337,11 @@ here when another is shared the same way.
   long a group chat's or conference's start is waited for, 30 s. A
   test that proves one of them runs out sets it short rather than
   waiting the default out, as `sl`'s do and `shortReadBacks` does for
-  `cmd/slsh`'s.
+  `cmd/slsh`'s. A wait a test does not mean to run out gets a timeout
+  of at least twice, and better three times, the longest it can
+  legitimately take. That longest is measured on a loaded machine -- a
+  full `go test ./...` with another running -- and not found by raising
+  a number until the failures stop.
 - `pay.Gate`, in `internal/pay`: the one check of a
   `MoneyTransferRequest`, and of every other message that spends L$
   (`pay.Spends` lists them: buying an object, land or a pass, joining a
