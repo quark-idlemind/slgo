@@ -219,10 +219,23 @@ func (w *Session) ParcelID(ctx context.Context, x, y, z float32) (msg.UUID, erro
 	if r == nil || r.ID.IsZero() {
 		return msg.UUID{}, fmt.Errorf("sl: ParcelID: the region has not said what it is")
 	}
+	return w.ParcelIDIn(ctx, r.ID, msg.Vector3{X: x, Y: y, Z: z})
+}
 
+// ParcelIDIn is ParcelID for a point in any region, asked through the
+// capability of the region the avatar is in.
+//
+// A landmark names its region by uuid and the capability takes that as
+// region_id; measured, it answers for a region the avatar is not in,
+// with no region_handle.
+// Why: doc/history/parcel.md#a-parcel-anywhere-from-a-landmark
+func (w *Session) ParcelIDIn(ctx context.Context, region msg.UUID, pos msg.Vector3) (msg.UUID, error) {
+	if region.IsZero() {
+		return msg.UUID{}, fmt.Errorf("sl: ParcelIDIn: no region given")
+	}
 	body, err := llsd.Encode(map[string]any{
-		"location":  []any{float64(x), float64(y), float64(z)},
-		"region_id": llsd.UUID(r.ID.String()),
+		"location":  []any{float64(pos.X), float64(pos.Y), float64(pos.Z)},
+		"region_id": llsd.UUID(region.String()),
 	})
 	if err != nil {
 		return msg.UUID{}, err

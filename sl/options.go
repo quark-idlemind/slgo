@@ -33,6 +33,10 @@ type Options struct {
 	// RequestRegionInfo.
 	// Why: doc/simstats.md#what-a-region-says-about-itself-regioninfo
 	RegionInfoTimeout time.Duration
+
+	// ParcelInfoTimeout bounds the wait for a ParcelInfoReply.
+	// Why: doc/history/parcel.md#a-parcel-anywhere-from-a-landmark
+	ParcelInfoTimeout time.Duration
 }
 
 // The defaults for Options.  None of them is a measurement; each is a
@@ -84,6 +88,10 @@ func (w *Session) moneyWait() time.Duration {
 
 func (w *Session) regionInfoWait() time.Duration {
 	return orDefault(w.Options().RegionInfoTimeout, DefaultRegionInfoTimeout)
+}
+
+func (w *Session) parcelInfoWait() time.Duration {
+	return orDefault(w.Options().ParcelInfoTimeout, DefaultParcelTimeout)
 }
 
 func orDefault(d, def time.Duration) time.Duration {

@@ -70,7 +70,22 @@ which moves the avatar.
 What the asset holds is a region id and three numbers.  It carries no
 region name, no parcel, no owner and no description of anything.  A
 landmark remembers where the avatar stood and nothing about what was
-there.  `parcel` is the command that asks, after arriving.
+there.  The reading form asks the grid what is there now, and prints
+the parcel's name, the region's name and the parcel's area:
+
+    Example Workshop
+      in       /Landmarks
+      region   3c8f7e57-...
+      at       28.00, 71.95, 20.00
+      item     a08f7e57-...
+      asset    bb817e57-...
+      parcel   Example Parcel, in Example Region
+      area     1024 m²
+
+That costs two questions, each given three seconds.  If either goes
+unanswered, one `place` line says so and everything above it is still
+printed.  The plain listing asks nothing.  `parcel` asks about the
+land under the avatar, after arriving.
 
 Nothing keeps the far end still.  The parcel may have been sold, the
 platform stood on taken away, the region emptied or removed.  A
@@ -97,14 +112,17 @@ after the arrival is where the avatar actually ended up, read back.
 Everything the shell knew about the region it left is dropped on the
 way, exactly as it is for `tp`.
 
-## Where it goes is an id
+## Where it goes is an id, and then a name
 
 The line the reading form prints as `region` is the region's grid-wide
-uuid, because that is what the asset says.  It is not a region name and
-it cannot be turned into one here: the only way this program has of
-finding a region is the world map's search by name, and a landmark
-carries no name to search for.  Going there needs no map lookup: the
-simulator already has the region id.
+uuid, because that is what the asset says.  The asset has no name to
+print, so the name comes from the parcel: the uuid and the position are
+put to the grid, which names the parcel there, and the grid's description of that
+parcel includes the name of its region.  Going there needs no lookup:
+the simulator already has the region id.
+
+The grid also gives a position for the parcel.  It is the parcel's own
+point and not the landmark's, so it is not printed.
 
 ## An item has two ids and the grid takes only one
 

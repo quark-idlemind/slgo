@@ -45,7 +45,7 @@ var Subscriptions = []string{
 	"OnlineNotification", "OfflineNotification",
 	"ScriptRunningReply", "ScriptQuestion", "ScriptDialog",
 	"TeleportLocal", "TeleportFailed", "TeleportFinish",
-	"AgentMovementComplete", "ParcelProperties", "ParcelDwellReply",
+	"AgentMovementComplete", "ParcelProperties", "ParcelDwellReply", "ParcelInfoReply",
 	"MapBlockReply", "MoneyBalanceReply",
 
 	// A group's chat, which is joined and spoken to over the circuit but
@@ -201,6 +201,9 @@ type Session struct {
 	// else pairs it with its question.
 	parcelFns []func(*agent.Parcel)
 	dwellFns  []func(local int32, id msg.UUID, dwell float32)
+
+	// infoFns are who is waiting for a ParcelInfoReply; see parcelinfo.go.
+	infoFns []func(*ParcelInfo)
 
 	// moneySeq numbers the grid's answers about L$, moneyLog is the last
 	// few of them, and payWaits the payments waiting for theirs, oldest
@@ -735,6 +738,9 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 			w.killed[d.ID] = true
 		}
 		w.mu.Unlock()
+
+	case *msg.ParcelInfoReply:
+		w.parcelInfoReply(parcelInfoFrom(t))
 
 	case *msg.ParcelDwellReply:
 		w.dwellReply(t.Data.LocalID, t.Data.ParcelID, t.Data.Dwell)

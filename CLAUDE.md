@@ -335,8 +335,9 @@ here when another is shared the same way.
   long each wait for the grid about L$ -- `Balance`, a payment's answer,
   the balance read after that answer did not come -- lasts, 15 s, and how
   long a group chat's or conference's start is waited for, 30 s, and how
-  long a region is given to answer `RequestRegionInfo`, 15 s. A
-  test that proves one of them runs out sets it short rather than
+  long a region is given to answer `RequestRegionInfo`, 15 s, and how
+  long a `ParcelInfoReply` is waited for, 5 s (`DefaultParcelTimeout`).
+  A test that proves one of them runs out sets it short rather than
   waiting the default out, as `sl`'s do and `shortReadBacks` does for
   `cmd/slsh`'s. A wait a test does not mean to run out gets a timeout
   of at least twice, and better three times, the longest it can

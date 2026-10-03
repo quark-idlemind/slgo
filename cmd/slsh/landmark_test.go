@@ -1110,3 +1110,66 @@ func TestLandmarkSetHomePrintsThePositionThatWentOut(t *testing.T) {
 		t.Errorf("the message carried %v", m.StartLocationData.LocationPos)
 	}
 }
+
+// serveRemoteParcel answers RemoteParcelRequest with a parcel id.
+func serveRemoteParcel(t *testing.T, x *testShell, id msg.UUID) {
+	t.Helper()
+	x.grid.ServeCap(t, "RemoteParcelRequest", func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `<llsd><map><key>parcel_id</key><uuid>`+id.String()+
+			`</uuid></map></llsd>`)
+	})
+}
+
+// TestLandmarkSaysWhatIsThere: the parcel's name, the region's name
+// and the area follow what the asset holds.
+func TestLandmarkSaysWhatIsThere(t *testing.T) {
+	x := newTestShell(t)
+	withLandmarks(x)
+	serveLandmarkAssets(t, x, map[msg.UUID]string{testThrushmoorAsset: thrushmoorAsset})
+	parcel := msg.MustParseUUID("a08f7e57-7e57-c0de-b173-7b785913e4fb")
+	serveRemoteParcel(t, x, parcel)
+	x.grid.onSend = func(m msg.Message) {
+		if r, ok := m.(*msg.ParcelInfoRequest); ok && r.Data.ParcelID == parcel {
+			reply := &msg.ParcelInfoReply{}
+			reply.Data.ParcelID = parcel
+			reply.Data.Name = []byte("Grindlow Croft\x00")
+			reply.Data.SimName = []byte("Harrowmere Ford\x00")
+			reply.Data.ActualArea = 1024
+			x.grid.Relay(t, reply)
+		}
+	}
+
+	got := x.do(t, "landmark Thrushmoor")
+	for _, want := range []string{
+		"at       32.00, 70.00, 1000.09",
+		"parcel   Grindlow Croft, in Harrowmere Ford",
+		"area     1024 m²",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+// TestLandmarkStillReadsWhenTheLookupFails: one line says so, and the
+// rest of the landmark is printed all the same.
+func TestLandmarkStillReadsWhenTheLookupFails(t *testing.T) {
+	x := newTestShell(t)
+	withLandmarks(x)
+	serveLandmarkAssets(t, x, map[msg.UUID]string{testThrushmoorAsset: thrushmoorAsset})
+	x.grid.ServeCap(t, "RemoteParcelRequest", func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	})
+
+	got := x.do(t, "landmark Thrushmoor")
+	if !strings.Contains(got, "at       32.00, 70.00, 1000.09") ||
+		!strings.Contains(got, "asset    "+testThrushmoorAsset.String()) {
+		t.Errorf("the landmark itself was lost:\n%s", got)
+	}
+	if n := strings.Count(got, "  place    the grid did not say what is there"); n != 1 {
+		t.Errorf("%d notes, want one:\n%s", n, got)
+	}
+	if strings.Contains(got, "parcel   ") {
+		t.Errorf("a parcel was invented:\n%s", got)
+	}
+}
