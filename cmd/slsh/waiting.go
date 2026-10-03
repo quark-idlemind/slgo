@@ -121,10 +121,12 @@ func (w waiter) key() string {
 }
 
 // recorded is whether it arrived before this shell attached, and is
-// known only because slgod kept it.  Dialogs and permissions never are:
-// the daemon does not keep them.
+// known only because slgod kept it.  Permissions never are: the daemon
+// does not keep them.
 func (w waiter) recorded() bool {
 	switch {
+	case w.dialog != nil:
+		return w.dialog.Recorded
 	case w.lure != nil:
 		return w.lure.Recorded
 	case w.asked != nil:
@@ -432,8 +434,8 @@ func cmdWaiting(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 // while no client was attached, and a person has no way to tell that
 // blind spot from an empty list unless the listing says which it is.
 //
-// scripts is whether the listing is one that would hold a dialog or a
-// permission request, which slgod does not keep; see server/offers.go.
+// scripts is whether the listing is one that would hold a permission
+// request, which slgod does not keep; see server/offers.go.
 func (sh *Shell) heardFrom(scripts bool) string {
 	rec, ok := sh.s.OfferRecord()
 	switch {
@@ -445,7 +447,7 @@ func (sh *Shell) heardFrom(scripts bool) string {
 				rec.Evicted, plural(rec.Evicted, "one", "ones"))
 		}
 		if scripts {
-			s += "; a script's dialog or permission request from before this shell attached is not kept"
+			s += "; a script's permission request from before this shell attached is not kept"
 		}
 		return s
 	case sh.cfg.Direct:
@@ -492,6 +494,9 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 		return err
 	}
 	rest := strings.TrimSpace(strings.Join(args[1:], " "))
+	// Anything after the number is the answer, an empty word included:
+	// `answer 4 ""` submits a text box blank, as the viewer can.
+	given := len(args) > 1
 	if o.File != "" {
 		if w.dialog == nil || !w.dialog.IsTextBox() {
 			return fmt.Errorf("--file answers a text box; %d is a %s", w.n, w.kind)
@@ -501,13 +506,14 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 			return err
 		}
 		// Kept as it is, including a trailing newline if the file has
-		// one: what a person put in the file is the answer.
-		rest = string(b)
+		// one: what a person put in the file is the answer, and an
+		// empty file is an empty answer.
+		rest, given = string(b), true
 	}
 
 	switch {
 	case w.dialog != nil && w.dialog.IsTextBox():
-		if rest == "" {
+		if !given {
 			// Nothing typed on the line means the long way: lines
 			// until Ctrl-D, which is the only way to send more than
 			// one from a prompt that reads one at a time.
@@ -516,6 +522,10 @@ func cmdAnswer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 				"^C sends nothing\n")
 			sh.collect(*w.dialog, w.who(), w.n)
 			return nil
+		}
+		if rest == "" {
+			// Said, as the form says it: blank is an answer.
+			fmt.Fprintf(out, "sending an empty answer to %s\n", w.who())
 		}
 		if err := sh.s.AnswerText(ctx, *w.dialog, rest); err != nil {
 			return err

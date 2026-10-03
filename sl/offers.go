@@ -11,11 +11,14 @@ package sl
 // waiting" about an avatar with two group invitations sitting on it.
 //
 // slgod keeps them now, whether or not anybody is attached, and a
-// hosted session is handed what is still waiting when it attaches.  They
-// go through the same reading as a live one, so nothing about what an
-// offer is has to be understood twice; they are marked Recorded, and are
-// not delivered to IMs subscribers, because they are history rather than
-// news.
+// hosted session is handed what is still waiting when it attaches: the
+// offers above, an item an object gives as well as one an avatar hands
+// over, and a script's dialog or text box (dialog.go).  A script's
+// permission request is the one thing a person answers that it does not
+// keep.  They go through the same reading as a live one, so nothing
+// about what an offer is has to be understood twice; they are marked
+// Recorded, and are neither delivered to IMs subscribers nor announced
+// to OnDialog, because they are history rather than news.
 //
 // Dealing with one goes through the daemon too.  Before this session
 // answers an offer the daemon keeps, it says so, and the daemon either
@@ -88,8 +91,8 @@ type OfferRecord struct {
 
 // Handled is an offer somebody dealt with.
 type Handled struct {
-	// Key is the daemon's name for it, and empty for a dialog or a
-	// permission request, which the daemon does not keep.
+	// Key is the daemon's name for it, and empty for a permission
+	// request, which the daemon does not keep.
 	Key string
 
 	// What is the offer, for a person: "the teleport Example Resident
@@ -179,8 +182,11 @@ func (w *Session) loadKept() {
 		if err != nil {
 			continue
 		}
-		if im, ok := v.(*msg.ImprovedInstantMessage); ok {
-			w.instantMessage(m, im)
+		switch t := v.(type) {
+		case *msg.ImprovedInstantMessage:
+			w.instantMessage(m, t)
+		case *msg.ScriptDialog:
+			w.dialog(m, t)
 		}
 	}
 }
@@ -309,6 +315,16 @@ func (w *Session) forgetKeyLocked(key string) string {
 				by = "somebody"
 			}
 			return "the invitation from " + by + " into group " + i.Group.String()
+		}
+	}
+	for i, d := range w.dialogs {
+		if d.key == key {
+			w.dialogs = append(w.dialogs[:i], w.dialogs[i+1:]...)
+			what := "the dialog from "
+			if d.IsTextBox() {
+				what = "the text box from "
+			}
+			return what + SenderObject.Label(orID(d.ObjectName, d.Object))
 		}
 	}
 	return ""

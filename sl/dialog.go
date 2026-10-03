@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -46,6 +47,14 @@ type Dialog struct {
 	// Channel is where the answer goes.  It is the script's choice
 	// and is usually negative.
 	Channel int32
+
+	// Recorded says it arrived before this session attached, and is
+	// known only because slgod kept it.  See offers.go.
+	Recorded bool
+
+	// key is slgod's name for it when the daemon is keeping it, and what
+	// is said to the daemon before answering; see answering.
+	key string
 }
 
 // TextBoxToken is the button label a text box arrives as.
@@ -85,10 +94,23 @@ func (d Dialog) String() string {
 	return fmt.Sprintf("%s on channel %d: %q %v", SenderObject.Label(d.ObjectName), d.Channel, d.Message, d.Buttons)
 }
 
-// dialog records one and tells whoever is waiting.
-func (w *Session) dialog(m *msg.ScriptDialog) {
+// dialog records one and tells whoever is waiting, unless it came out of
+// slgod's record: then it is history, and is listed without being
+// announced, as a recorded instant message is.  raw may be nil.
+func (w *Session) dialog(raw *client.Message, m *msg.ScriptDialog) {
+	at := time.Now()
+	var key string
+	var recorded bool
+	if raw != nil {
+		key, recorded = raw.Offer, raw.Recorded
+		if recorded && !raw.At.IsZero() {
+			at = raw.At
+		}
+	}
 	d := Dialog{
-		At:         time.Now(),
+		At:         at,
+		Recorded:   recorded,
+		key:        key,
 		Object:     m.Data.ObjectID,
 		ObjectName: trimNul(m.Data.ObjectName),
 		OwnerName:  strings.TrimSpace(trimNul(m.Data.FirstName) + " " + trimNul(m.Data.LastName)),
@@ -103,12 +125,20 @@ func (w *Session) dialog(m *msg.ScriptDialog) {
 	}
 
 	w.mu.Lock()
-	gone := w.pruneDialogsLocked(d.At, 1)
+	// Its "handled" notice may have overtaken it; see keepableLocked.
+	if !w.keepableLocked(key, recorded) {
+		w.mu.Unlock()
+		return
+	}
+	gone := w.pruneDialogsLocked(time.Now(), 1)
 	w.dialogs = append(w.dialogs, d)
 	fn, told := w.OnDialog, w.handledForLocked(gone)
 	w.mu.Unlock()
 
 	tellHandled(told, gone)
+	if recorded {
+		return
+	}
 	if fn != nil {
 		fn(d)
 	}
@@ -231,6 +261,10 @@ func (w *Session) AnswerIndex(ctx context.Context, d Dialog, i int) error {
 }
 
 func (w *Session) answer(ctx context.Context, d Dialog, index int, label string) error {
+	undo, err := w.answering(ctx, d.key, "answered")
+	if err != nil {
+		return err
+	}
 	m := &msg.ScriptDialogReply{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.Data.ObjectID = d.Object
@@ -238,6 +272,7 @@ func (w *Session) answer(ctx context.Context, d Dialog, index int, label string)
 	m.Data.ButtonIndex = int32(index)
 	m.Data.ButtonLabel = append([]byte(label), 0)
 	if err := w.Send(ctx, m); err != nil {
+		undo()
 		return err
 	}
 	// Answered is done: a dialog that stayed on the list would be

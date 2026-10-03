@@ -226,8 +226,10 @@ put it.
 
 ## Offers kept while nobody is attached
 
-Somebody offers this avatar a teleport, an item, their friendship or a
-place in a group, and the offer is an instant message carrying an id
+Somebody offers this avatar a teleport, an item (or an object gives one,
+instant-message dialog 9, kept exactly as an avatar's dialog 4 is, and
+answered by dialog 10 or 11 quoting the same transaction), their
+friendship or a place in a group, and the offer is an instant message carrying an id
 that answers it and nothing else does. It arrives once. Before the
 daemon kept them, it acknowledged one and relayed it to whoever was
 attached, and with nobody attached it was acknowledged and dropped --
@@ -235,18 +237,60 @@ so the program somebody starts BECAUSE they were away was the one
 program that could never be told, and "nothing waiting" read as an
 answer when it was a blind spot.
 
-### Why script dialogs are not kept
+### Script dialogs and text boxes
 
-Script dialogs and permission requests are not kept. Both come from an
-object in the region, both are almost always the result of something
-an attached client just did, and whether an answer to one still reaches
-it from another region has never been watched -- so a record of them
-would be a list of questions that may no longer have anybody asking.
+A script's dialog and a text box (the same `ScriptDialog` message, the
+text box having one button, `sl.TextBoxToken`) are kept too, and handed
+back to a client as the `ScriptDialog` they arrived in. A script's
+permission request is not kept: it was left out when dialogs were
+measured, and whether a late answer to one reaches its script has not
+been watched.
+
+They are kept as the client keeps its own list (`sl/waiting.go`): until
+answered, for an hour (`sl.UnansweredFor`) and no more than 32
+(`sl.MaxUnanswered`) at once, the oldest giving way. The daemon's two
+numbers are its own constants, because the server does not import `sl`,
+and a test refuses them drifting. Dialogs have room of their own and
+neither count toward the hundred offers nor push one out. A dialog
+dropped for room is not counted in the record's `evicted`: a client
+would have dropped it itself, so a listing built from the record loses
+nothing it would have kept. The age is applied when the record is read
+and when a dialog is noted.
+
+A dialog has no id of its own, so it is named by its object, the
+packet's sequence number and a checksum of its bytes: a retransmission
+is the same dialog, and a second dialog from one object is another, even
+under a number a new circuit has reused (sequence numbers begin again
+on every circuit). A newer dialog does not replace an older from the
+same object, because the client keeps every one.
+
+A dialog leaves the record when it is answered, when it is old, and when
+it is the oldest of more than 32. A client that calls `Handled` first
+takes out the one it names. An answer that goes out without it is seen
+by `noteSent`: a `ScriptDialogReply` names the object and the channel
+and no dialog, so the record cannot tell which was meant, and takes out
+every kept dialog from that object on that channel -- the script hears
+one answer on the channel -- and tells the clients, for each, that it was
+answered.
+
+Measured on 2026-10-03 with the test avatar and an invented scripted box
+that reported what it heard by instant message: an answer sent from the
+box's region was heard (the dialog's in 0.15 s); one sent after a
+teleport to another region was not heard in 20 s, and nothing said it was
+lost; a dialog asked before a teleport away and back was answered at
+home and heard. So the answer reaches the script only from its own
+region, and a kept dialog is still worth answering after a round trip:
+the record keeps dialogs through region changes. The viewer does not
+close one on a teleport either: nothing in `llscriptfloater.cpp`
+(Firestorm 885631b93a) acts on one, which is read from the source and
+not watched.
 
 ### Why nothing else drops one
 
 An offer leaves the record when it is answered, when a newer one
-replaces it, or when there is no more room, and that is all.
+replaces it, or when there is no more room, and that is all. (A script's
+dialog is the exception, with the rules of its own in
+[Script dialogs and text boxes](#script-dialogs-and-text-boxes).)
 
 Nothing is dropped on a timer, because nothing in the viewer drops these
 on one either: none of the five notifications has a duration in its

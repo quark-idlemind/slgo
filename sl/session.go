@@ -888,7 +888,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.saidElsewhere(raw, t)
 
 	case *msg.ScriptDialog:
-		w.dialog(t)
+		w.dialog(raw, t)
 
 	case *msg.ScriptQuestion:
 		w.permission(t)

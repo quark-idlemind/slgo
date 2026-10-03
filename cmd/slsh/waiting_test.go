@@ -146,6 +146,38 @@ func TestATextBoxIsNotAButton(t *testing.T) {
 	}
 }
 
+// TestATextBoxCanBeAnsweredBlank: the viewer sends an empty answer for a
+// blank Submit (Firestorm 885631b93a, lltoastscripttextbox.cpp:88-93 and
+// callback_script_dialog), which a script may ask for to keep a setting.
+// An empty word after the number sends one, and so does an empty file;
+// neither opens the multi-line form.
+func TestATextBoxCanBeAnsweredBlank(t *testing.T) {
+	x := newTestShell(t)
+	watching(t, x)
+	empty := filepath.Join(t.TempDir(), "empty.txt")
+	if err := os.WriteFile(empty, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for i, how := range []string{`answer 1 ""`, "answer --file " + empty + " 1"} {
+		x.grid.Relay(t, dialogFrom("a sign", "a new name, or nothing to keep it", int32(-120-i), "!!llTextBox!!"))
+		waits(t, x, "a sign asks")
+		got := x.do(t, how)
+		if strings.Contains(got, "^D ends it") || !strings.Contains(got, "sending an empty answer") || !strings.Contains(got, "told") {
+			t.Fatalf("%s said:\n%s", how, got)
+		}
+		var replies []*msg.ScriptDialogReply
+		for _, m := range x.grid.Sent() {
+			if r, ok := m.(*msg.ScriptDialogReply); ok && r.Data.ChatChannel == int32(-120-i) {
+				replies = append(replies, r)
+			}
+		}
+		if len(replies) != 1 || string(replies[0].Data.ButtonLabel) != "\x00" {
+			t.Errorf("%s sent %d replies, want one carrying an empty answer", how, len(replies))
+		}
+	}
+}
+
 // TestATextBoxTakesMoreThanOneLine.
 //
 // The viewer's text box is a text editor rather than a field, so an

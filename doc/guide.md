@@ -693,10 +693,14 @@ kinds at login out of offline storage, rather than watched. The record
 is in memory, so an offer made while slgod itself was down is not in
 it, and it says when it starts.
 
-Script dialogs and permission requests are not kept. Both come from an
-object in the region and are nearly always the result of something an
-attached client just did, and whether an answer to one still reaches
-the object from another region has not been watched.
+An object's give (dialog 9) is kept as an avatar's item offer is. A
+script's dialog or text box is kept too, for an hour and at most 32,
+the limits `sl` puts on its own list, and leaves the record when it is
+answered, when it is old or when it is the oldest of more; a script's
+permission request is not kept. An answer reaches the script only from
+the object's own region, but a kept dialog is still worth answering
+after a round trip, so a change of region drops none. See
+[Script dialogs and text boxes](daemon.md#script-dialogs-and-text-boxes).
 
 **Dealing with one.** A client about to answer a kept offer tells slgod
 first, with `Handled`, and the answer says whether to go on. The first

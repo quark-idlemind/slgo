@@ -145,7 +145,7 @@ func TestNothingWaitingSaysWhatItIsAnAccountOf(t *testing.T) {
 	got := x.do(t, "waiting")
 	if !strings.Contains(got, "nothing waiting -- slgod has kept every offer") ||
 		!strings.Contains(got, since.Local().Format("15:04")) ||
-		!strings.Contains(got, "dialog or permission request") {
+		!strings.Contains(got, "permission request") {
 		t.Errorf("with a record, waiting said %q", got)
 	}
 	if got := x.do(t, "offers"); !strings.Contains(got, "no offers waiting -- slgod has kept") ||

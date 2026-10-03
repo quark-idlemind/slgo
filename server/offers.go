@@ -26,8 +26,13 @@ package server
 //
 // The five kinds that arrive as instant messages and wait on a person:
 // a teleport offered (dialog 22), a request to be offered one (26), an
-// item handed over (4), an offer of friendship (38) and an invitation
-// into a group (3).  Script dialogs and permission requests are not
+// item handed over (4, or 9 when an object hands it over), an offer of
+// friendship (38) and an invitation into a group (3).
+//
+// And a script's dialog or text box, which is the ScriptDialog message
+// and not an instant message.  It is kept the way the client keeps it
+// (sl/waiting.go): until it is answered, for dialogKeptFor, and
+// dialogLimit of them at most.  A script's permission request is not
 // kept.
 //
 // # What makes one unanswerable, and so drops it
@@ -44,14 +49,22 @@ package server
 // the record says how many have gone, so a client can say its listing
 // is not the whole of it.
 //
-// Nothing else drops one: not a timer, not a change of region, and not
-// the daemon re-establishing the session.
+// A dialog is the exception to all of that but being answered: a newer
+// one from the same object does not replace it, dialogLimit of them are
+// kept apart from the offers, and one is dropped after dialogKeptFor.
+//
+// Nothing else drops an offer: not a timer, not a change of region, and
+// not the daemon re-establishing the session.  Nor a dialog but its own
+// timer and room.
 //
 // The record lives in memory and goes with the process.  An offer made
 // while the daemon was down is not in it, and Since says where it starts.
 // Why: doc/daemon.md#offers-kept-while-nobody-is-attached
+// and doc/daemon.md#script-dialogs-and-text-boxes
 
 import (
+	"fmt"
+	"hash/crc32"
 	"sync"
 	"time"
 
@@ -81,6 +94,16 @@ const (
 	offerInventory = "inventory"
 	offerFriend    = "friendship"
 	offerGroup     = "group"
+	offerDialog    = "dialog"
+)
+
+// How long a dialog is kept unanswered and how many are kept: sl's
+// UnansweredFor and MaxUnanswered, which the client applies to its own
+// list and which these must agree with (see TestDialogsAreKeptAsLongAs
+// TheClientKeepsThem).  Dialogs do not count toward offerLimit.
+const (
+	dialogKeptFor = time.Hour
+	dialogLimit   = 32
 )
 
 // The instant message dialogs this reads, from the viewer's
@@ -91,6 +114,9 @@ const (
 	imInventoryOffered       = 4
 	imInventoryAccepted      = 5
 	imInventoryDeclined      = 6
+	imTaskInventoryOffered   = 9
+	imTaskInventoryAccepted  = 10
+	imTaskInventoryDeclined  = 11
 	imLureUser               = 22
 	imLureDeclined           = 24
 	imTeleportRequest        = 26
@@ -99,7 +125,10 @@ const (
 	imFriendshipOffered      = 38
 )
 
-var imID = msg.IDOf(&msg.ImprovedInstantMessage{})
+var (
+	imID     = msg.IDOf(&msg.ImprovedInstantMessage{})
+	dialogID = msg.IDOf(&msg.ScriptDialog{})
+)
 
 // offer is one kept offer, as it arrived.
 type offer struct {
@@ -111,9 +140,18 @@ type offer struct {
 	key  string
 	kind string
 
+	// id and name are the message it arrived in, which is what it is
+	// handed back as.
+	id   msg.ID
+	name string
+
 	// from is who made it, which is what a later offer of the same kind
-	// replaces it by.
+	// replaces it by.  The object, for a dialog.
 	from msg.UUID
+
+	// channel is where a dialog is answered, which with from is all a
+	// reply says of which dialog it answers.
+	channel int32
 
 	// seq is the sequence number it arrived under, which is how a
 	// retransmission is told from somebody asking twice.  The relay
@@ -123,6 +161,11 @@ type offer struct {
 	at   time.Time
 	body []byte
 }
+
+// supersedable says whether a newer offer of the same kind from the same
+// sender replaces this one.  Items do not: two things handed over are two
+// offers.  Nor do dialogs: the client keeps every one, so the record does.
+func (o *offer) supersedable() bool { return o.kind != offerInventory && o.kind != offerDialog }
 
 // answered is an offer somebody dealt with, and who and how.
 type answered struct {
@@ -166,22 +209,36 @@ func (h *Hosted) offerLog() *offerLog {
 // offer whose bucket is too short to name the item, or an invitation
 // with nobody to answer.
 func offerIn(p *msg.Packet) (*offer, bool) {
-	if p.ID != imID {
+	if p.ID != imID && p.ID != dialogID {
 		return nil, false
 	}
 	body := packetBody(p)
 	if body == nil {
 		return nil, false
 	}
+	o := &offer{seq: p.Header.Sequence, at: p.At, body: body}
+	if o.at.IsZero() {
+		o.at = time.Now()
+	}
+	if p.ID == dialogID {
+		var d msg.ScriptDialog
+		if err := d.Decode(body); err != nil {
+			return nil, false
+		}
+		o.id, o.name = dialogID, "ScriptDialog"
+		o.from, o.channel = d.Data.ObjectID, d.Data.ChatChannel
+		// The object, the sequence number and the bytes: a
+		// retransmission is the same dialog, and a second one from the
+		// same object is not, even under a number a new circuit reused.
+		o.kind, o.key = offerDialog, fmt.Sprintf("%s:%s:%d:%08x", offerDialog, o.from, o.seq, crc32.ChecksumIEEE(body))
+		return o, true
+	}
 	var m msg.ImprovedInstantMessage
 	if err := m.Decode(body); err != nil {
 		return nil, false
 	}
 	b := m.MessageBlock
-	o := &offer{from: m.AgentData.AgentID, seq: p.Header.Sequence, at: p.At, body: body}
-	if o.at.IsZero() {
-		o.at = time.Now()
-	}
+	o.id, o.name, o.from = imID, "ImprovedInstantMessage", m.AgentData.AgentID
 	switch b.Dialog {
 	case imLureUser:
 		o.kind, o.key = offerLure, offerKey(offerLure, b.ID)
@@ -191,6 +248,13 @@ func offerIn(p *msg.Packet) (*offer, bool) {
 		o.kind, o.key = offerTPRequest, offerKey(offerTPRequest, o.from)
 	case imInventoryOffered:
 		if len(b.BinaryBucket) < 17 {
+			return nil, false
+		}
+		o.kind, o.key = offerInventory, offerKey(offerInventory, b.ID)
+	case imTaskInventoryOffered:
+		// An object's give needs only the asset type in its bucket,
+		// where an avatar's names the item as well (sl.InventoryOfferFrom).
+		if len(b.BinaryBucket) < 1 {
 			return nil, false
 		}
 		o.kind, o.key = offerInventory, offerKey(offerInventory, b.ID)
@@ -232,9 +296,9 @@ func answersIn(p *msg.Packet) (keys []string, how string) {
 		}
 		id := m.MessageBlock.ID
 		switch m.MessageBlock.Dialog {
-		case imInventoryAccepted:
+		case imInventoryAccepted, imTaskInventoryAccepted:
 			return []string{offerKey(offerInventory, id)}, "accepted"
-		case imInventoryDeclined:
+		case imInventoryDeclined, imTaskInventoryDeclined:
 			return []string{offerKey(offerInventory, id)}, "declined"
 		case imLureDeclined:
 			return []string{offerKey(offerLure, id)}, "declined"
@@ -318,8 +382,8 @@ func (l *offerLog) note(o *offer) string {
 	}
 
 	// A newer offer of the same kind from the same person replaces the
-	// older, except for items: two things handed over are two offers.
-	if o.kind != offerInventory {
+	// older, except for items and dialogs: see supersedable.
+	if o.supersedable() {
 		kept := l.kept[:0]
 		for _, k := range l.kept {
 			if k.kind == o.kind && k.from == o.from {
@@ -332,12 +396,91 @@ func (l *offerLog) note(o *offer) string {
 	}
 
 	l.kept = append(l.kept, o)
-	if over := len(l.kept) - offerLimit; over > 0 {
-		clear(l.kept[:over])
-		l.kept = l.kept[over:]
-		l.evicted += uint32(over)
+	l.trimDialogsLocked(time.Now())
+	// Dialogs have their own room, and are not offers pushed out.
+	if over := l.countLocked(false) - offerLimit; over > 0 {
+		kept := l.kept[:0]
+		for _, k := range l.kept {
+			if over > 0 && k.kind != offerDialog {
+				over--
+				l.evicted++
+				continue
+			}
+			kept = append(kept, k)
+		}
+		clear(l.kept[len(kept):])
+		l.kept = kept
 	}
 	return o.key
+}
+
+// countLocked is how many dialogs are kept, or how many are not.
+func (l *offerLog) countLocked(dialogs bool) (n int) {
+	for _, k := range l.kept {
+		if (k.kind == offerDialog) == dialogs {
+			n++
+		}
+	}
+	return n
+}
+
+// trimDialogsLocked drops the dialogs that have waited dialogKeptFor, and
+// then the oldest until dialogLimit are left.  It is sl's rule for its own
+// list (sl/waiting.go), applied when the record is read and when a dialog
+// is noted.  A dialog dropped here is not counted in evicted: a client
+// would have dropped it itself, so its listing loses nothing the record
+// could have given it.
+func (l *offerLog) trimDialogsLocked(now time.Time) {
+	left := l.countLocked(true)
+	kept := l.kept[:0]
+	for _, k := range l.kept {
+		if k.kind == offerDialog && now.Sub(k.at) >= dialogKeptFor {
+			left--
+			continue
+		}
+		kept = append(kept, k)
+	}
+	clear(l.kept[len(kept):])
+	l.kept = kept
+	if left <= dialogLimit {
+		return
+	}
+	kept = l.kept[:0]
+	for _, k := range l.kept {
+		if k.kind == offerDialog && left > dialogLimit {
+			left--
+			continue
+		}
+		kept = append(kept, k)
+	}
+	clear(l.kept[len(kept):])
+	l.kept = kept
+}
+
+// claimDialogs takes out every dialog from an object on a channel, for a
+// reply this avatar sent.  The reply names the object and the channel
+// and nothing else, so the record cannot tell which dialog was meant; the
+// script hears one answer on that channel, and the client that sent it
+// has dropped the one it pressed.  Returns the keys, oldest first.
+func (l *offerLog) claimDialogs(object msg.UUID, channel int32, how, by string, at time.Time) (keys []string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	kept := l.kept[:0]
+	for _, k := range l.kept {
+		if k.kind == offerDialog && k.from == object && k.channel == channel {
+			keys = append(keys, k.key)
+			l.answered = append(l.answered, &answered{offer: k, how: how, by: by, at: at})
+			continue
+		}
+		kept = append(kept, k)
+	}
+	clear(l.kept[len(kept):])
+	l.kept = kept
+	if over := len(l.answered) - answeredMemory; over > 0 {
+		clear(l.answered[:over])
+		l.answered = l.answered[over:]
+	}
+	return keys
 }
 
 // claim takes one out of the record on a client's word that it is
@@ -386,7 +529,7 @@ func (l *offerLog) restore(key string) (*offer, bool) {
 		}
 		l.answered = append(l.answered[:i], l.answered[i+1:]...)
 		for _, k := range l.kept {
-			if k.key == key || (o.kind != offerInventory && k.kind == o.kind && k.from == o.from) {
+			if k.key == key || (o.supersedable() && k.kind == o.kind && k.from == o.from) {
 				return nil, false
 			}
 		}
@@ -400,21 +543,40 @@ func (l *offerLog) restore(key string) (*offer, bool) {
 		l.kept = append(l.kept, nil)
 		copy(l.kept[at+1:], l.kept[at:])
 		l.kept[at] = o
-		return o, true
+		l.trimDialogsLocked(time.Now())
+		return o, l.holds(o)
 	}
 	return nil, false
 }
 
+// holds says whether o is still kept.  Called with mu held.
+func (l *offerLog) holds(o *offer) bool {
+	for _, k := range l.kept {
+		if k == o {
+			return true
+		}
+	}
+	return false
+}
+
 // snapshot is the record as a client is handed it.
-func (l *offerLog) snapshot() *pb.OfferRecord {
+func (l *offerLog) snapshot() *pb.OfferRecord { return l.snapshotFor(nil) }
+
+// snapshotFor is the record as a client is handed it, with only the
+// messages it asked for; all of them when wants is nil.
+func (l *offerLog) snapshotFor(wants func(msg.ID) bool) *pb.OfferRecord {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.trimDialogsLocked(time.Now())
 	out := &pb.OfferRecord{
 		Since:   l.since.UnixMicro(),
 		Evicted: l.evicted,
 		Limit:   offerLimit,
 	}
 	for _, o := range l.kept {
+		if wants != nil && !wants(o.id) {
+			continue
+		}
 		out.Messages = append(out.Messages, o.inbound())
 	}
 	return out
@@ -423,8 +585,8 @@ func (l *offerLog) snapshot() *pb.OfferRecord {
 // inbound is a kept offer as it is handed to a client out of the record.
 func (o *offer) inbound() *pb.InboundMessage {
 	return &pb.InboundMessage{
-		Id:         uint32(imID),
-		Name:       "ImprovedInstantMessage",
+		Id:         uint32(o.id),
+		Name:       o.name,
 		Body:       o.body,
 		Sequence:   o.seq,
 		ReceivedAt: o.at.UnixMicro(),
@@ -460,16 +622,27 @@ func (h *Hosted) noteOffer(p *msg.Packet) string {
 func (h *Hosted) noteSent(p *msg.Packet) {
 	switch p.ID {
 	case imID, msg.IDOf(&msg.AcceptFriendship{}), msg.IDOf(&msg.DeclineFriendship{}),
-		msg.IDOf(&msg.TeleportLureRequest{}), msg.IDOf(&msg.StartLure{}):
+		msg.IDOf(&msg.TeleportLureRequest{}), msg.IDOf(&msg.StartLure{}),
+		msg.IDOf(&msg.ScriptDialogReply{}):
 	default:
+		return
+	}
+	log := h.offerLog()
+	now := time.Now()
+	if p.ID == msg.IDOf(&msg.ScriptDialogReply{}) {
+		// Not by key: a reply names the object and the channel only.
+		var m msg.ScriptDialogReply
+		if body := packetBody(p); body != nil && m.Decode(body) == nil {
+			for _, k := range log.claimDialogs(m.Data.ObjectID, m.Data.ChatChannel, "answered", "", now) {
+				h.tellHandled(&pb.OfferHandled{Offer: k, How: "answered", At: now.UnixMicro()})
+			}
+		}
 		return
 	}
 	keys, how := answersIn(p)
 	if len(keys) == 0 {
 		return
 	}
-	log := h.offerLog()
-	now := time.Now()
 	for _, k := range keys {
 		// Nobody to name: the circuit does not say which program a
 		// message came from, and guessing would be worse than saying so.
@@ -483,14 +656,15 @@ func (h *Hosted) noteSent(p *msg.Packet) {
 // is no longer waiting.
 //
 // The same clients an offer is relayed to: those that asked for instant
-// messages, since those are the only ones that can have it.  Dropped for
-// a client that is behind, like everything else sent to one.
+// messages or script dialogs, since those are the only ones that can have
+// it.  Dropped for a client that is behind, like everything else sent to
+// one.
 func (h *Hosted) tellHandled(n *pb.OfferHandled) {
 	p := &pb.ServerPacket{Body: &pb.ServerPacket_Handled{Handled: n}}
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for c := range h.clients {
-		if c.wants(imID) {
+		if c.wants(imID) || c.wants(dialogID) {
 			c.send(p)
 		}
 	}
@@ -505,7 +679,7 @@ func (h *Hosted) relayRestored(o *offer) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for c := range h.clients {
-		if c.wants(imID) {
+		if c.wants(o.id) {
 			c.send(p)
 		}
 	}

@@ -290,14 +290,15 @@ type GridClient interface {
 	// The server keeps the offers that arrive for an avatar whether or
 	// not anybody is attached: a teleport offered, a request to be
 	// offered one, an item handed over, an offer of friendship, an
-	// invitation into a group.  Each is answered by quoting an id that
-	// arrives once and cannot be asked for again, and the daemon is the
-	// one thing that is always there to hear it; a client that attaches
-	// later is handed what is still waiting in Attached.offers.  That
-	// makes this the second place the server reads a message body, after
-	// the teleport and seat answers it reads for itself, and for the same
-	// reason: it is the session's business whether or not anybody is
-	// listening.
+	// invitation into a group, and a script's dialog or text box.  Each
+	// is answered by quoting an id that arrives once and cannot be asked
+	// for again (a dialog is answered by its object and channel), and the
+	// daemon is the one thing that is always there to hear it; a client
+	// that attaches later is handed what is still waiting in
+	// Attached.offers.  That makes this the second place the server reads
+	// a message body, after the teleport and seat answers it reads for
+	// itself, and for the same reason: it is the session's business
+	// whether or not anybody is listening.
 	//
 	// A client calls it BEFORE sending its answer, and the answer says
 	// whether to go on.  Two clients attached to one avatar see the same
@@ -836,14 +837,15 @@ type GridServer interface {
 	// The server keeps the offers that arrive for an avatar whether or
 	// not anybody is attached: a teleport offered, a request to be
 	// offered one, an item handed over, an offer of friendship, an
-	// invitation into a group.  Each is answered by quoting an id that
-	// arrives once and cannot be asked for again, and the daemon is the
-	// one thing that is always there to hear it; a client that attaches
-	// later is handed what is still waiting in Attached.offers.  That
-	// makes this the second place the server reads a message body, after
-	// the teleport and seat answers it reads for itself, and for the same
-	// reason: it is the session's business whether or not anybody is
-	// listening.
+	// invitation into a group, and a script's dialog or text box.  Each
+	// is answered by quoting an id that arrives once and cannot be asked
+	// for again (a dialog is answered by its object and channel), and the
+	// daemon is the one thing that is always there to hear it; a client
+	// that attaches later is handed what is still waiting in
+	// Attached.offers.  That makes this the second place the server reads
+	// a message body, after the teleport and seat answers it reads for
+	// itself, and for the same reason: it is the session's business
+	// whether or not anybody is listening.
 	//
 	// A client calls it BEFORE sending its answer, and the answer says
 	// whether to go on.  Two clients attached to one avatar see the same
