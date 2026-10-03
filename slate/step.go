@@ -440,7 +440,8 @@ func (s *stepRun) expectFor(ctx context.Context, x *expState) error {
 	case e.TextBox != nil:
 		return s.dialogExpect(x, e.TextBox.Name, e.TextBox.Link, e.TextBox.Text, nil)
 	case e.Texture != nil, e.Offset != nil, e.Repeats != nil, e.Rot != nil, e.Click != nil,
-		e.Fullbright != nil, e.Glow != nil, e.Colour != nil, e.Alpha != nil:
+		e.Fullbright != nil, e.Glow != nil, e.Colour != nil, e.Alpha != nil,
+		e.Position != nil, e.Size != nil:
 		return s.stateExpect(x)
 	case e.Button != nil:
 		return s.buttonExpect(x)

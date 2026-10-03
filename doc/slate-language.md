@@ -76,7 +76,7 @@ touch anywhere link face at button text pattern symbol image box circle oval
 drag from to over say on as tester owner of avatar anyone
 public debug direct sit stand choose answer send num key
 expect no within then dialog textbox texture offset repeats rotation
-click give rez name description heard by reason only null
+position size click give rez name description heard by reason only null
 all others children this root
 buy play open media zoom disabled none
 matching becomes changes original
@@ -166,7 +166,7 @@ takeoff     = "take" "off" binding
 
 expectation = "expect" "no"? expectbody ("within" duration)? ("as" capture)?
 expectbody  = sayexp / dialogexp / boxexp / textureexp / offsetexp
-            / repeatsexp / rotationexp / clickexp
+            / repeatsexp / rotationexp / positionexp / sizeexp / clickexp
             / fullbrightexp / glowexp / colourexp / alphaexp
             / buttonexp / attachexp
             / giveexp / rezexp / linkexp
@@ -187,6 +187,8 @@ textureexp  = "texture" binding link? faceall ( "changes" / state uuidval )
 offsetexp   = "offset" binding link? faceall ( "changes" / state pairval )
 repeatsexp  = "repeats" binding link? faceall ( "changes" / state pairval )
 rotationexp = "rotation" binding link? faceall ( "changes" / state numval )
+positionexp = "position" binding link? ( "changes" / state vecval )
+sizeexp     = "size" binding link? ( "changes" / state vecval )
 clickexp    = "click" binding link? ( "changes" / state clickval )
 fullbrightexp = "fullbright" binding link? faceall ( "changes" / state onoff )
 glowexp     = "glow" binding link? faceall ( "changes" / state numval )
@@ -203,6 +205,7 @@ numval      = number / named
 clickval    = clickname / named
 onoff       = "on" / "off" / named
 triple      = number number number / named
+vecval      = number number number / named
 clickname   = "touch" / "none" / "sit" / "buy" / "pay" / "open"
             / "play" / "media" / "zoom" / "disabled"
 giveexp     = "give" text "from" binding
@@ -248,10 +251,11 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Tests | A `test` name is a non-empty string, unique in the file, and there is at least one test in a suite. At most one `before each` and at most one `after each`. Top-level items may come in any order. |
 | Sequences | Sequence names are unique. A `do` names a defined sequence (it may be defined after its use). A sequence may `do` another but not cyclically; a cycle or an undefined name is an error. The other checks run on each test's expanded steps, so a sequence no test calls is checked only for its `do` calls. |
 | Matching | A `matching` pattern is a regular expression in Go's RE2 syntax and must compile. `matching` is legal only where the grammar writes `text`: `say`, `dialog` and `textbox` message, a `dialog` button clause, `give`, `rez` name and description, link text, and an object's `description`; and in `choose matching` and `sorted matching`, which take a string. |
-| State words | `becomes`, `changes`, `original` and `any` are legal only on the state expectations (texture, offset, repeats, rotation, click, fullbright, glow, colour, alpha, and the button reading, which has no `any`). `changes` takes no value; `is` and `becomes` require one. |
+| State words | `becomes`, `changes`, `original` and `any` are legal only on the state expectations (texture, offset, repeats, rotation, position, size, click, fullbright, glow, colour, alpha, and the button reading, which has no `any`). `changes` takes no value; `is` and `becomes` require one. |
 | Length | A `say` on a negative channel is at most 254 bytes (it travels as a dialog reply). A `say` on any other channel is at most 1023 bytes, so the chat field does not cut it. An `answer` body is at most 254 bytes. A `send` text, once quoted, must leave the whole relayed control line within 1023 bytes, because the tester sends the command to the worn bridge as one chat line on a positive channel (measured: a 1000-byte line arrived whole). `choose` has no length check; a label the dialog did not offer fails at the step. A capture used in `send` text is checked at the step, before anything is sent. |
 | Link text | A `send` text, and a link expectation's literal text, is printable ASCII (0x20 to 0x7E) plus tab and newline, written `\t` and `\n`. The probe's length check is then a character count, and any other character is a static error rather than a mangled report. A capture used as link text is checked at the step. A `matching` pattern on a link expectation is not limited to that character set, because only a literal is put on the wire. |
 | Floats | An offset or rotation literal lies in [−1, 1]. Repeats are unrestricted. `original`, `any` and a capture are not literals and are not range-checked. |
+| Position and size | A `position` or `size` literal is three numbers. A position may be any number, negative or zero. Each of the three numbers of a size is above 0: `size 0 is not above 0`. `link N` is checked as on every expectation, and neither has a `face`. |
 | Levels | A glow, alpha or colour literal lies in [0, 1]; each of the three numbers of a colour is checked alone. The error names the property and the number: `glow 1.5 is outside 0 to 1`. |
 | Origin | `at 0 0` is an error (on `face` and on `showing` alike), and so is a drag whose `from` or `to` is `0 0`, whether written `0` or `0.0`. The error is `at 0 0 is the middle of the face; placeTouches treats a zero ST as not given (sl/touch.go)`. The touch at 0 0 is treated as the middle of the face, so it is rejected. `at 0 0.5` is legal. |
 | Drag | A `drag … over D` must fit its step's budget: `D` is at most the longest `within` in the step, or the `timeout` when it has none, because the drag blocks for `D` and the step gives a blocking stimulus no more than that. |
@@ -262,7 +266,7 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Ordered and sorted | `ordered` needs at least two button clauses. A `sorted matching` pattern compiles and has at most one capturing group, the text to compare. A named group of a `sorted` pattern binds nothing. |
 | Dialog shape | `choose` and `answer` are not checked against a preceding dialog. That depends on the region and fails at run time; only the range of `button N` and the pattern of `matching` are checked. |
 | Wear | The first name of `wear` is an item (`X is an object; wear takes an item`, or `X is not an item`). The attach point, in `wear` and in `attached ... on`, is a name `sl` knows, in any case and with the viewer's spelling or `sl`'s; a name it does not know is refused, not guessed at. The name after `as` is new, and unique among objects, items and the other names `wear` and `rez` bind. A `take off` and an `attached` name an object binding, which is a header object or a name `wear` bound. |
-| Capture types | A capture has the type of the place that binds it, and a use must be of the same type. The types are text (a line, a message, an item name, a group, a button label), uuid (a texture), pair (offset, repeats), number (rotation, glow, alpha, the count of a button reading), click, colour triple and on or off (fullbright). Text is never accepted where a UUID is expected, even when it looks like one. `key` and `showing` take a uuid capture; `text`, `choose`, `send` text and a dialog button take a text capture. `choose matching $x` is refused, because a capture is data and never a pattern, and a capture is not usable inside a `matching` pattern. |
+| Capture types | A capture has the type of the place that binds it, and a use must be of the same type. The types are text (a line, a message, an item name, a group, a button label), uuid (a texture), pair (offset, repeats), number (rotation, glow, alpha, the count of a button reading), click, colour triple, vector (position, size; a position capture can be used by a size and the other way round) and on or off (fullbright). Text is never accepted where a UUID is expected, even when it looks like one. `key` and `showing` take a uuid capture; `text`, `choose`, `send` text and a dialog button take a text capture. `choose matching $x` is refused, because a capture is data and never a pattern, and a capture is not usable inside a `matching` pattern. |
 | Capture scope | The `as` rows above, for captures, in a separate namespace written with `$`: a capture is usable from the next step on and never in the step that binds it, it is visible after a `do`, it is visible from `before each` into the test and into `after each`, and it is not visible from a test body into `after each`. An object and a capture may share a word, since `$a` is not `a`. Each test is checked on its expanded steps. |
 | Bound once | A capture is bound once per expanded test, by a positive expectation only, so a sequence that captures can be called once per test. A second binding, in the same step or a later one, is `$t is already bound at line N; a capture is bound once per test`, and when it comes through a `do` the message ends with the test and the calls, innermost first. A negative expectation matches nothing to bind, so `as` on `expect no` is an error; so is `as $x` on a rez or a link, which have nothing to bind. |
 | Named groups | A `matching` pattern of a positive expectation binds each of its named groups, `(?P<name>...)`, as the text capture `$name`. A group name that appears twice in one pattern is an error, since RE2 allows it and the binding would be ambiguous. A name that cannot be written as a capture (it must begin with a letter and hold letters, digits and underscores) is an error. |
@@ -467,7 +471,7 @@ A text box does not match `expect dialog`. The matching dialog is held for the b
 
 **Text box.** The same as a dialog, for a text box, with a message that is a string or a pattern, no button list, and the same linkset and `link N` rules. Answer it with `answer`, not `choose`.
 
-**State expectations.** Texture, offset, repeats, rotation, click, fullbright, glow, colour and alpha are readings of state. Each takes one of three forms, and a value may be written `original`, as a capture (`$x`), or, after `is` only and with `as $x`, as `any`:
+**State expectations.** Texture, offset, repeats, rotation, position, size, click, fullbright, glow, colour and alpha are readings of state. Each takes one of three forms, and a value may be written `original`, as a capture (`$x`), or, after `is` only and with `as $x`, as `any`:
 
 | Form | Passes when |
 |---|---|
@@ -479,13 +483,23 @@ A text box does not match `expect dialog`. The matching dialog is held for the b
 
 **Baseline.** A step's baseline for an expectation is the latest reading of that face (or click byte) observed at or before the step's arm point, taken from the event log. The runner reads every prim and face that any state expectation in the test names, from the start of the test. If no reading exists at the arm point, the first reading after it is the baseline, and the transcript says so with a line `baseline for <object> face <n> taken after the arm point`.
 
-**Tolerances.** `changes` and `becomes` compare as `is` does: offset within 2/32767, repeats within 1e-4, rotation within 2/32768 of a turn, glow, colour and alpha within 1/255, texture, click and fullbright exactly. A reading that differs from the baseline by less than the tolerance is not a change.
+**Tolerances.** `changes` and `becomes` compare as `is` does: offset within 2/32767, repeats within 1e-4, rotation within 2/32768 of a turn, position and size within 0.001 m on each axis, glow, colour and alpha within 1/255, texture, click and fullbright exactly. A reading that differs from the baseline by less than the tolerance is not a change.
 
-**Original.** `original` means the reading of that face or click byte when the test's own steps begin, after `before each` has run, so a reset in `before each` is what `original` refers to. It is meant for toggles: touch once and the value `changes`; touch again and it `becomes original`. If no reading exists at that point, `original` is the first reading after it. `original` is legal wherever a value is: a texture, the two numbers of offset or repeats, the one number of rotation, glow or alpha, the three of a colour, `on` or `off`, a click name. With `face all` it is the tuple the test began with.
+**Original.** `original` means the reading of that face or click byte when the test's own steps begin, after `before each` has run, so a reset in `before each` is what `original` refers to. It is meant for toggles: touch once and the value `changes`; touch again and it `becomes original`. If no reading exists at that point, `original` is the first reading after it. `original` is legal wherever a value is: a texture, the two numbers of offset or repeats, the one number of rotation, glow or alpha, the three of a colour, a position or a size, `on` or `off`, a click name. With `face all` it is the tuple the test began with.
 
 **Texture.** Face N of the bound prim shows the texture UUID. A reading can lag a script's change by several seconds, so the runner asks the region again about once a second. A reading that still shows the old texture does not fail the step early; only the deadline does. A planar face or a face with a running texture animation does not stop a texture comparison.
 
 **Offset, repeats, rotation.** Offset matches within 2/32767 of each literal, since the stored value is quantised to about one part in 32767. Repeats match within 1e-4 each; negative repeats are a flip and are legal. Rotation is a fraction of a turn, not degrees or radians: `0.25` is a quarter turn and `0.5` a half turn, matched within 2/32768 of a turn.
+
+**Position and size.** `expect position OBJ [link N] (is X Y Z | becomes X Y Z | changes)` and `expect size OBJ [link N] (is X Y Z | becomes X Y Z | changes)` read the prim's position and its scale, in metres, as the object store holds them. They take no `face`, a value is three numbers, and a value may be `original`, a capture or, after `is` with `as`, `any`, as every state expectation does. What a position is depends on the prim, because the store keeps the position of the last update as the region sent it and does not compose it:
+
+| The prim | `position` is |
+|---|---|
+| A worn root | Its offset from the attach point, so a HUD that has not been moved reads `0 0 0` |
+| A child (`link N`, N of 2 or more) | Its position relative to its root, in the root's frame |
+| A rezzed root | Its position in the region |
+
+This is the `Position` of the prim's `sl.Seen`, and `Seen.Scale` for `size`; a poll reads both with no request of its own. Both compare within 0.001 m on each axis. The region reports what a script set exactly, so the tolerance is for the author, who writes rounded numbers. A millimetre is about one pixel of the default 1025-pixel world view at HUD zoom 1, since the view is one metre tall ([Where a worn HUD is on the screen](hud-screen.md#the-world-view)). Measurements are under [Position and size](slate-runner.md#position-and-size) in the runner document. The reading is a position in the HUD's own frame, not a place on the screen: `at X Y` on the screen is not built ([Known limitations](#known-limitations)).
 
 **Click.** The prim's click action equals the named value:
 
@@ -718,7 +732,7 @@ HH:MM:SS.mmm chat channel <n> from <who>: "<tail>"
 HH:MM:SS.mmm permission denied from <who>: <mask>
 ```
 
-`<how>` is `public`, `owner`, `debug`, `direct`, `region`, or `channel <n>`, which is a line the worn bridge forwarded from a `listen` channel; it is product chat, printed as `chat channel <n> from <who>: "<tail>"` with the raw tail. `<who>` is the script's name for a bound prim, otherwise the displayed name. The lines that begin `probe` are protocol, never `chat`. `probe link` carries ` key <uuid>` after the num only when the key the message carried is not the null key. `probe overflow` is a report the probe could not send whole; `probe bad` is a command the probe could not parse, on the link the probe is in; `probe fwd-overflow` is a forward the bridge could not send whole, on a `listen` channel. The pay line prints before the payment, including when it then fails. A texture line prints whenever a reading differs from the last one printed, stale readings included; the offset, repeats and rotation expectations print it too. A fullbright, glow, colour or alpha line prints the same way, and each is compared only with the last line of its own kind for that object and face. A level is rounded to four places. With `face all` the face is written `all` and the line lists the value of each face from face 0, separated by commas: `fullbright sign face all on, off`. A button line prints whenever the count differs from the last one printed for that prim and those parts, and ends with the faces the buttons were found on, `faces 0, 2`, or `faces none` when the count is 0. With a `link` the object is written `<object> link <n>`. An attached line prints when the reading differs from the last one printed for that name, `attached hud HUD centre 2` or `attached hud off`, and the point is written as `sl` names it. A capture prints when its expectation matches, once, with the step that bound it. Its value is a text quoted as Go quotes a string, a UUID, the two numbers of a pair, one number, a click byte as a number, the three of a colour, `on` or `off`, or, for a `face all`, `face all` and the comma-separated values: `capture $first = "Example Sign" (step 3)`, `capture $all = face all on, off (step 1)`. When a step's baseline is the first reading after the arm point, the runner also prints `baseline for <object> face <n> taken after the arm point` (`face all` stands for the face of a `face all`; for a click byte it is `baseline for <object> click taken after the arm point`, and `baseline for <object> button taken after the arm point` for a button reading). If chat or instant messages arrive faster than the runner reads them, the run fails with exit 1, `the chat subscription dropped <n> lines`, rather than looking like a timeout.
+`<how>` is `public`, `owner`, `debug`, `direct`, `region`, or `channel <n>`, which is a line the worn bridge forwarded from a `listen` channel; it is product chat, printed as `chat channel <n> from <who>: "<tail>"` with the raw tail. `<who>` is the script's name for a bound prim, otherwise the displayed name. The lines that begin `probe` are protocol, never `chat`. `probe link` carries ` key <uuid>` after the num only when the key the message carried is not the null key. `probe overflow` is a report the probe could not send whole; `probe bad` is a command the probe could not parse, on the link the probe is in; `probe fwd-overflow` is a forward the bridge could not send whole, on a `listen` channel. The pay line prints before the payment, including when it then fails. A texture line prints whenever a reading differs from the last one printed, stale readings included; the offset, repeats and rotation expectations print it too. A fullbright, glow, colour or alpha line prints the same way, and each is compared only with the last line of its own kind for that object and face. A level is rounded to four places. With `face all` the face is written `all` and the line lists the value of each face from face 0, separated by commas: `fullbright sign face all on, off`. A position or size line prints the same way, `position hud 0 0 0` or `size hud 0.5 0.25 0.1`, and is compared with the last line of its own kind for that object. A button line prints whenever the count differs from the last one printed for that prim and those parts, and ends with the faces the buttons were found on, `faces 0, 2`, or `faces none` when the count is 0. With a `link` the object is written `<object> link <n>`. An attached line prints when the reading differs from the last one printed for that name, `attached hud HUD centre 2` or `attached hud off`, and the point is written as `sl` names it. A capture prints when its expectation matches, once, with the step that bound it. Its value is a text quoted as Go quotes a string, a UUID, the two numbers of a pair, one number, a click byte as a number, the three of a colour, the three of a position or size, `on` or `off`, or, for a `face all`, `face all` and the comma-separated values: `capture $first = "Example Sign" (step 3)`, `capture $all = face all on, off (step 1)`. When a step's baseline is the first reading after the arm point, the runner also prints `baseline for <object> face <n> taken after the arm point` (`face all` stands for the face of a `face all`; for a click byte it is `baseline for <object> click taken after the arm point`, and `position` or `size` in the place of `click` for those readings, and `baseline for <object> button taken after the arm point` for a button reading). If chat or instant messages arrive faster than the runner reads them, the run fails with exit 1, `the chat subscription dropped <n> lines`, rather than looking like a timeout.
 
 **Warnings.** Three kinds of line are printed on their own and change no exit code. Two are about a line that looked like the runner's protocol and was not accepted:
 
@@ -1027,14 +1041,20 @@ test "moves and resizes" {
   # Grab the background low in the middle and take it 300 pixels right and
   # 200 down; the glass grows when pressed, so wait for it.
   drag hud on screen from face 0 at 0.5 0.9 by 300 200 over 800ms settle
+  expect position hud changes within 10s
 
   # The resize corner is a point on the screen, here in the default
   # 1920x1025 view.
   drag hud on screen from 1480 640 by -150 100 over 800ms settle
+  expect size hud becomes 0.8146 0.4073 0.1629 within 10s
 }
 ```
 
-The test passes when both drags are sent and released. The HUD's new position and size are not read ([Known limitations](#known-limitations)), so what the HUD did with them is not yet an expectation.
+The test passes when both drags are sent and released and the HUD has moved and then reached the size below.
+
+The move can only be `changes`. The HUD moves by the drag in metres, 300/1025 m to the right and 200/1025 m down, which is 0.2927 and 0.1951 m ([Where a worn HUD is on the screen](hud-screen.md#a-drag)), but where it ends is that plus where ExampleHUD stood when it was worn, and the example does not know that. Slate has no arithmetic to add the two, and an `is` or `becomes` with a made-up start would be a number nobody measured.
+
+The resize is derived, and it is only as good as the derivation. ExampleHUD's script scales the root by `1 + 2*|delta|/|<0.5,0.25>|`, with delta the pointer's change in metres; that is the formula in ExampleHUD's own script, and a drag of 150 and 100 pixels in a 2050-pixel view was measured scaling it by 1.3146, what the formula gives for that distance ([A drag](hud-screen.md#a-drag)); its root is 0.5 x 0.25 x 0.1 m as built at commit f174c9e. A drag of 150 and 100 pixels in a 1025-pixel view is a delta of 0.14634 and 0.09756 m, whose length is 0.17588, so the factor is 1.62925 and the size is 0.81462 x 0.40731 x 0.16292, written to four places inside the millimetre the reading is compared within. The press at `1480 640` is invented: it holds only if that point is on the HUD's resize corner. A different build, view height or press changes the numbers; a script that cannot say them writes `changes`. The `within 10s` is there because a drag with `settle` can take its duration plus the 5 s settle, and the step's budget is its longest `within` ([Static checks](#static-checks)).
 
 ### Anywhere, a link and a face
 
@@ -1419,7 +1439,8 @@ Each is discussed under [Open questions](slate-runner.md#open-questions).
 - The finder reads labels in the style it was tuned on, dark type on a lighter button: a word inside a dark outlined frame is not read, and a solid rectangle is not a `box` ([Limits found drawing test pictures for buttons](imgfind.md#limits-found-drawing-test-pictures-for-buttons)).
 - A button reading is the finder's count. A label the finder never reads is a count of 0, which is why `becomes gone` is the form to write. A planar or animated face is no reading.
 - A guarded touch takes no `button N`: two tuples fail the step, and it is not a way to choose one.
-- `wear` takes an item from a top-level folder by name. A worn HUD's screen position and size are not read, so a drag on the screen has nothing of that kind to expect, and the runner does not take off what a test wore.
+- `wear` takes an item from a top-level folder by name. The runner does not take off what a test wore.
+- A worn HUD's position and size are read (`expect position`, `expect size`), as an offset in the HUD's own frame and a scale. Where it is on the screen is not: an expectation such as `expect position hud on screen at X Y` is not built, and the author works the offset out from the drag and the world view's height, as [the worked example](#move-and-resize-a-hud-by-its-glass) does.
 - `touch ... button` does not use `Pick` yet: a button hidden behind another prim of a worn HUD is not reported as hidden, because the finder reads the picture of the face and does not ask what the viewer would press at that point.
 - A child prim is named with `link N`, whose numbers come from the object store when there is no probe. The store cannot give the order of a set that several prims joined in one update while it watched, nor one it took from another agent, and `link N` on such a set fails with `the link order of "<name>" is not known; a probe, or taking and rezzing it, gives it`. A probe gives the order, but only in a product the tester owns; taking the object and rezzing it again makes the store know it ([Link numbers](objects.md#link-numbers)). A daemon older than the link numbers reports every order as not known. The link messages `send` and `expect link` always need a probe.
 - One avatar is driven. Any wait is capped at 120 s.

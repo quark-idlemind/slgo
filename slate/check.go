@@ -898,6 +898,10 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 		}
 		_, err := c.reading(e, x.State, x.Any, x.Use, CapClick, same)
 		return err
+	case e.Position != nil:
+		return c.vec3(e, e.Position, "position", same)
+	case e.Size != nil:
+		return c.vec3(e, e.Size, "size", same)
 	case e.Fullbright != nil:
 		x := e.Fullbright
 		if err := c.faceRef(x.Name, x.Link, x.Face, x.FaceAll, same); err != nil {
@@ -1168,6 +1172,8 @@ func asType(e Expect) (CaptureType, bool) {
 		return CapOnOff, true
 	case e.Colour != nil:
 		return CapTriple, true
+	case e.Position != nil, e.Size != nil:
+		return CapVector, true
 	case e.Button != nil:
 		return CapNumber, true
 	}
@@ -1376,6 +1382,31 @@ func (c *checker) vec(e Expect, v *VecExp, same map[string]bool, unit bool) erro
 		return err
 	}
 	return c.exact(v.T)
+}
+
+// vec3 checks a position or size: the object, its link, the reading, and
+// that the three numbers are exact and, for a size, above 0.
+// Why: doc/slate-runner.md#position-and-size
+func (c *checker) vec3(e Expect, v *VecExp3, what string, same map[string]bool) error {
+	if err := c.ref(v.Name, same); err != nil {
+		return err
+	}
+	if err := c.linkN(v.Name, v.Link); err != nil {
+		return err
+	}
+	lit, err := c.reading(e, v.State, v.Any, v.Use, CapVector, same)
+	if err != nil || !lit {
+		return err
+	}
+	for _, n := range []Number{v.X, v.Y, v.Z} {
+		if err := c.exact(n); err != nil {
+			return err
+		}
+		if what == "size" && n.Value <= 0 {
+			return c.err(n.Span, "size %g is not above 0", n.Value)
+		}
+	}
+	return nil
 }
 
 func (c *checker) rot(e Expect, v *RotExp, same map[string]bool) error {
