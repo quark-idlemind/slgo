@@ -339,7 +339,9 @@ here when another is shared the same way.
   long a `ParcelInfoReply` is waited for, 5 s (`DefaultParcelTimeout`),
   and how long the first look at an object in `Faces`, `SetFace` and
   `FacePicture` waits for the region to name it, 30 s, and how long
-  `TakeOff` waits for the simulator to remove the attachment, 10 s. A
+  `TakeOff` waits for the simulator to remove the attachment, 10 s, and
+  how long `DragOnScreen`, asked to settle, waits for a pressed HUD prim
+  to be reported changed, 5 s. A
   test that proves one of them runs out sets it short rather than
   waiting the default out, as `sl`'s do and `shortReadBacks` does for
   `cmd/slsh`'s. A wait a test does not mean to run out gets a timeout

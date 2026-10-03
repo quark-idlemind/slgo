@@ -48,6 +48,11 @@ type Options struct {
 	// the attachment, after which the item can be deleted at once.
 	// Why: doc/slsh.md#deleting-straight-after-a-take-off
 	TakeOffTimeout time.Duration
+
+	// HUDChangeTimeout bounds DragOnScreen's wait, when it is asked to
+	// settle, for the region to say the HUD prim pressed has changed.
+	// Why: doc/hud-screen.md#a-drag
+	HUDChangeTimeout time.Duration
 }
 
 // The defaults for Options.  None of them is a measurement; each is a
@@ -72,6 +77,10 @@ const (
 	// DefaultTakeOffTimeout is a wide margin over the 78-226 ms a
 	// detached attachment took to be removed.
 	DefaultTakeOffTimeout = 10 * time.Second
+
+	// DefaultHUDChangeTimeout is a wide margin over the 197 ms the
+	// slowest of 20 presses took to be reported changed.
+	DefaultHUDChangeTimeout = 5 * time.Second
 )
 
 // SetOptions replaces the session's Options.  A call already waiting
@@ -88,7 +97,8 @@ func (w *Session) Options() Options {
 }
 
 // moveWait, permissionsWait, deleteWait, moneyWait, regionInfoWait,
-// parcelInfoWait and objectWait are the bounds in force.
+// parcelInfoWait, objectWait, takeOffWait and hudChangeWait are the
+// bounds in force.
 func (w *Session) moveWait() time.Duration {
 	return orDefault(w.Options().MoveTimeout, DefaultMoveTimeout)
 }
@@ -119,6 +129,10 @@ func (w *Session) objectWait() time.Duration {
 
 func (w *Session) takeOffWait() time.Duration {
 	return orDefault(w.Options().TakeOffTimeout, DefaultTakeOffTimeout)
+}
+
+func (w *Session) hudChangeWait() time.Duration {
+	return orDefault(w.Options().HUDChangeTimeout, DefaultHUDChangeTimeout)
 }
 
 func orDefault(d, def time.Duration) time.Duration {
