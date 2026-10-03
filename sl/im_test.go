@@ -684,9 +684,6 @@ func waiting(offers ...*InventoryOffer) *Session {
 	w := &Session{invOffers: map[msg.UUID]*InventoryOffer{}}
 	for i, o := range offers {
 		o.Transaction = msg.UUID{byte(i + 1)}
-		if w.invOffers == nil {
-			w.invOffers = map[msg.UUID]*InventoryOffer{}
-		}
 		w.invOffers[o.Transaction] = o
 	}
 	return w

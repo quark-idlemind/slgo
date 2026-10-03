@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -363,5 +364,30 @@ func TestAFacePictureRefusesWhatItCannotShow(t *testing.T) {
 	}
 	if fetches != 1 {
 		t.Errorf("%d fetches: the refusals fetched, or face 4 did not", fetches)
+	}
+}
+
+// TestFacePictureWaitsAsLongAsTheOptionSays: the wait for the region to
+// name the object is Options.ObjectTimeout, not a number of its own.
+// The thing here has no name and nothing answers for one, so the wait
+// runs out.  Run out the default way it takes four quiet seconds, and
+// with this option about one.
+func TestFacePictureWaitsAsLongAsTheOptionSays(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	tex := nrgba(2, 2, func(x, y int) color.NRGBA { return color.NRGBA{R: 200, A: 255} })
+	var fetches int
+	o, _ := aPaintedThing(t, w, f, tex, &fetches)
+	f.mu.Lock()
+	f.objects[0].Name = ""
+	f.mu.Unlock()
+	w.SetOptions(Options{ObjectTimeout: 300 * time.Millisecond})
+
+	start := time.Now()
+	if _, err := w.FacePicture(context.Background(), o, 0); err != nil {
+		t.Fatal(err)
+	}
+	if took := time.Since(start); took > 3*time.Second {
+		t.Errorf("FacePicture took %v with ObjectTimeout 300ms", took.Round(time.Millisecond))
 	}
 }

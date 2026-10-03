@@ -23,3 +23,17 @@ func TestTheReadBackBoundsAreTheSessionsOptions(t *testing.T) {
 		t.Errorf("Options = %+v, want what was set", got)
 	}
 }
+
+// TestTheObjectWaitIsTheSessionsOption: Faces, SetFace and FacePicture
+// wait for a name as long as Options.ObjectTimeout says, 30 s until it
+// is set.
+func TestTheObjectWaitIsTheSessionsOption(t *testing.T) {
+	w, _ := newFakeSession(t)
+	if w.objectWait() != 30*time.Second {
+		t.Errorf("the default is %v, want 30s", w.objectWait())
+	}
+	w.SetOptions(Options{ObjectTimeout: 2 * time.Second})
+	if w.objectWait() != 2*time.Second {
+		t.Errorf("with ObjectTimeout set, the bound is %v", w.objectWait())
+	}
+}

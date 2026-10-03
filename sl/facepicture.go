@@ -7,7 +7,6 @@ import (
 	"image"
 	"image/color"
 	"math"
-	"time"
 
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -133,7 +132,7 @@ func (w *Session) FacePicture(ctx context.Context, o *Object, face int) (image.I
 	if o == nil {
 		return nil, fmt.Errorf("sl: nothing to look at")
 	}
-	seen, err := w.ObjectByID(ctx, o.ID, 30*time.Second)
+	seen, err := w.ObjectByID(ctx, o.ID, w.objectWait())
 	if err != nil {
 		return nil, err
 	}
