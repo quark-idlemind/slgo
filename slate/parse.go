@@ -414,7 +414,7 @@ func (p *parser) startsStimulus() bool {
 		return false
 	}
 	switch p.tok.text {
-	case "touch", "drag", "say", "pay", "sit", "stand", "choose", "answer", "send", "wear", "take":
+	case "touch", "drag", "say", "pay", "sit", "stand", "choose", "answer", "send", "wear", "take", "wait":
 		return true
 	default:
 		return false
@@ -489,6 +489,8 @@ func (p *parser) stimulus() (*Stimulus, error) {
 		s.Sit, err = p.sit()
 	case "stand":
 		s.Stand, err = p.stand()
+	case "wait":
+		s.Wait, err = p.wait()
 	case "choose":
 		s.Choose, err = p.choose()
 	case "answer":
@@ -832,21 +834,35 @@ func (p *parser) drag() (*Drag, error) {
 		return nil, err
 	}
 	d.To = to
-	if p.kw("over") {
-		if err := p.next(); err != nil {
-			return nil, err
-		}
-		dur, err := p.duration()
-		if err != nil {
-			return nil, err
-		}
-		d.Over = &dur
+	if err := p.dragTimes(d); err != nil {
+		return nil, err
 	}
 	return d, nil
 }
 
+// dragTimes reads [over D] [press D] [dwell D], in that order.
+func (p *parser) dragTimes(d *Drag) error {
+	for _, t := range []struct {
+		word string
+		into **Duration
+	}{{"over", &d.Over}, {"press", &d.Press}, {"dwell", &d.Dwell}} {
+		if !p.kw(t.word) {
+			continue
+		}
+		if err := p.next(); err != nil {
+			return err
+		}
+		dur, err := p.duration()
+		if err != nil {
+			return err
+		}
+		*t.into = &dur
+	}
+	return nil
+}
+
 // screenDrag reads what follows drag OBJ: on screen from POINT (to X Y |
-// by DX DY) [over D] [settle].
+// by DX DY) [over D] [press D] [dwell D] [settle].
 func (p *parser) screenDrag(d *Drag) (*Drag, error) {
 	start := p.tok.span
 	if err := p.want("on"); err != nil {
@@ -901,15 +917,8 @@ func (p *parser) screenDrag(d *Drag) (*Drag, error) {
 	if sd.To, err = p.pair(); err != nil {
 		return nil, err
 	}
-	if p.kw("over") {
-		if err := p.next(); err != nil {
-			return nil, err
-		}
-		dur, err := p.duration()
-		if err != nil {
-			return nil, err
-		}
-		d.Over = &dur
+	if err := p.dragTimes(d); err != nil {
+		return nil, err
 	}
 	if p.kw("settle") {
 		sd.Settle = true
@@ -1004,6 +1013,17 @@ func (p *parser) stand() (*Stand, error) {
 		return nil, err
 	}
 	return &Stand{}, nil
+}
+
+func (p *parser) wait() (*Wait, error) {
+	if err := p.want("wait"); err != nil {
+		return nil, err
+	}
+	d, err := p.duration()
+	if err != nil {
+		return nil, err
+	}
+	return &Wait{For: d}, nil
 }
 
 func (p *parser) choose() (*Choose, error) {

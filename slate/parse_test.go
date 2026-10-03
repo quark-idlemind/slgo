@@ -548,3 +548,31 @@ expect say "pong" on 1 from object vendor within 1s
 
 // body is the steps of the only test in a file of plain steps.
 func body(s *Script) []Step { return s.Tests[0].Steps }
+
+// TestADragTakesAPressAndADwell: both forms read over, press and dwell,
+// in that order, and each is a duration in the usual range.
+func TestADragTakesAPressAndADwell(t *testing.T) {
+	src := "slate 1\nobject sign is \"Example Sign\"\ntest \"t\" {\n" +
+		"drag sign face 0 from 0.1 0.5 to 0.9 0.5 over 1s press 200ms dwell 300ms\n" +
+		"drag sign on screen from 100 100 by 10 0 over 1s press 250ms dwell 350ms settle\n}\n"
+	s, err := Parse("t.slate", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := s.Tests[0].Steps
+	face, screen := steps[0].Stimulus.Drag, steps[1].Stimulus.Drag
+	if face.Press == nil || face.Press.Value != 200*time.Millisecond || face.Dwell == nil || face.Dwell.Value != 300*time.Millisecond {
+		t.Errorf("the face drag read press %v dwell %v", face.Press, face.Dwell)
+	}
+	if screen.Press == nil || screen.Press.Value != 250*time.Millisecond || screen.Dwell == nil ||
+		screen.Dwell.Value != 350*time.Millisecond || !screen.Screen.Settle {
+		t.Errorf("the screen drag read press %v dwell %v settle %v", screen.Press, screen.Dwell, screen.Screen.Settle)
+	}
+	short, err := Parse("t.slate", []byte(strings.Replace(src, "press 200ms", "press 50ms", 1)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Check(short); err == nil {
+		t.Error("a press of 50ms passed the checks")
+	}
+}

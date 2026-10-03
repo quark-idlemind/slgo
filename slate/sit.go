@@ -40,6 +40,24 @@ func (s *stepRun) sitStimulus(st *Sit) (*stimulus, error) {
 	}, nil
 }
 
+// waitStimulus does nothing for d, as a blocking stimulus: the step's
+// expectations start when it returns.
+func waitStimulus(d time.Duration) *stimulus {
+	return &stimulus{
+		blocking: true,
+		send: func(ctx context.Context, budget time.Duration) (string, error) {
+			t := time.NewTimer(d)
+			defer t.Stop()
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-t.C:
+				return "waited " + d.String(), nil
+			}
+		},
+	}
+}
+
 // standStimulus stands the avatar up. One that is already standing is
 // not an error.
 func (s *stepRun) standStimulus() *stimulus {

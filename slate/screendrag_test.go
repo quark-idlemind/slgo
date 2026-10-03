@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/quark-idlemind/slgo/sl"
 )
 
 func TestScreenDragParses(t *testing.T) {
@@ -122,4 +124,18 @@ test "moves and resizes" {
   expect size hud becomes 0.8146 0.4073 0.1629 within 10s
 }
 `)
+}
+
+// TestASentenceNamesAWornObjectByItsBinding: the region does not name a
+// worn object, so a refusal quotes the name the file bound it to rather
+// than an empty one.
+func TestASentenceNamesAWornObjectByItsBinding(t *testing.T) {
+	b := &binding{name: "hud", seen: &sl.Seen{}}
+	if got := nameOf(b); got != "hud" {
+		t.Errorf("nameOf an unnamed worn object = %q, want its binding", got)
+	}
+	b.seen.Name = "Example Sign"
+	if got := nameOf(b); got != "Example Sign" {
+		t.Errorf("nameOf a named object = %q", got)
+	}
 }

@@ -477,3 +477,57 @@ func TestZoomScalesSizeAndPlaceAlike(t *testing.T) {
 		within(t, "middle y", (tp+b)/2, 1025-c.above, pixels)
 	}
 }
+
+// TestAShapedPrimIsInTheWayAndNoMore: a prim whose faces are not known --
+// here boxes with their profile cut -- stands for the box it fits in.  A click where it is in front is refused;
+// a click on the plain prims anywhere else is answered as before, and so
+// is a drag held on one of them.
+func TestAShapedPrimIsInTheWayAndNoMore(t *testing.T) {
+	cut := func(at msg.Vector3, size float32, local uint32) *Seen {
+		s := prim(t, "box", size, at, msg.Quaternion{})
+		shape := DefaultShape()
+		shape.CutEnd = 0.875
+		s.Shape, _ = shape.Pack()
+		s.Object.Local = local
+		return s
+	}
+	root := prim(t, "box", 0.25, front, msg.Quaternion{})
+	beside := cut(msg.Vector3{Y: 0.25}, 0.25, 901)          // to the left of the root
+	before := cut(msg.Vector3{X: -0.2, Z: 0.08}, 0.05, 902) // in front of the root's top
+	linkset := []*Seen{root, beside, before}
+
+	mid, err := measured.PointOf(linkset, 1, 4, msg.Vector3{X: 0.5, Y: 0.3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, ok, err := measured.Pick(linkset, mid)
+	if err != nil || !ok || h.Link != 1 || h.Touch.Face != 4 {
+		t.Fatalf("Pick on the root clear of both = %+v, %v, %v; want link 1 face 4", h, ok, err)
+	}
+	if h, ok, err := measured.PickOn(linkset, 1, mid); err != nil || !ok || h.Link != 1 {
+		t.Errorf("PickOn the root = %+v, %v, %v", h, ok, err)
+	}
+
+	top, err := measured.PointOf(linkset, 1, 4, msg.Vector3{X: 0.5, Y: 0.82})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := measured.Pick(linkset, top); !errors.Is(err, ErrShapeNotPlaced) {
+		t.Errorf("Pick where a shaped prim is in front: %v, want ErrShapeNotPlaced", err)
+	}
+	// Held on the root, the drag goes on reading the root, whatever is
+	// in front of it there.
+	if h, ok, err := measured.PickOn(linkset, 1, top); err != nil || !ok || h.Link != 1 {
+		t.Errorf("PickOn the root behind a shaped prim = %+v, %v, %v", h, ok, err)
+	}
+
+	if _, err := measured.PointOf(linkset, 2, 4, msg.Vector3{X: 0.5, Y: 0.5}); !errors.Is(err, ErrShapeNotPlaced) {
+		t.Errorf("PointOf on a shaped prim: %v, want ErrShapeNotPlaced", err)
+	}
+	if _, _, err := measured.PickOn(linkset, 2, mid); !errors.Is(err, ErrShapeNotPlaced) {
+		t.Errorf("PickOn a shaped prim: %v, want ErrShapeNotPlaced", err)
+	}
+	if _, err := measured.Faces(linkset); !errors.Is(err, ErrShapeNotPlaced) {
+		t.Errorf("Faces of a linkset with a shaped prim: %v, want ErrShapeNotPlaced", err)
+	}
+}

@@ -476,6 +476,8 @@ func (s *stepRun) stimulusFor(st *Stimulus) (*stimulus, error) {
 		return s.sitStimulus(st.Sit)
 	case st.Stand != nil:
 		return s.standStimulus(), nil
+	case st.Wait != nil:
+		return waitStimulus(st.Wait.For.Value), nil
 	case st.Send != nil:
 		return s.sendStimulus(st.Send)
 	case st.Wear != nil:

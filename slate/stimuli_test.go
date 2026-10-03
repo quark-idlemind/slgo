@@ -163,6 +163,36 @@ func TestDragSendsTwoPointsAndTheReleaseAndBlocks(t *testing.T) {
 	}
 }
 
+// TestADragHoldsItsPressAndDwell: press holds still at the start before
+// moving and dwell at the end before letting go, so a script that reads
+// the drag from its touch events sees both ends held.
+func TestADragHoldsItsPressAndDwell(t *testing.T) {
+	step := hdr + "drag sign face 1 from 0.1 0.5 to 0.9 0.5 over 100ms press 200ms dwell 200ms\n"
+	f := newGrid(t)
+	t0 := time.Now()
+	wantExit(t, play(t, f, step), 0)
+	if took := time.Since(t0); took < 400*time.Millisecond {
+		t.Errorf("the drag took %s, want at least the 400ms of press and dwell", took)
+	}
+	ups := sentOf[*msg.ObjectGrabUpdate](f)
+	if len(ups) < 3 {
+		t.Fatalf("%d updates", len(ups))
+	}
+	var atStart, atEnd int
+	for _, u := range ups {
+		switch u.SurfaceInfo[0].STCoord {
+		case msg.Vector3{X: 0.1, Y: 0.5}:
+			atStart++
+		case msg.Vector3{X: 0.9, Y: 0.5}:
+			atEnd++
+		}
+	}
+	// At the touch rate, 200 ms is several updates at each end.
+	if atStart < 3 || atEnd < 3 {
+		t.Errorf("%d updates held at the start and %d at the end, want several of each", atStart, atEnd)
+	}
+}
+
 // sits has the simulator seat the avatar on the sign when asked.
 func (f *fakeGrid) sits() {
 	f.replyTo(func(m msg.Message) {
@@ -368,4 +398,18 @@ func TestAPendingPermissionRequestIsDeniedAndPrinted(t *testing.T) {
 	res = play(t, f, sayFar)
 	wantExit(t, res, 0)
 	check(t, f, res)
+}
+
+// TestAWaitWaitsAndSendsNothing: wait D blocks for D and is the whole
+// step; nothing goes to the grid.
+func TestAWaitWaitsAndSendsNothing(t *testing.T) {
+	f := newGrid(t)
+	t0 := time.Now()
+	wantExit(t, play(t, f, hdr+"wait 300ms\n"), 0)
+	if took := time.Since(t0); took < 300*time.Millisecond {
+		t.Errorf("the wait took %s, want at least 300ms", took)
+	}
+	if n := len(sentOf[*msg.ObjectGrab](f)); n != 0 {
+		t.Errorf("a wait sent %d grabs", n)
+	}
 }

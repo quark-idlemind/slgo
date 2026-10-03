@@ -55,7 +55,7 @@ func (s *stepRun) screenDragStimulus(d *Drag) (*stimulus, error) {
 				if root.AttachPoint != 0 {
 					worn = "worn on " + sl.AttachPointName(root.AttachPoint)
 				}
-				return s.sentence("%q is %s; a drag on the screen needs an object worn on a HUD point, and nothing was sent", b.seen.Name, worn)
+				return s.sentence("%q is %s; a drag on the screen needs an object worn on a HUD point, and nothing was sent", nameOf(b), worn)
 			}
 			if sd.Face == nil {
 				from = sl.ScreenPoint{X: sd.FromPixels.S.Value, Y: sd.FromPixels.T.Value}
@@ -84,11 +84,12 @@ func (s *stepRun) screenDragStimulus(d *Drag) (*stimulus, error) {
 			defer cancel()
 			err := s.r.sess.DragOnScreen(ctx, &root.Object, sl.ScreenDrag{
 				View: view, Points: []sl.ScreenPoint{from, to}, Move: over, Settle: sd.Settle,
+				Press: d.pressFor(), Dwell: d.dwellFor(),
 			})
 			if err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("dragged %s on the screen from %.0f,%.0f to %.0f,%.0f over %s", b.name, from.X, from.Y, to.X, to.Y, over), nil
+			return fmt.Sprintf("dragged %s on the screen from %.0f,%.0f to %.0f,%.0f over %s%s", b.name, from.X, from.Y, to.X, to.Y, over, d.holds()), nil
 		},
 	}, nil
 }
@@ -96,5 +97,15 @@ func (s *stepRun) screenDragStimulus(d *Drag) (*stimulus, error) {
 // screenFault is the sentence for a face that cannot be put on the
 // screen.
 func (s *stepRun) screenFault(b *binding, err error) error {
-	return s.sentence("%q cannot be put on the screen: %v; give the start in pixels, and nothing was sent", b.seen.Name, err)
+	return s.sentence("%q cannot be put on the screen: %v; give the start in pixels, and nothing was sent", nameOf(b), err)
+}
+
+// nameOf is what a sentence calls a bound object: its name, or, for one
+// whose name is not known -- a worn object is not named by the region --
+// the name the file bound it to.
+func nameOf(b *binding) string {
+	if b.seen.Name != "" {
+		return b.seen.Name
+	}
+	return b.name
 }

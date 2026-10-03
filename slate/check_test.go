@@ -285,3 +285,35 @@ func TestADragLongerThanItsBudgetIsRefused(t *testing.T) {
 		t.Fatal("a drag longer than the timeout with no within was accepted")
 	}
 }
+
+// TestADragsPressAndDwellCountAgainstTheBudget: a drag blocks for its
+// press, move and dwell together, and the three must fit the step.
+func TestADragsPressAndDwellCountAgainstTheBudget(t *testing.T) {
+	mustCheck(t, "slate 1\nobject a is \"A\"\ndrag a face 0 from 0.1 0.5 to 0.9 0.5 over 1s press 2s dwell 2s\n")
+	src := "slate 1\nobject a is \"A\"\ndrag a face 0 from 0.1 0.5 to 0.9 0.5 over 4s press 4s dwell 4s\n"
+	s, err := Parse("t.slate", []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Check(s); err == nil || !strings.Contains(err.Error(), "can take 12s") {
+		t.Errorf("a 12 s drag in a 10 s step: %v", err)
+	}
+}
+
+// TestAWaitMustFitItsStep: a wait blocks, so it must fit the step's
+// budget, and is a duration in the usual range.
+func TestAWaitMustFitItsStep(t *testing.T) {
+	mustCheck(t, "slate 1\nobject a is \"A\"\nwait 2s\n")
+	for _, c := range []struct{ src, want string }{
+		{"slate 1\nobject a is \"A\"\nwait 12s\n", "longer than the step's budget"},
+		{"slate 1\nobject a is \"A\"\nwait 50ms\n", "outside 100ms to 120s"},
+	} {
+		s, err := Parse("t.slate", []byte(c.src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := Check(s); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%q: %v, want %q", c.src, err, c.want)
+		}
+	}
+}

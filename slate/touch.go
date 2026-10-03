@@ -81,7 +81,7 @@ func (s *stepRun) dragStimulus(d *Drag) (*stimulus, error) {
 	}
 	drag := sl.Drag{
 		Points: []sl.Touch{{Face: face, ST: stOf(d.From)}, {Face: face, ST: stOf(d.To)}},
-		Move:   over,
+		Move:   over, Press: d.pressFor(), Dwell: d.dwellFor(),
 	}
 	return withLink(&stimulus{
 		blocking: true,
@@ -91,7 +91,32 @@ func (s *stepRun) dragStimulus(d *Drag) (*stimulus, error) {
 			if err := s.r.sess.Drag(ctx, &b.seen.Object, drag); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("dragged %s face %d over %s", b.name, face, over), nil
+			return fmt.Sprintf("dragged %s face %d over %s%s", b.name, face, over, d.holds()), nil
 		},
 	}, resolve), nil
+}
+
+// pressFor and dwellFor are a drag's holds at its two ends, zero for
+// none.
+func (d *Drag) pressFor() time.Duration { return valueOr(d.Press) }
+func (d *Drag) dwellFor() time.Duration { return valueOr(d.Dwell) }
+
+func valueOr(d *Duration) time.Duration {
+	if d == nil {
+		return 0
+	}
+	return d.Value
+}
+
+// holds is what a drag's line says of its press and dwell, when it had
+// either.
+func (d *Drag) holds() string {
+	s := ""
+	if d.Press != nil {
+		s += fmt.Sprintf(", pressed %s first", d.Press.Value)
+	}
+	if d.Dwell != nil {
+		s += fmt.Sprintf(", held %s at the end", d.Dwell.Value)
+	}
+	return s
 }

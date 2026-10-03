@@ -55,18 +55,26 @@ type ScreenHit struct {
 	Touch  Touch
 }
 
-// ErrShapeNotPlaced is a prim this package cannot put on the screen:
-// anything but a plain box or cylinder, so far.
+// ErrShapeNotPlaced is a prim whose faces this package cannot put on
+// the screen: anything but a plain box or cylinder, so far.  Such a prim
+// is still in the way of what is behind it: a click where it is in front
+// is refused with this, and a click anywhere else is answered.
 // Why: doc/hud-screen.md#which-shapes
-var ErrShapeNotPlaced = errors.New("sl: only a plain box or cylinder can be hudPrim on the screen")
+var ErrShapeNotPlaced = errors.New("sl: only a plain box or cylinder can be put on the screen")
 
 // Faces is every face of a worn linkset that faces the viewer, in
 // front first.  linkset is as Linkset returns it: the root, worn on a
-// HUD point, then its children in link order.
+// HUD point, then its children in link order.  A linkset with a prim
+// whose faces are not known is refused, since every face is the promise.
 func (v HUDView) Faces(linkset []*Seen) ([]ScreenFace, error) {
 	prims, err := v.place(linkset)
 	if err != nil {
 		return nil, err
+	}
+	for _, p := range prims {
+		if p.kind == "" {
+			return nil, p.unplaced()
+		}
 	}
 	var out []ScreenFace
 	for _, p := range prims {
@@ -98,6 +106,10 @@ func (v HUDView) Pick(linkset []*Seen, p ScreenPoint) (ScreenHit, bool, error) {
 	if !found {
 		return ScreenHit{}, false, nil
 	}
+	if best.shaped != nil {
+		return ScreenHit{}, false, fmt.Errorf("%w, and %s is in front at %.0f,%.0f",
+			best.shaped.unplaced(), best.shaped.seen.Object, p.X, p.Y)
+	}
 	return best.ScreenHit, true, nil
 }
 
@@ -116,6 +128,9 @@ func (v HUDView) PickOn(linkset []*Seen, link int, p ScreenPoint) (ScreenHit, bo
 	if err != nil {
 		return ScreenHit{}, false, err
 	}
+	if pr.kind == "" {
+		return ScreenHit{}, false, pr.unplaced()
+	}
 	if h, ok := pr.intersect(v.ray(p)); ok {
 		return h.ScreenHit, true, nil
 	}
@@ -133,6 +148,9 @@ func (v HUDView) PointOf(linkset []*Seen, link, face int, st msg.Vector3) (Scree
 	pr, err := primAt(prims, link)
 	if err != nil {
 		return ScreenPoint{}, err
+	}
+	if pr.kind == "" {
+		return ScreenPoint{}, pr.unplaced()
 	}
 	f, ok := faceOf(pr.kind, face)
 	if !ok {
@@ -201,13 +219,16 @@ func (v HUDView) ray(p ScreenPoint) vec {
 
 // hudPrim is one prim put in the HUD's frame.  In its own frame a prim
 // is a unit box or cylinder about its middle; scale stretches it and
-// turn and at put it in the HUD's frame.
+// turn and at put it in the HUD's frame.  A prim of any other shape has
+// no kind, and stands for the unit box it fits in: in the way of what is
+// behind it, with no faces of its own.
 type hudPrim struct {
 	view  HUDView
 	seen  *Seen
 	link  int
-	kind  string
-	point vec // the HUD point it is worn on, which touch positions are from
+	kind  string // box, cylinder, or empty for any other shape
+	why   string // what the shape is, when kind is empty
+	point vec    // the HUD point it is worn on, which touch positions are from
 	at    vec
 	turn  rot3
 	scale vec
@@ -232,11 +253,11 @@ func (v HUDView) place(linkset []*Seen) ([]hudPrim, error) {
 		if s == nil {
 			return nil, fmt.Errorf("sl: link %d of %s is missing", i+1, root.Object)
 		}
-		kind, err := plainKind(s)
+		kind, why, err := plainKind(s)
 		if err != nil {
 			return nil, err
 		}
-		p := hudPrim{view: v, seen: s, link: i + 1, kind: kind, point: pt,
+		p := hudPrim{view: v, seen: s, link: i + 1, kind: kind, why: why, point: pt,
 			at: rootAt, turn: rootTurn, scale: vecOf(s.Scale)}
 		if i > 0 {
 			p.at = rootAt.add(rootTurn.rotate(vecOf(s.Position)))
@@ -247,24 +268,31 @@ func (v HUDView) place(linkset []*Seen) ([]hudPrim, error) {
 	return out, nil
 }
 
-// plainKind is box or cylinder for a prim this package can place.
-func plainKind(s *Seen) (string, error) {
+// plainKind is box or cylinder for a prim this package can place, and
+// otherwise no kind and what the shape is.  An error is a prim nothing
+// has described the shape of.
+func plainKind(s *Seen) (kind, why string, err error) {
 	shape, ok := s.Form()
 	if !ok {
-		return "", fmt.Errorf("sl: nothing has described the shape of %s", s.Object)
+		return "", "", fmt.Errorf("sl: nothing has described the shape of %s", s.Object)
 	}
 	if s.Sculpt.Kind != msg.SculptNone {
-		return "", fmt.Errorf("%w: %s is a sculpt or a mesh", ErrShapeNotPlaced, s.Object)
+		return "", "a sculpt or a mesh", nil
 	}
 	if shape.Type != "box" && shape.Type != "cylinder" {
-		return "", fmt.Errorf("%w: %s is a %s", ErrShapeNotPlaced, s.Object, shape.Type)
+		return "", "a " + shape.Type, nil
 	}
 	plain := DefaultShape()
 	plain.Type = shape.Type
 	if !sameShape(shape, plain) {
-		return "", fmt.Errorf("%w: %s is a %s with its shape changed", ErrShapeNotPlaced, s.Object, shape.Type)
+		return "", "a " + shape.Type + " with its shape changed", nil
 	}
-	return shape.Type, nil
+	return shape.Type, "", nil
+}
+
+// unplaced is the refusal for a prim whose faces are not known.
+func (p hudPrim) unplaced() error {
+	return fmt.Errorf("%w: %s is %s", ErrShapeNotPlaced, p.seen.Object, p.why)
 }
 
 // sameShape compares the parameters a box or cylinder uses, to within
@@ -323,10 +351,12 @@ func (p hudPrim) faces() []ScreenFace {
 	return out
 }
 
-// hit is where a line of sight meets a prim.
+// hit is where a line of sight meets a prim.  shaped is the prim when
+// it is one whose faces are not known, met at the box it fits in.
 type hit struct {
 	ScreenHit
-	depth float64
+	depth  float64
+	shaped *hudPrim
 }
 
 // intersect is where the line of sight through ray first meets the
@@ -346,6 +376,11 @@ func (p hudPrim) intersect(ray vec) (hit, bool) {
 		t, f, ok = enterBox(from, along)
 	case "cylinder":
 		t, f, ok = enterCylinder(from, along)
+	default:
+		// Only how far along, which is all that is known.
+		if t, _, ok = enterBox(from, along); ok {
+			return hit{depth: p.toHUD(from.add(along.scaled(t))).x, shaped: &p}, true
+		}
 	}
 	if !ok {
 		return hit{}, false
