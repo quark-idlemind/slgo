@@ -23,25 +23,25 @@ func TestSeatsSurviveARestart(t *testing.T) {
 	}
 	// A file that is not there yet is not an error: nothing has sat
 	// down.
-	if got := s.Seat("example"); !got.IsZero() {
+	if got, _ := s.Seat("example"); !got.IsZero() {
 		t.Errorf("an empty store answered %v", got)
 	}
-	s.SetSeat("example", chair)
-	s.SetSeat("other", bench)
+	s.SetSeat("example", chair, msg.UUID{})
+	s.SetSeat("other", bench, msg.UUID{})
 
 	again, err := openSeats(path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := again.Seat("example"); got != chair {
+	if got, _ := again.Seat("example"); got != chair {
 		t.Errorf("after reopening, example sits on %v, want %v", got, chair)
 	}
-	if got := again.Seat("other"); got != bench {
+	if got, _ := again.Seat("other"); got != bench {
 		t.Errorf("after reopening, other sits on %v, want %v", got, bench)
 	}
 	// A profile nobody has seen sitting has no seat, rather than
 	// somebody else's.
-	if got := again.Seat("nobody"); !got.IsZero() {
+	if got, _ := again.Seat("nobody"); !got.IsZero() {
 		t.Errorf("a profile with no seat answered %v", got)
 	}
 }
@@ -60,14 +60,14 @@ func TestStandingUpForgetsTheSeat(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s.SetSeat("example", chair)
-	s.SetSeat("example", msg.UUID{})
+	s.SetSeat("example", chair, msg.UUID{})
+	s.SetSeat("example", msg.UUID{}, msg.UUID{})
 
 	again, err := openSeats(path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := again.Seat("example"); !got.IsZero() {
+	if got, _ := again.Seat("example"); !got.IsZero() {
 		t.Errorf("standing up left %v remembered", got)
 	}
 	b, err := os.ReadFile(path)
@@ -114,10 +114,10 @@ func TestCommentsAndBlankLinesAreSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.Seat("example"); !got.IsZero() {
+	if got, _ := s.Seat("example"); !got.IsZero() {
 		t.Errorf("a commented out line was read: %v", got)
 	}
-	if got := s.Seat("other"); got.IsZero() {
+	if got, _ := s.Seat("other"); got.IsZero() {
 		t.Error("the line that was not commented out was skipped too")
 	}
 }
@@ -150,14 +150,55 @@ func TestAWriteThatFailsComplainsOnce(t *testing.T) {
 		t.Skip("this user can write into a read-only directory; nothing to test")
 	}
 	for i := 0; i < 3; i++ {
-		s.SetSeat("example", msg.MustParseUUID("33a37e57-7e57-c0de-8194-c2ede48c33c0"))
+		s.SetSeat("example", msg.MustParseUUID("33a37e57-7e57-c0de-8194-c2ede48c33c0"), msg.UUID{})
 	}
 	if len(said) != 1 {
 		t.Errorf("a store that cannot write said %d things, want one: %v", len(said), said)
 	}
 	// And it still answers from memory, since the session it is
 	// serving has not stopped happening.
-	if got := s.Seat("example"); got.IsZero() {
+	if got, _ := s.Seat("example"); got.IsZero() {
 		t.Error("a store that could not write forgot what it was told")
+	}
+}
+
+// TestTheRegionIsKeptWithTheSeat: a line may carry the region, and one
+// without reads as the region not known; both are written back as they
+// were.
+func TestTheRegionIsKeptWithTheSeat(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "seats")
+	chair := msg.MustParseUUID("99a57e57-7e57-c0de-73bb-5c5bfbf00fd1")
+	bench := msg.MustParseUUID("99c17e57-7e57-c0de-6569-645d75e4ae41")
+	region := msg.MustParseUUID("9c1a7e57-7e57-c0de-171a-cf0e69059309")
+
+	body := "example " + chair.String() + " " + region.String() + "\n" +
+		"other " + bench.String() + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := openSeats(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if on, in := s.Seat("example"); on != chair || in != region {
+		t.Errorf("example read as %v in %v, want %v in %v", on, in, chair, region)
+	}
+	if on, in := s.Seat("other"); on != bench || !in.IsZero() {
+		t.Errorf("an old line read as %v in %v, want %v and no region", on, in, bench)
+	}
+
+	s.SetSeat("third", chair, region)
+	out, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"example " + chair.String() + " " + region.String() + "\n",
+		"other " + bench.String() + "\n",
+		"third " + chair.String() + " " + region.String() + "\n",
+	} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("the file lacks the line %q:\n%s", want, out)
+		}
 	}
 }

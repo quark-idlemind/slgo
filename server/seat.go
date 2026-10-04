@@ -4,8 +4,9 @@ package server
 //
 // Nothing on the grid remembers a seat, so this daemon does: it is what
 // logs the avatar in, including at startup with no client attached.
-// What is remembered is the seat's object id; a local id is the
-// region's own numbering, handed out afresh every time.
+// What is remembered is the seat's object id, with the id of the region
+// the avatar was in; a local id is the region's own numbering, handed
+// out afresh every time.
 //
 // It is learned two ways.  AvatarSitResponse carries the seat's object
 // id however the sit was asked for.  The watch reads what the avatar is
@@ -17,16 +18,21 @@ package server
 //
 // The restore asks again for a while, since a sit naming an object the
 // simulator has not described yet is answered with nothing, and then
-// gives up, which also covers a seat that is gone.  It leaves alone an
-// avatar somebody else sat down meanwhile, and the watch goes on writing
-// down whatever the avatar sits on.
+// gives up.  It does not ask from another region than the seat's, which
+// cannot work and loses nothing.  If every ask was refused as "not in
+// this region" the seat is forgotten; any other end keeps it.  It leaves
+// alone an avatar somebody else sat down meanwhile, and the watch goes on
+// writing down whatever the avatar sits on.  A stop reads the seat one
+// last time, for a stand the watch had not yet seen.
 // Why: doc/daemon.md#sitting-down-again
 
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -38,13 +44,15 @@ import (
 // server with none behaves exactly as it did before -- it remembers
 // nothing and restores nothing.
 type Seats interface {
-	// Seat is what this profile was last sitting on.  The zero id is
-	// "nothing remembered", which is also what a profile nobody has
-	// ever seen sitting answers.
-	Seat(profile string) msg.UUID
+	// Seat is what this profile was last sitting on, and the id of the
+	// region the avatar was in.  The zero id is "nothing remembered",
+	// which is also what a profile nobody has ever seen sitting
+	// answers.  A zero region is "not known", as in a seat written
+	// before regions were kept.
+	Seat(profile string) (on, region msg.UUID)
 
 	// SetSeat writes it down.  The zero id forgets.
-	SetSeat(profile string, on msg.UUID)
+	SetSeat(profile string, on, region msg.UUID)
 }
 
 // SetSeats gives the server somewhere to remember seats.  Nil turns the
@@ -112,12 +120,12 @@ func (h *Hosted) keepSeat(ctx context.Context) {
 // seatward restores the remembered seat and then keeps the memory up to
 // date.
 func (h *Hosted) seatward(ctx context.Context, pace seatPace) {
-	want := h.seats.Seat(h.Name)
+	want, region := h.seats.Seat(h.Name)
 	if !want.IsZero() {
 		if !sleepFor(ctx, pace.settle) {
 			return
 		}
-		h.resit(ctx, want, pace)
+		h.resit(ctx, want, region, pace)
 	}
 	h.watchSeat(ctx, pace)
 }
@@ -131,7 +139,18 @@ func (h *Hosted) seatward(ctx context.Context, pace seatPace) {
 // asked: an avatar sitting on a chair nobody has described is sitting
 // on it just the same.
 // Why: doc/daemon.md#what-counts-as-having-sat-down
-func (h *Hosted) resit(ctx context.Context, want msg.UUID, pace seatPace) {
+func (h *Hosted) resit(ctx context.Context, want, region msg.UUID, pace seatPace) {
+	here := h.regionID()
+	if !region.IsZero() && !here.IsZero() && region != here {
+		// Asking would be refused as it is for a deleted seat, and the
+		// seat may well be where it was.
+		h.logf("not asking to sit on %s again: it was in region %s and this avatar is in %s; keeping it",
+			want, region, here)
+		return
+	}
+
+	refused0 := h.sitRefusals.Load()
+	asked := 0
 	for attempt := 0; attempt < pace.tries; attempt++ {
 		if local, known := h.seatedLocal(); known && local != 0 {
 			h.saySeated(want, local, attempt)
@@ -149,15 +168,103 @@ func (h *Hosted) resit(ctx context.Context, want msg.UUID, pace seatPace) {
 		if err := a.Send.Send(ctx, m); err != nil {
 			return
 		}
+		asked++
 		if !sleepFor(ctx, pace.retry) {
 			return
 		}
+	}
+	if local, known := h.seatedLocal(); known && local != 0 {
+		h.saySeated(want, local, pace.tries-1)
+		return
 	}
 	// Said once, and said plainly: the seat may be gone for good, and
 	// an avatar standing where it used to sit is a thing somebody will
 	// otherwise wonder about.
 	h.logf("could not sit on %s again after %d attempts; it may no longer be there",
 		want, pace.tries)
+
+	// The region answers a sit on what it does not hold the same way
+	// for another region's object and for a deleted one, and the avatar
+	// is in the seat's region, so every such answer says it is gone.
+	// Any other end proves nothing.
+	// Why: doc/daemon.md#gone-elsewhere-or-only-slow
+	if asked > 0 && h.sitRefusals.Load()-refused0 >= uint64(asked) &&
+		(here.IsZero() || h.regionID() == here) {
+		h.seats.SetSeat(h.Name, msg.UUID{}, msg.UUID{})
+		h.logf("forgot the seat %s: all %d attempts were refused as not in this region, "+
+			"and the avatar is in the region the seat was in", want, asked)
+	}
+}
+
+// regionID is the id of the region the avatar is in, zero if not known.
+func (h *Hosted) regionID() msg.UUID {
+	a := h.Agent()
+	if a == nil {
+		return msg.UUID{}
+	}
+	if r, ok := a.Region(); ok {
+		return r.ID
+	}
+	return msg.UUID{}
+}
+
+// noteStandSent forgets the seat when this avatar asks to stand up,
+// whoever asked: a client through Control, a shell, a viewer.  The
+// region's word that the avatar is standing comes a moment later, and a
+// daemon stopped in that moment kept a seat the avatar had left; a stand
+// that does not take leaves the avatar on the seat, and the watch writes
+// it down again.
+// Why: doc/daemon.md#gone-elsewhere-or-only-slow
+func (h *Hosted) noteStandSent(p *msg.Packet) {
+	if h.seats == nil || p.ID != agentUpdateID {
+		return
+	}
+	body := packetBody(p)
+	if body == nil {
+		return
+	}
+	var m msg.AgentUpdate
+	if m.Decode(body) != nil || m.AgentData.ControlFlags&agent.ControlStandUp == 0 {
+		return
+	}
+	if was, _ := h.seats.Seat(h.Name); !was.IsZero() {
+		h.seats.SetSeat(h.Name, msg.UUID{}, msg.UUID{})
+		h.logf("forgot the seat %s: asked to stand up", was)
+	}
+}
+
+var agentUpdateID = msg.IDOf(&msg.AgentUpdate{})
+
+// standingAtStop forgets the seat if the avatar is standing now, for a
+// stand just before a stop that the watch had not yet seen.  It reads
+// what the session already holds and asks the region nothing.
+func (h *Hosted) standingAtStop() {
+	if h.seats == nil {
+		return
+	}
+	if on, known := h.currentSeat(); known && on.IsZero() {
+		if was, _ := h.seats.Seat(h.Name); !was.IsZero() {
+			h.seats.SetSeat(h.Name, msg.UUID{}, msg.UUID{})
+		}
+	}
+}
+
+// sitRefusedNotSameRegion says whether an alert is the region's answer
+// to a sit on an object it does not hold: by its notification name, or
+// failing that the shape of its text.
+func sitRefusedNotSameRegion(m *msg.AlertMessage) bool {
+	texts := []string{string(m.AlertData.Message)}
+	for _, i := range m.AlertInfo {
+		texts = append(texts, string(i.Message))
+	}
+	for _, t := range texts {
+		t = strings.ToLower(strings.TrimRight(t, "\x00"))
+		if t == "sitfailnotsameregion" ||
+			(strings.Contains(t, "can't sit") && strings.Contains(t, "same region")) {
+			return true
+		}
+	}
+	return false
 }
 
 // saySeated reports what the avatar ended up on, in whatever detail is
@@ -223,11 +330,12 @@ func (h *Hosted) watchSeat(ctx context.Context, pace seatPace) {
 			// No opinion.  Not standing; see the head of this file.
 			continue
 		}
-		switch was := h.seats.Seat(h.Name); {
+		was, wasIn := h.seats.Seat(h.Name)
+		switch here := h.regionID(); {
 		case on.IsZero() && !was.IsZero():
-			h.seats.SetSeat(h.Name, msg.UUID{})
-		case !on.IsZero() && on != was:
-			h.seats.SetSeat(h.Name, on)
+			h.seats.SetSeat(h.Name, msg.UUID{}, msg.UUID{})
+		case !on.IsZero() && (on != was || wasIn.IsZero() && !here.IsZero()):
+			h.seats.SetSeat(h.Name, on, here)
 		}
 	}
 }
@@ -239,7 +347,11 @@ func (h *Hosted) watchSeat(ctx context.Context, pace seatPace) {
 // session's business whether or not a client is attached to hear it,
 // which is the same reason the teleport answers are read there.
 func (h *Hosted) noteSeatMessage(p *msg.Packet) {
-	if h.seats == nil || p.ID != msg.IDOf(&msg.AvatarSitResponse{}) {
+	if h.seats == nil {
+		return
+	}
+	sit, alert := msg.IDOf(&msg.AvatarSitResponse{}), msg.IDOf(&msg.AlertMessage{})
+	if p.ID != sit && p.ID != alert {
 		return
 	}
 	body := p.Body
@@ -249,6 +361,13 @@ func (h *Hosted) noteSeatMessage(p *msg.Packet) {
 			return
 		}
 		body = b
+	}
+	if p.ID == alert {
+		var m msg.AlertMessage
+		if m.Decode(body) == nil && sitRefusedNotSameRegion(&m) {
+			h.sitRefusals.Add(1)
+		}
+		return
 	}
 	var m msg.AvatarSitResponse
 	if err := m.Decode(body); err != nil {
@@ -260,7 +379,7 @@ func (h *Hosted) noteSeatMessage(p *msg.Packet) {
 	if m.SitObject.ID.IsZero() {
 		return
 	}
-	h.seats.SetSeat(h.Name, m.SitObject.ID)
+	h.seats.SetSeat(h.Name, m.SitObject.ID, h.regionID())
 }
 
 // currentSeat is the object this avatar is sitting on, and whether

@@ -47,6 +47,12 @@ type fakeSim struct {
 	// goroutine, so a test can send something at that instant.  Set with
 	// whenArrived.
 	onArrive func()
+
+	// regionID is the id the handshake carries, zero if not set.
+	// onSit, if set, is called on the sim's goroutine with how many
+	// AgentRequestSits have come, this one included.
+	regionID msg.UUID
+	onSit    func(n int)
 }
 
 // whenArrived sets what the sim does the moment the avatar arrives.
@@ -168,7 +174,17 @@ func (f *fakeSim) run() {
 		case "UseCircuitCode":
 			rh := &msg.RegionHandshake{}
 			rh.RegionInfo.SimName = []byte("Testville\x00")
+			f.mu.Lock()
+			rh.RegionInfo2.RegionID = f.regionID
+			f.mu.Unlock()
 			f.send(rh, msg.FlagReliable)
+		case "AgentRequestSit":
+			f.mu.Lock()
+			n, fn := len(f.bodies[name]), f.onSit
+			f.mu.Unlock()
+			if fn != nil {
+				fn(n)
+			}
 		case "CompleteAgentMovement":
 			amc := &msg.AgentMovementComplete{}
 			amc.Data.Position = msg.Vector3{X: 1, Y: 2, Z: 3}

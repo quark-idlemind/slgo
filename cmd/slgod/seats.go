@@ -22,8 +22,10 @@ package main
 //
 // # The format
 //
-// One line per avatar: the profile name, a space, and the id of the
-// object it was sitting on.  Blank lines and # comments are skipped, so
+// One line per avatar: the profile name, a space, the id of the
+// object it was sitting on, and optionally a space and the id of the
+// region the avatar was in.  A line without a region is one written
+// before regions were kept, and reads as a region not known.  Blank lines and # comments are skipped, so
 // somebody can leave a note in it or comment a line out to stop an
 // avatar being put back in its chair.
 //
@@ -48,7 +50,7 @@ type seatStore struct {
 	path string
 
 	mu sync.Mutex
-	on map[string]msg.UUID
+	on map[string]seatEntry
 
 	// complained is set once a write has failed, so that a directory
 	// that cannot be written says so once rather than every time an
@@ -59,6 +61,10 @@ type seatStore struct {
 	// which is what a test wants.
 	log func(format string, v ...any)
 }
+
+// seatEntry is a seat and the region the avatar was in; the region is
+// zero when not known.
+type seatEntry struct{ on, region msg.UUID }
 
 // seatsPath is where the file lives.
 func seatsPath() (string, error) {
@@ -75,7 +81,7 @@ func seatsPath() (string, error) {
 // A file that cannot be READ is, because carrying on would quietly
 // forget every seat in it and then overwrite it with the forgetting.
 func openSeats(path string, log func(string, ...any)) (*seatStore, error) {
-	s := &seatStore{path: path, on: map[string]msg.UUID{}, log: log}
+	s := &seatStore{path: path, on: map[string]seatEntry{}, log: log}
 
 	f, err := os.Open(path)
 	if os.IsNotExist(err) {
@@ -92,24 +98,31 @@ func openSeats(path string, log func(string, ...any)) (*seatStore, error) {
 		if text == "" || strings.HasPrefix(text, "#") {
 			continue
 		}
-		name, id, ok := strings.Cut(text, " ")
-		if !ok {
-			return nil, fmt.Errorf("%s:%d: want a profile name and an id", path, line)
+		f := strings.Fields(text)
+		if len(f) < 2 || len(f) > 3 {
+			return nil, fmt.Errorf("%s:%d: want a profile name, an id and optionally a region id", path, line)
 		}
-		u, err := msg.ParseUUID(strings.TrimSpace(id))
-		if err != nil {
+		var e seatEntry
+		var err error
+		if e.on, err = msg.ParseUUID(f[1]); err != nil {
 			return nil, fmt.Errorf("%s:%d: %w", path, line, err)
 		}
-		s.on[strings.TrimSpace(name)] = u
+		if len(f) == 3 {
+			if e.region, err = msg.ParseUUID(f[2]); err != nil {
+				return nil, fmt.Errorf("%s:%d: %w", path, line, err)
+			}
+		}
+		s.on[f[0]] = e
 	}
 	return s, sc.Err()
 }
 
-// Seat is what this profile was last sitting on.
-func (s *seatStore) Seat(profile string) msg.UUID {
+// Seat is what this profile was last sitting on, and the region it was in.
+func (s *seatStore) Seat(profile string) (on, region msg.UUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.on[profile]
+	e := s.on[profile]
+	return e.on, e.region
 }
 
 // SetSeat writes it down.  The zero id forgets.
@@ -118,13 +131,13 @@ func (s *seatStore) Seat(profile string) msg.UUID {
 // watch loop with nothing useful to do about it, and an avatar that
 // goes on sitting where it is sitting is not made worse by the note
 // about it being lost.
-func (s *seatStore) SetSeat(profile string, on msg.UUID) {
+func (s *seatStore) SetSeat(profile string, on, region msg.UUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if on.IsZero() {
 		delete(s.on, profile)
 	} else {
-		s.on[profile] = on
+		s.on[profile] = seatEntry{on, region}
 	}
 	if err := s.writeLocked(); err != nil && !s.complained {
 		s.complained = true
@@ -146,9 +159,14 @@ func (s *seatStore) writeLocked() error {
 
 	var b strings.Builder
 	b.WriteString("# What each avatar was last sitting on, written by slgod.\n")
-	b.WriteString("# One profile and one object id per line.\n")
+	b.WriteString("# One profile, one object id and, if known, one region id per line.\n")
 	for _, name := range names {
-		fmt.Fprintf(&b, "%s %s\n", name, s.on[name])
+		e := s.on[name]
+		if e.region.IsZero() {
+			fmt.Fprintf(&b, "%s %s\n", name, e.on)
+		} else {
+			fmt.Fprintf(&b, "%s %s %s\n", name, e.on, e.region)
+		}
 	}
 
 	tmp, err := os.CreateTemp(filepath.Dir(s.path), "seats-")
