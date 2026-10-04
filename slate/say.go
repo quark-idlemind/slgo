@@ -55,6 +55,10 @@ func (r *runner) ownerOf(ctx context.Context, b *binding) (msg.UUID, error) {
 // refusal is made before anything is said.
 func (s *stepRun) sayStimulus(sy *Say) *stimulus {
 	who := "the tester"
+	sess := s.r.sess
+	if sy.As != nil && sy.As.Kind == SpeakSecond {
+		sess = s.r.actor(&sy.As.Name)
+	}
 	return &stimulus{
 		prepare: func(ctx context.Context) error {
 			var err error
@@ -67,7 +71,7 @@ func (s *stepRun) sayStimulus(sy *Say) *stimulus {
 		send: func(ctx context.Context, _ time.Duration) (string, error) {
 			// Say and a negative-channel dialog reply return when the
 			// message is sent: no stimulus budget.
-			if err := s.r.sess.Say(ctx, sy.Text, int32(sy.Channel.Value)); err != nil {
+			if err := sess.Say(ctx, sy.Text, int32(sy.Channel.Value)); err != nil {
 				return "", err
 			}
 			return fmt.Sprintf("sent on channel %d as %s", sy.Channel.Value, who), nil
@@ -102,6 +106,8 @@ func (s *stepRun) sayAs(ctx context.Context, sy *Say) (string, error) {
 			return "", fmt.Errorf("this runner drives only the tester")
 		}
 		return fmt.Sprintf("avatar %q", sy.As.Avatar), nil
+	case SpeakSecond:
+		return sy.As.Name.Text, nil
 	}
 	return "", fmt.Errorf("a say cannot be spoken as this")
 }
@@ -315,6 +321,13 @@ func (s *stepRun) speaker(ctx context.Context, sp Speaker, why *string) (func(sl
 	case SpeakAvatar:
 		name := sp.Avatar
 		return func(l sl.Line) bool { return strings.EqualFold(l.From, name) }, nil
+	case SpeakSecond:
+		sc := r.secondOf(sp.Name.Text)
+		if sc == nil {
+			return nil, fmt.Errorf("%s is not an avatar this run was given", sp.Name.Text)
+		}
+		id := sc.sess.Me()
+		return func(l sl.Line) bool { return l.Source == id }, nil
 	case SpeakObject:
 		b := r.lookup(sp.Name.Text)
 		if b == nil {

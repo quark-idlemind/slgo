@@ -149,6 +149,7 @@ type Script struct {
 	Allows    []Span
 	Permits   []PermissionAllow
 	Objects   []Object
+	Avatars   []Avatar
 	Items     []Item
 	Probes    []Probe
 	Listens   []Listen
@@ -330,6 +331,14 @@ type Object struct {
 	Desc      Text
 }
 
+// Avatar is one avatar header: a binding for a second avatar the run is
+// given, with --avatar NAME=PROFILE. It holds no in-world name.
+// Why: doc/slate-language.md#a-second-avatar
+type Avatar struct {
+	Span Span
+	Name Ident
+}
+
 // Item is one item header: an inventory item, by name, in a top-level
 // folder. Name is the script binding, which only wear uses.
 type Item struct {
@@ -383,6 +392,10 @@ type Stimulus struct {
 	Wear    *Wear
 	Rez     *RezItem
 	TakeOff *TakeOff
+
+	// OtherAs is an as NAME written after a stimulus that is the
+	// tester's alone; Check refuses it.
+	OtherAs *Ident
 }
 
 // Wear is wear ITEM on "point" as NAME. As is a new object binding, the
@@ -419,6 +432,7 @@ type Touch struct {
 	Button   *Button
 	Showing  *Showing // touch OBJ showing ...; Check refuses it beside any other target
 	Guard    *Span    // if shown, after a button; Check allows it in before each and after each only
+	AsAvatar *Ident   // as NAME: a second avatar touches; nil is the tester
 }
 
 // Showing is the refine "showing" uuidval ( "at" number number )?: touch
@@ -481,6 +495,7 @@ type Drag struct {
 	// none.
 	Press, Dwell *Duration
 	Screen       *ScreenDrag
+	AsAvatar     *Ident // as NAME after a face drag: a second avatar drags; nil is the tester
 }
 
 // ScreenDrag is the rest of drag OBJ on screen from ...: where it starts,
@@ -522,10 +537,11 @@ const (
 	SpeakAvatar
 	SpeakObject
 	SpeakAnyone
+	SpeakSecond // a second avatar's binding (Name): as NAME, or from avatar NAME
 )
 
-// Speaker is an as or from clause. Name is set for the owner and for an
-// object. Avatar is the displayed name, matched with EqualFold of the whole
+// Speaker is an as or from clause. Name is set for the owner, for an
+// object and for a second avatar. Avatar is the displayed name, matched with EqualFold of the whole
 // string. Anyone is an expectation only.
 type Speaker struct {
 	Span   Span
@@ -577,6 +593,7 @@ type Choose struct {
 	Index     *Int
 	Use       *Capture
 	Name      Ident
+	AsAvatar  *Ident // as NAME: the dialog held for a second avatar; nil is the tester's
 }
 
 // Answer types into a text box.
@@ -584,6 +601,7 @@ type Answer struct {
 	Text     string
 	TextSpan Span
 	Name     Ident
+	AsAvatar *Ident // as NAME: the text box held for a second avatar; nil is the tester's
 }
 
 // Send asks a probe to llMessageLinked. A nil Key is the null key.
@@ -669,7 +687,7 @@ type ExpectChan struct {
 	Int  Int
 }
 
-// DialogExp is a dialog offered to the tester. Only rejects extra buttons.
+// DialogExp is a dialog offered to the tester, or with To to a second avatar. Only rejects extra buttons.
 // HasText is false when no text clause was written: any message matches.
 // Clauses are the button clauses in source order. Buttons is the legacy
 // list: the value of each clause that is a plain literal with no number.
@@ -677,6 +695,7 @@ type ExpectChan struct {
 type DialogExp struct {
 	Name    Ident
 	Link    *Int
+	To      *Ident // to NAME: the dialog came to a second avatar; nil is the tester
 	Text    Text
 	HasText bool
 	Buttons []string
@@ -712,6 +731,7 @@ type DButton struct {
 type BoxExp struct {
 	Name Ident
 	Link *Int
+	To   *Ident // as for DialogExp
 	Text Text
 }
 
@@ -852,6 +872,7 @@ type AlphaExp struct {
 type GiveExp struct {
 	Item Text
 	From Ident
+	To   *Ident // to NAME: the offer came to a second avatar; nil is the tester
 }
 
 // RezExp is a new root. As is set on a positive rez and absent on a negative one.

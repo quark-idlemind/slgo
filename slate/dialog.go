@@ -18,18 +18,38 @@ import (
 // hold is the dialog a binding is holding for choose and answer. It is
 // not dropped when the step that matched it ends: choose and answer are
 // stimuli, a stimulus begins a new step, and there would be nothing left
-// to answer.
+// to answer. It is kept per object and per recipient: to is the second
+// avatar it came to, "" for the tester, and sess the session that holds it.
 type hold struct {
 	binding string
+	to      string
+	sess    *sl.Session
 	d       sl.Dialog
 }
 
-// holdDialog keeps d for the binding, forgetting the one it replaces.
-func (t *testRun) holdDialog(name string, d sl.Dialog) {
-	if old := t.holds[name]; old != nil {
-		t.r.sess.ForgetDialog(old.d)
+// holdKey is how a hold is found: the object's binding, and who the dialog
+// came to, so that the tester's and a second avatar's dialogs from one
+// object do not replace each other.
+// Why: doc/slate-runner.md#second-avatars
+func holdKey(name string, to *Ident) string {
+	if to == nil {
+		return name
 	}
-	t.holds[name] = &hold{binding: name, d: d}
+	return name + "@" + to.Text
+}
+
+// holdDialog keeps d for the binding and recipient, forgetting the one it
+// replaces.
+func (t *testRun) holdDialog(name string, to *Ident, d sl.Dialog) {
+	k := holdKey(name, to)
+	if old := t.holds[k]; old != nil {
+		old.sess.ForgetDialog(old.d)
+	}
+	h := &hold{binding: name, sess: t.r.actor(to), d: d}
+	if to != nil {
+		h.to = to.Text
+	}
+	t.holds[k] = h
 }
 
 // dropHolds forgets every dialog still held, at the end of a test, and
@@ -37,8 +57,12 @@ func (t *testRun) holdDialog(name string, d sl.Dialog) {
 func (t *testRun) dropHolds() string {
 	var left []string
 	for _, h := range t.orderedHolds() {
-		left = append(left, describeHeld(h.d))
-		t.r.sess.ForgetDialog(h.d)
+		desc := describeHeld(h.d)
+		if h.to != "" {
+			desc += " (to " + h.to + ")"
+		}
+		left = append(left, desc)
+		h.sess.ForgetDialog(h.d)
 	}
 	t.holds = map[string]*hold{}
 	if len(left) == 0 {
@@ -73,6 +97,14 @@ func describeHeld(d sl.Dialog) string {
 	return fmt.Sprintf("%s %q buttons %s", from, d.Message, quoteAll(d.Buttons))
 }
 
+// asText is " as NAME" for a stimulus a second avatar does, else "".
+func asText(as *Ident) string {
+	if as == nil {
+		return ""
+	}
+	return " as " + as.Text
+}
+
 func quoteAll(ss []string) string {
 	q := make([]string, len(ss))
 	for i, s := range ss {
@@ -89,7 +121,7 @@ func fold(s string) string { return strings.TrimSpace(strings.ToLower(s)) }
 // must be present by Dialog.Button, and with only the set is exactly the
 // list. A text box matches textbox and not dialog. The match is held.
 // Why: doc/slate-runner.md#dialog-and-text-box
-func (s *stepRun) dialogExpect(x *expState, name Ident, link *Int, text Text, dx *DialogExp) error {
+func (s *stepRun) dialogExpect(x *expState, name Ident, to *Ident, link *Int, text Text, dx *DialogExp) error {
 	b := s.r.lookup(name.Text)
 	if b == nil {
 		return fmt.Errorf("%s is not an object", name.Text)
@@ -129,7 +161,7 @@ func (s *stepRun) dialogExpect(x *expState, name Ident, link *Int, text Text, dx
 		return "; " + why
 	}
 	x.match = func(ev *event) bool {
-		if ev.kind != evDialog {
+		if ev.kind != evDialog || ev.to != toName(to) {
 			return false
 		}
 		d := ev.dialog
@@ -165,7 +197,7 @@ func (s *stepRun) dialogExpect(x *expState, name Ident, link *Int, text Text, dx
 	}
 	if !x.neg {
 		x.onMatch = func(ev *event) {
-			s.t.holdDialog(name.Text, ev.dialog)
+			s.t.holdDialog(name.Text, to, ev.dialog)
 			v := capValue{typ: CapText, text: ev.dialog.Message}
 			srcs := []groupSrc{{msgOK, ev.dialog.Message}}
 			if dx != nil {
@@ -182,10 +214,21 @@ func (s *stepRun) dialogExpect(x *expState, name Ident, link *Int, text Text, dx
 	return nil
 }
 
-// held is the dialog held for a binding, or why there is none.
-func (s *stepRun) held(name string) (*hold, error) {
-	h := s.t.holds[name]
+// toName is the binding a to or as names, "" for the tester.
+func toName(id *Ident) string {
+	if id == nil {
+		return ""
+	}
+	return id.Text
+}
+
+// held is the dialog held for a binding and recipient, or why there is none.
+func (s *stepRun) held(name string, to *Ident) (*hold, error) {
+	h := s.t.holds[holdKey(name, to)]
 	if h == nil {
+		if to != nil {
+			return nil, fmt.Errorf("no dialog is held for %s to %s", name, to.Text)
+		}
 		return nil, fmt.Errorf("no dialog is held for %s", name)
 	}
 	return h, nil
@@ -201,7 +244,7 @@ func (s *stepRun) chooseStimulus(c *Choose) *stimulus {
 	return &stimulus{
 		prepare: func(context.Context) error {
 			var err error
-			if h, err = s.held(c.Name.Text); err != nil {
+			if h, err = s.held(c.Name.Text, c.AsAvatar); err != nil {
 				return err
 			}
 			if h.d.IsTextBox() {
@@ -265,11 +308,11 @@ func (s *stepRun) chooseStimulus(c *Choose) *stimulus {
 		},
 		send: func(ctx context.Context, _ time.Duration) (string, error) {
 			label := h.d.Buttons[index]
-			if err := s.r.sess.AnswerIndex(ctx, h.d, index); err != nil {
+			if err := h.sess.AnswerIndex(ctx, h.d, index); err != nil {
 				return "", err
 			}
-			delete(s.t.holds, c.Name.Text)
-			return fmt.Sprintf("chose %q on the dialog held for %s", label, c.Name.Text), nil
+			delete(s.t.holds, holdKey(c.Name.Text, c.AsAvatar))
+			return fmt.Sprintf("chose %q on the dialog held for %s%s", label, c.Name.Text, asText(c.AsAvatar)), nil
 		},
 	}
 }
@@ -280,7 +323,7 @@ func (s *stepRun) answerStimulus(a *Answer) *stimulus {
 	return &stimulus{
 		prepare: func(context.Context) error {
 			var err error
-			if h, err = s.held(a.Name.Text); err != nil {
+			if h, err = s.held(a.Name.Text, a.AsAvatar); err != nil {
 				return err
 			}
 			if !h.d.IsTextBox() {
@@ -289,11 +332,11 @@ func (s *stepRun) answerStimulus(a *Answer) *stimulus {
 			return nil
 		},
 		send: func(ctx context.Context, _ time.Duration) (string, error) {
-			if err := s.r.sess.AnswerText(ctx, h.d, a.Text); err != nil {
+			if err := h.sess.AnswerText(ctx, h.d, a.Text); err != nil {
 				return "", err
 			}
-			delete(s.t.holds, a.Name.Text)
-			return fmt.Sprintf("answered %q on the text box held for %s", a.Text, a.Name.Text), nil
+			delete(s.t.holds, holdKey(a.Name.Text, a.AsAvatar))
+			return fmt.Sprintf("answered %q on the text box held for %s%s", a.Text, a.Name.Text, asText(a.AsAvatar)), nil
 		},
 	}
 }

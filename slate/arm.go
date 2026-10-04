@@ -37,6 +37,7 @@ type event struct {
 	dialog   sl.Dialog
 	im       *sl.IM
 	text     string
+	to       string // the second avatar a dialog or an instant message came to; "" is the tester
 
 	wire wireMessage // evWire: the protocol line (bridge.go)
 	prim *probePrim  // evWire: the probe that said it, when a probe did
@@ -47,9 +48,10 @@ type dialogKey struct {
 	at      time.Time
 	object  msg.UUID
 	channel int32
+	to      string // the recipient's binding; "" is the tester
 }
 
-func keyOf(d sl.Dialog) dialogKey { return dialogKey{d.At, d.Object, d.Channel} }
+func keyOf(d sl.Dialog, to string) dialogKey { return dialogKey{d.At, d.Object, d.Channel, to} }
 
 // eventLog is the run's one log. Only the runner's goroutine touches it.
 type eventLog struct {
@@ -87,8 +89,9 @@ func later(ts ...time.Time) time.Time {
 	return out
 }
 
-// drain takes in everything waiting: the chat and IM subscriptions, and
-// the dialogs the session holds. It does not block.
+// drain takes in everything waiting: the chat and IM subscriptions, the
+// dialogs the session holds, and the same of each second avatar's session
+// but its chat. It does not block.
 func (r *runner) drain() error {
 	for {
 		select {
@@ -107,6 +110,11 @@ func (r *runner) drain() error {
 		default:
 		}
 		break
+	}
+	for _, sc := range r.seconds {
+		if err := r.drainSecond(sc); err != nil {
+			return err
+		}
 	}
 	r.pollDialogs()
 	return r.denyPermissions()
@@ -161,33 +169,95 @@ func (r *runner) observeChat(l sl.Line) {
 	r.printEvent(ev)
 }
 
+// drainSecond takes in the instant messages a second avatar has been sent.
+func (r *runner) drainSecond(sc *second) error {
+	for {
+		select {
+		case im, ok := <-sc.ims:
+			if !ok {
+				return fmt.Errorf("slate: the session of %s ended", sc.name)
+			}
+			r.observeSecondIM(sc, im)
+		default:
+			return nil
+		}
+	}
+}
+
+// observeSecondIM logs an instant message to a second avatar, with its
+// recipient, and declines an inventory offer at once: the expectation
+// still sees it in the log, and the avatar's inventory is left as found.
+// Why: doc/slate-language.md#a-second-avatar
+func (r *runner) observeSecondIM(sc *second, im *sl.IM) {
+	ev := &event{kind: evIM, at: arrived(im.At), im: im, to: sc.name}
+	offer := im.Dialog == sl.DialogTaskInventoryOffered
+	if offer {
+		ev.text = r.giveText(im, sc.name)
+	}
+	r.log.add(ev)
+	r.printEvent(ev)
+	if !offer {
+		return
+	}
+	if err := r.decline(sc, im); err != nil {
+		r.printf("slate: the offer to %s could not be declined: %v", sc.name, err)
+		return
+	}
+	line := &event{kind: evAccept, at: time.Now(), consumed: true, to: sc.name,
+		text: fmt.Sprintf("give to %s declined, transaction %s", sc.name, im.ID)}
+	r.log.add(line)
+	r.printEvent(line)
+}
+
+// decline refuses the offer an instant message carries, through the
+// session's own record of it when it has one.
+func (r *runner) decline(sc *second, im *sl.IM) error {
+	for _, o := range sc.sess.InventoryOffers() {
+		if o.Transaction == im.ID && o.From == im.From {
+			return o.Decline(r.ctx)
+		}
+	}
+	o, ok := sl.InventoryOfferFrom(im)
+	if !ok {
+		return fmt.Errorf("the message is not an offer")
+	}
+	return sc.sess.DeclineInventoryOffer(r.ctx, o)
+}
+
 func (r *runner) observeIM(im *sl.IM) {
 	ev := &event{kind: evIM, at: arrived(im.At), im: im}
 	if im.Dialog == sl.DialogTaskInventoryOffered {
-		ev.text = r.giveText(im)
+		ev.text = r.giveText(im, "")
 	}
 	r.log.add(ev)
 	r.printEvent(ev)
 }
 
-// pollDialogs logs each dialog the session holds that the log has not
-// seen. A dialog is stamped with the time the session received it. One
+// pollDialogs logs each dialog the sessions hold that the log has not
+// seen. A dialog is stamped with the time its session received it. One
 // that was already waiting when the run began is logged for nobody and
 // not printed: it belongs to no test.
 func (r *runner) pollDialogs() {
-	for _, d := range r.sess.Dialogs() {
-		k := keyOf(d)
+	r.pollDialogsOf(r.sess, "")
+	for _, sc := range r.seconds {
+		r.pollDialogsOf(sc.sess, sc.name)
+	}
+}
+
+func (r *runner) pollDialogsOf(sess *sl.Session, to string) {
+	for _, d := range sess.Dialogs() {
+		k := keyOf(d, to)
 		if r.log.dialog[k] {
 			continue
 		}
 		r.log.dialog[k] = true
-		ev := &event{kind: evDialog, at: d.At, dialog: d}
+		ev := &event{kind: evDialog, at: d.At, dialog: d, to: to}
 		if d.At.Before(r.began) {
 			ev.consumed = true
 			r.log.add(ev)
 			continue
 		}
-		ev.text = r.dialogText(d)
+		ev.text = r.dialogText(d, to)
 		r.log.add(ev)
 		r.printEvent(ev)
 	}
@@ -225,6 +295,35 @@ func (r *runner) denyPermissions() error {
 			continue
 		}
 		ev := &event{kind: evPermission, at: time.Now(), consumed: true, text: text}
+		r.log.add(ev)
+		r.printEvent(ev)
+	}
+	for _, sc := range r.seconds {
+		if err := r.denySecond(sc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// denySecond refuses every permission request a second avatar holds: allow
+// permission is the tester's, and the avatar is left as found.
+// Why: doc/slate-language.md#a-second-avatar
+func (r *runner) denySecond(sc *second) error {
+	for _, q := range sc.sess.Asked() {
+		who := r.whoPrim(q.Object, func(n string) bool { return n != "" && n == q.ObjectName })
+		if who == "" {
+			who = sl.SenderObject.Label(q.ObjectName)
+		}
+		if err := q.Deny(r.ctx); err != nil {
+			if r.ctx.Err() != nil {
+				return r.ctx.Err()
+			}
+			r.printf("slate: permission request to %s from %s could not be answered: %v", sc.name, who, err)
+			continue
+		}
+		ev := &event{kind: evPermission, at: time.Now(), consumed: true, to: sc.name,
+			text: fmt.Sprintf("permission denied to %s from %s: %s", sc.name, who, q.Wants)}
 		r.log.add(ev)
 		r.printEvent(ev)
 	}

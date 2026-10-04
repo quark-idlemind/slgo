@@ -4,7 +4,7 @@ Slate is a language for testing Second Life products. A `.slate` file names the 
 
 This page is the reference for someone writing a test by hand. How a runner implements it is in [the runner design](slate-runner.md). Where a runner and this page disagree, the runner is wrong until the page is revised. The runner design's [Step lifecycle](slate-runner.md#step-lifecycle) states the same timing rules precisely, and the two must agree.
 
-A runner takes one avatar, the tester, from an already-running slgod. It finds each declared prim by name, performs the stimuli as that avatar, watches chat, dialogs, messages, object changes and inventory, and prints a transcript and an exit code. A missing effect fails the test when its deadline passes. The run does not hang.
+A runner takes one avatar, the tester, from an already-running slgod, and any second avatars the run is given ([A second avatar](#a-second-avatar)). It finds each declared prim by name, performs the stimuli as the tester (a few as a second avatar, when the file says so), watches chat, dialogs, messages, object changes and inventory, and prints a transcript and an exit code. A missing effect fails the test when its deadline passes. The run does not hang.
 
 Link messages do not leave a linkset. A HUD that changes another object is observed as an effect on that other object (a texture, a chat line, a rez, a give), never as a link message crossing from the HUD to the sign. The only link messages a test can see are those a probe script inside the linkset reports.
 
@@ -12,7 +12,7 @@ Link messages do not leave a linkset. A HUD that changes another object is obser
 
 A person can write a test after reading this page, with no Go and no pixel coordinates for an ordinary button. One stimulus can require several effects, on the prim touched or on another, and newly rezzed objects can be named for the rest of the file. A test can wear a HUD or another attachment from the tester's inventory, rez an item from it, watch a button appear and disappear, and take the attachment off again. Every wait has a deadline.
 
-Slate does not run more than one avatar (the syntax can name another; the runner does not log one in), drive the camera, walk or teleport, check animations, particles, sounds or the product's inventory, edit the product's scripts, or delete objects (except those its own `rez` steps made), refund payments or remove items a run produced. A permission request is printed and refused with no bits granted, so the product script is not left waiting, unless the file names the permission and the object with `allow permission` ([Pay](#stimuli) has the paragraph); `debit` is never one of them. A file that does not start with `slate 1` is rejected.
+Slate drives the tester, and a second avatar only when the run is given one explicitly ([A second avatar](#a-second-avatar)); it does not pick other avatars for itself, drive the camera, walk or teleport, check animations, particles, sounds or the product's inventory, edit the product's scripts, or delete objects (except those its own `rez` steps made), refund payments or remove items a run produced. A permission request is printed and refused with no bits granted, so the product script is not left waiting, unless the file names the permission and the object with `allow permission` ([Pay](#stimuli) has the paragraph); `debit` is never one of them. `allow permission` covers the tester's requests only: a request to a second avatar is always refused. A file that does not start with `slate 1` is rejected.
 
 ## A first script
 
@@ -71,7 +71,7 @@ A UUID is one token, so a leading digit does not split it; hex is case-insensiti
 No word is reserved. The words below have a meaning, and each has it only where the grammar expects that word; anywhere else it is an ordinary word and can be a name. Within one production a word position is either a fixed word or a name, never a choice between the two, so the parser needs no list of forbidden names. An object binding, a probe, a sequence name, a `do` target and the name a rez binds with `as` each take any word: `object button is "Test HUD"` and `touch button button text "Open"` are both legal. A step begins with a stimulus word, `expect`, `then` or `do`, and the file begins with `slate 1`. An error message names the word that was expected. The in-world name is a string, so a prim may be called anything. `{` and `}` are tokens, not words. `null` is the UUID `00000000-0000-0000-0000-000000000000`. The words with a meaning are:
 
 ```text
-slate timeout allow pay permission object is probe listen
+slate timeout allow pay permission object avatar is probe listen
 touch anywhere link face at button text pattern symbol image box circle oval
 drag from to over press dwell say on as tester owner of avatar anyone
 public debug direct sit stand wait choose answer send num key
@@ -95,12 +95,13 @@ This is a PEG. Alternatives are tried in the order written. Repetition is greedy
 
 ```ebnf
 script      = "slate" "1" header* ( suite / body )
-header      = timeout / allow / objectDecl / itemDecl / probe / listen
+header      = timeout / allow / objectDecl / avatarDecl / itemDecl / probe / listen
 timeout     = "timeout" duration
 allow       = "allow" ( "pay" / "permission" permName+ "from" IDENT )
 permName    = "take-controls" / "trigger-animation" / "attach" / "change-links"
             / "track-camera" / "control-camera" / "teleport" / "override-animations"
 objectDecl  = "object" ident "is" string ( "description" text )?
+avatarDecl  = "avatar" ident   (* a second avatar; no in-world name, the run is given its profile *)
 itemDecl    = "item" ident "is" string "in" string   (* item name, top-level folder *)
 probe       = "probe" ident
 listen      = "listen" integer
@@ -123,7 +124,8 @@ call        = "do" ident
 stimulus    = touch / drag / say / pay / sit / stand / choose / answer / send / wait
             / wear / rezitem / takeoff
 
-touch       = "touch" binding target guard?
+touch       = "touch" binding target guard? asavatar?
+asavatar    = "as" ident   (* a second avatar's binding *)
 guard       = "if" "shown"
 target      = "anywhere"
             / "link" integer refine?
@@ -145,22 +147,22 @@ part        = "text" ( string / capture )
             / "oval"
 
 drag        = "drag" binding ("link" integer)? "face" integer
-              "from" number number "to" number number dragtimes
+              "from" number number "to" number number dragtimes asavatar?
             / "drag" binding "on" "screen" "from" screenpoint
               ("to" / "by") number number dragtimes "settle"?
 dragtimes   = ("over" duration)? ("press" duration)? ("dwell" duration)?
 screenpoint = number number
             / ("link" integer)? "face" integer "at" number number
 say         = "say" string "on" integer ("as" stimspeaker)?
-stimspeaker = "tester" / "owner" "of" binding / "avatar" string
+stimspeaker = "tester" / "owner" "of" binding / "avatar" string / avatar
 pay         = "pay" binding amount ("reason" string)?
 amount      = "L$"? integer
 sit         = "sit" binding
 stand       = "stand"
 wait        = "wait" duration
-choose      = "choose" chooselabel "on" binding
+choose      = "choose" chooselabel "on" binding asavatar?
 chooselabel = string / "matching" string / "button" integer / capture
-answer      = "answer" string "on" binding
+answer      = "answer" string "on" binding asavatar?
 send        = "send" "on" binding "from" "link" integer
               "to" "link" linktarget "num" integer "text" ( string / capture ) ("key" key)?
 linktarget  = integer / "all" / "others" / "children" / "this" / "root"
@@ -180,13 +182,15 @@ text        = string / "matching" string / capture
 
 sayexp      = "say" text "on" expchan "from" expspeaker
 expchan     = integer / "public" / "owner" / "debug" / "direct"
-expspeaker  = "tester" / "owner" "of" binding / "avatar" string
+expspeaker  = "tester" / "owner" "of" binding / "avatar" string / "avatar" avatar
             / "object" binding link? / "anyone"
-dialogexp   = "dialog" "from" binding link? ("text" text)? dbutton*
+avatar      = ident   (* a second avatar's binding *)
+toavatar    = "to" avatar
+dialogexp   = "dialog" "from" binding link? toavatar? ("text" text)? dbutton*
               "only"? "ordered"? ("count" integer)? sorted?
 dbutton     = "button" integer? text
 sorted      = "sorted" ( "matching" string )?
-boxexp      = "textbox" "from" binding link? "text" text
+boxexp      = "textbox" "from" binding link? toavatar? "text" text
 faceall     = "face" ( integer / "all" )
 textureexp  = "texture" binding link? faceall ( "changes" / state uuidval )
 offsetexp   = "offset" binding link? faceall ( "changes" / state pairval )
@@ -215,7 +219,7 @@ triple      = number number number / named
 vecval      = number number number / named
 clickname   = "touch" / "none" / "sit" / "buy" / "pay" / "open"
             / "play" / "media" / "zoom" / "disabled"
-giveexp     = "give" text "from" binding
+giveexp     = "give" text "from" binding toavatar?
 rezexp      = "rez" "name" text ("description" text)? "from" binding ("as" ident)?
 linkexp     = "link" "on" binding "from" "link" integer "num" integer
               "text" text ("key" key)? ("heard" "by" integer)?
@@ -224,6 +228,8 @@ link        = "link" integer
 binding     = ident
 number      = float / integer
 ```
+
+A stimulus not listed with `asavatar` or `stimspeaker` (`pay`, `sit`, `stand`, `wait`, `send`, `wear`, `rez`, `take off` and `drag ... on screen`) is read with an optional trailing `as ident` as well, so that [the static check](#static-checks) can say that it stays the tester's and not leave a grammar error at the word. In `stimspeaker`, `avatar` is a name written bare (`say "hi" on 0 as visitor`), and `avatar string` is the in-world name of the tester.
 
 The in-world name appears only in `objectDecl` and `itemDecl`; a step refers to a prim by `binding`, one identifier, and to an item only in `wear` and `rezitem`. The word `object` in `from object sign` is not a use of either. A stimulus and the `expect` lines right after it are one step, so the step after a guarded touch is written `then expect ...`. `button` in `buttonexp` reads the parts of a touch. The parser accepts a number before them, as a touch has, so that the static check can say it is not legal there. A file may open with a step that has no stimulus (the third `step` alternative); its failure block prints `stimulus: (none)`. A bare `then` is rejected. A `call` is a step of its own and takes no expectations: an expectation after `do NAME` starts a new step.
 
@@ -243,13 +249,14 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Permissions | Each name of an `allow permission` is one of the eight words; any other is `X is not a permission a file can name (one of ...)`, and `debit` is `a permission never grants debit; pay with allow pay and --pay`. `from` names an `object` header or an `item` header, else `X is not an object or an item`; the header may come before the one it names. The same name twice for one object, or in several headers, is harmless: the allowed bits are added. |
 | Objects | Binding identifiers are unique across objects, items and the names `wear` and `rez` bind, and any word may be one. In-world name strings are non-empty. One in-world name may be written on several headers only when every one of them has a `description` and no two are written the same: `description "x"` and `description matching "x"` are different, two of either are not. Otherwise the error is `in-world name "N" is already used; objects of one name need a description each`, or `... is already used with that description`. |
 | Descriptions | A description is a string or `matching "RE"`; the pattern compiles. A capture is refused, because a description is read at setup, before any step. The empty string is legal. |
+| Avatars | An `avatar` binding is neither an object nor an item and shares their names: a name bound twice (`X is already bound`), by an `avatar`, an `object`, an `item`, or by the name `wear`, `rez` or a rez expectation binds, is refused. An avatar is used only after `as` on `touch`, a face `drag`, `say`, `choose` and `answer`, after `to` on `dialog`, `textbox` and `give` expectations, and after `from avatar` on `say`. A name that is not an avatar there is `X is not an avatar; declare it with avatar X and give it with --avatar`, an object there is `X is an object, not an avatar`, and an avatar where an object is wanted is `X is an avatar, not an object`. `as NAME` on `pay`, `sit`, `stand`, `wait`, `send`, `take off` and `drag ... on screen` is `<stimulus> stays the tester's: a second avatar only touches, drags a face, says, chooses and answers (a second avatar never pays)`; `wear` and `rez` take `as` for the new object, and an avatar's name there is `X is a second avatar, and a second avatar never wears` (`rezzes`). The check does not know whether the run is given the avatar: that is a setup error ([A second avatar](#a-second-avatar)). |
 | Items | An item binding is not an object: it is used only by `wear` and `rez`, and any other use is `X is an item; only wear and rez use an item`. The item name and the folder name are non-empty after trimming. |
 | Probes | The identifier is an object binding, with at most one probe per object. A probe has no channels; the runner picks them. |
 | Listens | Each `listen` channel is a 32-bit integer, not 0 and not 2147483647. Duplicates are an error, and there are at most 63 of them. The bridge script opens one listen for its own control channel and one per `listen` channel; LSL allows 65 in one script (published, not measured here), and one is kept spare. |
 | References | Every object in a step is a header binding, a name bound with `as` on a positive rez expectation in an earlier step of the same test, or a name bound by `wear` or by a `rez` step. A name bound in a step is not usable in that same step, except a name `wear` or `rez` binds, which that step's own expectations may use. A name `take off` ends is not usable from the next step on: `h was taken off at line N; it cannot be used again in this test`. A capture is a different thing and has its own rows below. |
 | Rez names | A positive rez expectation has `as`, a negative one does not. The identifier is not already a binding and is not bound twice in one test. |
 | `as` scope | A name bound in `before each`, by a rez expectation, by `wear` or by a `rez` step, is visible in the test and in `after each`. A name bound in a test body is not visible in `after each`, because the test may have failed before binding it. A name bound in a sequence is visible to the caller after the `do`. Each test is checked on its expanded steps (`before each`, the test with every `do` inlined, `after each`). |
-| Speakers | A stimulus speaks `as tester` (the default), `as owner of` an object, or `as avatar`. `as object` and `anyone` are expectation-only. |
+| Speakers | A stimulus speaks `as tester` (the default), `as owner of` an object, `as avatar "Name"` (the tester's own name), or `as NAME` for a second avatar (the bare name; an expectation writes `from avatar NAME`). `as object` and `anyone` are expectation-only. |
 | Channels on `say` | A stimulus takes an integer. `public`, `owner`, `debug` and `direct` belong to expectations. An expectation on an integer other than 0 or 2147483647 requires a `listen` for it. `on 0` and `on public` are the same channel, as are `on 2147483647` and `on debug`. |
 | Buttons | At least one part. `nth` is 1 or more. `pattern` is a regular expression in Go's RE2 syntax and must compile. A literal `text` is non-empty after trimming; a capture used as `text` is checked at the step. |
 | Button readings | `expect button` takes the parts of a touch and they are checked as a touch's are, but not `nth`: `button N is not legal in an expectation: a reading is the count of the buttons found, not one of them`. `count` is 0 or more. `link N` needs no probe, as on every expectation ([Objects](#objects-names-and-link-numbers)). A reading takes `as $x` when it is positive, and the capture is a number. `image` and `oval` parts pass and fail at run time. |
@@ -307,7 +314,7 @@ This section states the timing rules once. [Step lifecycle](slate-runner.md#step
 
 **When a step passes.** With only positive expectations, as soon as all have matched. With any negative expectation, after the positives have matched and every negative window has elapsed. A step with no expectations passes when the stimulus succeeds; one with only negative expectations passes when its windows elapse. A step with a positive `rez` waits one more 250 ms object poll before passing, and a second prim that matches the same claim in that wait fails the step. A click expectation on a name bound with `as` makes the rez step wait up to 30 s to read the click action; see [Step lifecycle](slate-runner.md#step-lifecycle).
 
-**Dialog hold.** A dialog matched by `expect dialog` or `expect textbox` is held for that object until a `choose` or `answer` on that object consumes it, a later matched dialog from the same object replaces it, or its test ends. It is not dropped when the step that matched it ends, so a `choose` in the next step finds it. At the end of a test an unconsumed hold is forgotten and reported on that test's `dialog left unanswered:` line.
+**Dialog hold.** A dialog matched by `expect dialog` or `expect textbox` is held for that object, and for whom it came to (the tester, or a second avatar named by `to`), until a `choose` or `answer` on that object, and as the same avatar, consumes it, a later matched dialog from the same object to the same avatar replaces it, or its test ends. The tester's dialog from a sign and a second avatar's dialog from the same sign are two holds, and neither replaces the other. It is not dropped when the step that matched it ends, so a `choose` in the next step finds it. At the end of a test an unconsumed hold is forgotten and reported on that test's `dialog left unanswered:` line.
 
 ## Tests, sequences, before and after
 
@@ -358,13 +365,14 @@ Here `before each` runs first in every test, then `do press-open` presses the bu
 
 ## Speakers and channels
 
-The runner drives one avatar, the tester.
+The runner drives the tester, and a second avatar for each `avatar` header the run is given.
 
 | Phrase | On a stimulus | On an expectation |
 |---|---|---|
 | `tester` | The default. The avatar speaks or touches. | The speaker is the tester. |
+| `NAME` (`as NAME`; `from avatar NAME`) | `say "..." on N as NAME`: the second avatar `NAME` speaks, on its own session. Written without `avatar`. | The speaker is the second avatar `NAME`, matched by its id and not by its name. The tester hears it as it hears anyone, so it must be within earshot. |
 | `owner of OBJ` | Legal only when the tester owns `OBJ`; the tester then speaks, being the owner. Otherwise the step fails before anything is said. A group-deeded object fails this check; write `as tester`. If the owner is not known the step fails with `the owner of OBJ is not known`. | The speaker is `OBJ`'s owner. |
-| `avatar "Name"` | Legal in the file. At the step, the name is compared with the tester's displayed name, whole string, ignoring case. If it is not the tester, the step fails with `this runner drives only the tester` and does not speak. | The speaker's whole name equals it, ignoring case. A prefix or one half of a display name does not match. |
+| `avatar "Name"` | Legal in the file. At the step, the name is compared with the tester's displayed name, whole string, ignoring case. If it is not the tester, the step fails with `this runner drives only the tester` and does not speak (to speak as another avatar, declare it with `avatar NAME` and write `as NAME`). | The speaker's whole name equals it, ignoring case. A prefix or one half of a display name does not match. |
 | `object OBJ` | Cannot be written. | The speaker is any prim of `OBJ`'s linkset. |
 | `object OBJ link N` | Cannot be written. | The speaker is the prim at link number N, from the probe when `OBJ` has one and else from the object store, found when each line arrives ([Objects](#objects-names-and-link-numbers)). |
 | `anyone` | Cannot be written. | Any speaker except a probe protocol line. |
@@ -455,6 +463,40 @@ Every refusal is made before anything is sent: so are no held dialog and a held 
 
 **Take off.** `take off NAME` takes off the item `NAME` is worn from, which is a name `wear` bound or an object the tester is wearing. A binding that is not worn fails the step with `NAME is not worn`. It is a blocking stimulus, and it completes when the store no longer lists the worn root, about 0.1 s after the request (measured, [Eighth round](slate-runner.md#eighth-round)), or fails with `"<item>" is still in the store <budget> after the take off`. `NAME` is not usable after this step, and this step's own expectations, such as `expect attached NAME off`, are what it is for.
 
+## A second avatar
+
+A product with a public, a group and a private mode needs a second avatar's touch, chat and dialog answers in the same test. A file declares one with a header, and the run is told who it is:
+
+```slate
+slate 1
+object sign is "Example Sign"
+avatar visitor
+
+touch sign anywhere as visitor
+expect dialog from sign to visitor text "Pick one" button "Red" within 5s
+choose "Red" on sign as visitor
+expect say "red" on public from object sign
+```
+
+`avatar NAME` holds no in-world name. It is a binding for an avatar the runner is **given**, on the command line, with `--avatar NAME=PROFILE`: the slgod profile that drives it ([the command line](slate-runner.md#second-avatars)). Any number may be declared and each must be given. The runner dials a session for each, as it dials the tester's, so the second avatar acts on its own session.
+
+**Explicit only.** The runner uses an avatar for a second one only because a flag named it, for that binding. It never picks one from what slgod holds, never offers one, and never falls back to one when a flag is missing. The avatars a daemon holds for others are lent: they are the owner's to allow, one at a time, by giving the flag. A declared avatar with no flag, a flag for an avatar the file does not declare, a profile that is the tester's own, and a profile the daemon does not hold are each a setup error, exit 3, and the sentence names the binding and never the profile:
+
+```text
+slate: setup: visitor is declared but no --avatar visitor=... was given
+slate: setup: an --avatar was given for visitor, which the file does not declare
+slate: setup: the profile given for visitor is the tester's own
+slate: setup: the profile given for visitor is not held by the daemon (dial: ...)
+```
+
+**What it can do.** A second avatar touches (`touch OBJ ... as NAME`, with any target the tester's touch has), drags on a face (`drag OBJ face ... as NAME`; `drag ... on screen` is about the tester's own HUD and has no `as`), says (`say "..." on N as NAME`), and answers the dialogs that came to it (`choose ... on OBJ as NAME`, `answer "..." on OBJ as NAME`). It does nothing else: `pay`, `sit`, `stand`, `wear`, `take off`, `rez`, `send` and `drag ... on screen` are the tester's, and `as NAME` on them is a static error. It never pays. The second avatar must be in the same region as the tester and near what it touches; the runner does not move it.
+
+**What reaches it.** `expect dialog from OBJ to NAME ...`, `expect textbox from OBJ to NAME ...` and `expect give TEXT from OBJ to NAME` are what an object sent to the second avatar; without `to` they are the tester's, as before. What the second avatar says is heard by the tester, and is matched by `expect say ... from avatar NAME`, by the second avatar's id and not by its name. A dialog is held for the object and for whom it came to, so `choose "A" on sign` answers the tester's dialog from the sign and `choose "A" on sign as visitor` the second avatar's, and neither replaces the other. Both go to the same event log, with the same arming and consumption rules as any other event.
+
+**Left as found.** The second avatar must come out of a run as it went in. An inventory offer to it is **declined** the moment the runner sees it, after the log has it for an `expect give ... to NAME`, and never accepted, so its inventory does not change. A permission request to it is **refused**, whatever `allow permission` names: `allow permission` covers the tester's requests only. A dialog or text box to it that no step answered is left to expire, as the tester's is.
+
+**Transcript.** An event for the second avatar is labelled with its binding: `dialog to visitor from sign: "Pick one" buttons "Red"`, `textbox to visitor from sign: ...`, `give to visitor from sign: "..."`, `give to visitor declined, transaction ...`, `permission denied to visitor from sign: ...`, and a chat line it spoke as `chat public from visitor: "..."`. Neither its displayed name nor its profile appears in the output, in the failure block, or in an error.
+
 ## Expectations
 
 **Text and patterns.** Wherever an expectation compares product text, the author writes either a string, which is exact and case-sensitive, or `matching "RE"`, which is a pattern.
@@ -492,7 +534,7 @@ expect dialog from hud text matching "^Pick" button matching "^[0-9]+$" button 4
 
 `ordered` and `sorted` judge the order the script gave `llDialog`, which is `Dialog.Buttons`, and not the order a person sees on screen. The details of a failure are [under Reading the result](#reading-the-result).
 
-A text box does not match `expect dialog`. The matching dialog is held for the binding ([Dialog hold](#steps-and-timing)), so `choose` and `answer` on `OBJ` use the hold of any dialog matched for `OBJ`. The author never writes the dialog's channel, and does not expect the reply `choose` sends; the product's next chat line, give or texture change is the expectation. A dialog offered to another avatar is invisible. There is no decline, so an unanswered dialog is left to expire. When no dialog meets the clauses, the `unmatched` line says why the last dialog from that object with that message did not ([Reading the result](#reading-the-result)).
+A text box does not match `expect dialog`. The matching dialog is held for the binding ([Dialog hold](#steps-and-timing)), so `choose` and `answer` on `OBJ` use the hold of any dialog matched for `OBJ`. The author never writes the dialog's channel, and does not expect the reply `choose` sends; the product's next chat line, give or texture change is the expectation. A dialog offered to another avatar is invisible, unless the run is given that avatar and the expectation says `to NAME`. There is no decline, so an unanswered dialog is left to expire. When no dialog meets the clauses, the `unmatched` line says why the last dialog from that object with that message did not ([Reading the result](#reading-the-result)).
 
 **Text box.** The same as a dialog, for a text box, with a message that is a string or a pattern, no button list, and the same linkset and `link N` rules. Answer it with `answer`, not `choose`.
 
@@ -606,7 +648,7 @@ expect say $first on public from object sign
 
 A capture is data. It is never parsed as Slate, never compiled as a pattern and never spliced into a string, and it is not usable inside a `matching` pattern. Each use is the value whole, as a literal in that position: exact for a `say` and a `give`, folded for `choose` and a dialog button, as the text of a button part for a `text` part. The checks that are static for a literal are made at the step for a capture, before the stimulus is sent: non-empty after trimming for a button part, and the link-text character rule and the length of the control line for a `send` text. A capture that breaks one fails the step with a sentence that names it and quotes its value, as under [Reading the result](#reading-the-result).
 
-**Give.** Passes when the tester's inventory holds a non-folder item of that name whose id was not there at the arm point, and the offer's `FromName` equals the name of any prim of the binding's linkset. A give stays on the linkset: it takes no `link N`, because the give offer does not say which prim sent it. The name is a string (exact and case-sensitive) or a `matching` pattern. An older item of the same name does not count and does not block the pass. Seeing the offer alone is not enough. The runner accepts the offer, and says so in the transcript: `give accept sent to <uuid> transaction <uuid> into <folder>`. The item's name is read out of the offer text; [Give](slate-runner.md#give) says how. Two offers that match, or two new items of that name, fail the step as ambiguous and name both. If an accept was sent and the count of items of that name has not grown, the unmatched line says so:
+**Give.** Passes when the tester's inventory holds a non-folder item of that name whose id was not there at the arm point, and the offer's `FromName` equals the name of any prim of the binding's linkset. A give stays on the linkset: it takes no `link N`, because the give offer does not say which prim sent it. The name is a string (exact and case-sensitive) or a `matching` pattern. An older item of the same name does not count and does not block the pass. Seeing the offer alone is not enough. With `to NAME` the offer is one made to a second avatar, which the runner declines and never accepts ([A second avatar](#a-second-avatar)); the expectation passes when the offer is seen. Otherwise the runner accepts the offer, and says so in the transcript: `give accept sent to <uuid> transaction <uuid> into <folder>`. The item's name is read out of the offer text; [Give](slate-runner.md#give) says how. Two offers that match, or two new items of that name, fail the step as ambiguous and name both. If an accept was sent and the count of items of that name has not grown, the unmatched line says so:
 
 ```text
 unmatched give "Example Thank You" from vendor within 10s; accept was sent and inventory still has 1 item of that name
@@ -705,7 +747,7 @@ The runner writes the run to standard output as it happens, so one capture is th
 | 0 | Every test passed. Cleanup warnings may still be present. |
 | 1 | Some test failed (and setup did not): a step failed an expectation, a stimulus or a runtime rule (not the owner, a button part the finder cannot match, paying is off, an ambiguous match). |
 | 2 | The file did not parse or failed a static check. The region was not dialled. |
-| 3 | Setup failed: the dial (`slate: dial: <error>`, on standard error), object lookup, item lookup, probe install, hello, the bridge. Also a click action still unknown when its 30 s wait ends. Exit 3 outranks 1. For a name bound with `as`, that exit is printed while the rez step is still open, before any later step. |
+| 3 | Setup failed: the dial (`slate: dial: <error>`, on standard error), a second avatar the run was not given as the file declares it (`slate: setup: visitor is declared but no --avatar visitor=... was given`, and the other sentences in [A second avatar](#a-second-avatar)), object lookup, item lookup, probe install, hello, the bridge. Also a click action still unknown when its 30 s wait ends. Exit 3 outranks 1. For a name bound with `as`, that exit is printed while the rez step is still open, before any later step. |
 | 4 | The runner was used wrongly: a missing file, an unknown flag, or a `-run` pattern that does not compile or matches no test. Nothing is dialled. |
 
 The code is 3 if setup failed or a click byte stayed unknown, else 1 if any test failed, else 0. A run with several tests continues after a failed test, so one run can report several failures; see [Tests, sequences, before and after](#tests-sequences-before-and-after).
@@ -740,6 +782,11 @@ HH:MM:SS.mmm dialog from <who>: "<message>" buttons <labels>
 HH:MM:SS.mmm textbox from <who>: "<message>"
 HH:MM:SS.mmm give from <who>: "<item>"
 HH:MM:SS.mmm give accept sent to <uuid> transaction <uuid> into <folder>
+HH:MM:SS.mmm dialog to <avatar> from <who>: "<message>" buttons <labels>
+HH:MM:SS.mmm textbox to <avatar> from <who>: "<message>"
+HH:MM:SS.mmm give to <avatar> from <who>: "<item>"
+HH:MM:SS.mmm give to <avatar> declined, transaction <uuid>
+HH:MM:SS.mmm permission denied to <avatar> from <who>: <mask>
 HH:MM:SS.mmm rez <uuid> name "<name>" at <x> <y> <z>
 HH:MM:SS.mmm texture <object> face <n> <uuid>
 HH:MM:SS.mmm fullbright <object> face <n> <on or off>
@@ -760,7 +807,7 @@ HH:MM:SS.mmm permission denied from <who>: <mask>
 HH:MM:SS.mmm permission granted to <who>: <granted>[; refused: <rest>]
 ```
 
-`permission granted to` is the answer to a request an `allow permission` header covers: the permissions granted, then, when part of the request was refused, `; refused:` and those. `<how>` is `public`, `owner`, `debug`, `direct`, `region`, or `channel <n>`, which is a line the worn bridge forwarded from a `listen` channel; it is product chat, printed as `chat channel <n> from <who>: "<tail>"` with the raw tail. `<who>` is the script's name for a bound prim, otherwise the displayed name. The lines that begin `probe` are protocol, never `chat`. `probe link` carries ` key <uuid>` after the num only when the key the message carried is not the null key. `probe overflow` is a report the probe could not send whole; `probe bad` is a command the probe could not parse, on the link the probe is in; `probe fwd-overflow` is a forward the bridge could not send whole, on a `listen` channel. The pay line prints before the payment, including when it then fails. A texture line prints whenever a reading differs from the last one printed, stale readings included; the offset, repeats and rotation expectations print it too. A fullbright, glow, colour or alpha line prints the same way, and each is compared only with the last line of its own kind for that object and face. A level is rounded to four places. With `face all` the face is written `all` and the line lists the value of each face from face 0, separated by commas: `fullbright sign face all on, off`. A position or size line prints the same way, `position hud 0 0 0` or `size hud 0.5 0.25 0.1`, and is compared with the last line of its own kind for that object. A floating text line prints whenever the text differs from the last one printed for that object, `text sign "Controlling Example Chair"`, with the text quoted as Go quotes a string, as a chat line is, so a newline in it shows as `\n` and a quote as `\"` and neither can start a line of its own. A button line prints whenever the count differs from the last one printed for that prim and those parts, and ends with the faces the buttons were found on, `faces 0, 2`, or `faces none` when the count is 0. With a `link` the object is written `<object> link <n>`. An attached line prints when the reading differs from the last one printed for that name, `attached hud HUD centre 2` or `attached hud off`, and the point is written as `sl` names it. A capture prints when its expectation matches, once, with the step that bound it. Its value is a text quoted as Go quotes a string (a floating text included), a UUID, the two numbers of a pair, one number, a click byte as a number, the three of a colour, the three of a position or size, `on` or `off`, or, for a `face all`, `face all` and the comma-separated values: `capture $first = "Example Sign" (step 3)`, `capture $all = face all on, off (step 1)`. When a step's baseline is the first reading after the arm point, the runner also prints `baseline for <object> face <n> taken after the arm point` (`face all` stands for the face of a `face all`; for a click byte it is `baseline for <object> click taken after the arm point`, and `position` or `size` in the place of `click` for those readings, `text` for a floating text, and `baseline for <object> button taken after the arm point` for a button reading). If chat or instant messages arrive faster than the runner reads them, the run fails with exit 1, `the chat subscription dropped <n> lines`, rather than looking like a timeout.
+A line for a second avatar names it by its binding, `<avatar>`, in `dialog to visitor from sign: ...`, and never by its in-world name or its profile; a chat line it spoke is `chat public from visitor: "..."`. `permission denied to <avatar>` is the refusal of a request to a second avatar, which no `allow permission` covers. `permission granted to` is the answer to a request an `allow permission` header covers: the permissions granted, then, when part of the request was refused, `; refused:` and those. `<how>` is `public`, `owner`, `debug`, `direct`, `region`, or `channel <n>`, which is a line the worn bridge forwarded from a `listen` channel; it is product chat, printed as `chat channel <n> from <who>: "<tail>"` with the raw tail. `<who>` is the script's name for a bound prim, otherwise the displayed name. The lines that begin `probe` are protocol, never `chat`. `probe link` carries ` key <uuid>` after the num only when the key the message carried is not the null key. `probe overflow` is a report the probe could not send whole; `probe bad` is a command the probe could not parse, on the link the probe is in; `probe fwd-overflow` is a forward the bridge could not send whole, on a `listen` channel. The pay line prints before the payment, including when it then fails. A texture line prints whenever a reading differs from the last one printed, stale readings included; the offset, repeats and rotation expectations print it too. A fullbright, glow, colour or alpha line prints the same way, and each is compared only with the last line of its own kind for that object and face. A level is rounded to four places. With `face all` the face is written `all` and the line lists the value of each face from face 0, separated by commas: `fullbright sign face all on, off`. A position or size line prints the same way, `position hud 0 0 0` or `size hud 0.5 0.25 0.1`, and is compared with the last line of its own kind for that object. A floating text line prints whenever the text differs from the last one printed for that object, `text sign "Controlling Example Chair"`, with the text quoted as Go quotes a string, as a chat line is, so a newline in it shows as `\n` and a quote as `\"` and neither can start a line of its own. A button line prints whenever the count differs from the last one printed for that prim and those parts, and ends with the faces the buttons were found on, `faces 0, 2`, or `faces none` when the count is 0. With a `link` the object is written `<object> link <n>`. An attached line prints when the reading differs from the last one printed for that name, `attached hud HUD centre 2` or `attached hud off`, and the point is written as `sl` names it. A capture prints when its expectation matches, once, with the step that bound it. Its value is a text quoted as Go quotes a string (a floating text included), a UUID, the two numbers of a pair, one number, a click byte as a number, the three of a colour, the three of a position or size, `on` or `off`, or, for a `face all`, `face all` and the comma-separated values: `capture $first = "Example Sign" (step 3)`, `capture $all = face all on, off (step 1)`. When a step's baseline is the first reading after the arm point, the runner also prints `baseline for <object> face <n> taken after the arm point` (`face all` stands for the face of a `face all`; for a click byte it is `baseline for <object> click taken after the arm point`, and `position` or `size` in the place of `click` for those readings, `text` for a floating text, and `baseline for <object> button taken after the arm point` for a button reading). If chat or instant messages arrive faster than the runner reads them, the run fails with exit 1, `the chat subscription dropped <n> lines`, rather than looking like a timeout.
 
 **Warnings.** Three kinds of line are printed on their own and change no exit code. Two are about a line that looked like the runner's protocol and was not accepted:
 
@@ -1483,7 +1530,7 @@ Each is discussed under [Open questions](slate-runner.md#open-questions).
 - A worn HUD's position and size are read (`expect position`, `expect size`), as an offset in the HUD's own frame and a scale. Where it is on the screen is not: an expectation such as `expect position hud on screen at X Y` is not built, and the author works the offset out from the drag and the world view's height, as [the worked example](#move-and-resize-a-hud-by-its-glass) does.
 - `touch ... button` does not use `Pick` yet: a button hidden behind another prim of a worn HUD is not reported as hidden, because the finder reads the picture of the face and does not ask what the viewer would press at that point.
 - A child prim is named with `link N`, whose numbers come from the object store when there is no probe. The store cannot give the order of a set that several prims joined in one update while it watched, nor one it took from another agent, and `link N` on such a set fails with `the link order of "<name>" is not known; a probe, or taking and rezzing it, gives it`. A probe gives the order, but only in a product the tester owns; taking the object and rezzing it again makes the store know it ([Link numbers](objects.md#link-numbers)). A daemon older than the link numbers reports every order as not known. The link messages `send` and `expect link` always need a probe.
-- One avatar is driven. Any wait is capped at 120 s.
+- The tester is driven, and a second avatar the run is given; no more is chosen for it. A second avatar's chat is heard by the tester and not by itself, so it cannot be asked what it heard, and its inventory and attachments are not read. Any wait is capped at 120 s.
 - The bridge item is made once where the tester may build (`slate -make-bridge`).
 - `face all` has no face count for a sculpt, a mesh, or a prim nothing has described. For every other prim the count comes from its shape ([How many faces a prim has](objects.md#how-many-faces-a-prim-has)), but a sculpt or a mesh sends no shape that gives one. The tuple then runs to the last face that differs from the entry's default and takes one more, the default itself, so a sculpt whose faces are split between two values, neither of them the default, can read with a phantom default face at the end, and `face all is X` then fails although every real face is X. The transcript says `slate: step N: the face count of "<name>" is not known (sculpt, mesh or not described); face all reads the faces its texture entry names`, once for each name in a test.
 - `touch ... showing` has the same blindness for a sculpt or a mesh. A face that the entry does not name shows the entry's default texture, and the search decodes faces only as far as the last one the entry names (the same note is printed). Asking for the default texture can find several faces, so that the step fails as ambiguous, or none. Ask for a texture that a script put on a face.

@@ -67,6 +67,9 @@ func (s *stepRun) giveExpect(x *expState) error {
 	if err != nil {
 		return err
 	}
+	if g.To != nil {
+		return s.giveToSecond(x, b, match, g.To.Text)
+	}
 	gr := &giveRun{from: b, name: match.match, text: match, count: -1}
 	if s.obs.gives == nil {
 		s.obs.gives = map[*expState]*giveRun{}
@@ -79,6 +82,29 @@ func (s *stepRun) giveExpect(x *expState) error {
 			return ""
 		}
 		return fmt.Sprintf("; accept was sent and inventory still has %d %s of that name", gr.count, plural(gr.count, "item", "items"))
+	}
+	return nil
+}
+
+// giveToSecond makes a give expectation of an offer to a second avatar. The
+// runner declines every such offer as it is heard (observeSecondIM), so
+// the expectation only has to see it: there is no accept, no inventory to
+// read, and the avatar is left as found.
+// Why: doc/slate-language.md#a-second-avatar
+func (s *stepRun) giveToSecond(x *expState, from *binding, item textMatch, to string) error {
+	x.match = func(ev *event) bool {
+		if ev.kind != evIM || ev.to != to || ev.im.Dialog != sl.DialogTaskInventoryOffered {
+			return false
+		}
+		name, ok := offerItemName(ev.im.Text)
+		return ok && from.named(ev.im.FromName) && item.match(name)
+	}
+	if !x.neg {
+		x.onMatch = func(ev *event) {
+			name, _ := offerItemName(ev.im.Text)
+			v := capValue{typ: CapText, text: name}
+			s.bindMatched(x, &v, groupSrc{item, name})
+		}
 	}
 	return nil
 }
@@ -102,7 +128,7 @@ func (s *stepRun) snapshot(ctx context.Context) error {
 	}
 	want := false
 	for _, x := range s.exps {
-		if x.e.Give != nil && !x.neg {
+		if x.e.Give != nil && x.e.Give.To == nil && !x.neg {
 			want = true
 		}
 	}
@@ -258,7 +284,7 @@ func offerLabel(im *sl.IM) string {
 func (s *stepRun) offers(g *giveRun) []*event {
 	var out []*event
 	for _, ev := range s.r.log.events[s.t.mark:] {
-		if ev.kind != evIM || !ev.eligible(s.arm) || ev.im.Dialog != sl.DialogTaskInventoryOffered {
+		if ev.kind != evIM || ev.to != "" || !ev.eligible(s.arm) || ev.im.Dialog != sl.DialogTaskInventoryOffered {
 			continue
 		}
 		item, ok := offerItemName(ev.im.Text)
@@ -323,8 +349,9 @@ func (s *stepRun) acceptGive(ctx context.Context, im *sl.IM, folder msg.UUID) er
 	return s.r.sess.AcceptInventoryOffer(ctx, o, folder)
 }
 
-// giveText is the transcript line of an offer heard.
-func (r *runner) giveText(im *sl.IM) string {
+// giveText is the transcript line of an offer heard; to is the second
+// avatar it came to, or "" for the tester.
+func (r *runner) giveText(im *sl.IM, to string) string {
 	item, ok := offerItemName(im.Text)
 	if !ok {
 		item = im.Text
@@ -332,6 +359,9 @@ func (r *runner) giveText(im *sl.IM) string {
 	who := r.whoPrim(msg.UUID{}, func(n string) bool { return n != "" && n == im.FromName })
 	if who == "" {
 		who = sl.SenderObject.Label(im.FromName)
+	}
+	if to != "" {
+		return fmt.Sprintf("give to %s from %s: %q", to, who, item)
 	}
 	return fmt.Sprintf("give from %s: %q", who, item)
 }

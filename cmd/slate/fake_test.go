@@ -24,6 +24,7 @@ var (
 	testInvRoot = msg.MustParseUUID("99267e57-7e57-c0de-55c2-b0e23ccf1e53")
 	idPane      = msg.MustParseUUID("adb37e57-7e57-c0de-ccaf-c554c41e4c8a")
 	idSign      = msg.MustParseUUID("a12e7e57-7e57-c0de-1f13-2165984b7290")
+	idSecond    = msg.MustParseUUID("b7f37e57-7e57-c0de-9241-25f659887717")
 )
 
 type fakeGrid struct {
@@ -33,6 +34,7 @@ type fakeGrid struct {
 	doneOnce sync.Once
 	sent     []msg.Message
 	objects  []*sl.Seen
+	me       msg.UUID // the avatar's id; testMe when zero
 }
 
 func newGrid(t *testing.T) *fakeGrid {
@@ -74,8 +76,12 @@ func (f *fakeGrid) said() []string {
 }
 
 func (f *fakeGrid) Info() *sl.Info {
+	me := testMe
+	if !f.me.IsZero() {
+		me = f.me
+	}
 	return &sl.Info{
-		Name: "fake", AgentID: testMe, SessionID: testSession,
+		Name: "fake", AgentID: me, SessionID: testSession,
 		AvatarName: "Quark Idlemind", Region: "Test Region", InventoryRoot: testInvRoot,
 	}
 }
@@ -158,6 +164,16 @@ func (f *fakeGrid) withPane() {
 		Parent: 1, AttachPoint: sl.HUDCenter2, Shape: shape,
 		Position: msg.Vector3{X: -0.5}, Scale: msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5},
 	})
+}
+
+// withMe makes the grid another avatar's, with a body of its own.
+func (f *fakeGrid) withMe(id msg.UUID) *fakeGrid {
+	f.me = id
+	f.objects[len(f.objects)-1] = &sl.Seen{
+		Object: sl.Object{ID: id, Local: 2, Name: "Example Resident"}, PCode: 47,
+		Position: msg.Vector3{X: 129, Y: 128, Z: 22},
+	}
+	return f
 }
 
 // grabs is how many times the pane was pressed.

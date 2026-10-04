@@ -66,6 +66,17 @@ func (r *runner) whoPrim(id msg.UUID, is func(string) bool) string {
 	return best
 }
 
+// secondNamed is the binding of the second avatar with this id, or "":
+// what the transcript calls it, in place of its displayed name.
+func (r *runner) secondNamed(id msg.UUID) string {
+	for _, sc := range r.seconds {
+		if sc.sess.Me() == id {
+			return sc.name
+		}
+	}
+	return ""
+}
+
 // chatText is the transcript line of a heard line: how, who and what.
 // A name that is not a bound prim's is the displayed name, and an object's
 // is labelled as one, since anything can be called anything.
@@ -76,6 +87,9 @@ func (r *runner) chatText(l sl.Line) string {
 	}
 	who := r.whoPrim(l.Source, nil)
 	if who == "" {
+		who = r.secondNamed(l.Source)
+	}
+	if who == "" {
 		who = l.From
 		if l.FromObject() {
 			who = sl.SenderObject.Label(l.From)
@@ -84,15 +98,24 @@ func (r *runner) chatText(l sl.Line) string {
 	return fmt.Sprintf("chat %s from %s: %q", how, who, l.Text)
 }
 
-func (r *runner) dialogText(d sl.Dialog) string {
+// dialogText is the transcript line of a dialog; to is the second avatar
+// it came to, named by its binding, or "" for the tester.
+func (r *runner) dialogText(d sl.Dialog, to string) string {
 	who := r.whoPrim(d.Object, func(n string) bool { return n != "" && n == d.ObjectName })
 	if who == "" {
 		who = sl.SenderObject.Label(d.ObjectName)
 	}
+	kind := "dialog"
 	if d.IsTextBox() {
-		return fmt.Sprintf("textbox from %s: %q", who, d.Message)
+		kind = "textbox"
 	}
-	return fmt.Sprintf("dialog from %s: %q buttons %s", who, d.Message, quoteAll(d.Buttons))
+	if to != "" {
+		kind += " to " + to
+	}
+	if d.IsTextBox() {
+		return fmt.Sprintf("%s from %s: %q", kind, who, d.Message)
+	}
+	return fmt.Sprintf("%s from %s: %q buttons %s", kind, who, d.Message, quoteAll(d.Buttons))
 }
 
 // failBlock is a failed step, kept until the test ends so that the
