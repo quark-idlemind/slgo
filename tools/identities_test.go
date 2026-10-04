@@ -432,6 +432,47 @@ func TestCheckIdentitiesRefusesAnUnlistedName(t *testing.T) {
 	}
 }
 
+// TestCheckIdentitiesRefusesAPathItCannotRead: a file named on the
+// command line that is not in the checkout -- a typo, or somewhere else
+// altogether -- is an error, not "nothing real in what was checked".  A
+// file named by its absolute path inside the checkout is checked.
+func TestCheckIdentitiesRefusesAPathItCannotRead(t *testing.T) {
+	needPerl(t)
+	run := func(args ...string) (string, int) {
+		cmd := exec.Command("sh", append([]string{"tools/check-identities"}, args...)...)
+		cmd.Dir = ".."
+		cmd.Env = append(os.Environ(), "SLGO_IDENTITIES=/nonexistent")
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if e, ok := err.(*exec.ExitError); ok {
+			code = e.ExitCode()
+		}
+		return string(out), code
+	}
+	outside := filepath.Join(t.TempDir(), "outside.go")
+	if err := os.WriteFile(outside, []byte("package outside\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"no_such_file_here.go"},
+		{"tools/known-names", "no_such_file_here.go"},
+		{outside},
+		{"--message", "no_such_message.txt"},
+	} {
+		out, code := run(args...)
+		if code != 2 || !strings.Contains(out, "is not a readable file") {
+			t.Errorf("%v: exit %d, said %s", args, code, out)
+		}
+	}
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, code := run(filepath.Join(root, "tools", "known-names")); code != 0 {
+		t.Errorf("an absolute path in the checkout: exit %d, said %s", code, out)
+	}
+}
+
 // ---------------------------------------------------------------- images
 
 // scanImage writes b to a file called name and runs scan-images --check on
