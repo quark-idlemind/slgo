@@ -114,7 +114,11 @@ func (w *Session) DragOnScreen(ctx context.Context, root *Object, d ScreenDrag) 
 		return err
 	}
 	// Along the path, picking afresh at every step as the cursor moves,
-	// and reading the HUD again at each point given.
+	// against the HUD as the region last described it: a HUD that grows
+	// its prim once the drag has begun moving is seen grown a step after
+	// the region says so, as the viewer sees it.
+	// Why: doc/hud-screen.md#a-drag
+	read := time.Now()
 	if n := len(d.Points) - 1; n > 0 && d.Move > 0 {
 		per := d.Move / time.Duration(n)
 		for i := 0; i < n; i++ {
@@ -125,6 +129,12 @@ func (w *Session) DragOnScreen(ctx context.Context, root *Object, d ScreenDrag) 
 				case <-ctx.Done():
 					return ctx.Err()
 				case <-time.After(every):
+				}
+				if time.Since(read) >= hudReread {
+					if now, err := w.Linkset(ctx, root); err == nil && len(now) >= link {
+						linkset = now
+					}
+					read = time.Now()
 				}
 				f := float64(s) / float64(steps)
 				p := ScreenPoint{from.X + (to.X-from.X)*f, from.Y + (to.Y-from.Y)*f}
@@ -139,6 +149,13 @@ func (w *Session) DragOnScreen(ctx context.Context, root *Object, d ScreenDrag) 
 	}
 	return w.hold(ctx, at(d.Points[len(d.Points)-1]), d.Dwell, every, tick)
 }
+
+// hudReread is how often a drag on the screen reads the HUD again as it
+// moves.  The region describes a change to a pressed prim 95 to 197 ms
+// after it is made (measured; doc/hud-screen.md#a-drag), so reading every
+// tenth of a second sees one within a step of its arriving, and costs a
+// read of the store, not of the grid.
+const hudReread = 100 * time.Millisecond
 
 // withUV fills in the texture coordinates of a touch on a prim from its
 // appearance, as placeTouches does from a fresh read.
