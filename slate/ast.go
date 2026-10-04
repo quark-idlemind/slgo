@@ -147,6 +147,7 @@ type Script struct {
 
 	Timeouts  []Duration
 	Allows    []Span
+	Permits   []PermissionAllow
 	Objects   []Object
 	Items     []Item
 	Probes    []Probe
@@ -155,6 +156,14 @@ type Script struct {
 	Befores   []Block // Check allows at most one
 	Afters    []Block // Check allows at most one
 	Sequences []Sequence
+}
+
+// PermissionAllow is allow permission NAME... from OBJ: the permissions a
+// request from OBJ may be granted. Names are as written; Check validates them.
+type PermissionAllow struct {
+	Span  Span
+	Names []Ident
+	From  Ident
 }
 
 // Before is the before each block, or nil. It is meaningful after Check.
