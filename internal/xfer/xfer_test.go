@@ -1,4 +1,4 @@
-package client
+package xfer
 
 import (
 	"context"
@@ -9,11 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
 // sendXfer builds the message a simulator would send for one packet.
-func sendXfer(id uint64, seq uint32, data []byte, last bool) *Message {
+func sendXfer(id uint64, seq uint32, data []byte, last bool) *client.Message {
 	m := &msg.SendXferPacket{}
 	m.XferID.ID = id
 	m.XferID.Packet = seq
@@ -22,7 +23,7 @@ func sendXfer(id uint64, seq uint32, data []byte, last bool) *Message {
 	}
 	m.DataPacket.Data = data
 	body, _ := m.Encode()
-	return &Message{ID: msg.IDOf(m), Name: "SendXferPacket", Body: body}
+	return &client.Message{ID: msg.IDOf(m), Name: "SendXferPacket", Body: body}
 }
 
 func TestXferReassembles(t *testing.T) {
@@ -92,10 +93,10 @@ func TestXferAbort(t *testing.T) {
 	x.pending[9] = f
 	x.mu.Unlock()
 
-	x.fail(9, ErrXferAborted)
+	x.fail(9, client.ErrXferAborted)
 	select {
 	case err := <-f.err:
-		if err != ErrXferAborted {
+		if err != client.ErrXferAborted {
 			t.Errorf("err = %v", err)
 		}
 	case <-time.After(2 * time.Second):
@@ -126,7 +127,7 @@ func TestXferLengthPrefix(t *testing.T) {
 	}
 }
 
-func decodeXfer(t *testing.T, m *Message) *msg.SendXferPacket {
+func decodeXfer(t *testing.T, m *client.Message) *msg.SendXferPacket {
 	t.Helper()
 	v, err := m.Decode()
 	if err != nil {
@@ -227,12 +228,12 @@ func TestAnAbortedXferIsReportedRatherThanWaitedOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !x.Handle(context.Background(), &Message{ID: msg.IDOf(abort), Name: "AbortXfer", Body: body}) {
+	if !x.Handle(context.Background(), &client.Message{ID: msg.IDOf(abort), Name: "AbortXfer", Body: body}) {
 		t.Error("an abort was not claimed")
 	}
 	select {
 	case err := <-f.err:
-		if !errors.Is(err, ErrXferAborted) {
+		if !errors.Is(err, client.ErrXferAborted) {
 			t.Errorf("err = %v", err)
 		}
 		if !strings.Contains(err.Error(), "-39") {
@@ -251,15 +252,15 @@ func TestXferHandleLeavesAloneWhatIsNotItsOwn(t *testing.T) {
 	t.Parallel()
 	x := NewXfers(&recordingSender{})
 
-	if x.Handle(context.Background(), &Message{Name: "ChatFromSimulator"}) {
+	if x.Handle(context.Background(), &client.Message{Name: "ChatFromSimulator"}) {
 		t.Error("a message that is not a transfer was claimed")
 	}
-	if x.Handle(context.Background(), &Message{
+	if x.Handle(context.Background(), &client.Message{
 		ID: msg.IDOf(&msg.SendXferPacket{}), Name: "SendXferPacket", Body: []byte{1},
 	}) {
 		t.Error("a packet whose bytes will not decode was claimed")
 	}
-	if x.Handle(context.Background(), &Message{
+	if x.Handle(context.Background(), &client.Message{
 		ID: msg.IDOf(&msg.AbortXfer{}), Name: "AbortXfer", Body: []byte{1},
 	}) {
 		t.Error("an abort whose bytes will not decode was claimed")
@@ -382,13 +383,13 @@ func TestAnAbortArrivingMidFetchEndsIt(t *testing.T) {
 	x := NewXfers(s)
 	s.on = func(m msg.Message) {
 		if req, ok := m.(*msg.RequestXfer); ok {
-			go x.fail(req.XferID.ID, ErrXferAborted)
+			go x.fail(req.XferID.ID, client.ErrXferAborted)
 		}
 	}
 
 	_, err := x.Fetch(context.Background(), msg.UUID{}, msg.UUID{},
 		"inventory.tmp", FilePathTaskInventory, 10*time.Second)
-	if !errors.Is(err, ErrXferAborted) {
+	if !errors.Is(err, client.ErrXferAborted) {
 		t.Errorf("Fetch = %v, want the abort", err)
 	}
 }

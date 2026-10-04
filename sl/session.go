@@ -12,6 +12,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/internal/xfer"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -86,8 +87,8 @@ type Session struct {
 	me      msg.UUID
 	invRoot msg.UUID
 
-	xfers     *client.Xfers
-	transfers *client.Transfers
+	xfers     *xfer.Xfers
+	transfers *xfer.Transfers
 
 	mu sync.Mutex
 
@@ -411,8 +412,8 @@ func New(b Backend) (*Session, error) {
 	}
 	// Before anything can send: agentBlock reads this on every message.
 	w.ident.Store(info)
-	w.xfers = client.NewXfers(b)
-	w.transfers = client.NewTransfers(b)
+	w.xfers = xfer.NewXfers(b)
+	w.transfers = xfer.NewTransfers(b)
 	// Before the reader, so that whatever the daemon kept is here by
 	// the time anybody can ask.  See offers.go.
 	w.loadKept()

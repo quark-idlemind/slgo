@@ -91,8 +91,7 @@ case.
     agent/appearance.go what each avatar nearby looks like, said once and kept
 
     client/             attaching to slgod over gRPC, and holding no grid state
-    client/xfer.go      the old UDP file transfer, reassembled
-    client/transfer.go  the UDP asset transfer, reassembled
+    internal/xfer/      the old UDP file transfer and the UDP asset transfer, reassembled
     server/             slgod's side: holds the circuits, relays the bytes
     server/lock.go      exclusive use of a named thing, for as long as a client lives
     viewer/             handing a live session over to a real viewer
@@ -967,8 +966,8 @@ it cannot be used to make the server fetch anything at all.
 Reading a prim's inventory goes over **xfer**, the old UDP file
 transfer: `RequestTaskInventory` answers with a *filename*, and
 `RequestXfer` pulls the file down in packets that each have to be
-acknowledged before the next is sent.  `client.Xfers` reassembles them.
-It is client side, being nothing but messages.
+acknowledged before the next is sent.  `xfer.Xfers`, in `internal/xfer`, reassembles them.
+It runs on the client side, being nothing but messages.
 
 Reading an asset's bytes is a third mechanism again.  `ViewerAsset`
 serves the content delivery network -- textures, meshes, sounds -- and
@@ -977,7 +976,7 @@ answers 403 for a notecard, so those come over the UDP asset transfer:
 with a `TransferInfo` carrying the size, and then a run of
 `TransferPacket`.  Nothing is acknowledged, so packets arrive in any
 order and the last is marked by its *status* rather than its number.
-`client.Transfers` reassembles them.  This is the path the C client's
+`xfer.Transfers`, in `internal/xfer`, reassembles them.  This is the path the C client's
 cache.c uses.
 
 Four things that cost time here:

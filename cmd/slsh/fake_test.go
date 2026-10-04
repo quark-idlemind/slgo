@@ -1607,7 +1607,7 @@ func (f *fakeGrid) AnswerInside(t *testing.T, task msg.UUID, held ...*heldItem) 
 		case *msg.TransferRequest:
 			// A read of something inside.  The parameters are the
 			// agent, the session, the owner, the object and then the
-			// item; see client/transfer.go.
+			// item; see internal/xfer/transfer.go.
 			item := msg.UUID(r.TransferInfo.Params[64:80])
 			mu.Lock()
 			var text *string

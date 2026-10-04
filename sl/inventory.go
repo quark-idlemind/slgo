@@ -13,6 +13,7 @@ import (
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/internal/xfer"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 )
@@ -533,7 +534,7 @@ func (w *Session) TaskInventory(ctx context.Context, o *Object) ([]TaskItem, err
 		return nil, nil
 	}
 	body, err := w.xfers.Fetch(ctx, w.me, w.Session(), filename,
-		client.FilePathTaskInventory, 30*time.Second)
+		xfer.FilePathTaskInventory, 30*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("sl: reading the inventory of %s: %w", o, err)
 	}

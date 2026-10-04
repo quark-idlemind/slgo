@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/internal/xfer"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -844,7 +845,7 @@ func TestTheContentsOfAnObjectComeOverXfer(t *testing.T) {
 	if got := trimNul(x.XferID.Filename); got != "inventory_37c9.tmp" {
 		t.Errorf("asked for the file %q", got)
 	}
-	if x.XferID.FilePath != client.FilePathTaskInventory {
+	if x.XferID.FilePath != xfer.FilePathTaskInventory {
 		t.Errorf("asked for it under path %d", x.XferID.FilePath)
 	}
 
