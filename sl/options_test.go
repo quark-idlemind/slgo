@@ -37,3 +37,16 @@ func TestTheObjectWaitIsTheSessionsOption(t *testing.T) {
 		t.Errorf("with ObjectTimeout set, the bound is %v", w.objectWait())
 	}
 }
+
+// TestTheWindowForAskingEveryNameAgainIsTheSessionsOption: 30 s until
+// it is set.
+func TestTheWindowForAskingEveryNameAgainIsTheSessionsOption(t *testing.T) {
+	w, _ := newFakeSession(t)
+	if w.namesAskedAgainEvery() != 30*time.Second {
+		t.Errorf("the default is %v, want 30s", w.namesAskedAgainEvery())
+	}
+	w.SetOptions(Options{NamesAskedAgainEvery: 2 * time.Second})
+	if w.namesAskedAgainEvery() != 2*time.Second {
+		t.Errorf("with NamesAskedAgainEvery set, the window is %v", w.namesAskedAgainEvery())
+	}
+}

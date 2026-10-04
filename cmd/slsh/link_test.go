@@ -168,13 +168,15 @@ func TestUnlinkingARootTakesTheWholeThingApart(t *testing.T) {
 	// prim to a convex hull on the way past (llselectmgr.cpp:5458-5472)
 	// and this deliberately does not; see sl.Unlink for why.  A message
 	// appearing here is that decision being reversed without the
-	// reasoning being revisited.
+	// reasoning being revisited.  The one request for a name is the
+	// lookup of "chair" asking again what it is called.
+	// Why: doc/objects.md#a-name-a-script-changed
 	var names []string
 	for _, s := range x.grid.Sent() {
 		names = append(names, s.MsgInfo().Name)
 	}
 	for _, n := range names {
-		if n != "ObjectSelect" && n != "ObjectDelink" {
+		if n != "ObjectSelect" && n != "ObjectDelink" && n != "RequestObjectPropertiesFamily" {
 			t.Errorf("unlink sent %s as well; the wire was %s", n, strings.Join(names, ", "))
 		}
 	}

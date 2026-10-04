@@ -146,3 +146,54 @@ func TestADragOnTheScreenMustStartOnSomething(t *testing.T) {
 		t.Errorf("%d grabs were sent", n)
 	}
 }
+
+// TestADragOnTheScreenSeesAHUDThatGrowsOnceItMoves: a HUD that grows its
+// prim only when the drag starts moving, not when it is pressed, is read
+// again as the drag goes, and the points after it grew are on it.
+func TestADragOnTheScreenSeesAHUDThatGrowsOnceItMoves(t *testing.T) {
+	w, f := newFakeSession(t)
+	box := wornHUD(t, f)
+	var once bool
+	f.mu.Lock()
+	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.ObjectGrabUpdate); ok && !once {
+			once = true
+			go func() {
+				time.Sleep(100 * time.Millisecond)
+				f.mu.Lock()
+				grown := *f.objects[1]
+				grown.Scale = msg.Vector3{X: 0.01, Y: 4, Z: 2}
+				f.objects[1] = &grown
+				f.mu.Unlock()
+			}()
+		}
+	}
+	f.mu.Unlock()
+
+	err := w.DragOnScreen(context.Background(), &box.Object, ScreenDrag{
+		View: measured, Points: []ScreenPoint{onTheBox, offTheBox},
+		Move: 600 * time.Millisecond, Rate: 50,
+	})
+	if err != nil {
+		t.Fatalf("DragOnScreen: %v", err)
+	}
+	updates := sentOf[*msg.ObjectGrabUpdate](f)
+	if len(updates) < 10 {
+		t.Fatalf("%d updates", len(updates))
+	}
+	// The cursor leaves the box as it was within the first few steps;
+	// once the region has the box grown, every later point is on it.
+	last := updates[len(updates)-1].SurfaceInfo[0]
+	if last.FaceIndex != 4 {
+		t.Errorf("the last point of the drag was face %d, want 4 on the grown box", last.FaceIndex)
+	}
+	off := 0
+	for _, u := range updates[len(updates)/2:] {
+		if u.SurfaceInfo[0].FaceIndex != 4 {
+			off++
+		}
+	}
+	if off > 0 {
+		t.Errorf("%d points in the second half of the drag were off the grown box", off)
+	}
+}

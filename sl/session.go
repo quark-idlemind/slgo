@@ -100,7 +100,15 @@ type Session struct {
 	owners      map[msg.UUID]msg.UUID // object id to owner
 	groups      map[msg.UUID]msg.UUID // object id to group, from its properties
 	objectNames map[msg.UUID]string   // object id to name
-	parents     map[uint32]uint32     // local id to parent local id
+	// nameAt is when each name in objectNames last arrived, so that
+	// asking for a name again can wait for an answer newer than the
+	// asking.  Why: doc/objects.md#a-name-a-script-changed
+	nameAt map[msg.UUID]time.Time
+	// reaskDone is when the last full re-ask of every name finished,
+	// and reaskFlight the one in progress, if any; see askAllNamesAgain.
+	reaskDone   time.Time
+	reaskFlight *reaskFlight
+	parents     map[uint32]uint32 // local id to parent local id
 	attach      map[msg.UUID]*Attached
 	killed      map[uint32]bool
 
@@ -379,6 +387,7 @@ func New(b Backend) (*Session, error) {
 		owners:      map[msg.UUID]msg.UUID{},
 		groups:      map[msg.UUID]msg.UUID{},
 		objectNames: map[msg.UUID]string{},
+		nameAt:      map[msg.UUID]time.Time{},
 		parents:     map[uint32]uint32{},
 		attach:      map[msg.UUID]*Attached{},
 		killed:      map[uint32]bool{},
@@ -771,6 +780,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.owners[t.ObjectData.ObjectID] = t.ObjectData.OwnerID
 		w.groups[t.ObjectData.ObjectID] = t.ObjectData.GroupID
 		w.objectNames[t.ObjectData.ObjectID] = trimNul(t.ObjectData.Name)
+		w.nameAt[t.ObjectData.ObjectID] = time.Now()
 		w.mu.Unlock()
 
 	case *msg.ObjectProperties:
@@ -781,6 +791,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 			w.owners[o.ObjectID] = o.OwnerID
 			w.groups[o.ObjectID] = o.GroupID
 			w.objectNames[o.ObjectID] = trimNul(o.Name)
+			w.nameAt[o.ObjectID] = time.Now()
 			out = append(out, &Properties{
 				Object: o.ObjectID, Name: trimNul(o.Name),
 				Description: trimNul(o.Description),

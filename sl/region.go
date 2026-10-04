@@ -151,7 +151,7 @@ func (w *Session) regionChanged(c *RegionChange) {
 //     an object here as confidently as it named one there.  killed is
 //     the worst of the three, because a stale kill makes an object that
 //     exists read as one that was destroyed.
-//   - owners, groups, objectNames: keyed by object id, which is
+//   - owners, groups, objectNames, nameAt: keyed by object id, which is
 //     grid-wide, but what they describe is a prim in the region left
 //     behind.  They are dropped because they are answers about things
 //     nothing here can see, act on or ask about any more, and because a
@@ -223,6 +223,7 @@ func (w *Session) dropRegionState() {
 	clear(w.owners)
 	clear(w.groups)
 	clear(w.objectNames)
+	clear(w.nameAt)
 	clear(w.parents)
 	clear(w.attach)
 	clear(w.killed)

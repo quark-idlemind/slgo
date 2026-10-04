@@ -191,6 +191,15 @@ waits, after the press, for the region to say the prim pressed has
 changed before the cursor moves, so that the later points land on the
 grown glass.
 
+Not every HUD grows its glass at the press. **Measured** on a HUD made
+that way by somebody else: its glass grew to a 10 m cube 220 ms after
+the press, once the drag had begun to move, and went back 400 ms after
+the release; `Settle` would wait for a change that comes only when the
+cursor moves. So as it moves, `DragOnScreen` reads the HUD again every
+100 ms and casts each step against the HUD as the region last described
+it, as the viewer does, and a glass that grows mid-drag is under the
+cursor from the step after the region says so.
+
 **Measured.** A box whose script set its own scale on `touch_start` was
 reported changed 95 to 197 ms after the press, median 146, in 20
 presses. `Options.HUDChangeTimeout` defaults to 5 s.

@@ -296,7 +296,50 @@ func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error
 	if fn != nil {
 		fn(m)
 	}
+	// After the test's own answer, so that one is heard first.
+	f.answerNames(m)
 	return nil
+}
+
+// answerNames answers a request for names the way a simulator does,
+// from the names the fake holds: a root to a family request, a child to
+// a selection.  A root is not answered when selected: that is how a
+// test reads its properties, and a test that has the properties never
+// come answers them itself.  A lookup by name asks again for names that are
+// already known and waits for an answer, so a fake that never answered
+// would cost every lookup the quiet rounds.
+// Why: doc/objects.md#a-name-a-script-changed
+func (f *fakeGrid) answerNames(m msg.Message) {
+	var replies []msg.Message
+	f.mu.Lock()
+	switch m := m.(type) {
+	case *msg.RequestObjectPropertiesFamily:
+		for _, o := range f.objects {
+			if o.ID == m.ObjectData.ObjectID && o.Parent == 0 && !o.IsAvatar() && o.Name != "" {
+				r := &msg.ObjectPropertiesFamily{}
+				r.ObjectData.ObjectID, r.ObjectData.OwnerID = o.ID, o.Owner
+				r.ObjectData.Name = append([]byte(o.Name), 0)
+				replies = append(replies, r)
+			}
+		}
+	case *msg.ObjectSelect:
+		for _, d := range m.ObjectData {
+			for _, o := range f.objects {
+				if o.Local == d.ObjectLocalID && o.Parent != 0 && !o.IsAvatar() && o.Name != "" {
+					r := &msg.ObjectProperties{ObjectData: []msg.ObjectProperties_ObjectData{{
+						ObjectID: o.ID, OwnerID: o.Owner, Name: append([]byte(o.Name), 0),
+					}}}
+					replies = append(replies, r)
+				}
+			}
+		}
+	}
+	f.mu.Unlock()
+	for _, r := range replies {
+		if f.relay(r) != nil {
+			return
+		}
+	}
 }
 
 func (f *fakeGrid) Control(_ context.Context, flags uint32) error {
