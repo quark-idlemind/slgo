@@ -441,7 +441,7 @@ func (s *stepRun) expectFor(ctx context.Context, x *expState) error {
 		return s.dialogExpect(x, e.TextBox.Name, e.TextBox.Link, e.TextBox.Text, nil)
 	case e.Texture != nil, e.Offset != nil, e.Repeats != nil, e.Rot != nil, e.Click != nil,
 		e.Fullbright != nil, e.Glow != nil, e.Colour != nil, e.Alpha != nil,
-		e.Position != nil, e.Size != nil:
+		e.Position != nil, e.Size != nil, e.FloatText != nil:
 		return s.stateExpect(x)
 	case e.Button != nil:
 		return s.buttonExpect(x)
@@ -482,6 +482,8 @@ func (s *stepRun) stimulusFor(st *Stimulus) (*stimulus, error) {
 		return s.sendStimulus(st.Send)
 	case st.Wear != nil:
 		return s.wearStimulus(st.Wear)
+	case st.Rez != nil:
+		return s.rezStimulus(st.Rez)
 	case st.TakeOff != nil:
 		return s.takeOffStimulus(st.TakeOff)
 	}

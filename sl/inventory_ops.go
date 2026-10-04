@@ -560,6 +560,12 @@ func expectMask(who uint8, sent uint32, p *Properties) (want, compared uint32) {
 //     aimed at open sky the request is dropped with no object and no
 //     complaint.
 //
+// A refusal for the land arrives as an AlertMessage and no object ("Can't
+// rez object ... because the owner of this land does not allow it"); an
+// alert of that shape heard after the request ends the wait at once with
+// an error quoting it, rather than at the timeout.
+// Why: doc/slate-language.md#stimuli
+//
 // A caller that gives up while this waits gets ctx.Err(), and the
 // object as well if it turned out to be standing there already.
 func (w *Session) RezFromInventory(ctx context.Context, it *Item, at msg.Vector3, group msg.UUID, timeout time.Duration) (*Object, error) {
@@ -599,6 +605,9 @@ func (w *Session) RezFromInventory(ctx context.Context, it *Item, at msg.Vector3
 		CreationDate: int32(it.Created),
 		CRC:          itemCRC(it),
 	}
+	w.mu.Lock()
+	mark := len(w.alerts)
+	w.mu.Unlock()
 	if err := w.Send(ctx, m); err != nil {
 		return nil, err
 	}
@@ -610,7 +619,11 @@ func (w *Session) RezFromInventory(ctx context.Context, it *Item, at msg.Vector3
 	// arrived.  Where it is was known before it existed, and is the one
 	// thing about it that cannot be stale.
 	var made *Object
+	var refused string
 	look := func(ctx context.Context) (bool, error) {
+		if refused = w.rezRefusal(mark); refused != "" {
+			return true, nil
+		}
 		all, err := w.AllObjects(ctx, 10*time.Second)
 		if err != nil {
 			return false, err
@@ -637,7 +650,25 @@ func (w *Session) RezFromInventory(ctx context.Context, it *Item, at msg.Vector3
 	if err != nil && !lastLook(ctx, look) {
 		return nil, err
 	}
+	if refused != "" {
+		return nil, fmt.Errorf("sl: %q was not rezzed: the simulator said %q", it.Name, refused)
+	}
 	return made, err
+}
+
+// rezRefusal is the first alert heard after mark that has the shape of a
+// refused rez, "Can't rez object ... because ...", or "". Only the shape
+// is matched: the alert names the parcel and the region.
+func (w *Session) rezRefusal(mark int) string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for i := mark; i < len(w.alerts); i++ {
+		a := w.alerts[i]
+		if strings.HasPrefix(a, "Can't rez object") && strings.Contains(a, " because ") {
+			return a
+		}
+	}
+	return ""
 }
 
 // rezRadius is how far from the asked-for spot a new object may be and

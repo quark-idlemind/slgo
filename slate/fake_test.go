@@ -66,6 +66,7 @@ type fakeGrid struct {
 	linkOrder   map[uint32][]msg.UUID // root local id -> its children in the store's link order (setLinkOrder)
 	linkUnknown map[uint32]bool       // root local id -> the set's order is not known (unknownLinks)
 
+	group     msg.UUID    // the tester's active group, in Presence
 	sess      *sl.Session // the last session made
 	controls  []uint32    // the control flags the session asked for
 	onControl func(flags uint32)
@@ -362,7 +363,9 @@ func (f *fakeGrid) SimAttachments(context.Context, msg.UUID) (*sl.SimAttachments
 }
 
 func (f *fakeGrid) Presence(context.Context, float32) (*sl.Presence, error) {
-	return &sl.Presence{Position: msg.Vector3{X: 128, Y: 128, Z: 25}}, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return &sl.Presence{Position: msg.Vector3{X: 128, Y: 128, Z: 25}, ActiveGroup: f.group}, nil
 }
 
 func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, error) {

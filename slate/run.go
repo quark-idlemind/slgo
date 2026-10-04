@@ -379,6 +379,7 @@ type testRun struct {
 	failed      bool
 	afterFailed bool
 	dropped     string
+	rezzed      []*rezzed // what rez steps made, deleted at the end (rezitem.go)
 	blocks      []*failBlock
 }
 
@@ -410,7 +411,7 @@ func (r *runner) runTest(ctx context.Context, et ExpandedTest) (TestResult, bool
 		}
 		s := newStepRun(t, x, i+1, i == 0)
 		if err := s.run(ctx); err != nil {
-			t.finish()
+			t.finish(ctx)
 			return TestResult{Name: tr.Name, Exit: 1}, true, err
 		}
 		if s.state == stFailed {
@@ -432,7 +433,7 @@ func (r *runner) runTest(ctx context.Context, et ExpandedTest) (TestResult, bool
 			break
 		}
 	}
-	t.finish()
+	t.finish(ctx)
 	tr.Passed = !t.failed
 	if t.failed {
 		tr.Exit = 1
@@ -455,9 +456,10 @@ func (r *runner) dropped() string {
 }
 
 // finish ends a test: an unconsumed hold is forgotten and reported, the
-// failure blocks are printed with it, and the as bindings go with t.
+// failure blocks are printed with it, what its rez steps made is deleted
+// (a delete that fails fails the test), and the as bindings go with t.
 // Why: doc/slate-runner.md#dialog-hold
-func (t *testRun) finish() {
+func (t *testRun) finish(ctx context.Context) {
 	t.r.denyPermissions()
 	left := t.dropHolds()
 	for _, b := range t.blocks {
@@ -466,6 +468,13 @@ func (t *testRun) finish() {
 	}
 	if t.dropped != "" {
 		t.r.printf("slate: %s", t.dropped)
+	}
+	if undeleted := t.deleteRezzed(ctx); len(undeleted) > 0 {
+		wasPassing := !t.failed
+		t.failed = true
+		if wasPassing {
+			t.r.printf("slate: fail test %q: could not delete %s", t.et.Test.Name, strings.Join(undeleted, ", "))
+		}
 	}
 	if !t.failed {
 		t.r.printf("slate: pass test %q", t.et.Test.Name)

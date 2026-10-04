@@ -414,7 +414,7 @@ func (p *parser) startsStimulus() bool {
 		return false
 	}
 	switch p.tok.text {
-	case "touch", "drag", "say", "pay", "sit", "stand", "choose", "answer", "send", "wear", "take", "wait":
+	case "touch", "drag", "say", "pay", "sit", "stand", "choose", "answer", "send", "wear", "rez", "take", "wait":
 		return true
 	default:
 		return false
@@ -499,6 +499,8 @@ func (p *parser) stimulus() (*Stimulus, error) {
 		s.Send, err = p.send()
 	case "wear":
 		s.Wear, err = p.wear()
+	case "rez":
+		s.Rez, err = p.rezItem()
 	case "take":
 		s.TakeOff, err = p.takeOff()
 	default:
@@ -1249,6 +1251,8 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.vec3Exp(e, true)
 	case p.kw("click"):
 		return p.clickExp(e)
+	case p.kw("text"):
+		return p.floatTextExp(e)
 	case p.kw("fullbright"):
 		return p.fullbrightExp(e)
 	case p.kw("glow"):
@@ -1791,6 +1795,39 @@ func (p *parser) clickExp(e *Expect) error {
 	return nil
 }
 
+// floatTextExp reads text OBJ link? and the state: a string, matching, a
+// capture, or after is, any.
+func (p *parser) floatTextExp(e *Expect) error {
+	if err := p.want("text"); err != nil {
+		return err
+	}
+	name, err := p.ident()
+	if err != nil {
+		return err
+	}
+	link, err := p.optLink()
+	if err != nil {
+		return err
+	}
+	st, err := p.state()
+	if err != nil {
+		return err
+	}
+	x := &TextExp{Name: name, Link: link, State: st}
+	if st.Kind != StateChanges && !st.Original {
+		if p.kw("any") {
+			x.Any = true
+			if err := p.next(); err != nil {
+				return err
+			}
+		} else if x.Value, err = p.text(); err != nil {
+			return err
+		}
+	}
+	e.FloatText = x
+	return nil
+}
+
 // faceProp reads the head every face property shares, OBJ link? faceall
 // and the state, after the property's own word has been read.
 func (p *parser) faceProp(word string) (name Ident, link *Int, face Int, all bool, st State, err error) {
@@ -2047,6 +2084,41 @@ func (p *parser) wear() (*Wear, error) {
 		return nil, err
 	}
 	return &Wear{Item: item, Point: point, PointSpan: sp, As: as}, nil
+}
+
+// rezItem reads rez ident (at | by) number number number as ident. Only a
+// step's first word is this stimulus; after expect, rez is the expectation.
+func (p *parser) rezItem() (*RezItem, error) {
+	if err := p.want("rez"); err != nil {
+		return nil, err
+	}
+	item, err := p.ident()
+	if err != nil {
+		return nil, err
+	}
+	r := &RezItem{Item: item}
+	switch {
+	case p.kw("at"):
+	case p.kw("by"):
+		r.By = true
+	default:
+		return nil, p.unexpected("expected at or by")
+	}
+	if err := p.next(); err != nil {
+		return nil, err
+	}
+	for _, n := range []*Number{&r.X, &r.Y, &r.Z} {
+		if *n, err = p.number(); err != nil {
+			return nil, err
+		}
+	}
+	if err := p.want("as"); err != nil {
+		return nil, err
+	}
+	if r.As, err = p.ident(); err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 // takeOff reads take off binding.

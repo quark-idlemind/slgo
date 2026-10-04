@@ -372,6 +372,7 @@ type Stimulus struct {
 	Answer  *Answer
 	Send    *Send
 	Wear    *Wear
+	Rez     *RezItem
 	TakeOff *TakeOff
 }
 
@@ -382,6 +383,17 @@ type Wear struct {
 	Point     string // an attachment point name, which Check resolves
 	PointSpan Span
 	As        Ident
+}
+
+// RezItem is rez ITEM (at X Y Z | by DX DY DZ) as NAME, the stimulus.
+// By is an offset from the tester's own position, else the numbers are a
+// region position. As is a new object binding, the rezzed root. It is not
+// the rez expectation (RezExp), which a step reaches only after expect.
+type RezItem struct {
+	Item    Ident
+	By      bool
+	X, Y, Z Number
+	As      Ident
 }
 
 // TakeOff is take off NAME: the binding stops being usable.
@@ -608,6 +620,7 @@ type Expect struct {
 	Repeats    *VecExp
 	Rot        *RotExp
 	Click      *ClickExp
+	FloatText  *TextExp
 	Fullbright *FullbrightExp
 	Glow       *GlowExp
 	Colour     *ColourExp
@@ -759,6 +772,18 @@ type ClickExp struct {
 	Action string
 	Any    bool
 	Use    *Capture
+}
+
+// TextExp is expect text OBJ link? changes / is / becomes: the floating text
+// of a prim. Value is the text of an is or becomes with a value, a literal,
+// a pattern or a capture (its Use); it is zero for changes and original.
+// Any is as for TextureExp.
+type TextExp struct {
+	Name  Ident
+	Link  *Int
+	State State
+	Value Text
+	Any   bool
 }
 
 // FullbrightExp is expect fullbright OBJ link? faceall changes / is on|off.

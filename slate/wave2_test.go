@@ -215,7 +215,7 @@ after each {
 		if strings.HasPrefix(use, "expect") {
 			src = w2Hdr + "touch a anywhere\n" + use + "\n"
 		}
-		refuses(t, src, "last:hat", "hat is an item; only wear uses an item")
+		refuses(t, src, "last:hat", "hat is an item; only wear and rez use an item")
 	}
 	refuses(t, w2Hdr+"probe hat\ntouch a anywhere\n", "hat\ntouch", "hat is not an object")
 	// wear takes an item, and a known point.
