@@ -16,7 +16,7 @@ took the count from 195 to 217, and dropping it to 32 left it at 193 --
 the store kept everything the far view had brought in. Those numbers
 are what it did then, and are written down because they turn up
 elsewhere and would otherwise read as current. `Trim` now drops what is
-out of range, and the agent calls it every `TrimInterval`, so a store
+out of range, and the agent calls it every `trimInterval`, so a store
 does shrink when the camera pulls in -- a little behind the camera
 rather than with it.
 
@@ -31,7 +31,7 @@ there and thrown away, and the region describes each object once.
 Measured on Agni: an avatar sitting on a chair whose description
 arrived in that window stayed "sitting on something not described
 here" for as long as the session lasted. That is why an object out of
-range is put on notice for `OutOfRangeGrace` rather than dropped.
+range is put on notice for a grace period rather than dropped.
 
 ## People are kept whatever the distance
 
@@ -80,7 +80,7 @@ values are named beside `Seen.Click` in sl (`ClickTouch` and the rest).
 `lookFrom` tells the store where an agent is looking whenever the
 camera moves, and not only on the trim tick. Before it did, an agent
 joining a store the others were already trimming was invisible to them
-until its own first tick, up to `TrimInterval` later. One of them
+until its own first tick, up to `trimInterval` later. One of them
 trimming in that window, from a camera somewhere else, threw away
 everything around the newcomer, its own attachments included, and the
 region describes each object once. Measured on Agni: an avatar logged
@@ -452,7 +452,7 @@ later ones close up. A sitter is link 2 only on a single prim, which is
 then link 1. A prim linked while somebody sits goes in among the prims,
 as link 2, and the sitters stay after all of them. `Objects.sitters`
 keeps them apart from `Objects.kids`, so a sitter takes no part in the
-prims' order, the front insertion or `JoinWindow`.
+prims' order, the front insertion or `joinWindow`.
 
 Measured on 2026-10-03 on an invented three-prim seat (root, prim2,
 prim3), linked by the test avatar, with a script in the root listing
@@ -498,7 +498,7 @@ region's store each run their own handler, so each may apply a
 different child's block first and see the other's copy as a repeat.
 Either way each block on its own looks like a link of one, and front
 insertion would number the set wrongly as known. So a second live join
-to the same parent within `JoinWindow`, 250 ms, of the one before makes
+to the same parent within `joinWindow`, 250 ms, of the one before makes
 the set unknown and remembers its root as misordered, as a link of
 several in one update does; the linking session's record and the
 whole-set rule still give the order when they apply. A real link of one
@@ -583,7 +583,7 @@ program sent it, a client of the daemon, or a viewer bridged onto the
 circuit. For one that names two or more children the store keeps the
 root's local id, the children in the order named and the time
 (`Objects.links`). When the region's update for that set arrives within
-20 s (`LinkWindow`) and the root's children are exactly the ones named,
+20 s (`linkWindow`) and the root's children are exactly the ones named,
 the store gives the set the named order and marks it known; the record
 is then spent. The root stays in `Objects.misordered`, so a flush and a
 fresh description, in the region's own order, read as unknown.

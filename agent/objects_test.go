@@ -1665,7 +1665,7 @@ func TestTheChangeIsNoticedOnTheWayOut(t *testing.T) {
 }
 
 // onNotice says whether an object is held but out of everybody's range,
-// waiting out OutOfRangeGrace.
+// waiting out outOfRangeGrace.
 func onNotice(o *Objects, id msg.UUID) bool {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -1673,14 +1673,14 @@ func onNotice(o *Objects, id msg.UUID) bool {
 	return v != nil && !v.leaving.IsZero()
 }
 
-// graceRunsOut moves every notice back by OutOfRangeGrace, as though
+// graceRunsOut moves every notice back by outOfRangeGrace, as though
 // that long had passed with nothing coming back into range.
 func graceRunsOut(o *Objects) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	for _, v := range o.byID {
 		if !v.leaving.IsZero() {
-			v.leaving = v.leaving.Add(-OutOfRangeGrace)
+			v.leaving = v.leaving.Add(-outOfRangeGrace)
 		}
 	}
 }

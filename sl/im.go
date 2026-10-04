@@ -194,6 +194,8 @@ type imSub struct {
 
 // DefaultIMDepth is the buffer a subscription gets when none is asked
 // for.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultIMDepth = 64
 
 // IMs returns a channel of instant messages, closed when StopIMs is

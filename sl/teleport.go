@@ -221,6 +221,8 @@ func (w *Session) TeleportLocal(ctx context.Context, to msg.Vector3, timeout tim
 // everything after it is the daemon's: a circuit at the new simulator, a
 // capability fetch over HTTP, and a fresh event queue, any of which can
 // be waiting on something slow.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultTeleportTimeout = 90 * time.Second
 
 // Teleport takes the avatar to another region and waits until it is

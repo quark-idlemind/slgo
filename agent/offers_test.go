@@ -54,7 +54,7 @@ func TestTakingEmpties(t *testing.T) {
 func TestStaleOffersAreNotShown(t *testing.T) {
 	var o Offers
 	now := time.Now()
-	o.note(im("stale"), now.Add(-OfferHold-time.Minute))
+	o.note(im("stale"), now.Add(-offerHold-time.Minute))
 	o.note(im("fresh"), now.Add(-time.Minute))
 
 	got := o.take(now)
@@ -70,12 +70,12 @@ func TestStaleOffersAreNotShown(t *testing.T) {
 // here is obliged to remember it.
 func TestOffersAreBounded(t *testing.T) {
 	var o Offers
-	for i := 0; i < OfferLimit*2; i++ {
+	for i := 0; i < offerLimit*2; i++ {
 		o.note(im("chatter"), time.Now())
 	}
 	held, dropped := o.Stats()
-	if held > OfferLimit {
-		t.Errorf("held %d offers, over the %d limit", held, OfferLimit)
+	if held > offerLimit {
+		t.Errorf("held %d offers, over the %d limit", held, offerLimit)
 	}
 	if dropped == 0 {
 		t.Error("nothing was dropped, so the limit did nothing")

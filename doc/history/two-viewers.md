@@ -49,7 +49,7 @@ with `--multiple`, which maps to `AllowMultipleViewers`
 (`cmd_line.xml:229`, checked at `llappviewer.cpp:3572`).
 
 **Two viewers on one avatar: no, and it fails badly.** One circuit per
-profile means one `peer` address. `notePeer` (`viewer/circuit.go:191`)
+profile means one `peer` address. `notePeer` (`internal/viewer/circuit.go:191`)
 moves the peer to whoever a packet last came from, and since `abaa2af`
 each move also forgets the departed viewer's sequence numbers and pending
 retransmissions. Two live viewers would take the circuit from each other
@@ -93,7 +93,7 @@ Three maps and a URL.
 
 3. **`queues`** (`:49`, `queueFor` at `:122`). One `EventQueue` per profile, and
    this is the one that cannot be shared. The file that implements it
-   makes the argument itself (`viewer/caps.go:14-22`): a queue has one
+   makes the argument itself (`internal/viewer/caps.go:14-22`): a queue has one
    reader, two pollers split the events between them at random, and
    neither can tell it is missing any. That is the same argument one
    level down. slgod already solved it once -- it is the only thing
@@ -113,7 +113,7 @@ This is the part that is not plumbing, and it is where the two use cases
 part company.
 
 The simulator streams what it streams because of the camera. `takeCamera`
-(`viewer/circuit.go:571`) says it plainly -- "the camera, which is not
+(`internal/viewer/circuit.go:571`) says it plainly -- "the camera, which is not
 decoration: the simulator works out what to stream from it" -- and while
 a viewer is attached its camera replaces the session's own. There is one
 agent, one `AgentUpdate`, one camera.

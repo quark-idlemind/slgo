@@ -28,8 +28,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/quark-idlemind/slgo/internal/scripttest"
 	"github.com/quark-idlemind/slgo/proto/scriptv1"
-	"github.com/quark-idlemind/slgo/scripttest"
 )
 
 // speaks is a script that says two things and then the sentinel.

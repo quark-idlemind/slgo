@@ -20,7 +20,7 @@ import (
 func TestViewerOptionsMatchTheCapture(t *testing.T) {
 	f, err := os.Open("testdata/firestorm-login.xml")
 	if err != nil {
-		t.Skipf("no capture: %v", err)
+		t.Fatalf("testdata/firestorm-login.xml is tracked and must be readable: %v", err)
 	}
 	defer f.Close()
 

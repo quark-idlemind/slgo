@@ -1,4 +1,4 @@
-package client
+package xfer
 
 import (
 	"context"
@@ -8,20 +8,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-func infoMsg(id msg.UUID, size, status int32) *Message {
+var (
+	testAgentID   = msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de")
+	testSessionID = msg.MustParseUUID("72427e57-7e57-c0de-39d2-e78c47465eb6")
+)
+
+func infoMsg(id msg.UUID, size, status int32) *client.Message {
 	m := &msg.TransferInfo{}
 	m.TransferInfo.TransferID = id
 	m.TransferInfo.ChannelType = channelAsset
 	m.TransferInfo.Size = size
 	m.TransferInfo.Status = status
 	b, _ := m.Encode()
-	return &Message{ID: msg.IDOf(m), Name: "TransferInfo", Body: b}
+	return &client.Message{ID: msg.IDOf(m), Name: "TransferInfo", Body: b}
 }
 
-func packetMsg(id msg.UUID, n int32, data []byte, done bool) *Message {
+func packetMsg(id msg.UUID, n int32, data []byte, done bool) *client.Message {
 	m := &msg.TransferPacket{}
 	m.TransferData.TransferID = id
 	m.TransferData.ChannelType = channelAsset
@@ -31,7 +37,7 @@ func packetMsg(id msg.UUID, n int32, data []byte, done bool) *Message {
 		m.TransferData.Status = statusDone
 	}
 	b, _ := m.Encode()
-	return &Message{ID: msg.IDOf(m), Name: "TransferPacket", Body: b}
+	return &client.Message{ID: msg.IDOf(m), Name: "TransferPacket", Body: b}
 }
 
 func waiting(x *Transfers, id msg.UUID) *transfer {
@@ -99,7 +105,7 @@ func TestTransferDenied(t *testing.T) {
 	x.Handle(infoMsg(id, 0, -3))
 	select {
 	case err := <-f.err:
-		if !errors.Is(err, ErrTransferDenied) {
+		if !errors.Is(err, client.ErrTransferDenied) {
 			t.Errorf("err = %v", err)
 		}
 		if !strings.Contains(err.Error(), "permissions") {
@@ -148,7 +154,7 @@ func TestTransferIDsAreDistinct(t *testing.T) {
 
 func TestTransferNeedsAConnection(t *testing.T) {
 	x := NewTransfers(nil)
-	_, err := x.Fetch(context.Background(), msg.UUID{}, msg.UUID{}, AssetRef{}, 50*time.Millisecond)
+	_, err := x.Fetch(context.Background(), msg.UUID{}, msg.UUID{}, client.AssetRef{}, 50*time.Millisecond)
 	if err == nil {
 		t.Error("expected an error with no connection")
 	}
@@ -162,13 +168,13 @@ func TestTransferHandleLeavesAloneWhatIsNotItsOwn(t *testing.T) {
 	t.Parallel()
 	x := NewTransfers(nil)
 
-	if x.Handle(&Message{Name: "ChatFromSimulator"}) {
+	if x.Handle(&client.Message{Name: "ChatFromSimulator"}) {
 		t.Error("a message that is not a transfer was claimed")
 	}
 	// Only TransferPacket can be made undecodable by cutting it short.
 	// TransferInfo is zerocoded, and a zerocoded message reads past its
 	// end as zeros, as the viewer reads it (see msg.Unmarshal).
-	if x.Handle(&Message{
+	if x.Handle(&client.Message{
 		ID: msg.IDOf(&msg.TransferPacket{}), Name: "TransferPacket", Body: []byte{1},
 	}) {
 		t.Error("a TransferPacket whose bytes will not decode was claimed")
@@ -202,11 +208,11 @@ func TestFetchingAnAssetAsksWithEveryIdentityTheSimulatorChecks(t *testing.T) {
 	s := &recordingSender{}
 	x := NewTransfers(s)
 
-	ref := AssetRef{
+	ref := client.AssetRef{
 		Owner: msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de"),
 		Item:  msg.MustParseUUID("97c27e57-7e57-c0de-c041-be2c2f8cb586"),
 		Asset: msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85"),
-		Type:  AssetLSLText,
+		Type:  10, // LSL text (AT_LSL_TEXT, llassettype.h); sl's constants are an import cycle away
 	}
 	s.on = func(m msg.Message) {
 		req, ok := m.(*msg.TransferRequest)
@@ -258,7 +264,7 @@ func TestAnAssetThatNeverArrivesIsGivenUpOnAndCancelled(t *testing.T) {
 	s := &recordingSender{}
 	x := NewTransfers(s)
 
-	ref := AssetRef{Asset: msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85")}
+	ref := client.AssetRef{Asset: msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85")}
 	_, err := x.Fetch(context.Background(), testAgentID, testSessionID, ref, 20*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), ref.Asset.String()) {
 		t.Errorf("Fetch = %v, want the asset named", err)
@@ -293,7 +299,7 @@ func TestAFetchThatCouldNotBeAskedForIsForgotten(t *testing.T) {
 	x := NewTransfers(s)
 
 	if _, err := x.Fetch(context.Background(), testAgentID, testSessionID,
-		AssetRef{}, 10*time.Second); err == nil {
+		client.AssetRef{}, 10*time.Second); err == nil {
 		t.Error("Fetch waited for an asset it could not ask for")
 	}
 	x.mu.Lock()
@@ -339,8 +345,8 @@ func TestARefusalReachesWhoeverIsWaitingForTheAsset(t *testing.T) {
 	}
 
 	_, err := x.Fetch(context.Background(), testAgentID, testSessionID,
-		AssetRef{Type: AssetNotecard}, 10*time.Second)
-	if !errors.Is(err, ErrTransferDenied) {
+		client.AssetRef{Type: 7}, 10*time.Second) // 7: a notecard (AT_NOTECARD, llassettype.h)
+	if !errors.Is(err, client.ErrTransferDenied) {
 		t.Errorf("Fetch = %v, want the refusal", err)
 	}
 }

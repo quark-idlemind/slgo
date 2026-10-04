@@ -53,7 +53,7 @@ package main
 //
 // The house rule of two spaces after a full stop is held across the
 // join between two lines of one paragraph as well as inside a line;
-// CommonMark makes a soft line break one space, so md/parse.go puts the
+// CommonMark makes a soft line break one space, so internal/md/parse.go puts the
 // second one back rather than have a sentence boundary come out
 // differently depending on where the author pressed return.
 //
@@ -95,7 +95,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/quark-idlemind/slgo/md"
+	"github.com/quark-idlemind/slgo/internal/md"
 )
 
 // manPages is cmd/slsh/man, as it was on the day this was built.

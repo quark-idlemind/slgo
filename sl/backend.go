@@ -117,6 +117,11 @@ type Friend struct {
 // above this interface may care which, so anything that only one of
 // them can do -- listing the sessions a daemon holds, logging the
 // avatar out -- is a method on that one and not part of this.
+//
+// Methods may be added to Backend in minor releases.  An implementation
+// outside slgo -- a fake in a program's tests, say -- embeds
+// UnimplementedBackend and overrides what it supports; an embedded
+// method answers ErrNotSupported, or as UnimplementedBackend describes.
 type Backend interface {
 	// Info is who this session is: the avatar, the session, the
 	// capability URLs.

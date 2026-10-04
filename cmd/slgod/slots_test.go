@@ -8,8 +8,8 @@ package main
 import (
 	"testing"
 
+	"github.com/quark-idlemind/slgo/internal/server"
 	"github.com/quark-idlemind/slgo/internal/session"
-	"github.com/quark-idlemind/slgo/server"
 )
 
 // TestTheDaemonAndItsClientsCountThePoolTheSameWay: a daemon that

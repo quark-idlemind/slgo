@@ -14,6 +14,11 @@
 // Text is read by the tesseract binary on PATH. Figures are read from
 // the pixels, so a request that only asks for drawings or boxes does
 // not need tesseract.
+//
+// # Experimental
+//
+// This package is experimental: not covered by slgo's compatibility
+// promise, and it may change in any release.
 package imgfind
 
 import (

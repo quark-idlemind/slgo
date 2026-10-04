@@ -125,7 +125,7 @@ kicking someone from land"), via global coords and within region.
 `agent/teleportflags.go` keeps the flags of the latest `TeleportStart`
 and when it came, and the viewer circuit goes on absorbing
 `TeleportStart` and `TeleportProgress` for an attached viewer
-(`viewer/circuit.go`): an agent handler is one more reader of what the
+(`internal/viewer/circuit.go`): an agent handler is one more reader of what the
 session was sent and changes nothing on the way to the viewer.
 
 The next arrival takes the flags and they are spent.  In the order the
@@ -135,7 +135,7 @@ cases come:
   `arrive` takes the flags and gives them to `OnRegionChange`, and so
   to the notice the daemon sends every client (`AgentEvent.teleport_flags`),
   `client.RegionChange.TeleportFlags` and `sl.RegionChange`.
-- **A start older than a minute** (`agent.TeleportCauseKept`) is not
+- **A start older than a minute** is not
   attached, only dropped: it was for a teleport that never arrived.
 - **A second start for one teleport** replaces the first, so the two
   the viewer's comment says a landmark teleport is sent are one cause,

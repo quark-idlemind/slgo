@@ -73,7 +73,7 @@ func cmdViewer(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 // in, and it says how to get one.
 //
 // The same instruction slgod gives when a credential is asked for of a
-// daemon without an endpoint (server/viewer.go, noViewerEndpoint).  Two
+// daemon without an endpoint (internal/server/viewer.go, noViewerEndpoint).  Two
 // wordings for two moments -- this one is an answer, that one is a
 // refusal -- but the flag and the address must not drift apart.
 const noViewerEndpoint = "this daemon serves no viewer logins.\n" +

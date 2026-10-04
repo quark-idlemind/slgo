@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/quark-idlemind/slgo/md"
+	"github.com/quark-idlemind/slgo/internal/md"
 )
 
 // plain is a rendered page with the terminal's styling taken back out,

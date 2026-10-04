@@ -7,7 +7,7 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-// AppearanceLimit is how many avatars are remembered.
+// appearanceLimit is how many avatars are remembered.
 //
 // A region holds a hundred or so at the very most, and this store keeps
 // one entry each however long they stay -- so the limit is not about a
@@ -16,7 +16,7 @@ import (
 // otherwise be remembered for ever.  Nothing here is told when somebody
 // goes.  KillObject names a local id and this is keyed by the avatar's
 // own, so the two cannot be matched without keeping a third thing.
-const AppearanceLimit = 256
+const appearanceLimit = 256
 
 // Appearances is what each avatar nearby looks like, kept as the
 // simulator described it.
@@ -74,7 +74,7 @@ func (s *Appearances) noteAt(m *msg.AvatarAppearance, at time.Time) {
 	s.byAvatar[id] = kept
 	s.heard[id] = at
 
-	for len(s.order) > AppearanceLimit {
+	for len(s.order) > appearanceLimit {
 		oldest := s.order[0]
 		s.order = s.order[1:]
 		delete(s.byAvatar, oldest)

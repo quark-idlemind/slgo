@@ -61,7 +61,7 @@ func TestTheCacheIsSweptOnATimer(t *testing.T) {
 	// Already on notice this long, so that the sweep is the only thing
 	// between it and the door.
 	a.Objects().mu.Lock()
-	a.Objects().byID[aChild].leaving = time.Now().Add(-OutOfRangeGrace)
+	a.Objects().byID[aChild].leaving = time.Now().Add(-outOfRangeGrace)
 	a.Objects().mu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())

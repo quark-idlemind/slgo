@@ -33,14 +33,14 @@ import (
 	"unicode"
 
 	"github.com/quark-idlemind/slgo/agent"
-	"github.com/quark-idlemind/slgo/auth"
+	"github.com/quark-idlemind/slgo/internal/auth"
 	"github.com/quark-idlemind/slgo/internal/logfile"
 	"github.com/quark-idlemind/slgo/internal/pay"
 	"github.com/quark-idlemind/slgo/internal/redact"
+	"github.com/quark-idlemind/slgo/internal/server"
 	"github.com/quark-idlemind/slgo/internal/version"
+	"github.com/quark-idlemind/slgo/internal/viewer"
 	"github.com/quark-idlemind/slgo/msg"
-	"github.com/quark-idlemind/slgo/server"
-	"github.com/quark-idlemind/slgo/viewer"
 )
 
 func main() {
@@ -205,7 +205,7 @@ func main() {
 	// Where each avatar was last sitting, so that one that was in a
 	// chair when its session ended is put back in it.  Set before any
 	// session comes up, because a session takes its copy when it is
-	// made.  See seats.go and server/seat.go.
+	// made.  See seats.go and internal/server/seat.go.
 	//
 	// A file that cannot be READ stops the daemon.  Carrying on would
 	// forget every seat in it and then write the forgetting over the
@@ -219,7 +219,7 @@ func main() {
 	}
 
 	// What each profile has paid, kept beside the seats so that its
-	// daily limit outlives a restart.  See server/pay.go.
+	// daily limit outlives a restart.  See internal/server/pay.go.
 	if dir, err := machineConfigDir(); err != nil {
 		log.Printf("keeping what is paid in memory only: %v", err)
 	} else {
@@ -455,7 +455,7 @@ func main() {
 	// parcel lets the avatar build at all, and which a login starts
 	// without.  It belongs to the session, and every client attached
 	// shares it; a reconnect is a fresh login, so the answer is handed
-	// to the server to remember and put back.  See server/group.go.
+	// to the server to remember and put back.  See internal/server/group.go.
 	// Why: doc/daemon.md#the-active-group
 	settle := func(h *server.Hosted) {
 		name := h.Name

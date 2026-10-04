@@ -16,9 +16,9 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-// NameLookup bounds asking the grid for a name.  A refusal waits for
+// nameLookup bounds asking the grid for a name.  A refusal waits for
 // it, so it is short: a refusal without a name is still a refusal.
-const NameLookup = 3 * time.Second
+const nameLookup = 3 * time.Second
 
 // inviteBucketLen is a group invitation's bucket: an S32 fee in network
 // byte order and a role id (llimprocessing.cpp:1502-1518).
@@ -147,7 +147,7 @@ func (a *Agent) InvitationFee(group, txn msg.UUID) (int, bool) {
 }
 
 // NameOf is an avatar's name, from what the session has heard or, for
-// NameLookup, from the grid; "" when neither says.
+// nameLookup, from the grid; "" when neither says.
 func (a *Agent) NameOf(ctx context.Context, id msg.UUID) string {
 	pr := &a.prices
 	pr.mu.Lock()
@@ -171,7 +171,7 @@ func (a *Agent) NameOf(ctx context.Context, id msg.UUID) string {
 			return ""
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, NameLookup)
+	ctx, cancel := context.WithTimeout(ctx, nameLookup)
 	defer cancel()
 	select {
 	case <-ch:

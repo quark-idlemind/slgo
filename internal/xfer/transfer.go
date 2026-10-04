@@ -1,4 +1,4 @@
-package client
+package xfer
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -37,15 +38,6 @@ const (
 	statusDone = 1
 )
 
-// Asset types worth naming here; the full list is in llassettype.h.
-const (
-	AssetNotecard = 7
-	AssetLSLText  = 10
-)
-
-// ErrTransferDenied is reported when the simulator refuses.
-var ErrTransferDenied = errors.New("client: transfer refused")
-
 // Transfers reassembles assets arriving over the transfer protocol.
 type Transfers struct {
 	c Sender
@@ -71,7 +63,7 @@ func NewTransfers(c Sender) *Transfers {
 
 // Handle feeds one relayed message in and reports whether it belonged
 // to a transfer.
-func (x *Transfers) Handle(m *Message) bool {
+func (x *Transfers) Handle(m *client.Message) bool {
 	switch m.Name {
 	case "TransferInfo":
 		v, err := m.Decode()
@@ -111,7 +103,7 @@ func (x *Transfers) info(m *msg.TransferInfo) {
 		if s == -3 {
 			why = "insufficient permissions"
 		}
-		x.fail(id, fmt.Errorf("%w: %s", ErrTransferDenied, why))
+		x.fail(id, fmt.Errorf("%w: %s", client.ErrTransferDenied, why))
 		return
 	}
 	// A size of zero with an ok status means there is nothing to
@@ -175,21 +167,9 @@ func (x *Transfers) finish(id msg.UUID, b []byte) {
 	}
 }
 
-// AssetRef says which asset to read and how to prove we may.
-//
-// Owner, Task and Item are what the simulator checks the permissions
-// against.  Task is zero for something in agent inventory.
-type AssetRef struct {
-	Owner msg.UUID
-	Task  msg.UUID
-	Item  msg.UUID
-	Asset msg.UUID
-	Type  int32
-}
-
 // Fetch reads an asset's bytes.
 func (x *Transfers) Fetch(ctx context.Context, agentID, sessionID msg.UUID,
-	ref AssetRef, timeout time.Duration) ([]byte, error) {
+	ref client.AssetRef, timeout time.Duration) ([]byte, error) {
 
 	id := newTransferID()
 	t := &transfer{

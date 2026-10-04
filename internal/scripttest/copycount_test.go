@@ -33,8 +33,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/quark-idlemind/slgo/internal/scripttest"
 	"github.com/quark-idlemind/slgo/proto/scriptv1"
-	"github.com/quark-idlemind/slgo/scripttest"
 )
 
 // The constants the search works in.  blockSize is slbench's; minpad is

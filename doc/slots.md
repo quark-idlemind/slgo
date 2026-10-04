@@ -115,7 +115,7 @@ every kind of send at once against a fake daemon.
 
 None of this section was watched on the grid. It is how the code was
 built on 2026-09-26, and the tests in `client/slots_test.go`,
-`client/lock_test.go`, `client/send_test.go`, `server/slots_test.go`
+`client/lock_test.go`, `client/send_test.go`, `internal/server/slots_test.go`
 and, for `--wait`, `cmd/slrun/daemon_test.go` check it against a fake
 daemon and a fake stream.
 
@@ -167,7 +167,7 @@ reading the code. The first fix had a request naming a logged-out avatar
 wait for it, on the belief that such an avatar was often reconnecting;
 a reconnecting session is never stopped, and a stopped one does not come
 back on its own, so it is refused instead. The behaviour above was built
-then and has not been watched on the grid; the tests in `server/slots_test.go` check it
+then and has not been watched on the grid; the tests in `internal/server/slots_test.go` check it
 against a fake login server and simulator, and
 `internal/slots/slots_test.go` checks the pool's half.
 

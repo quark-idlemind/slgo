@@ -343,6 +343,8 @@ func hasU8(xs []uint8, x uint8) bool {
 
 // DefaultChatDepth is the buffer a subscription gets when none is
 // asked for.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultChatDepth = 64
 
 // chatSub is one subscription.

@@ -66,6 +66,9 @@ type Options struct {
 
 // The defaults for Options.  None of them is a measurement; each is a
 // margin over what was seen.
+//
+// No value below is promised: each may change in any release, so refer to
+// it by name.
 const (
 	DefaultMoveTimeout        = 15 * time.Second
 	DefaultPermissionsTimeout = 15 * time.Second

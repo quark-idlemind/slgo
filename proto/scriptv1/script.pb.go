@@ -44,6 +44,19 @@
 // benchmark that wants a number from the last run has the script say
 // it, which works everywhere; anything else would be an interface to
 // linkset data, which two of the three backends do not have.
+//
+// # Compatibility
+//
+// What is promised is the wire.  A field number is never reused, and a
+// field never changes type: a new field takes a new number, and a field
+// that is retired keeps its number reserved.  A field one side does not
+// know is zero to it, so every new field is defined so that zero means
+// what a side older than the field did, and a caller and a backend of
+// different versions keep working together.
+//
+// The Go generated from this follows gRPC's conventions rather than
+// slgo's own: a backend embeds UnimplementedRunnerServer, and
+// RunnerClient gains a method with each new RPC.
 
 package scriptv1
 

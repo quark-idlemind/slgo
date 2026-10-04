@@ -1,13 +1,13 @@
-package client
+package xfer
 
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -31,9 +31,6 @@ const (
 	// filenames live under.
 	FilePathTaskInventory = 4
 )
-
-// ErrXferAborted is reported when the simulator gives up on a transfer.
-var ErrXferAborted = errors.New("client: transfer aborted")
 
 // Xfers reassembles files arriving over the xfer protocol.
 //
@@ -80,7 +77,7 @@ func NewXfers(c Sender) *Xfers {
 //
 // SendXferPacket must be acknowledged or the simulator stops sending,
 // so this replies as it goes.
-func (x *Xfers) Handle(ctx context.Context, m *Message) bool {
+func (x *Xfers) Handle(ctx context.Context, m *client.Message) bool {
 	switch m.Name {
 	case "SendXferPacket":
 		v, err := m.Decode()
@@ -95,7 +92,7 @@ func (x *Xfers) Handle(ctx context.Context, m *Message) bool {
 			return false
 		}
 		a := v.(*msg.AbortXfer)
-		x.fail(a.XferID.ID, fmt.Errorf("%w: result %d", ErrXferAborted, a.XferID.Result))
+		x.fail(a.XferID.ID, fmt.Errorf("%w: result %d", client.ErrXferAborted, a.XferID.Result))
 		return true
 	}
 	return false

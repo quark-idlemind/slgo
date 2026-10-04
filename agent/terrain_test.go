@@ -76,8 +76,8 @@ func TestTerrainIsBounded(t *testing.T) {
 		tr.note(m)
 	}
 	n, size, dropped := tr.Stats()
-	if size > TerrainLimit {
-		t.Errorf("held %d bytes, over the %d limit", size, TerrainLimit)
+	if size > terrainLimit {
+		t.Errorf("held %d bytes, over the %d limit", size, terrainLimit)
 	}
 	if dropped == 0 {
 		t.Error("nothing was dropped, so the limit did nothing")

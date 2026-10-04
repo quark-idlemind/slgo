@@ -15,7 +15,7 @@ package main
 import (
 	"context"
 
-	"github.com/quark-idlemind/slgo/scripttest"
+	"github.com/quark-idlemind/slgo/internal/scripttest"
 )
 
 // openModel starts the offline backend in this process and takes a lease

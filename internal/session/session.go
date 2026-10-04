@@ -132,7 +132,7 @@ const AutoObject = "auto"
 // whatever the entry says, so AutoName must never change either.
 // Growing the pool means appending.
 //
-// SlotsPerAgent in server/slots.go is this length, and the new slgod and
+// SlotsPerAgent in internal/server/slots.go is this length, and the new slgod and
 // the new clients are best deployed together, but need not be: the
 // client says how many places it wears (AutoPool) with every ask and the
 // daemon grants none past it, twelve for a client that says nothing.  A

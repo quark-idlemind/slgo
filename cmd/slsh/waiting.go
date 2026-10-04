@@ -435,7 +435,7 @@ func cmdWaiting(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 // blind spot from an empty list unless the listing says which it is.
 //
 // scripts is whether the listing is one that would hold a permission
-// request, which slgod does not keep; see server/offers.go.
+// request, which slgod does not keep; see internal/server/offers.go.
 func (sh *Shell) heardFrom(scripts bool) string {
 	rec, ok := sh.s.OfferRecord()
 	switch {

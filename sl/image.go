@@ -33,6 +33,8 @@ import (
 // It is the viewer's LL_IMAGE_REZ_LOSSLESS_CUTOFF squared: a small
 // texture is usually a button or a bit of interface where the artefacts
 // show and the bytes saved are few.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const LosslessArea = 128 * 128
 
 // TextureOptions says how to compress. The zero value is what
@@ -52,6 +54,8 @@ type TextureOptions struct {
 
 // DefaultRatio is the compression aimed for when nothing says
 // otherwise. See TextureOptions.Ratio for where the number comes from.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultRatio = 8
 
 // MaxDecodeTiles is the most tiles a codestream may be cut into and
@@ -63,6 +67,8 @@ const DefaultRatio = 8
 // for the size.  Its own ceiling is 1<<20.  The viewer's encoder writes
 // one tile for the whole image (llimagej2coj.cpp sets no tile size), and
 // 4096 is a tile of 64 pixels a side over the largest texture decoded.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const MaxDecodeTiles = 4096
 
 // DecodeTexture turns a codestream into a picture.

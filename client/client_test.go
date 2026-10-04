@@ -36,7 +36,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/agent"
-	"github.com/quark-idlemind/slgo/auth"
+	"github.com/quark-idlemind/slgo/internal/auth"
 	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )

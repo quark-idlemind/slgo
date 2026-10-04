@@ -9,7 +9,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -28,13 +27,14 @@ var (
 )
 
 type fakeGrid struct {
-	mu       sync.Mutex
-	msgs     chan *sl.Message
-	done     chan struct{}
-	doneOnce sync.Once
-	sent     []msg.Message
-	objects  []*sl.Seen
-	me       msg.UUID // the avatar's id; testMe when zero
+	sl.UnimplementedBackend // what a test does not use answers ErrNotSupported
+	mu                      sync.Mutex
+	msgs                    chan *sl.Message
+	done                    chan struct{}
+	doneOnce                sync.Once
+	sent                    []msg.Message
+	objects                 []*sl.Seen
+	me                      msg.UUID // the avatar's id; testMe when zero
 }
 
 func newGrid(t *testing.T) *fakeGrid {
@@ -92,15 +92,8 @@ func (f *fakeGrid) Send(_ context.Context, m msg.Message, _ bool) error {
 	f.mu.Unlock()
 	return nil
 }
-func (f *fakeGrid) Control(context.Context, uint32) error  { return nil }
-func (f *fakeGrid) Messages() <-chan *sl.Message           { return f.msgs }
-func (f *fakeGrid) Events() <-chan *sl.QueueEvent          { return nil }
-func (f *fakeGrid) RegionChanges() <-chan *sl.RegionChange { return nil }
-func (f *fakeGrid) Done() <-chan struct{}                  { return f.done }
-func (f *fakeGrid) Err() error                             { return nil }
-func (f *fakeGrid) SimAttachments(context.Context, msg.UUID) (*sl.SimAttachments, error) {
-	return nil, nil
-}
+func (f *fakeGrid) Messages() <-chan *sl.Message { return f.msgs }
+func (f *fakeGrid) Done() <-chan struct{}        { return f.done }
 func (f *fakeGrid) Presence(context.Context, float32) (*sl.Presence, error) {
 	return &sl.Presence{Position: msg.Vector3{X: 128, Y: 128, Z: 25}}, nil
 }
@@ -120,15 +113,6 @@ func (f *fakeGrid) Objects(_ context.Context, named, id string) ([]*sl.Seen, err
 func (f *fakeGrid) Region(context.Context) (*sl.Region, bool, error) {
 	return &sl.Region{ID: testRegion, Name: "Test Region", Handle: 1099511628032}, true, nil
 }
-func (f *fakeGrid) SimStats(context.Context) (*sl.SimStats, error) { return nil, nil }
-
-func (f *fakeGrid) LastRegionDetails(context.Context) (*sl.RegionDetails, uint64, error) {
-	return nil, 0, nil
-}
-func (f *fakeGrid) Land(context.Context) (*sl.Land, error) { return nil, nil }
-func (f *fakeGrid) Ground(context.Context, float32, float32, float32, float32) (float32, bool, error) {
-	return 0, false, nil
-}
 func (f *fakeGrid) Neighbours(context.Context, *bool) (*sl.Neighbours, error) {
 	return &sl.Neighbours{}, nil
 }
@@ -136,13 +120,6 @@ func (f *fakeGrid) Lock(context.Context, string) error { return nil }
 func (f *fakeGrid) Unlock(string) error                { return nil }
 func (f *fakeGrid) TryLock(context.Context, string) (bool, string, error) {
 	return true, "", nil
-}
-func (f *fakeGrid) Flush(context.Context) (int, error)               { return 0, nil }
-func (f *fakeGrid) Friends(context.Context) ([]sl.Friend, error)     { return nil, nil }
-func (f *fakeGrid) NoteFriend(context.Context, msg.UUID, bool) error { return nil }
-func (f *fakeGrid) HasCap(string) bool                               { return false }
-func (f *fakeGrid) DoCap(context.Context, agent.CapRequest) (*agent.CapResponse, error) {
-	return nil, context.Canceled
 }
 func (f *fakeGrid) Close() error {
 	f.doneOnce.Do(func() {

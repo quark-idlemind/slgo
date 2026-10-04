@@ -18,6 +18,8 @@ import (
 	"time"
 )
 
+// Neither value is promised: each may change in any release, so refer to it
+// by name.
 const (
 	// UnansweredFor is how long a dialog or a permission request is kept
 	// with nobody answering it.

@@ -75,17 +75,17 @@ func TestAppearanceIsCopied(t *testing.T) {
 // so a session somewhere busy would remember everybody who ever passed.
 func TestAppearancesAreBounded(t *testing.T) {
 	var s Appearances
-	for i := 1; i <= AppearanceLimit*2; i++ {
+	for i := 1; i <= appearanceLimit*2; i++ {
 		s.note(appearanceOf(avatarID(i), "x"))
 	}
 	held, dropped := s.Stats()
-	if held > AppearanceLimit {
-		t.Errorf("held %d appearances, over the %d limit", held, AppearanceLimit)
+	if held > appearanceLimit {
+		t.Errorf("held %d appearances, over the %d limit", held, appearanceLimit)
 	}
 	if dropped == 0 {
 		t.Error("nothing was dropped, so the limit did nothing")
 	}
-	if s.Get(avatarID(AppearanceLimit*2)) == nil {
+	if s.Get(avatarID(appearanceLimit*2)) == nil {
 		t.Error("the most recent avatar was dropped; eviction took the wrong end")
 	}
 }

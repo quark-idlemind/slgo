@@ -108,9 +108,9 @@ func (w *Session) Where(ctx context.Context) (*Presence, error) {
 //
 // Neither way is at once.  Raising it brings more in over the following
 // seconds, so a raise wants a Settle after it.  Lowering it lets the
-// session drop what is then out of range, people apart, at a trim every
-// agent.TrimInterval once agent.OutOfRangeGrace has passed -- so for
-// half a minute or so what was described is still found.
+// session drop what is then out of range, people apart, at the agent's
+// next trim once its grace for things out of range has passed -- so for a
+// while afterwards what was described is still found.
 // Why: doc/objects.md#before-trim
 func (w *Session) SetDrawDistance(ctx context.Context, metres float32) (*Presence, error) {
 	if metres <= 0 {

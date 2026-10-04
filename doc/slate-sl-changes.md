@@ -44,7 +44,7 @@ bool click_known = 17;
 
 Then regenerate `proto/slgov1` and copy the two values at each step:
 
-- `server/grpc.go`, `Server.Objects`, copies them from `agent.Object` into `pb.ObjectInfo`.
+- `internal/server/grpc.go`, `Server.Objects`, copies them from `agent.Object` into `pb.ObjectInfo`.
 - `sl/hosted.go`, `Hosted.Objects`, copies them from `pb.ObjectInfo` into `sl.Seen`.
 - `sl/direct.go`, `Direct.Objects`, copies them from `agent.Object` into `sl.Seen`.
 - `sl.Seen`, in `sl/query.go`, gains `Click` and `ClickKnown` with the same meaning.

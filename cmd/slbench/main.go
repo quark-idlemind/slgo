@@ -83,9 +83,9 @@ import (
 	"github.com/pborman/options"
 	"golang.org/x/term"
 
+	"github.com/quark-idlemind/slgo/internal/scripttest"
 	"github.com/quark-idlemind/slgo/internal/session"
 	"github.com/quark-idlemind/slgo/internal/version"
-	"github.com/quark-idlemind/slgo/scripttest"
 )
 
 var flags = struct {

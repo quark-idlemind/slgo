@@ -101,7 +101,7 @@ relayed (`1 of 1 clients want it`), and the probe printing none of
 them. Taking the `Session` only where one is needed made it three of
 three, and then everything.
 
-This is the same hazard `viewer/caps.go` describes for the event queue
+This is the same hazard `internal/viewer/caps.go` describes for the event queue
 one layer down, and it is worth stating in the client's own
 documentation: **a program that holds an `sl.Session` must not also
 read the `Conn` underneath it.** The measurement it corrupts looks

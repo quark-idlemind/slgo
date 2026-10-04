@@ -82,7 +82,7 @@ func TestAwkwardPositionsForWords(t *testing.T) {
 func TestLanguageReferenceExamples(t *testing.T) {
 	doc, err := os.ReadFile("../doc/slate-language.md")
 	if err != nil {
-		t.Skip(err)
+		t.Fatalf("../doc/slate-language.md is tracked and must be readable: %v", err)
 	}
 	blocks := regexp.MustCompile("(?s)```slate\\n(.*?)```").FindAllStringSubmatch(string(doc), -1)
 	n := 0

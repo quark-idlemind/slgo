@@ -693,6 +693,8 @@ func (w *Session) RestoreOutfit(ctx context.Context, timeout time.Duration) (*Ou
 
 // DefaultRestoreWait is how long a restore gives the region to describe
 // what it was asked to rez, and restorePoll how often it looks.
+//
+// The value is not promised and may change in any release: refer to it by name. (restorePoll is not exported.)
 const (
 	DefaultRestoreWait = 20 * time.Second
 	restorePoll        = time.Second

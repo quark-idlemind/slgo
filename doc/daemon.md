@@ -2,7 +2,7 @@
 
 slgod holds a session whether or not any client is attached, and some
 of what a session needs it does by itself, because nobody else is
-there to. The comments in `server/` say what the package does. This
+there to. The comments in `internal/server/` say what the package does. This
 page is why: what went wrong before each rule, and what was watched
 happening.
 
@@ -63,7 +63,7 @@ this needs, and it buys not having to know where home is.
 
 The loop decides on a refusal's key, and the grid's words are only for
 the log. Deciding on the words is what it used to do, by searching them
-for a copy of the key kept in `server/home.go`; the key is the grid's,
+for a copy of the key kept in `internal/server/home.go`; the key is the grid's,
 and it is written down once, in `agent`.
 
 ### When it stops without getting there

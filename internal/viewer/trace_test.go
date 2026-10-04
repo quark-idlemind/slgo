@@ -153,7 +153,7 @@ func TestEveryDispositionIsOneSomethingRecords(t *testing.T) {
 
 	// What is passed to a call: Dropped here, viewer.Dropped in slgod.
 	passed := map[string]bool{}
-	for _, pattern := range []string{"*.go", "../cmd/slgod/*.go"} {
+	for _, pattern := range []string{"*.go", "../../cmd/slgod/*.go"} {
 		files, err := filepath.Glob(pattern)
 		if err != nil {
 			t.Fatal(err)

@@ -39,6 +39,8 @@ const refreshTimeout = 30 * time.Second
 // arrive one to a teleport rather than one to a sentence: a subscriber
 // eight teleports behind is not a slow reader, it is a reader that has
 // stopped.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultRegionDepth = 8
 
 // regionSub is a subscription to region changes.

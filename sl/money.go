@@ -114,6 +114,8 @@ const moneyKept = 64
 
 // DefaultMoneyDepth is the buffer a subscription gets when none is asked
 // for.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultMoneyDepth = 16
 
 // moneySub is a subscription to money.

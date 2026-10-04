@@ -26,6 +26,8 @@ type FriendChange struct {
 }
 
 // DefaultFriendDepth holds a login burst from a long friend list.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultFriendDepth = 256
 
 // friendSub is a subscription to friends coming and going.

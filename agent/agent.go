@@ -383,7 +383,7 @@ type Options struct {
 	// region from the one it was in, with that region's name and
 	// handle, and the flags of the TeleportStart that began the
 	// teleport when it was one (zero when not, or when none came
-	// within TeleportCauseKept).  See regionChanged for when it fires
+	// within teleportCauseKept).  See regionChanged for when it fires
 	// and, as importantly, when it does not.
 	//
 	// It is what lets something above this package throw away what
@@ -464,9 +464,9 @@ type Options struct {
 	// check at s.c:618, on a fifteen second ping deadline.
 	Idle time.Duration
 
-	// neighbourTimeout stands in for NeighbourTimeout when set, so
-	// that a test need not wait a hundred seconds for a child to be
-	// found silent.
+	// neighbourTimeout, when set, stands in for childSilence, so that
+	// a test need not wait a hundred seconds for a child to be found
+	// silent.
 	neighbourTimeout time.Duration
 }
 
@@ -630,7 +630,7 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	}
 	if opts.Presence > 0 {
 		a.spawn(func() error { a.sendPresence(runCtx, opts.Presence); return nil })
-		a.spawn(func() error { a.trimObjects(runCtx, TrimInterval); return nil })
+		a.spawn(func() error { a.trimObjects(runCtx, trimInterval); return nil })
 	}
 
 	// Capabilities are HTTP and have nothing to do with the

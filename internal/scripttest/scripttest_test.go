@@ -36,8 +36,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/quark-idlemind/slgo/internal/scripttest"
 	"github.com/quark-idlemind/slgo/proto/scriptv1"
-	"github.com/quark-idlemind/slgo/scripttest"
 )
 
 // testSecond is what one second of the contract's timeouts is worth in

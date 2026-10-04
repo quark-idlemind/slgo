@@ -78,7 +78,7 @@ that was run -- is written by slsh rather than by slgod because slsh
 is where the three of them exist at once.  The daemon relays messages
 as undecoded bytes and says so in as many words -- "it does not decode
 message bodies, hold an inventory, understand chat, or know what a
-script is" (server/server.go) -- and it never sees a command line at
+script is" (internal/server/server.go) -- and it never sees a command line at
 all, since parsing one and running it is the whole of what slsh does.
 What the daemon could log is packets; what a person wants is what they
 saw.
@@ -1255,7 +1255,7 @@ It rides in `StatusResponse` rather than a call of its own because it
 is the same kind of thing as the counters there: state the daemon
 holds, about one agent, that a client cannot work out for itself.
 Minting a credential is not that -- it has an effect -- so that is a
-call of its own; see `server/viewer.go`.
+call of its own; see `internal/server/viewer.go`.
 
 ### When slgod serves no viewer logins
 

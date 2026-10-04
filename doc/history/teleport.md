@@ -119,9 +119,9 @@ requests at all -- not a rate limit, and not a wait that clears.
 ## The hard part: the circuit moves under everything
 
 An `Agent` has one `Conn`, one `Send`, one `Recv`, one `Disp`, and six
-places outside the package reach through it -- `server/grpc.go:389`,
-`server/group.go:92`, `sl/direct.go:161` and `:303`,
-`viewer/circuit.go:353`, `server/grpc.go:431` for the stats. A teleport
+places outside the package reach through it -- `internal/server/grpc.go:389`,
+`internal/server/group.go:92`, `sl/direct.go:161` and `:303`,
+`internal/viewer/circuit.go:353`, `internal/server/grpc.go:431` for the stats. A teleport
 must not invalidate any of them, so the objects stay and the socket
 underneath them moves.
 

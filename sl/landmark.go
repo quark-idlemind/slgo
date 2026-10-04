@@ -464,6 +464,8 @@ var ErrHomeRefused = errors.New("sl: the grid would not set home here")
 // way of things: every set measured on 2026-09-01 was answered at once,
 // success and refusal alike.  What it bounds is silence, and silence
 // here is not a slow answer -- see SetHome for what it means.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultHomeSetTimeout = 10 * time.Second
 
 // SetHome makes where the avatar is standing the place it starts, and

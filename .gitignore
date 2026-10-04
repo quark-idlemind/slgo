@@ -31,7 +31,7 @@
 /slgo
 /slgo-multiattach
 /slchat
-# The binary from "go build ./cmd/md", not the md/ package.  A trailing
+# The binary from "go build ./cmd/md", not the internal/md package.  A trailing
 # slash on the exception is what keeps the directory in the tree;
 # without it the command's name would hide the renderer.
 /md
