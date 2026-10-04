@@ -660,6 +660,15 @@ that avatar folds into the note like any other. It does not start a
 conversation that does not exist: one remark to somebody never spoken
 to before is one remark, not a memory.
 
+### Writing a fake `sl.Backend`
+
+`sl.Backend` gains methods in minor releases, so a fake that lists every
+method breaks each time one is added. Embed `sl.UnimplementedBackend`
+and write only what the test needs: every other method answers
+`sl.ErrNotSupported` and the relays are closed. `sl.New` refuses a
+backend with no agent or session id, so a fake overrides `Info`, and
+`Messages` and `Done` too if the session is meant to stay up.
+
 ### Offers that arrive while nobody is attached
 
 A teleport offered, a request to be offered one, an item handed over,
