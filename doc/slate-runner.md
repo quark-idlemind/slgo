@@ -1108,7 +1108,7 @@ What a failure leaves:
 - A payment that returned `*sl.PayUnconfirmed` uses that error's text, which already says whether the balance moved.
 - An object a `rez` step made is deleted to the Trash when its test ends, after `after each`, whatever the outcome, and a delete that fails fails the test (`slate/rezitem.go`). Objects the product rezzed are not deleted. An item a give expectation received is not deleted: the next run's snapshot already holds that id.
 - An item a `wear` put on stays worn until a `take off`. The runner does not take it off, because the test that wore it may have failed before it could, and an automatic take off can itself fail and hide the evidence. `after each` is where it is taken off. A run that is killed can leave it worn, and the next `wear` of that item fails before sending anything.
-- A permission request is the exception to leaving things pending. Whenever one is pending, during a step or during cleanup, the runner calls `Permission.Deny` and prints the permission-denied line. `Deny` sends `ScriptAnswerYes` with no bits so that `llRequestPermissions` returns; `PermissionDebit` is never granted. Leaving it pending would block the product script until its own timer and would consume the expectation deadline.
+- A permission request is the exception to leaving things pending. Whenever one is pending, during a step or during cleanup, the runner answers it and prints the line. With nothing allowed for the requesting object it calls `Permission.Deny`, which sends `ScriptAnswerYes` with no bits so that `llRequestPermissions` returns. Where an `allow permission` header names bits for the object (a prim of a header binding's linkset, or an object the run wore from a named item, matched by id), the runner calls `Permission.Grant` with the asked bits that are named, and the rest are refused in that one answer (`slate/permit.go`). The mask is built without `PermissionDebit` whatever was asked or named, and naming it is a static error: paying stays behind `allow pay`, `--pay` and `pay.Gate`. Leaving it pending would block the product script until its own timer and would consume the expectation deadline.
 
 Cleanup that does run, once per file, after the last test (or after the run stopped), on every exit after setup started, success or failure:
 
@@ -1185,7 +1185,7 @@ slate -version
 
 **Installing requires modify.** A no-mod object fails at `InstallScript`. The runner does not ask for modify permissions and does not deed itself anything.
 
-**Dialogs and permissions.** The runner answers only a dialog the current or an earlier step matched and holds, and only with a label that dialog offered, or with `AnswerText` when it is a text box. It does not answer a dialog it does not recognise. A permission request is denied and printed, with no bits granted, including `PermissionDebit`.
+**Dialogs and permissions.** The runner answers only a dialog the current or an earlier step matched and holds, and only with a label that dialog offered, or with `AnswerText` when it is a text box. It does not answer a dialog it does not recognise. A permission request is denied and printed, with no bits granted, unless an `allow permission` header names them for that object; `PermissionDebit` is never granted.
 
 **Textures.** `TextureImage` fetches an image the face is already showing. A button step's face pictures are written as PNGs under the system temp directory only when that step fails, and are not committed.
 

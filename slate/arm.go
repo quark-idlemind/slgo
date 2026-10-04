@@ -193,8 +193,11 @@ func (r *runner) pollDialogs() {
 	}
 }
 
-// denyPermissions answers every permission request the session holds with
-// a refusal and prints it, so the script's llRequestPermissions returns
+// denyPermissions answers every permission request the session holds and
+// prints it: with a refusal, except for the bits an allow permission header
+// names for the requesting object, which are granted and the rest refused
+// in the same answer (permit.go). Debit is never among them.
+// Each request is answered so the script's llRequestPermissions returns
 // and its wait does not eat the expectation deadline. It is called with
 // the dialog poll, and at the end of a test.
 // Why: doc/slate-runner.md#cleanup-and-what-a-failure-leaves-behind
@@ -204,15 +207,24 @@ func (r *runner) denyPermissions() error {
 		if who == "" {
 			who = sl.SenderObject.Label(q.ObjectName)
 		}
-		if err := q.Deny(r.ctx); err != nil {
+		// The mask never holds debit: pay.Gate and allow pay own spending.
+		granted := q.Wants & r.permitMask(q)
+		text := fmt.Sprintf("permission denied from %s: %s", who, q.Wants)
+		var err error
+		if granted != 0 {
+			err = q.Grant(r.ctx, granted)
+			text = grantedText(who, granted, q.Wants)
+		} else {
+			err = q.Deny(r.ctx)
+		}
+		if err != nil {
 			if r.ctx.Err() != nil {
 				return r.ctx.Err()
 			}
-			r.printf("slate: permission request from %s could not be denied: %v", who, err)
+			r.printf("slate: permission request from %s could not be answered: %v", who, err)
 			continue
 		}
-		ev := &event{kind: evPermission, at: time.Now(), consumed: true,
-			text: fmt.Sprintf("permission denied from %s: %s", who, q.Wants)}
+		ev := &event{kind: evPermission, at: time.Now(), consumed: true, text: text}
 		r.log.add(ev)
 		r.printEvent(ev)
 	}

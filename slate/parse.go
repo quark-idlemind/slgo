@@ -304,10 +304,49 @@ func (p *parser) allow() error {
 	if err := p.want("allow"); err != nil {
 		return err
 	}
+	if p.kw("permission") {
+		return p.allowPermission(start)
+	}
 	if err := p.want("pay"); err != nil {
 		return err
 	}
 	p.script.Allows = append(p.script.Allows, cover(start, p.prev.span))
+	return nil
+}
+
+// allowPermission is allow permission NAME [NAME...] from OBJ. The names
+// are words here and are checked by Check.
+func (p *parser) allowPermission(start Span) error {
+	if err := p.want("permission"); err != nil {
+		return err
+	}
+	a := PermissionAllow{}
+	// The list ends at from, or at a word that begins something else, so
+	// a header missing its from says so rather than swallowing the next
+	// line's first word.
+	for p.tok.kind == kWord && !p.kw("from") && !p.beginsItem() {
+		id, err := p.ident()
+		if err != nil {
+			return err
+		}
+		a.Names = append(a.Names, id)
+	}
+	if len(a.Names) == 0 {
+		return p.unexpected("expected a permission name")
+	}
+	if !p.kw("from") {
+		return p.unexpected("expected from and the object the permissions are for")
+	}
+	if err := p.want("from"); err != nil {
+		return err
+	}
+	from, err := p.ident()
+	if err != nil {
+		return err
+	}
+	a.From = from
+	a.Span = cover(start, p.prev.span)
+	p.script.Permits = append(p.script.Permits, a)
 	return nil
 }
 
@@ -2350,4 +2389,18 @@ func (p *parser) key() (Key, error) {
 		return k, p.next()
 	}
 	return Key{}, p.unexpected("expected a key")
+}
+
+// beginsItem says the current word starts a step, a header or a block,
+// and so cannot be part of a list before it.
+func (p *parser) beginsItem() bool {
+	if p.startsStimulus() {
+		return true
+	}
+	switch p.tok.text {
+	case "expect", "then", "do", "test", "sequence", "before", "after",
+		"object", "item", "allow", "probe", "listen", "timeout", "slate":
+		return true
+	}
+	return false
 }

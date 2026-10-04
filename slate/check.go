@@ -268,7 +268,7 @@ func (c *checker) headers() error {
 			return err
 		}
 	}
-	return nil
+	return c.checkPermits()
 }
 
 func (c *checker) timeoutAt(i int) error {
