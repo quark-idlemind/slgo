@@ -2,7 +2,7 @@ package main
 
 // The certificate the viewer endpoint serves.
 //
-// This one is nothing like the gRPC side's.  There (auth/tls.go) the
+// This one is nothing like the gRPC side's.  There (internal/auth/tls.go) the
 // certificate proves nothing on purpose: it is made fresh every start,
 // the client does not look at it, and what proves both ends is the
 // Login handshake bound to the TLS session.  Here the certificate is

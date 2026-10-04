@@ -62,7 +62,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
-	"github.com/quark-idlemind/slgo/auth"
+	"github.com/quark-idlemind/slgo/internal/auth"
 	"io"
 	"net/http"
 	"sync"

@@ -36,7 +36,7 @@ package agent
 // in a viewer logged in elsewhere later, or by a viewer attached to
 // this very session through slgod -- which is handed the simulator's
 // own capabilities and talks to them directly, so its request never
-// passes through here (see viewer/caps.go).  What Maturity says is
+// passes through here (see internal/viewer/caps.go).  What Maturity says is
 // therefore the last thing this session was told, which is true of
 // everything a simulator volunteers once, but here the gap has a name.
 

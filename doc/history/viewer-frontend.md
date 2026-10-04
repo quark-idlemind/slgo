@@ -4,7 +4,7 @@
 > work and kept for the measurements folded into it; the stage headings
 > below record what was found, including where the plan turned out to be
 > wrong.  For current behaviour see `man viewer`, `doc/guide.md` and
-> `viewer/`.  [doc/history/README.md](README.md) says why this is here.
+> `internal/viewer/`.  [doc/history/README.md](README.md) says why this is here.
 
 Written 2026-08-14, against commit `3ebe930`.
 
@@ -36,7 +36,7 @@ The relay was anticipated, and some of it is built.
   hands back exactly what it was given.
 - **`msg.KeepBody()`** (`msg/receive.go:99`) makes every packet carry its
   raw body, "so a relay can pass on a message without understanding it".
-  `server.StartAgent` already sets it (`server/server.go:225`).
+  `server.StartAgent` already sets it (`internal/server/server.go:225`).
 - **`agent.Options.Recv`** is documented as the thing "a relay wants".
 - **`doc/messages.txt`** classifies all 483 messages by direction:
   223 `out`, 130 `in`, 31 `both`, 99 `int`, 24 retired.
@@ -83,7 +83,7 @@ where it shows up.
 
 **One real defect in the relay path.** `WithTap` runs "before routing and
 before duplicate suppression" (`msg/dispatch.go:121`), and `Hosted.relay`
-uses it (`server/server.go:226`). A retransmission from the simulator
+uses it (`internal/server/server.go:226`). A retransmission from the simulator
 would therefore be forwarded to the viewer as two distinct packets with
 two distinct sequence numbers, and the viewer has no way to tell. gRPC
 clients tolerate that; a viewer showing a chat line twice does not. Add a
@@ -407,7 +407,7 @@ so nothing is ever signed in by pointing a viewer at it.
 stopped talking and about what. Firestorm does not complain; it renders
 nothing and waits.
 
-**Files.** New `viewer/trace.go`; `msg/dispatch.go` (the `WithRelay`
+**Files.** New `internal/viewer/trace.go`; `msg/dispatch.go` (the `WithRelay`
 hook); `cmd/slgod/main.go` (flags).
 
 **The work.**
@@ -437,7 +437,7 @@ Default to names-and-counts, full bodies only for a named set.
 the fake viewer through a handshake and asserts the census shows the
 expected messages in the expected directions. Nothing renders yet.
 
-**DONE 2026-08-14.** `viewer/trace.go` holds the Census and Trace,
+**DONE 2026-08-14.** `internal/viewer/trace.go` holds the Census and Trace,
 `msg.WithRelay` fires after duplicate suppression, and
 `slgod -trace FILE` records a live session. Three things came out of
 building it that the plan did not anticipate:
@@ -470,7 +470,7 @@ comparison a handover trace gets read against.
 **Goal.** Firestorm connects, gets past "Loading world", and stays
 connected. It will be grey. That is the correct result for this stage.
 
-**Files.** New `viewer/login.go`, `viewer/circuit.go`, `viewer/session.go`;
+**Files.** New `internal/viewer/login.go`, `internal/viewer/circuit.go`, `internal/viewer/session.go`;
 `agent/xmlrpc.go` (encoding, and decoding a `methodCall`);
 `agent/presence.go` (suspend); `cmd/slgod/main.go`.
 
@@ -556,8 +556,8 @@ grid: slgod's session still up, `slsh status holt-beta` unchanged,
 **Goal.** Ground under the avatar and a sky over it.
 
 **Files.** `agent/agent.go` and `agent/region.go` (keep the raw
-handshake); new `agent/replay.go`; new `viewer/caps.go`,
-`viewer/eventqueue.go`; `agent/eventqueue.go` (fan-out).
+handshake); new `agent/replay.go`; new `internal/viewer/caps.go`,
+`internal/viewer/eventqueue.go`; `agent/eventqueue.go` (fan-out).
 
 **The work.**
 
@@ -652,7 +652,7 @@ the *direct* login from S0.3, same camera: the ground should match.
 
 **Goal.** The region has things in it.
 
-**Files.** `agent/objects.go`, `viewer/session.go`.
+**Files.** `agent/objects.go`, `internal/viewer/session.go`.
 
 **The work.** On attach, take every local id in the store
 (`Objects.All()`) and ask the simulator to describe them again with
@@ -699,7 +699,7 @@ land within a few percent. A void here means S0.1 was answered wrong.
 **Goal.** Other people are people, the parcel bar says who owns the land,
 and the avatar is wearing its own clothes.
 
-**Files.** `viewer/classify.go`, `agent/replay.go`.
+**Files.** `internal/viewer/classify.go`, `agent/replay.go`.
 
 **The work.** Build the classification table properly, driven by
 `doc/messages.txt`: a generated table with an override list for the
@@ -761,7 +761,7 @@ current under a viewer's authority.
 
 **Goal.** Touch, chat, select, edit.
 
-**Files.** `viewer/classify.go`, `viewer/circuit.go`.
+**Files.** `internal/viewer/classify.go`, `internal/viewer/circuit.go`.
 
 **The work.** Mostly already done: 223 messages are `out` in
 `doc/messages.txt` and the default for `out` is forward. What needs care
@@ -781,7 +781,7 @@ that a viewer's action invalidates:
   Refuse them in both directions and count the refusals.
 
 **Risks.** Locks. slgod's clients take per-session locks
-(`server/lock.go`) over things like the auto objects, and a user editing
+(`internal/server/lock.go`) over things like the auto objects, and a user editing
 the same prim through the viewer will fight a benchmark. This does not
 need solving now, but it needs saying: a viewer session should be listed
 by `slsh agents` as an attached client so `logout` can refuse while it is
@@ -801,7 +801,7 @@ confirm `slsh objects` reports the new position.
 **Goal.** `slsh viewer holt-beta` brings the endpoint up and prints
 the login URI; ending it puts slgod back the way it was.
 
-**Files.** `proto/slgo.proto`, `server/grpc.go`, `cmd/slgod/main.go`,
+**Files.** `proto/slgo.proto`, `internal/server/grpc.go`, `cmd/slgod/main.go`,
 `cmd/slsh/`, `doc/guide.md`, `README.md`.
 
 **The work.** A `Viewer` RPC that starts the login endpoint and the UDP

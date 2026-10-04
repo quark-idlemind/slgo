@@ -35,10 +35,10 @@ come back when a client asks for it by name.
 
 Worth stating so that none of the work below quietly breaks it.
 
-- **Sessions are keyed by profile name** in `server/server.go:51`, and
+- **Sessions are keyed by profile name** in `internal/server/server.go:51`, and
   every request names one (`proto/slgo.proto:203` for the stream,
-  `server/grpc.go:597` for the rest).
-- **Locks are per session.**  `Hosted.lockSet()` in `server/lock.go`
+  `internal/server/grpc.go:597` for the rest).
+- **Locks are per session.**  `Hosted.lockSet()` in `internal/server/lock.go`
   means example's auto-object lock does not block qi's, so two avatars can
   run slbench at the same time without queueing behind each other.
 - **The auto objects are per avatar.**  `UseAutoN` in
@@ -90,7 +90,7 @@ It is settled exactly once, by a loop in `cmd/slgod/main.go:152` that
 runs after every `Host` has returned, and nothing in the `server`
 package ever sends `ActivateGroup`.  A reconnect goes through
 `supervise` -> `h.reconnect` -> `agent.Connect`
-(`server/server.go:224`), which is a fresh login -- and a fresh login
+(`internal/server/server.go:224`), which is a fresh login -- and a fresh login
 has no active group.  The comment at `cmd/slgod/main.go:151` already
 says "a restarted slgod is a fresh login, so it must be settled again";
 that is just as true of a reconnect, and the reconnect is the case it
@@ -104,7 +104,7 @@ The fix belongs in the server rather than in `main`, because state the
 server owns is state it can reapply: keep the resolved group uuid on
 `Hosted` when it is first settled, and re-send `ActivateGroup` after
 each successful reconnect, next to the `REGION_CHANGED` notify at
-`server/server.go:218`.
+`internal/server/server.go:218`.
 
 Re-send the uuid; do not re-run `chooseGroup`.  It calls
 `a.WaitGroups(ctx, 15*time.Second)` because group membership is not in
@@ -143,12 +143,12 @@ and there are four distinct cases a person must be able to tell apart:
 | `STOPPED` | deliberately logged out; do not bring it back unasked |
 | `FAILED` | tried, could not; with the reason and when to retry |
 
-`ListAgents` (`server/grpc.go:382`) returns only what is hosted, so a
+`ListAgents` (`internal/server/grpc.go:382`) returns only what is hosted, so a
 client cannot tell "I have never heard of qi" from "qi is deliberately
 down".  Extend it to list configured profiles too, and add a state and a
 detail string to `AgentInfo` (`proto/slgo.proto:296`).
 
-`Hosted.stopped` (`server/server.go:84`) already exists and is already
+`Hosted.stopped` (`internal/server/server.go:84`) already exists and is already
 checked by the supervisor (`:185`); it is the seed of `STOPPED`.  What is
 new is that a stopped agent has to stay in the map to be reported,
 rather than being dropped from it as `Close` does now.
@@ -185,7 +185,7 @@ Four ways this can be got wrong in the implementation:
 
 - **Rank belongs to the `Hosted`, not to the `agent.Agent`.**  The
   supervisor replaces the agent underneath on every reconnect
-  (`server/server.go:224`), so a rank read from the live session would
+  (`internal/server/server.go:224`), so a rank read from the live session would
   send the default to another avatar because of a network blip.  `Hosted`
   survives reconnection by design; the rank goes there.
 - **Stamp when the session becomes hosted, not when it was asked for.**
@@ -198,7 +198,7 @@ Four ways this can be got wrong in the implementation:
   slots in behind the incumbent.
 
   A `uint64` counter is enough, incremented under the same lock that
-  reserves the name (`server/server.go:114`).  Allocation is therefore
+  reserves the name (`internal/server/server.go:114`).  Allocation is therefore
   serialised by construction: no clock is consulted and two sessions
   cannot be given the same rank.
 
@@ -212,7 +212,7 @@ Four ways this can be got wrong in the implementation:
   the queue when it returns, and it is the whole of the mechanism for
   the case above.
 - **Do not read the order from `Names()`**, which sorts alphabetically
-  (`server/server.go:275`).  With example and qi the two orders coincide,
+  (`internal/server/server.go:275`).  With example and qi the two orders coincide,
   which is exactly how that would survive testing and then bite with a
   third avatar.  Rank order and display order are different things.
 
@@ -240,7 +240,7 @@ cause a login.  Otherwise quark comes back from the dead while you are
 using it in Firestorm.
 
 Note also that the daemon's own `Stream` handler does not default an
-empty name at all (`server/grpc.go:260` calls `s.Agent`, not
+empty name at all (`internal/server/grpc.go:260` calls `s.Agent`, not
 `s.lookup`); the resolution happens client-side before it gets there.
 Once slgod picks, move that logic into `Stream` and let `AttachConn`
 send the empty name through.
@@ -263,7 +263,7 @@ Four things fall out of it, and none is optional:
 - **Single-flight.**  Two clients attaching to an unhosted agent at once
   must produce one login.  `Host` currently reserves the name under the
   mutex and hands the loser "already hosted"
-  (`server/server.go:112-119`); that has to become "wait for the one in
+  (`internal/server/server.go:112-119`); that has to become "wait for the one in
   flight and share its result".
 - **The deadline.**  Attach is near-instant today; this makes it a
   login, a region handshake, capability fetching and group activation.
@@ -272,7 +272,7 @@ Four things fall out of it, and none is optional:
   happening.
 - **Do not retry-storm.**  An expired password must not mean every
   attach hits the login server again.  Remember the failure with a
-  backoff -- `ReconnectDelays` (`server/server.go:164`) is the right
+  backoff -- `ReconnectDelays` (`internal/server/server.go:164`) is the right
   shape and the right reason: a login server throttles a client that
   hammers it, and the throttle then presents as a different bug.
 - **What happens when the client leaves.**  The session stays up.  Not
@@ -286,7 +286,7 @@ Four things fall out of it, and none is optional:
 client asks for quark **by name**.
 
 Mechanically small, because `stopped` already exists and the supervisor
-already honours it (`server/server.go:185`).  What has to be added:
+already honours it (`internal/server/server.go:185`).  What has to be added:
 
 - **Refuse while clients are attached**, listing who they are, with a
   force flag to do it anyway.  Someone's benchmark is probably mid-run,
@@ -294,7 +294,7 @@ already honours it (`server/server.go:185`).  What has to be added:
   a half-written reading in its linkset data.  Harmless, but the run is
   lost and the person should get to decide that.
 - **Release the locks.**  This is already handled -- `detach` calls
-  `releaseAll` (`server/server.go:343`) -- but the streams have to be
+  `releaseAll` (`internal/server/server.go:343`) -- but the streams have to be
   ended with a reason the client can print, rather than dropped.
 - **Stay in the map as `STOPPED`**, per stage 3, so that `agents` can
   report why quark is not there.
@@ -413,7 +413,7 @@ That is exactly the deadlock the present single lock was built to avoid,
 and `session.go:118` says so: two benchmarks each holding some and
 waiting for the rest.
 
-The existing `locks` table (`server/lock.go`) has the right machinery but
+The existing `locks` table (`internal/server/lock.go`) has the right machinery but
 the wrong shape -- it is keyed per name with a queue per name.  A pool
 needs *one* FIFO queue, or a request for 4 starves behind an endless
 trickle of requests for 1.

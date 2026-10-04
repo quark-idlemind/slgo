@@ -1,6 +1,6 @@
 # scripttest, the backend that runs no LSL
 
-The comments in `scripttest/` say what the package does. This page is
+The comments in `internal/scripttest/` say what the package does. This page is
 why, where the why is a measurement or a story: what was measured live
 that the model has to be able to express, and what the in-process
 client was measured to save. The last sections are slbench's side of

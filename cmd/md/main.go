@@ -14,8 +14,8 @@ import (
 	"io"
 	"os"
 
+	"github.com/quark-idlemind/slgo/internal/md"
 	"github.com/quark-idlemind/slgo/internal/version"
-	"github.com/quark-idlemind/slgo/md"
 )
 
 func main() {

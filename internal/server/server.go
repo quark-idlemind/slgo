@@ -29,7 +29,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/quark-idlemind/slgo/auth"
+	"github.com/quark-idlemind/slgo/internal/auth"
 	"net"
 	"sort"
 	"sync"

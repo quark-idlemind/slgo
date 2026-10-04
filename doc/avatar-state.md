@@ -125,7 +125,7 @@ kicking someone from land"), via global coords and within region.
 `agent/teleportflags.go` keeps the flags of the latest `TeleportStart`
 and when it came, and the viewer circuit goes on absorbing
 `TeleportStart` and `TeleportProgress` for an attached viewer
-(`viewer/circuit.go`): an agent handler is one more reader of what the
+(`internal/viewer/circuit.go`): an agent handler is one more reader of what the
 session was sent and changes nothing on the way to the viewer.
 
 The next arrival takes the flags and they are spent.  In the order the

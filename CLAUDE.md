@@ -359,14 +359,14 @@ here when another is shared the same way.
   (`pay.Spends` lists them: buying an object, land or a pass, joining a
   group, a classified), against a profile's rules for paying, and the
   record of what it has paid. slgod runs it where it forwards a client's
-  message (`server/pay.go`) and `sl.Direct.Send` for a session held
+  message (`internal/server/pay.go`) and `sl.Direct.Send` for a session held
   without a daemon, so every payment and purchase a program sends passes
   one of the two; a viewer's does not, on purpose.
   `TestEveryMessageThatCarriesAPriceIsCheckedOrListed` fails for a
   message added to the template that carries a price and is neither in
   `Spends` nor listed there with why not. slbotd pays nothing, and
   `TestNothingHerePays` refuses a payment anywhere in it.
-- `Server.SetLog` (and `SetBase`), in `server/server.go`: a session's
+- `Server.SetLog` (and `SetBase`), in `internal/server/server.go`: a session's
   `Log` is given when `StartAgent` makes it, before its circuit is up,
   and is never assigned afterwards; a handler reads it from the first
   message. `TestASessionLogsFromTheFirstMessageItHears` fails for one

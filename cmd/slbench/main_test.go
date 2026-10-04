@@ -9,8 +9,8 @@ import (
 
 	"github.com/pborman/getopt/v2"
 
+	"github.com/quark-idlemind/slgo/internal/scripttest"
 	"github.com/quark-idlemind/slgo/internal/session"
-	"github.com/quark-idlemind/slgo/scripttest"
 	"github.com/quark-idlemind/slgo/sl"
 )
 

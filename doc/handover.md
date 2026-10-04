@@ -4,7 +4,7 @@
 viewer logs in to the daemon, is given the session's own ids with the
 daemon's address in place of the simulator's, and from then on the
 daemon is a simulator to the viewer and a client to the simulator. The
-comments in `viewer/` say what the package does. This page is why: what
+comments in `internal/viewer/` say what the package does. This page is why: what
 went wrong before each rule, and what was watched happening.
 
 The plan the package was built from, stage by stage, is

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/quark-idlemind/slgo/scripttest"
+	"github.com/quark-idlemind/slgo/internal/scripttest"
 )
 
 // These tests drive the measurement machinery against the offline model, so

@@ -212,7 +212,7 @@ func TestFetchingAnAssetAsksWithEveryIdentityTheSimulatorChecks(t *testing.T) {
 		Owner: msg.MustParseUUID("3ac37e57-7e57-c0de-5607-527da8fa08de"),
 		Item:  msg.MustParseUUID("97c27e57-7e57-c0de-c041-be2c2f8cb586"),
 		Asset: msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85"),
-		Type:  10,
+		Type:  10, // LSL text (AT_LSL_TEXT, llassettype.h); sl's constants are an import cycle away
 	}
 	s.on = func(m msg.Message) {
 		req, ok := m.(*msg.TransferRequest)
@@ -345,7 +345,7 @@ func TestARefusalReachesWhoeverIsWaitingForTheAsset(t *testing.T) {
 	}
 
 	_, err := x.Fetch(context.Background(), testAgentID, testSessionID,
-		client.AssetRef{Type: 7}, 10*time.Second)
+		client.AssetRef{Type: 7}, 10*time.Second) // 7: a notecard (AT_NOTECARD, llassettype.h)
 	if !errors.Is(err, client.ErrTransferDenied) {
 		t.Errorf("Fetch = %v, want the refusal", err)
 	}

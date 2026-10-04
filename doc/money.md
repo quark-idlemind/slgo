@@ -3,7 +3,7 @@
 What the grid says about an avatar's L$, what paying looks like on the
 wire, and the rules a profile puts on the programs that pay or buy
 with it. The comments in `agent/money.go`, `agent/prices.go`,
-`internal/pay`, `server/pay.go`, `sl/money.go` and `cmd/slsh/money.go`
+`internal/pay`, `internal/server/pay.go`, `sl/money.go` and `cmd/slsh/money.go`
 say what the code does. This page is why.
 
 ## What the grid says

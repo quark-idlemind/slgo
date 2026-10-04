@@ -16,7 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/quark-idlemind/slgo/auth"
+	"github.com/quark-idlemind/slgo/internal/auth"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 	"github.com/quark-idlemind/slgo/sl"
 )

@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/quark-idlemind/slgo/internal/scripttest"
 	"github.com/quark-idlemind/slgo/proto/scriptv1"
-	"github.com/quark-idlemind/slgo/scripttest"
 )
 
 // TestARunSaysCompiledFirstAndFinishedExactlyOnceAtTheEnd is the shape

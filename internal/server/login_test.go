@@ -32,8 +32,8 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/quark-idlemind/slgo/agent"
-	"github.com/quark-idlemind/slgo/auth"
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/internal/auth"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 

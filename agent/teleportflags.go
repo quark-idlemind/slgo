@@ -81,7 +81,7 @@ func (s *teleportStarts) take(now time.Time) uint32 {
 //
 // Nothing here stops the message going where it went before: an
 // attached viewer's circuit absorbs TeleportStart on its own account
-// (viewer/circuit.go), and a handler here is only one more reader of
+// (internal/viewer/circuit.go), and a handler here is only one more reader of
 // what the session was sent.
 func (a *Agent) keepTeleportStart() {
 	a.Disp.MustHandle("TeleportStart", func(p *msg.Packet) {

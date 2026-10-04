@@ -29,7 +29,7 @@ is in, so the equivalent is to resolve a local id against that region.
 A region that restarts keeps its uuid and numbers everything afresh.
 What a client hears of one is slgod logging back in, which it announces
 as a region change with the detail `session re-established`
-(`server/server.go`), and which may land in the same region. So a
+(`internal/server/server.go`), and which may land in the same region. So a
 re-established session counts as a new run of the region, and every
 local id is looked up again. None of this was watched happening: that
 a restarted region keeps its uuid and renumbers its objects, and that a

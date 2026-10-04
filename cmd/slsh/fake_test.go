@@ -48,8 +48,8 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/agent"
-	"github.com/quark-idlemind/slgo/auth"
 	"github.com/quark-idlemind/slgo/client"
+	"github.com/quark-idlemind/slgo/internal/auth"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"

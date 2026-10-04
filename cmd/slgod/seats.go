@@ -3,7 +3,7 @@ package main
 // Where each avatar was last sitting, kept across logins.
 //
 // The daemon restores a seat at login and writes one down when it
-// changes; see server/seat.go for why that is worth doing and how the
+// changes; see internal/server/seat.go for why that is worth doing and how the
 // watching works.  This is only the half that decides where it is
 // kept, which is this command's business and not the server's -- the
 // same division the profile list is under.

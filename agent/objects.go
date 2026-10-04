@@ -1371,7 +1371,7 @@ func (o *Objects) anchorLocked(local uint32) (msg.Vector3, bool) {
 // ByLocal is byLocal, exported for the one caller outside this package
 // that has a local id and nothing else: a seated avatar names its seat
 // by local id and by nothing else, so answering "what is it sitting on"
-// means turning one into an object.  See server/seat.go.
+// means turning one into an object.  See internal/server/seat.go.
 func (o *Objects) ByLocal(local uint32) (*Object, bool) { return o.byLocal(local) }
 
 // byLocal is one object by the local id the region numbers it with.

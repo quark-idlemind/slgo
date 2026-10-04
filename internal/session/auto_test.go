@@ -3,7 +3,7 @@ package session
 // Turning a grant into objects.
 //
 // What the daemon decides is tested where it is decided, over the wire
-// that carries it -- see server/slots_test.go.  What is left here is the
+// that carries it -- see internal/server/slots_test.go.  What is left here is the
 // half the daemon cannot do and the choosing this side still makes:
 // which avatar to ask about, what to do when one cannot supply the lot,
 // and turning a place into an object that exists and is worn.

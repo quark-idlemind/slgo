@@ -6,7 +6,7 @@ package main
 // These reach viewerHost directly rather than through a login, because
 // what is being tested is the credential and not the handover: viewer's
 // own tests take a Handover with a minted digest on it and drive a real
-// XML-RPC login through it (viewer/login_test.go), and this side is
+// XML-RPC login through it (internal/viewer/login_test.go), and this side is
 // where the digest comes from and where it goes.
 
 import (
@@ -32,10 +32,10 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/internal/server"
+	"github.com/quark-idlemind/slgo/internal/viewer"
 	"github.com/quark-idlemind/slgo/llsd"
 	"github.com/quark-idlemind/slgo/msg"
-	"github.com/quark-idlemind/slgo/server"
-	"github.com/quark-idlemind/slgo/viewer"
 
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
@@ -739,7 +739,7 @@ func TestTheStandInForAMissingTokenIsNotAToken(t *testing.T) {
 
 // Refusing a viewer login, end to end through the daemon's own lookup.
 //
-// viewer/login_test.go drives the handler with handovers composed by
+// internal/viewer/login_test.go drives the handler with handovers composed by
 // hand; this is the same question asked of find(), which is where a
 // hosted session, a profile with no viewer_password and a name nobody
 // holds are actually told apart.

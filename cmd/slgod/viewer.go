@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/internal/server"
+	"github.com/quark-idlemind/slgo/internal/viewer"
 	"github.com/quark-idlemind/slgo/msg"
-	"github.com/quark-idlemind/slgo/server"
-	"github.com/quark-idlemind/slgo/viewer"
 )
 
 // viewerHost is the login endpoint a viewer is pointed at, and the

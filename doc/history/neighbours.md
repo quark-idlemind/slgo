@@ -57,7 +57,7 @@ minutes of watching recorded `EnableSimulator` within a second of login
 and not one of these; stage 0 then opened a circuit and it arrived 1.04
 seconds later. So the simulator introduces a neighbour properly once the
 client has taken the address up, and the filter that has been in
-`viewer/caps.go` since the front end was built has never had anything to
+`internal/viewer/caps.go` since the front end was built has never had anything to
 catch.
 
 Both are withheld from an attached viewer (`d0584c2`). That stays true
@@ -186,7 +186,7 @@ The rest of what it measured, in the order it happened:
   child has to be as idempotent about it as the root is.
 - **`EstablishAgentCommunication` follows the circuit**, as predicted:
   it arrived 1.04 seconds after `UseCircuitCode` and had never been seen
-  in any run before. So the filter that has been in `viewer/caps.go`
+  in any run before. So the filter that has been in `internal/viewer/caps.go`
   since the front end was built never had anything to catch.
 - **Its shape is not the others'.** Where `TeleportFinish` and
   `CrossedRegion` carry blocks as arrays of one map with binary fields,

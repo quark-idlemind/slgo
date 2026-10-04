@@ -116,13 +116,13 @@ case.
 
     client/             attaching to slgod over gRPC, and holding no grid state
     internal/xfer/      the old UDP file transfer and the UDP asset transfer, reassembled
-    server/             slgod's side: holds the circuits, relays the bytes
-    server/lock.go      exclusive use of a named thing, for as long as a client lives
-    viewer/             handing a live session over to a real viewer
-    auth/               TLS, and mutual authentication between slsh and slgod
+    internal/server/    slgod's side: holds the circuits, relays the bytes
+    internal/server/lock.go  exclusive use of a named thing, for as long as a client lives
+    internal/viewer/    handing a live session over to a real viewer
+    internal/auth/      TLS, and mutual authentication between slsh and slgod
     llsd/               LLSD decoding and encoding
     proto/              slgo.proto, script.proto, and the Go they generate
-    scripttest/         a script-running backend with no LSL and no grid in it
+    internal/scripttest/  a script-running backend with no LSL and no grid in it
     internal/session/   get a session, and an object to run scripts in
     internal/slhost/    where slgod is, asking sl-host when it is there
     internal/creds/     who to log in as, when a program logs in itself
