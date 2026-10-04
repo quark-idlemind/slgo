@@ -5,6 +5,17 @@
 // Numbers on the wire are little endian, with exceptions that are
 // network order: the packet sequence number and the acknowledgements
 // appended to a packet, a Low message's number, IPADDR and IPPORT.
+//
+// # Compatibility
+//
+// The message structures are generated from Linden Lab's template, and
+// follow it: when the template adds a block or a field, the generated
+// struct gains it in a minor release.  Code that names the fields it
+// uses is unaffected; code that builds a struct with an unkeyed
+// composite literal, or relies on its exact layout, is not promised to
+// keep compiling.  The hand-written parts -- UUID, Vector3 and the other
+// wire types, Message, the encoder and decoder -- are promised as the
+// rest of slgo is.
 package msg
 
 //go:generate go run ../cmd/msggen -out messages_gen.go

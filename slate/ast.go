@@ -5,6 +5,12 @@
 // them. None of them dials a region. A file that fails Parse or Check is
 // exit 2 for the command, and the process has not looked at the grid.
 // Run (run.go) drives a checked script against an sl.Session.
+//
+// # Experimental
+//
+// Slate, this package and the slate command are experimental: not
+// covered by slgo's compatibility promise, and they may change in any
+// release, the language included.
 package slate
 
 import (

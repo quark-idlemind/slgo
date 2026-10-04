@@ -32,6 +32,30 @@ The template is Linden Lab's and is not kept here; `go generate` fetches
 it from the shipping viewer.  `cmd/msggen`'s documentation says where
 else it is published, and why that one is the default.
 
+## What 1.0 promises
+
+From 1.0, code written against slgo keeps compiling and means the same
+across 1.x releases, under Go's usual rules, for these packages: `sl`,
+`agent`, `msg`, `llsd`, `client`, `proto/slgov1` and `proto/scriptv1`.
+Four things are written down as exceptions:
+
+- `sl.Backend` may gain methods in a minor release.  A Backend of your
+  own -- a fake in a test, typically -- embeds `sl.UnimplementedBackend`
+  and keeps compiling.
+- `msg`'s message structures follow Linden Lab's template, and gain a
+  field when it does.  Name the fields you use.
+- The values of `sl`'s tuning numbers (`DefaultTeleportTimeout` and the
+  like) may change.  Refer to them by name.
+- The gRPC packages follow gRPC's conventions in Go.  On the wire, a
+  field number is never reused and a field never changes type, which is
+  also why slgod and its clients work across versions: a field one side
+  does not know is zero to it, and zero always means what that side
+  did.
+
+Not promised: anything under `internal/`; Slate and `imgfind`, which are
+experimental; and the programs under `cmd/`, whose flags and output are
+documented rather than promised.
+
 ## Layout
 
 `sl` is the front door and the rest is underneath it. A program that
