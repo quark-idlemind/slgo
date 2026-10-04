@@ -228,7 +228,6 @@ type hudPrim struct {
 	link  int
 	kind  string // box, cylinder, or empty for any other shape
 	why   string // what the shape is, when kind is empty
-	point vec    // the HUD point it is worn on, which touch positions are from
 	at    vec
 	turn  rot3
 	scale vec
@@ -257,7 +256,7 @@ func (v HUDView) place(linkset []*Seen) ([]hudPrim, error) {
 		if err != nil {
 			return nil, err
 		}
-		p := hudPrim{view: v, seen: s, link: i + 1, kind: kind, why: why, point: pt,
+		p := hudPrim{view: v, seen: s, link: i + 1, kind: kind, why: why,
 			at: rootAt, turn: rootTurn, scale: vecOf(s.Scale)}
 		if i > 0 {
 			p.at = rootAt.add(rootTurn.rotate(vecOf(s.Position)))
@@ -395,8 +394,10 @@ func (p hudPrim) intersect(ray vec) (hit, bool) {
 			Touch: Touch{
 				Face: f.n,
 				ST:   msg.Vector3{X: float32(s), Y: float32(tt)},
-				// From the HUD point, as llDetectedTouchPos gives it.
-				Position: hud.sub(p.point).msg(),
+				// From the middle of the screen, whatever point it is
+				// worn on, as the viewer sends it for llDetectedTouchPos.
+				// Why: doc/hud-screen.md#a-click
+				Position: hud.msg(),
 				Normal:   normal.msg(),
 				Binormal: p.turn.rotate(f.tDir(local).times(p.scale)).unit().msg(),
 			},

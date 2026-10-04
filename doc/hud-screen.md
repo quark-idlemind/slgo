@@ -156,12 +156,34 @@ every face at alpha 0 was clicked as face 4 at its middle, though the
 viewer does not draw it. So `Pick` ignores how a prim looks, and a
 transparent prim in front takes the click.
 
-**Measured.** The position is in the HUD point's frame, as
-`llDetectedTouchPos` gives it: the middle of face 4 of a 0.5 m box half
-a metre in front of Center 2 read -0.75, 0, 0. The region passes the
-position a client sends to the script unchanged: besides that reading,
-the ExampleHUD, which moves itself by the change in `llDetectedTouchPos`,
-moved by exactly the distance `DragOnScreen` dragged.
+The position is in the HUD's own frame, whose origin is the middle of
+the world view, whatever point the prim is worn on: the viewer casts
+the click from `LLViewerWindow::mousePointHUD`, which measures from the
+world view's centre in units of its height (divided by the HUD zoom),
+and sends where the ray meets the prim as the grab's
+`SurfaceInfo.Position` (`LLViewerWindow::cursorIntersect`,
+llviewerwindow.cpp:5535-5606; `LLPickInfo::getSurfaceInfo`; the grab in
+lltoolgrab.cpp:909-914; Firestorm 885631b93a). The wiki says the same
+of `llDetectedTouchPos`: on a HUD, "relative to the center of the screen
+rather than the attachment point".
+
+**Measured.** The middle of face 4 of a 0.5 m box half a metre in front
+of Center 2 read -0.75, 0, 0. That reading was on Center 2, which is the
+middle of the screen, so it could not tell the two frames apart, and
+`Pick` sent the position from the attachment point until 2026-10-03.
+Then a 0.1 x 0.4 x 0.2 box was clicked in Firestorm on both Center 2 and
+Top Left, and through `DragOnScreen` on both. On Center 2 the two
+agreed to a pixel. On Top Left, near the box's lower-right corner, the
+viewer read -0.05, 0.74524, 0.40556 -- the point, half the aspect
+across and half a metre up, plus the place on the box -- where `Pick`
+sent -0.05, -0.192, -0.096. It sends the viewer's now.
+
+A script that moves or resizes a HUD by the change in the position,
+as the ExampleHUD does, sees the same change either way: the old
+answer differed from the viewer's by the point's position, the same
+for every touch of a drag. And on Center 2, where the ExampleHUD's move
+and resize were measured, the two are the same answer. The region
+passes the position a client sends to the script unchanged.
 
 ## A drag
 
