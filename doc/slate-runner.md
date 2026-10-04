@@ -259,7 +259,7 @@ For a step that begins with a stimulus, the snapshot is taken at the arm point. 
 
 ### Dialog hold
 
-A dialog matched by `expect dialog` or `expect textbox` is held for that binding, whichever prim of its linkset offered it. The hold lasts until a `choose` or `answer` on that binding consumes it, or a later matched dialog for the same binding replaces it, or its test ends. It is not dropped at the end of the step that matched it: `choose` and `answer` are stimuli, a stimulus always begins a new step, and a hold dropped at the step's end would leave nothing for them to answer. A dialog that was held from an earlier step is not eligible for a new `expect dialog`, because it was observed before that step's arm point.
+A dialog matched by `expect dialog` or `expect textbox` is held for that binding, whichever prim of its linkset offered it, and for whom it came to: the tester, or the second avatar named by `to` ([Second avatars](#second-avatars)). The hold lasts until a `choose` or `answer` on that binding, as the same avatar, consumes it, or a later matched dialog for the same binding and avatar replaces it, or its test ends. It is not dropped at the end of the step that matched it: `choose` and `answer` are stimuli, a stimulus always begins a new step, and a hold dropped at the step's end would leave nothing for them to answer. A dialog that was held from an earlier step is not eligible for a new `expect dialog`, because it was observed before that step's arm point.
 
 At the end of each test an unconsumed hold is reported on the `dialog left unanswered:` line of that test's failure block (when it failed) and dropped with `ForgetDialog`, so the next test starts with no hold. There is no decline to send: `sl/dialog.go` records why, and the object's own listen is left to expire. The author never writes the dialog's channel. `Answer` sends `ScriptDialogReply` on `Dialog.Channel`, which is not a `ChatFromSimulator` line and is not an expectation.
 
@@ -319,6 +319,7 @@ The speaker is resolved before anything is said:
 
 - `as tester`, or no `as`: speak as this session.
 - `as owner of OBJ`: legal only when the tester's id equals `OBJ`'s owner. The owner is `sl.Seen.Owner`; a zero owner is resolved with `Properties` (15 s) before the comparison, and if it is still zero the step fails with `the owner of OBJ is not known` rather than match nobody in particular. If the tester is not the owner the step fails before anything is said. A group-deeded object, whose owner id is the group, fails for this runner.
+- `as NAME`, for an `avatar NAME` header: `Session.Say` of that second avatar's session ([Second avatars](#second-avatars)). It is written without `avatar`.
 - `as avatar "Name"`: the name is compared to the tester's displayed name with `strings.EqualFold` of the whole string. If it is not the tester the step fails with `this runner drives only the tester` and does not speak. `Session.Find` is not used: it ignores case and also matches a prefix and either half of a display name, so it would accept `"Example"` as `"Example Resident"`.
 
 Before a `say` is sent, the runner measures the distance from the tester position ([Tester position](#tester-position)) to every binding named in that step (the `as owner of` binding, if any, and every binding an expectation in the step names), using the region position of [Linksets and region positions](#linksets-and-region-positions). The tester is not put through that walk. If any binding is more than 20 m away, the step fails before the say, exit 1, with the 20 m sentence in [Reading the result](slate-language.md#reading-the-result).
@@ -417,7 +418,7 @@ When any step fails, the dialog does not match, and the reason is kept for the `
 
 The match is held ([Dialog hold](#dialog-hold)), and binds what [Captures](#captures) says: the message, the named groups of the message pattern, and the named groups of each clause pattern, bound to the label of the button that clause was given.
 
-Dialogs are delivered to the avatar they were offered to, and `Session.Dialogs` is this session. A dialog the product offers to someone else is invisible, the expectation times out, and the transcript says no dialog was offered to the tester.
+Dialogs are delivered to the avatar they were offered to, and `Session.Dialogs` is that session's. A dialog the product offers to someone else is invisible, the expectation times out, and the transcript says no dialog was offered to the tester. The exception is a second avatar the run was given: its session's dialogs are logged with its binding, and `to NAME` on the expectation selects them, so the tester's `expect dialog` never matches one and the other way round.
 
 ### Texture
 
@@ -1142,6 +1143,8 @@ type Options struct {
     Pay bool           // the --pay flag
     Run *regexp.Regexp // the -run flag; nil runs every test
     Out io.Writer      // the live transcript: each line is written as it happens; may be nil
+
+    Avatars map[string]*sl.Session // the second avatars, by binding; see Second avatars
 }
 
 type TestResult struct {
@@ -1162,7 +1165,7 @@ type Result struct {
 The command line:
 
 ```text
-slate [-addr ADDR] [-agent NAME] [--pay] [-run REGEX] [--screen WxH] [--hud-zoom Z] FILE
+slate [-addr ADDR] [-agent NAME] [--pay] [-run REGEX] [--screen WxH] [--hud-zoom Z] [--avatar NAME=PROFILE]... FILE
 slate -make-bridge [-addr ADDR] [-agent NAME]
 slate -version
 ```
@@ -1171,9 +1174,37 @@ slate -version
 
 `--screen WxH` and `--hud-zoom Z` are the world view a `drag ... on screen` is given in ([A drag on the screen](#a-drag-on-the-screen)): 1920x1025 and 1 unless given. A `--screen` that is not two integers above 0 joined by `x`, or a `--hud-zoom` that is not above 0, is exit 4 with nothing dialled.
 
-`-make-bridge` is a separate mode. It takes no `FILE`, `--pay`, `-run`, `--screen` or `--hud-zoom` (given one, it is exit 4), runs once per account where the tester may build, and exits 0 when the item is in the Objects folder, whether it made it or it was already there, and 3 when a step failed. `Options` and `Result` do not change.
+`--avatar NAME=PROFILE`, repeatable, gives the file's second avatar `NAME` the slgod profile that drives it ([Second avatars](#second-avatars)). One that is not of that shape is exit 4, with nothing dialled and without the value repeated.
+
+`-make-bridge` is a separate mode. It takes no `FILE`, `--pay`, `-run`, `--screen`, `--hud-zoom` or `--avatar` (given one, it is exit 4), runs once per account where the tester may build, and exits 0 when the item is in the Objects folder, whether it made it or it was already there, and 3 when a step failed. `Options` and `Result` do not change.
 
 `-addr` is where slgod is; `$SLGO_ADDR` is the same value when the flag is empty. With neither set, `slhost.ResolveFor` asks `sl-host` about the avatar, the way `slpic` asks, and a machine without `sl-host` uses `localhost:7807`. The dial itself is limited to 30 s, and a failed dial is `slate: dial: <error>` on standard error, exit 3. `-agent` is passed to `sl.DialWeak`, which reads `$SLGO_AGENT` when the flag is empty; that is the dial `slpic faces` uses. `-run` is compiled as RE2 into `Options.Run` and selects tests by name. `--pay` is the process half of the pay gate and is off by default; no change adds a configuration file that turns it on. The exit codes are in [Reading the result](slate-language.md#reading-the-result).
+
+### Second avatars
+
+The language side is [A second avatar](slate-language.md#a-second-avatar): the `avatar NAME` header, `as NAME` and `to NAME`. This is what the command and the runner do for it.
+
+**Given, never inferred.** The flag is the only way a second avatar enters a run. The command never reads what slgod holds to choose one, and a daemon may hold avatars that belong to other people and were lent for other uses; each is the owner's to allow, one `--avatar` at a time. Nothing in a message, a transcript line or a failure block names a profile: a profile handle identifies an account as an id does, and a pasted error must not carry one. Only the binding is named. The usage text and the documents write the flag with invented handles (`--avatar visitor=example-two`).
+
+**Checks before any dial.** After the file parses and checks, and before anything is dialled, the flags are matched to the file's `avatar` headers. Each failure is `slate: setup: ...` on standard error, exit 3, and says which:
+
+| Failure | Sentence |
+|---|---|
+| A header with no flag | `visitor is declared but no --avatar visitor=... was given` |
+| A flag for a name the file does not declare | `an --avatar was given for visitor, which the file does not declare` |
+| The same name given twice | `--avatar was given twice for visitor` |
+| The profile equals `-agent` | `the profile given for visitor is the tester's own` |
+| One profile for two names | `the profiles given for visitor and guest are the same` |
+
+**Dialled and closed.** The tester is dialled first, as before. Each second avatar is then dialled with `sl.DialWeak(ctx, addr, PROFILE)` through the same dialler, to the same slgod and with the same 30 s limit, in the order the flags were written. A profile the daemon does not hold fails the dial: `the profile given for visitor is not held by the daemon (dial: ...)`, where the daemon's own words have the profile replaced by the binding, in any case, so that an answer that quotes it does not leak it. The profile of `-agent` is not always known (it may be the daemon's default or `$SLGO_AGENT`), so the tester's own is also found by identity: a session whose avatar id is the tester's, or another second avatar's, is `the profile given for visitor is the tester's own` or `the profiles given for visitor and guest are the same`. `slate.Run` makes the same checks on the sessions it is given and refuses a run that is not given exactly the declared names (`Options.Avatars`), also exit 3. All the sessions are closed when the command returns, the tester's last.
+
+**One log.** `Run` subscribes to each second session's instant messages, with the tester's subscription depth; it does not subscribe to its chat, because the tester hears what the second avatar says and one line must not be logged twice. Each drain ([Event log and arming](#event-log-and-arming)) takes in the second avatars' instant messages and the dialogs their sessions hold, as it does the tester's, into the one log. An event carries `to`, the binding of the second avatar it came to, empty for the tester's. A dialog is logged once for each session that holds it (its key includes `to`), an expectation matches an event only when its own `to` equals the event's, and the arming, consumption and `then` rules are those of any event. The transcript prints the event with `to <binding>` after the kind. A chat line whose source is a second avatar's id is printed with the binding as its speaker. A dropped subscription of a second avatar's instant messages fails the run as the tester's does.
+
+**Holds.** A hold is keyed by the object's binding and who the dialog came to (`sign` for the tester's, `sign@visitor` for the second avatar's), and keeps the session it must be answered on. `choose` and `answer` with `as NAME` use the hold under that key and answer on that session (`AnswerIndex`, `AnswerText`), and the tester's hold of the same object is untouched. At the end of a test every hold is forgotten, each on its own session, and an unanswered one is named on the `dialog left unanswered:` line with `(to visitor)`.
+
+**Stimuli.** `touch` (every target, including `button` and `showing`) and a face `drag` send on the second avatar's session; so does `say`, which is `Session.Say` of that session. The objects are the ones the tester's session found: a local id is the region's, the same for every avatar in it, so a second avatar in another region should fail the touch with the session's `ErrNotHere` (read from `Session.local`; no second avatar has been run against the grid yet, and none of this section is a measurement). The say-radius rule (20 m) measures from the tester, not from the second avatar, and the runner does not move it.
+
+**Left as found.** `observeSecondIM` declines an object's inventory offer (dialog 9) to a second avatar the moment it is read, with `InventoryOffer.Decline` on that session (dialog 11, the offer's transaction), after the event is in the log, so an `expect give ... to NAME` still sees it. It is never accepted and the avatar's inventory is not read. Every permission request a second session holds is answered with `Deny` in the same pass that answers the tester's, `allow permission` not consulted. Both are printed. A dialog or a text box nobody answered is left to expire, as for the tester ([Dialog hold](#dialog-hold)).
 
 ## Security and privacy
 
@@ -1262,7 +1293,7 @@ Each is one or two lines; the rule is in the section pointed at.
 - **Dialog channels are hidden.** The author writes a label or a body; `Answer` and `AnswerText` speak on the script's channel. [Choose](#stimuli).
 - **One claim, two rezzes is a failure**; zero at the deadline is a failure. [Rez](#rez).
 - **A give passes on a new item id**, not a new name, and the accept is the task-inventory one (dialog 10), the only answer measured to deliver. [Give](#give).
-- **The runner drives only the tester.** No session manager is designed. [Say](#stimuli).
+- **The runner drives the tester, and a second avatar only when the run is given one, by a flag, for a binding the file declares.** It is never chosen from what slgod holds, its offers are declined, its permission requests are refused, and no output names its profile. [Second avatars](#second-avatars).
 - **A failed step leaves the world as the failure left it.** [Cleanup](#cleanup-and-what-a-failure-leaves-behind).
 - **`at 0 0` is rejected** because the session treats a zero ST as not given. [Touch a face](#stimuli).
 - **`image` and `oval` are legal and fail closed**, rather than pretending an oval is a circle. [Buttons](#buttons).

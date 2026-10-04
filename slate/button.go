@@ -70,10 +70,10 @@ func (s *stepRun) buttonStimulus(t *Touch, b *binding) (*stimulus, error) {
 				X: float32((float64(hit.at.X) + 0.5) / float64(w)),
 				Y: float32(1 - (float64(hit.at.Y)+0.5)/float64(h)),
 			}
-			if err := s.r.sess.Touch(ctx, &b.seen.Object, sl.Touch{Face: hit.face, ST: st}); err != nil {
+			if err := s.r.actor(t.AsAvatar).Touch(ctx, &b.seen.Object, sl.Touch{Face: hit.face, ST: st}); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("touched %s face %d button at %d,%d (st %v %v)", b.name, hit.face, hit.at.X, hit.at.Y, st.X, st.Y), nil
+			return fmt.Sprintf("touched %s face %d button at %d,%d (st %v %v)%s", b.name, hit.face, hit.at.X, hit.at.Y, st.X, st.Y, asText(t.AsAvatar)), nil
 		},
 	}, nil
 }

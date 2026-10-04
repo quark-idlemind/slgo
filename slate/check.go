@@ -35,6 +35,7 @@ func Check(s *Script) error {
 	c := &checker{
 		s:        s,
 		declared: map[string]bool{},
+		avatars:  map[string]Span{},
 		bound:    map[string]Span{},
 		names:    map[string]Span{},
 		hidden:   map[string]Span{},
@@ -67,6 +68,7 @@ func Check(s *Script) error {
 type checker struct {
 	s        *Script
 	declared map[string]bool        // header bindings, whatever order the headers are in
+	avatars  map[string]Span        // avatar headers: not objects, so never in bound
 	bound    map[string]Span        // visible in the step being checked
 	hdr      map[string]Span        // the header bindings, copied into bound per test
 	wornAt   map[string]int         // the attachment point a binding is known to be worn on, or notWorn
@@ -163,6 +165,9 @@ func (c *checker) test(et ExpandedTest) error {
 	c.curTest = et.Test
 	c.bound = copySpans(c.hdr)
 	c.names = copySpans(c.hdr)
+	for n, sp := range c.avatars {
+		c.names[n] = sp // an as cannot bind a name an avatar has
+	}
 	c.hidden = map[string]Span{}
 	c.gone = map[string]Span{}
 	c.capType = map[string]CaptureType{}
@@ -250,6 +255,10 @@ func (c *checker) headers() error {
 		i := i
 		items = append(items, placed{c.s.Objects[i].Span.Start, func() error { return c.objectAt(i) }})
 	}
+	for i := range c.s.Avatars {
+		i := i
+		items = append(items, placed{c.s.Avatars[i].Span.Start, func() error { return c.avatarAt(i) }})
+	}
 	for i := range c.s.Items {
 		i := i
 		items = append(items, placed{c.s.Items[i].Span.Start, func() error { return c.itemAt(i) }})
@@ -294,6 +303,9 @@ func (c *checker) objectAt(i int) error {
 	if _, ok := c.bound[o.Name.Text]; ok {
 		return c.err(o.Name.Span, "%s is already bound", o.Name.Text)
 	}
+	if _, ok := c.avatars[o.Name.Text]; ok {
+		return c.err(o.Name.Span, "%s is already bound", o.Name.Text)
+	}
 	if _, ok := c.items[o.Name.Text]; ok {
 		return c.err(o.Name.Span, "%s is already bound", o.Name.Text)
 	}
@@ -329,9 +341,43 @@ func (c *checker) objectAt(i int) error {
 	return nil
 }
 
+// avatarAt checks an avatar header: a name nothing else has.
+// Why: doc/slate-language.md#a-second-avatar
+func (c *checker) avatarAt(i int) error {
+	a := c.s.Avatars[i]
+	n := a.Name.Text
+	_, obj := c.bound[n]
+	_, item := c.items[n]
+	_, twice := c.avatars[n]
+	if obj || item || twice {
+		return c.err(a.Name.Span, "%s is already bound", n)
+	}
+	c.avatars[n] = a.Name.Span
+	return nil
+}
+
+// avatarRef checks a name that must be a second avatar's binding.
+func (c *checker) avatarRef(id Ident) error {
+	if _, ok := c.avatars[id.Text]; ok {
+		return nil
+	}
+	_, obj := c.bound[id.Text]
+	_, item := c.items[id.Text]
+	switch {
+	case obj:
+		return c.err(id.Span, "%s is an object, not an avatar; as and to take an avatar header", id.Text)
+	case item:
+		return c.err(id.Span, "%s is an item, not an avatar", id.Text)
+	}
+	return c.err(id.Span, "%s is not an avatar; declare it with avatar %s and give it with --avatar", id.Text, id.Text)
+}
+
 func (c *checker) itemAt(i int) error {
 	it := c.s.Items[i]
 	if _, ok := c.bound[it.Name.Text]; ok {
+		return c.err(it.Name.Span, "%s is already bound", it.Name.Text)
+	}
+	if _, ok := c.avatars[it.Name.Text]; ok {
 		return c.err(it.Name.Span, "%s is already bound", it.Name.Text)
 	}
 	if _, ok := c.items[it.Name.Text]; ok {
@@ -481,6 +527,9 @@ func (c *checker) budget(st Step) time.Duration {
 }
 
 func (c *checker) stimulus(s *Stimulus, same map[string]bool) error {
+	if s.OtherAs != nil {
+		return c.err(s.OtherAs.Span, "%s stays the tester's: a second avatar only touches, drags a face, says, chooses and answers (a second avatar never pays)", stimulusWord(s))
+	}
 	switch {
 	case s.Touch != nil:
 		return c.touch(s.Touch, same)
@@ -513,6 +562,31 @@ func (c *checker) stimulus(s *Stimulus, same map[string]bool) error {
 	}
 }
 
+// stimulusWord names a stimulus for an error.
+func stimulusWord(s *Stimulus) string {
+	switch {
+	case s.Pay != nil:
+		return "pay"
+	case s.Sit != nil:
+		return "sit"
+	case s.Stand != nil:
+		return "stand"
+	case s.Wait != nil:
+		return "wait"
+	case s.Send != nil:
+		return "send"
+	case s.Wear != nil:
+		return "wear"
+	case s.Rez != nil:
+		return "rez"
+	case s.TakeOff != nil:
+		return "take off"
+	case s.Drag != nil && s.Drag.Screen != nil:
+		return "drag on screen"
+	}
+	return "this stimulus"
+}
+
 // wear checks wear ITEM on "point" as NAME. NAME is a new object binding,
 // and it exists as soon as the stimulus returns, so this step's own
 // expectations may use it: the one name a step binds that the step sees.
@@ -528,6 +602,9 @@ func (c *checker) wear(w *Wear, same map[string]bool) error {
 		return err
 	}
 	as := w.As.Text
+	if _, ok := c.avatars[as]; ok {
+		return c.err(w.As.Span, "%s is a second avatar, and a second avatar never wears; as here names the worn object", as)
+	}
 	if _, ok := c.names[as]; ok {
 		return c.err(w.As.Span, "%s is already bound", as)
 	}
@@ -559,6 +636,9 @@ func (c *checker) rezItem(r *RezItem) error {
 		}
 	}
 	as := r.As.Text
+	if _, ok := c.avatars[as]; ok {
+		return c.err(r.As.Span, "%s is a second avatar, and a second avatar never rezzes; as here names the rezzed object", as)
+	}
 	if _, ok := c.names[as]; ok {
 		return c.err(r.As.Span, "%s is already bound", as)
 	}
@@ -574,6 +654,11 @@ func (c *checker) rezItem(r *RezItem) error {
 func (c *checker) touch(t *Touch, same map[string]bool) error {
 	if err := c.ref(t.Name, same); err != nil {
 		return err
+	}
+	if t.AsAvatar != nil {
+		if err := c.avatarRef(*t.AsAvatar); err != nil {
+			return err
+		}
 	}
 	if t.Guard != nil {
 		if t.Button == nil {
@@ -638,6 +723,11 @@ func (c *checker) showing(t *Touch, same map[string]bool) error {
 func (c *checker) choose(ch *Choose, same map[string]bool) error {
 	if err := c.ref(ch.Name, same); err != nil {
 		return err
+	}
+	if ch.AsAvatar != nil {
+		if err := c.avatarRef(*ch.AsAvatar); err != nil {
+			return err
+		}
 	}
 	switch ch.Kind {
 	case ChooseMatching:
@@ -776,6 +866,11 @@ func (c *checker) drag(d *Drag, same map[string]bool) error {
 	if err := c.ref(d.Name, same); err != nil {
 		return err
 	}
+	if d.AsAvatar != nil {
+		if err := c.avatarRef(*d.AsAvatar); err != nil {
+			return err
+		}
+	}
 	if d.Screen != nil {
 		if err := c.screenDrag(d, d.Screen); err != nil {
 			return err
@@ -859,6 +954,11 @@ func (c *checker) answer(a *Answer, same map[string]bool) error {
 	if err := c.ref(a.Name, same); err != nil {
 		return err
 	}
+	if a.AsAvatar != nil {
+		if err := c.avatarRef(*a.AsAvatar); err != nil {
+			return err
+		}
+	}
 	if n := len(a.Text); n > sl.MaxDialogReply {
 		return c.err(a.TextSpan, "answer is %d bytes; a text box carries at most %d", n, sl.MaxDialogReply)
 	}
@@ -927,6 +1027,9 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 	case e.Dialog != nil:
 		return c.dialog(e.Dialog, same)
 	case e.TextBox != nil:
+		if err := c.toRef(e.TextBox.To); err != nil {
+			return err
+		}
 		return c.dialogLike(e.TextBox.Name, e.TextBox.Link, e.TextBox.Text, same)
 	case e.Texture != nil:
 		x := e.Texture
@@ -985,6 +1088,9 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 		x := e.Colour
 		return c.level(e, "colour", x.Name, x.Link, x.Face, x.FaceAll, x.State, x.Any, x.Use, same, x.R, x.G, x.B)
 	case e.Give != nil:
+		if err := c.toRef(e.Give.To); err != nil {
+			return err
+		}
 		if err := c.ref(e.Give.From, same); err != nil {
 			return err
 		}
@@ -1324,8 +1430,19 @@ func isCaptureName(n string) bool {
 
 // dialog checks expect dialog: its message, its button clauses, count.
 // Why: doc/slate-language.md#expectations
+// toRef checks the to NAME of an expectation, when it has one.
+func (c *checker) toRef(to *Ident) error {
+	if to == nil {
+		return nil
+	}
+	return c.avatarRef(*to)
+}
+
 func (c *checker) dialog(d *DialogExp, same map[string]bool) error {
 	if err := c.ref(d.Name, same); err != nil {
+		return err
+	}
+	if err := c.toRef(d.To); err != nil {
 		return err
 	}
 	if err := c.linkN(d.Name, d.Link); err != nil {
@@ -1570,6 +1687,8 @@ func (c *checker) speaker(sp Speaker, same map[string]bool) error {
 			return err
 		}
 		return c.linkN(sp.Name, sp.Link)
+	case SpeakSecond:
+		return c.avatarRef(sp.Name)
 	default:
 		return nil
 	}
@@ -1589,6 +1708,9 @@ func (c *checker) ref(id Ident, same map[string]bool) error {
 	}
 	if _, ok := c.items[id.Text]; ok {
 		return c.err(id.Span, "%s is an item; only wear and rez use an item", id.Text)
+	}
+	if _, ok := c.avatars[id.Text]; ok {
+		return c.err(id.Span, "%s is an avatar, not an object; only as and to take an avatar", id.Text)
 	}
 	if _, ok := c.bound[id.Text]; !ok {
 		if _, hid := c.hidden[id.Text]; hid {

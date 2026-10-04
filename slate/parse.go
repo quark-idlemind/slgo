@@ -256,7 +256,7 @@ func (p *parser) header() error {
 
 func (p *parser) isHeader() bool {
 	switch p.tok.text {
-	case "timeout", "allow", "object", "item", "probe", "listen":
+	case "timeout", "allow", "object", "avatar", "item", "probe", "listen":
 		return p.tok.kind == kWord
 	default:
 		return false
@@ -273,6 +273,8 @@ func (p *parser) headers() error {
 			err = p.allow()
 		case "object":
 			err = p.object()
+		case "avatar":
+			err = p.avatar()
 		case "item":
 			err = p.item()
 		case "probe":
@@ -378,6 +380,20 @@ func (p *parser) object() error {
 	}
 	o.Span = cover(start, p.prev.span)
 	p.script.Objects = append(p.script.Objects, o)
+	return nil
+}
+
+// avatar reads avatar ident: a second avatar, given at run time.
+func (p *parser) avatar() error {
+	start := p.tok.span
+	if err := p.want("avatar"); err != nil {
+		return err
+	}
+	name, err := p.ident()
+	if err != nil {
+		return err
+	}
+	p.script.Avatars = append(p.script.Avatars, Avatar{Span: cover(start, p.prev.span), Name: name})
 	return nil
 }
 
@@ -548,8 +564,36 @@ func (p *parser) stimulus() (*Stimulus, error) {
 	if err != nil {
 		return nil, err
 	}
+	// An as NAME no stimulus above took is the tester's alone: read so
+	// that Check can say so, and not a grammar error at the word.
+	if p.kw("as") {
+		if err := p.next(); err != nil {
+			return nil, err
+		}
+		id, err := p.ident()
+		if err != nil {
+			return nil, err
+		}
+		s.OtherAs = &id
+	}
 	s.Span = cover(start, p.prev.span)
 	return s, nil
+}
+
+// asAvatar reads an optional as NAME after a stimulus a second avatar can
+// do: the avatar's binding.
+func (p *parser) asAvatar() (*Ident, error) {
+	if !p.kw("as") {
+		return nil, nil
+	}
+	if err := p.next(); err != nil {
+		return nil, err
+	}
+	id, err := p.ident()
+	if err != nil {
+		return nil, err
+	}
+	return &id, nil
 }
 
 func (p *parser) touch() (*Touch, error) {
@@ -604,7 +648,8 @@ func (p *parser) touch() (*Touch, error) {
 		sp := cover(start, p.prev.span)
 		t.Guard = &sp
 	}
-	return t, nil
+	t.AsAvatar, err = p.asAvatar()
+	return t, err
 }
 
 // beside reads what may follow or precede a showing, so the clash is a
@@ -878,7 +923,8 @@ func (p *parser) drag() (*Drag, error) {
 	if err := p.dragTimes(d); err != nil {
 		return nil, err
 	}
-	return d, nil
+	d.AsAvatar, err = p.asAvatar()
+	return d, err
 }
 
 // dragTimes reads [over D] [press D] [dwell D], in that order.
@@ -1049,6 +1095,22 @@ func (p *parser) sit() (*Sit, error) {
 	return &Sit{Name: name}, nil
 }
 
+// toAvatar reads an optional to NAME on an expectation of what reached a
+// second avatar.
+func (p *parser) toAvatar() (*Ident, error) {
+	if !p.kw("to") {
+		return nil, nil
+	}
+	if err := p.next(); err != nil {
+		return nil, err
+	}
+	id, err := p.ident()
+	if err != nil {
+		return nil, err
+	}
+	return &id, nil
+}
+
 func (p *parser) stand() (*Stand, error) {
 	if err := p.want("stand"); err != nil {
 		return nil, err
@@ -1115,7 +1177,8 @@ func (p *parser) choose() (*Choose, error) {
 		return nil, err
 	}
 	c.Name = name
-	return c, nil
+	c.AsAvatar, err = p.asAvatar()
+	return c, err
 }
 
 func (p *parser) answer() (*Answer, error) {
@@ -1133,7 +1196,11 @@ func (p *parser) answer() (*Answer, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Answer{Text: text, TextSpan: tsp, Name: name}, nil
+	as, err := p.asAvatar()
+	if err != nil {
+		return nil, err
+	}
+	return &Answer{Text: text, TextSpan: tsp, Name: name, AsAvatar: as}, nil
 }
 
 func (p *parser) send() (*Send, error) {
@@ -1386,6 +1453,13 @@ func (p *parser) expSpeaker() (Speaker, error) {
 		if err := p.next(); err != nil {
 			return Speaker{}, err
 		}
+		if p.tok.kind == kWord && !p.kw("matching") {
+			id, err := p.ident()
+			if err != nil {
+				return Speaker{}, err
+			}
+			return Speaker{Span: cover(sp, id.Span), Kind: SpeakSecond, Name: id}, nil
+		}
 		s, ssp, err := p.str()
 		if err != nil {
 			return Speaker{}, err
@@ -1415,14 +1489,26 @@ func (p *parser) expSpeaker() (Speaker, error) {
 
 func (p *parser) stimSpeaker() (Speaker, error) {
 	if p.kw("object") || p.kw("anyone") {
-		return Speaker{}, p.errorf("a stimulus speaks as the tester, the owner, or an avatar")
+		return Speaker{}, p.errorf("a stimulus speaks as the tester, the owner, an avatar, or a second avatar")
+	}
+	switch p.tok.text {
+	case "tester", "owner", "avatar":
+	default:
+		// as NAME: a second avatar's binding.
+		if p.tok.kind == kWord {
+			id, err := p.ident()
+			if err != nil {
+				return Speaker{}, err
+			}
+			return Speaker{Span: id.Span, Kind: SpeakSecond, Name: id}, nil
+		}
 	}
 	spk, err := p.expSpeaker()
 	if err != nil {
 		return Speaker{}, err
 	}
-	if spk.Kind == SpeakObject || spk.Kind == SpeakAnyone {
-		return Speaker{}, p.errorf("a stimulus speaks as the tester, the owner, or an avatar")
+	if spk.Kind == SpeakSecond {
+		return Speaker{}, p.errorf("a second avatar says as NAME, without avatar")
 	}
 	return spk, nil
 }
@@ -1445,7 +1531,11 @@ func (p *parser) dialogExp(e *Expect) error {
 	if err != nil {
 		return err
 	}
-	d := &DialogExp{Name: name, Link: link}
+	to, err := p.toAvatar()
+	if err != nil {
+		return err
+	}
+	d := &DialogExp{Name: name, Link: link, To: to}
 	if p.kw("text") {
 		if err := p.next(); err != nil {
 			return err
@@ -1564,6 +1654,10 @@ func (p *parser) boxExp(e *Expect) error {
 	if err != nil {
 		return err
 	}
+	to, err := p.toAvatar()
+	if err != nil {
+		return err
+	}
 	if err := p.want("text"); err != nil {
 		return err
 	}
@@ -1571,7 +1665,7 @@ func (p *parser) boxExp(e *Expect) error {
 	if err != nil {
 		return err
 	}
-	e.TextBox = &BoxExp{Name: name, Link: link, Text: text}
+	e.TextBox = &BoxExp{Name: name, Link: link, To: to, Text: text}
 	return nil
 }
 
@@ -1987,7 +2081,11 @@ func (p *parser) giveExp(e *Expect) error {
 	if err != nil {
 		return err
 	}
-	e.Give = &GiveExp{Item: item, From: from}
+	to, err := p.toAvatar()
+	if err != nil {
+		return err
+	}
+	e.Give = &GiveExp{Item: item, From: from, To: to}
 	return nil
 }
 
@@ -2399,7 +2497,7 @@ func (p *parser) beginsItem() bool {
 	}
 	switch p.tok.text {
 	case "expect", "then", "do", "test", "sequence", "before", "after",
-		"object", "item", "allow", "probe", "listen", "timeout", "slate":
+		"object", "avatar", "item", "allow", "probe", "listen", "timeout", "slate":
 		return true
 	}
 	return false

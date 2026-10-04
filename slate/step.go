@@ -436,9 +436,9 @@ func (s *stepRun) expectFor(ctx context.Context, x *expState) error {
 	case e.Say != nil:
 		return s.sayExpect(ctx, x)
 	case e.Dialog != nil:
-		return s.dialogExpect(x, e.Dialog.Name, e.Dialog.Link, e.Dialog.Text, e.Dialog)
+		return s.dialogExpect(x, e.Dialog.Name, e.Dialog.To, e.Dialog.Link, e.Dialog.Text, e.Dialog)
 	case e.TextBox != nil:
-		return s.dialogExpect(x, e.TextBox.Name, e.TextBox.Link, e.TextBox.Text, nil)
+		return s.dialogExpect(x, e.TextBox.Name, e.TextBox.To, e.TextBox.Link, e.TextBox.Text, nil)
 	case e.Texture != nil, e.Offset != nil, e.Repeats != nil, e.Rot != nil, e.Click != nil,
 		e.Fullbright != nil, e.Glow != nil, e.Colour != nil, e.Alpha != nil,
 		e.Position != nil, e.Size != nil, e.FloatText != nil:

@@ -56,10 +56,10 @@ func (s *stepRun) touchStimulus(t *Touch) (*stimulus, error) {
 	}
 	return withLink(&stimulus{
 		send: func(ctx context.Context, _ time.Duration) (string, error) {
-			if err := s.r.sess.Touch(ctx, &b.seen.Object, touch); err != nil {
+			if err := s.r.actor(t.AsAvatar).Touch(ctx, &b.seen.Object, touch); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("touched %s %s", b.name, what), nil
+			return fmt.Sprintf("touched %s %s%s", b.name, what, asText(t.AsAvatar)), nil
 		},
 	}, resolve), nil
 }
@@ -88,10 +88,10 @@ func (s *stepRun) dragStimulus(d *Drag) (*stimulus, error) {
 		send: func(ctx context.Context, budget time.Duration) (string, error) {
 			ctx, cancel := context.WithTimeout(ctx, budget)
 			defer cancel()
-			if err := s.r.sess.Drag(ctx, &b.seen.Object, drag); err != nil {
+			if err := s.r.actor(d.AsAvatar).Drag(ctx, &b.seen.Object, drag); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("dragged %s face %d over %s%s", b.name, face, over, d.holds()), nil
+			return fmt.Sprintf("dragged %s face %d over %s%s%s", b.name, face, over, d.holds(), asText(d.AsAvatar)), nil
 		},
 	}, resolve), nil
 }

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -30,6 +31,81 @@ type Options struct {
 	// Width or Height is DefaultScreenWidth by DefaultScreenHeight, and a
 	// zero Zoom is 1.
 	Screen sl.HUDView
+
+	// Avatars is the session of each second avatar the file declares, by
+	// its binding. The caller dialled them and closes them; Run needs
+	// exactly the declared names, each a different avatar from the tester
+	// and from the others.
+	// Why: doc/slate-runner.md#second-avatars
+	Avatars map[string]*sl.Session
+}
+
+// second is a second avatar the run drives: its binding, its session, and
+// the instant messages it is sent. Its chat is not subscribed: the tester
+// hears what it says, as it hears anyone, and one line is not logged twice.
+type second struct {
+	name string
+	sess *sl.Session
+	ims  <-chan *sl.IM
+}
+
+// setupSeconds matches the file's avatar headers to the sessions given,
+// and refuses a run that is not given exactly those, or that is given one
+// avatar twice. No message names a profile: the caller has not told Run
+// one, and a pasted error must not carry it.
+func (r *runner) setupSeconds() error {
+	declared := map[string]bool{}
+	for _, a := range r.s.Avatars {
+		declared[a.Name.Text] = true
+		if r.opt.Avatars[a.Name.Text] == nil {
+			return &setupError{fmt.Sprintf("%s is declared but no --avatar %s=... was given", a.Name.Text, a.Name.Text)}
+		}
+	}
+	var names []string
+	for n := range r.opt.Avatars {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if !declared[n] {
+			return &setupError{fmt.Sprintf("an --avatar was given for %s, which the file does not declare", n)}
+		}
+	}
+	ids := map[msg.UUID]string{r.sess.Me(): ""}
+	for _, a := range r.s.Avatars {
+		n := a.Name.Text
+		sess := r.opt.Avatars[n]
+		if prev, dup := ids[sess.Me()]; dup || sess == r.sess {
+			if prev == "" {
+				return &setupError{fmt.Sprintf("the profile given for %s is the tester's own", n)}
+			}
+			return &setupError{fmt.Sprintf("the profiles given for %s and %s are the same avatar", prev, n)}
+		}
+		ids[sess.Me()] = n
+		r.seconds = append(r.seconds, &second{name: n, sess: sess, ims: sess.IMs(r.cfg.chatDepth)})
+	}
+	return nil
+}
+
+// actor is the session a stimulus is sent on: the tester's, or the second
+// avatar named by as. Check has made sure the name is declared.
+func (r *runner) actor(as *Ident) *sl.Session {
+	if as != nil {
+		if sc := r.secondOf(as.Text); sc != nil {
+			return sc.sess
+		}
+	}
+	return r.sess
+}
+
+// secondOf is the second avatar bound to name, or nil.
+func (r *runner) secondOf(name string) *second {
+	for _, sc := range r.seconds {
+		if sc.name == name {
+			return sc
+		}
+	}
+	return nil
 }
 
 // TestResult is one test that ran.
@@ -151,6 +227,7 @@ type runner struct {
 	bind    map[string]*binding // header bindings, for the file
 	itemHdr map[string]*sl.Item // item headers, found at setup (wear.go)
 	cur     *testRun            // the test being run, for its as bindings
+	seconds []*second           // the second avatars, in the order the file declares them
 
 	ops gridOps   // what the bring-up and cleanup ask of the grid
 	pr  *probeRun // the bridge and probes; nil when the file has none
@@ -210,7 +287,15 @@ func run(ctx context.Context, sess *sl.Session, s *Script, opt Options, cfg runC
 		r.tick.Stop()
 		sess.StopChat(r.chat)
 		sess.StopIMs(r.ims)
+		for _, sc := range r.seconds {
+			sc.sess.StopIMs(sc.ims)
+		}
 	}()
+	if err := r.setupSeconds(); err != nil {
+		res.Exit = 3
+		r.printf("slate: setup: %v", err)
+		return res, err
+	}
 
 	defer r.cleanup(ctx)
 	if err := r.setup(ctx); err != nil {
@@ -364,7 +449,7 @@ type testRun struct {
 	start time.Time
 	mark  int
 	as    map[string]*binding // bound with as; gone with the test
-	holds map[string]*hold    // dialogs held for a binding
+	holds map[string]*hold    // dialogs held for an object and who they came to (holdKey)
 
 	caps     map[string]*capValue // captured values; gone with the test
 	capNames []string             // in the order they were bound
@@ -451,6 +536,11 @@ func (r *runner) dropped() string {
 	}
 	if n := r.sess.IMsDropped(r.ims); n > 0 {
 		return fmt.Sprintf("the instant message subscription dropped %d lines", n)
+	}
+	for _, sc := range r.seconds {
+		if n := sc.sess.IMsDropped(sc.ims); n > 0 {
+			return fmt.Sprintf("the instant message subscription of %s dropped %d lines", sc.name, n)
+		}
 	}
 	return ""
 }

@@ -52,10 +52,10 @@ func (s *stepRun) showingStimulus(t *Touch) (*stimulus, error) {
 			if sh.At != nil {
 				touch.ST = stOf(*sh.At)
 			}
-			if err := s.r.sess.Touch(ctx, &hit.prim.Object, touch); err != nil {
+			if err := s.r.actor(t.AsAvatar).Touch(ctx, &hit.prim.Object, touch); err != nil {
 				return "", err
 			}
-			return fmt.Sprintf("touched %q face %d showing %s", hit.prim.Name, hit.face, tex), nil
+			return fmt.Sprintf("touched %q face %d showing %s%s", hit.prim.Name, hit.face, tex, asText(t.AsAvatar)), nil
 		},
 	}, nil
 }
