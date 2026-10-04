@@ -372,6 +372,7 @@ type Stimulus struct {
 	Answer  *Answer
 	Send    *Send
 	Wear    *Wear
+	Rez     *RezItem
 	TakeOff *TakeOff
 }
 
@@ -382,6 +383,17 @@ type Wear struct {
 	Point     string // an attachment point name, which Check resolves
 	PointSpan Span
 	As        Ident
+}
+
+// RezItem is rez ITEM (at X Y Z | by DX DY DZ) as NAME, the stimulus.
+// By is an offset from the tester's own position, else the numbers are a
+// region position. As is a new object binding, the rezzed root. It is not
+// the rez expectation (RezExp), which a step reaches only after expect.
+type RezItem struct {
+	Item    Ident
+	By      bool
+	X, Y, Z Number
+	As      Ident
 }
 
 // TakeOff is take off NAME: the binding stops being usable.

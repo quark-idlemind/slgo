@@ -77,7 +77,7 @@ type checker struct {
 	curTest  *Test
 	suffix   string                // names the test and do calls for a step from a sequence
 	world    map[string][]worldUse // in-world names of the object headers, with their descriptions
-	items    map[string]Span       // item headers: not bindings of the grid, only wear uses them
+	items    map[string]Span       // item headers: not bindings of the grid, only wear and rez use them
 	gone     map[string]Span       // names taken off in this test, and where
 	phase    Phase                 // the part of the test the step being checked came from
 	probes   map[string]Probe
@@ -504,6 +504,8 @@ func (c *checker) stimulus(s *Stimulus, same map[string]bool) error {
 		return c.send(s.Send, same)
 	case s.Wear != nil:
 		return c.wear(s.Wear, same)
+	case s.Rez != nil:
+		return c.rezItem(s.Rez)
 	case s.TakeOff != nil:
 		return c.ref(s.TakeOff.Name, same)
 	default:
@@ -537,6 +539,35 @@ func (c *checker) wear(w *Wear, same map[string]bool) error {
 	if point, ok := sl.AttachPointNamed(w.Point); ok {
 		c.wornAt[as] = point
 	}
+	return nil
+}
+
+// rezItem checks rez ITEM (at | by) X Y Z as NAME. ITEM is an item header,
+// the numbers are exact, and NAME is a new object binding made as wear's
+// is, so this step's own expectations may use it.
+// Why: doc/slate-language.md#static-checks
+func (c *checker) rezItem(r *RezItem) error {
+	if _, ok := c.items[r.Item.Text]; !ok {
+		if _, obj := c.bound[r.Item.Text]; obj {
+			return c.err(r.Item.Span, "%s is an object; rez takes an item (item NAME is \"item\" in \"folder\")", r.Item.Text)
+		}
+		return c.err(r.Item.Span, "%s is not an item", r.Item.Text)
+	}
+	for _, n := range []Number{r.X, r.Y, r.Z} {
+		if err := c.exact(n); err != nil {
+			return err
+		}
+	}
+	as := r.As.Text
+	if _, ok := c.names[as]; ok {
+		return c.err(r.As.Span, "%s is already bound", as)
+	}
+	if _, ok := c.items[as]; ok {
+		return c.err(r.As.Span, "%s is already bound", as)
+	}
+	c.bound[as] = r.As.Span
+	c.names[as] = r.As.Span
+	c.wornAt[as] = notWorn
 	return nil
 }
 
@@ -1557,7 +1588,7 @@ func (c *checker) ref(id Ident, same map[string]bool) error {
 		return c.err(id.Span, "%s was taken off at line %d; it cannot be used again in this test", id.Text, at.Line)
 	}
 	if _, ok := c.items[id.Text]; ok {
-		return c.err(id.Span, "%s is an item; only wear uses an item", id.Text)
+		return c.err(id.Span, "%s is an item; only wear and rez use an item", id.Text)
 	}
 	if _, ok := c.bound[id.Text]; !ok {
 		if _, hid := c.hidden[id.Text]; hid {

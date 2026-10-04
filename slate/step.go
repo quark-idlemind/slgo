@@ -482,6 +482,8 @@ func (s *stepRun) stimulusFor(st *Stimulus) (*stimulus, error) {
 		return s.sendStimulus(st.Send)
 	case st.Wear != nil:
 		return s.wearStimulus(st.Wear)
+	case st.Rez != nil:
+		return s.rezStimulus(st.Rez)
 	case st.TakeOff != nil:
 		return s.takeOffStimulus(st.TakeOff)
 	}

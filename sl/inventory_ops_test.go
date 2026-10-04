@@ -1155,6 +1155,55 @@ func TestRezFromInventoryReportsWhatDidNotHappen(t *testing.T) {
 	})
 }
 
+// TestRezFromInventoryEndsAtOnceOnTheLandsRefusal: a parcel that does
+// not let the avatar build says so in an alert and makes no object; the
+// call ends with that sentence instead of waiting out its timeout, and
+// an alert that is not a refused rez does not end it.
+func TestRezFromInventoryEndsAtOnceOnTheLandsRefusal(t *testing.T) {
+	at := msg.Vector3{X: 130, Y: 128, Z: 25}
+	refusal := "Can't rez object 'Example Box' at { 130, 128, 25 } on parcel " +
+		"'Example Parcel' in region Test Region because the owner of this " +
+		"land does not allow it.  Use the land tool to see land ownership."
+
+	t.Run("the refusal", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		// An older refusal, from before the request, is not this one's.
+		f.Relay(t, alert(refusal))
+		start := time.Now()
+		wait := aside(t, func() (*Object, error) {
+			return w.RezFromInventory(context.Background(), anItem(theChild, "Example Box"), at, msg.UUID{}, time.Minute)
+		})
+		waitSent[*msg.RezObject](t, f)
+		f.Relay(t, alert(refusal))
+		o, err := wait()
+		if err == nil || !strings.Contains(err.Error(), refusal) {
+			t.Fatalf("RezFromInventory = %v, want an error quoting the alert", err)
+		}
+		if errors.Is(err, ErrTimeout) || o != nil {
+			t.Errorf("RezFromInventory = %v, %v; want a refusal and no object", o, err)
+		}
+		if d := time.Since(start); d > 10*time.Second {
+			t.Errorf("the refusal took %s to be reported", d)
+		}
+	})
+
+	t.Run("an unrelated alert", func(t *testing.T) {
+		t.Parallel()
+		w, f := newFakeSession(t)
+		wait := aside(t, func() (*Object, error) {
+			return w.RezFromInventory(context.Background(), anItem(theChild, "Example Box"), at, msg.UUID{}, 3*time.Second)
+		})
+		waitSent[*msg.RezObject](t, f)
+		f.Relay(t, alert("Can't sit on that because it is too far away."))
+		f.Relay(t, alert("The owner of this land does not allow it."))
+		_, err := wait()
+		if !errors.Is(err, ErrTimeout) {
+			t.Errorf("RezFromInventory = %v, want it to wait out its timeout", err)
+		}
+	})
+}
+
 // TestRezFromInventoryStopsWhenTheCallerGivesUp: a caller that gives up
 // is told so at once, not a minute later as a timeout.  The object may
 // be standing there by then, and is handed back with the cancel so that
