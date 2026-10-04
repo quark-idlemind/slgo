@@ -3,6 +3,7 @@ package sl
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -107,5 +108,58 @@ func TestUnimplementedBackendRelaysAreClosed(t *testing.T) {
 	case <-b.Done():
 	default:
 		t.Error("Done is open")
+	}
+}
+
+// TestEveryBackendMethodAnswersNotSupported walks Backend by reflection, so a
+// method added later whose UnimplementedBackend answer is not ErrNotSupported
+// fails here.  It subsumes the hand-listed test above, which is kept for the
+// non-error answers.  A method that returns no error must be on the list.
+func TestEveryBackendMethodAnswersNotSupported(t *testing.T) {
+	// Methods whose answer is not ErrNotSupported, and why.
+	exempt := map[string]string{
+		"Info":          "identity, not a request",
+		"HasCap":        "a bool",
+		"Close":         "closing nothing succeeds",
+		"Messages":      "a closed channel",
+		"Events":        "a closed channel",
+		"RegionChanges": "a closed channel",
+		"Done":          "a closed channel",
+	}
+	bt := reflect.TypeOf((*Backend)(nil)).Elem()
+	errType := reflect.TypeOf((*error)(nil)).Elem()
+	ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
+	recv := reflect.ValueOf(UnimplementedBackend{})
+	for i := 0; i < bt.NumMethod(); i++ {
+		m := bt.Method(i)
+		if _, ok := exempt[m.Name]; ok {
+			continue
+		}
+		mt := recv.MethodByName(m.Name).Type()
+		if mt.NumOut() == 0 || mt.Out(mt.NumOut()-1) != errType {
+			t.Errorf("%s returns no error and is not on the exempt list", m.Name)
+			continue
+		}
+		args := make([]reflect.Value, mt.NumIn())
+		for j := range args {
+			at := mt.In(j)
+			switch {
+			case at == ctxType:
+				args[j] = reflect.ValueOf(context.Background())
+			case at.Kind() == reflect.Ptr:
+				args[j] = reflect.New(at.Elem())
+			default:
+				args[j] = reflect.Zero(at)
+			}
+		}
+		var out []reflect.Value
+		if mt.IsVariadic() {
+			out = recv.MethodByName(m.Name).CallSlice(args)
+		} else {
+			out = recv.MethodByName(m.Name).Call(args)
+		}
+		if err, _ := out[len(out)-1].Interface().(error); !errors.Is(err, ErrNotSupported) {
+			t.Errorf("%s: %v, want ErrNotSupported", m.Name, err)
+		}
 	}
 }

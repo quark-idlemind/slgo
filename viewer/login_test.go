@@ -389,7 +389,7 @@ func TestGetIsNotALogin(t *testing.T) {
 func TestARealFirestormRequestIsAccepted(t *testing.T) {
 	body, err := os.ReadFile("../agent/testdata/firestorm-login.xml")
 	if err != nil {
-		t.Skipf("no capture: %v", err)
+		t.Fatalf("../agent/testdata/firestorm-login.xml is tracked and must be readable: %v", err)
 	}
 
 	// The capture is Flint Prober, with the digest of the throwaway
