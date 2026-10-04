@@ -923,3 +923,170 @@ func TestASetOfUnknownOrderJoiningIsNotKnown(t *testing.T) {
 	))
 	expectKnown(t, o, []bool{false, false, false, false, false}, linkRoot, linkRoot2, linkC, linkD, linkA)
 }
+
+// Sitters: a viewer appends every child, avatar or not, so an avatar
+// sitting on a set is numbered after all of its prims, in the order the
+// avatars sat.
+// Why: doc/objects.md#link-numbers
+var (
+	sitterOne = msg.MustParseUUID("48f07e57-7e57-c0de-7b78-68dc421e249b")
+	sitterTwo = msg.MustParseUUID("99a17e57-7e57-c0de-3c9c-78eb61efe352")
+	linkSpare = msg.MustParseUUID("af667e57-7e57-c0de-7202-f78602af6e09")
+)
+
+// sat is one full update: an avatar with this local id under this parent.
+func sat(o *Objects, id msg.UUID, local, parent uint32) {
+	o.update(&msg.ObjectUpdate_ObjectData{ID: local, ParentID: parent, FullID: id, PCode: pcodeAvatar},
+		msg.Vector3{}, 0)
+}
+
+func TestSittersAreNumberedAfterThePrimsInTheOrderTheySat(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	told(o, linkRoot, 1, 0)
+	told(o, linkA, 2, 1)
+	told(o, linkB, 3, 1)
+	expectNumbers(t, o, []int{1, 2, 3}, linkRoot, linkA, linkB)
+
+	// Both avatars are in the region, standing, before they sit.
+	sat(o, sitterOne, 10, 0)
+	sat(o, sitterTwo, 11, 0)
+	sat(o, sitterOne, 10, 1)
+	expectNumbers(t, o, []int{1, 2, 3, 4}, linkRoot, linkA, linkB, sitterOne)
+	sat(o, sitterTwo, 11, 1)
+	expectNumbers(t, o, []int{1, 2, 3, 4, 5}, linkRoot, linkA, linkB, sitterOne, sitterTwo)
+	expectKnown(t, o, []bool{true, true, true, true, true}, linkRoot, linkA, linkB, sitterOne, sitterTwo)
+
+	// All and Linkset agree with Get, the prims first.
+	var ids []msg.UUID
+	var nums []int
+	for _, v := range o.Linkset(1) {
+		ids, nums = append(ids, v.ID), append(nums, v.LinkNumber)
+	}
+	if want := []msg.UUID{linkRoot, linkA, linkB, sitterOne, sitterTwo}; !reflect.DeepEqual(ids, want) {
+		t.Errorf("Linkset is %v, want %v", ids, want)
+	}
+	if want := []int{1, 2, 3, 4, 5}; !reflect.DeepEqual(nums, want) {
+		t.Errorf("Linkset numbers %v, want %v", nums, want)
+	}
+	for _, v := range o.All() {
+		if want := map[msg.UUID]int{linkRoot: 1, linkA: 2, linkB: 3, sitterOne: 4, sitterTwo: 5}[v.ID]; v.LinkNumber != want {
+			t.Errorf("All numbers %s %d, want %d", v.ID, v.LinkNumber, want)
+		}
+	}
+
+	// The first stands and the second closes up.
+	sat(o, sitterOne, 10, 0)
+	expectNumbers(t, o, []int{1, 2, 3, 0, 4}, linkRoot, linkA, linkB, sitterOne, sitterTwo)
+
+	// Both stand, and the prims are as they were built.
+	sat(o, sitterTwo, 11, 0)
+	expectNumbers(t, o, []int{1, 2, 3, 0, 0}, linkRoot, linkA, linkB, sitterOne, sitterTwo)
+	expectKnown(t, o, []bool{true, true, true, true, true}, linkRoot, linkA, linkB, sitterOne, sitterTwo)
+}
+
+func TestASitterOnASinglePrimIsLinkTwoAndThePrimLinkOne(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	told(o, linkRoot, 1, 0)
+	expectNumbers(t, o, []int{0}, linkRoot)
+	sat(o, sitterOne, 10, 1)
+	expectNumbers(t, o, []int{1, 2}, linkRoot, sitterOne)
+	sat(o, sitterOne, 10, 0)
+	expectNumbers(t, o, []int{0, 0}, linkRoot, sitterOne)
+}
+
+func TestAKilledSitterClosesTheOthersUp(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	told(o, linkRoot, 1, 0)
+	told(o, linkA, 2, 1)
+	sat(o, sitterOne, 10, 0)
+	sat(o, sitterTwo, 11, 0)
+	sat(o, sitterOne, 10, 1)
+	sat(o, sitterTwo, 11, 1)
+	o.kill(10)
+	expectNumbers(t, o, []int{1, 2, 3}, linkRoot, linkA, sitterTwo)
+	o.kill(1)
+	if len(o.sitters) != 0 {
+		t.Error("a killed root kept its sitters' list")
+	}
+}
+
+func TestAPrimLinkedWhileSomebodySitsGoesInAmongThePrims(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	told(o, linkRoot, 1, 0)
+	told(o, linkA, 2, 1)
+	told(o, linkB, 3, 1)
+	sat(o, sitterOne, 10, 0)
+	sat(o, sitterOne, 10, 1)
+	told(o, linkSpare, 4, 0)
+
+	// A live link of one is link 2, the old prims move up, and the sitter
+	// is still after every prim: 5 of 5.
+	told(o, linkSpare, 4, 1)
+	expectNumbers(t, o, []int{1, 2, 3, 4, 5}, linkRoot, linkSpare, linkA, linkB, sitterOne)
+	expectKnown(t, o, []bool{true, true, true, true, true}, linkRoot, linkSpare, linkA, linkB, sitterOne)
+}
+
+func TestASitFollowedByALinkIsNotTakenForALinkOfSeveral(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	base := time.Unix(1700000000, 0)
+	o.now = func() time.Time { return base }
+	told(o, linkRoot, 1, 0)
+	told(o, linkA, 2, 1)
+	told(o, linkSpare, 4, 0)
+	sat(o, sitterOne, 10, 0)
+
+	// Both at the same instant, well inside JoinWindow.
+	sat(o, sitterOne, 10, 1)
+	told(o, linkSpare, 4, 1)
+	expectNumbers(t, o, []int{1, 2, 3, 4}, linkRoot, linkSpare, linkA, sitterOne)
+	expectKnown(t, o, []bool{true, true, true, true}, linkRoot, linkSpare, linkA, sitterOne)
+	if o.misordered[linkRoot] {
+		t.Error("a sit marked the set as one the region misorders")
+	}
+}
+
+func TestAnAvatarDescribedAlreadySeatedGoesAfterThePrims(t *testing.T) {
+	t.Parallel()
+
+	// The prims first, then the avatar.
+	o := newObjects()
+	told(o, linkRoot, 1, 0)
+	told(o, linkA, 2, 1)
+	sat(o, sitterOne, 10, 1)
+	told(o, linkB, 3, 1)
+	expectNumbers(t, o, []int{1, 2, 3, 4}, linkRoot, linkA, linkB, sitterOne)
+
+	// The avatar first, then the root, then the prims.
+	o = newObjects()
+	sat(o, sitterOne, 10, 1)
+	told(o, linkB, 3, 1)
+	told(o, linkRoot, 1, 0)
+	told(o, linkA, 2, 1)
+	expectNumbers(t, o, []int{1, 2, 3, 4}, linkRoot, linkB, linkA, sitterOne)
+	expectKnown(t, o, []bool{true, true, true, true}, linkRoot, linkB, linkA, sitterOne)
+
+	// Two described seated are numbered after the prims, but their order
+	// is not known.
+	sat(o, sitterTwo, 11, 1)
+	expectNumbers(t, o, []int{4, 5}, sitterOne, sitterTwo)
+	expectKnown(t, o, []bool{false, false}, sitterOne, sitterTwo)
+	expectKnown(t, o, []bool{true, true, true}, linkRoot, linkB, linkA)
+	sat(o, sitterOne, 10, 0)
+	expectKnown(t, o, []bool{true}, sitterTwo)
+
+	// A flush forgets the sitters with the prims.
+	o.Flush()
+	if len(o.sitters) != 0 || len(o.sitUnordered) != 0 {
+		t.Error("a flush left sitters behind")
+	}
+}

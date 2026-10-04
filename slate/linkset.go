@@ -181,9 +181,10 @@ func (r *runner) linkBinding(ctx context.Context, all []*sl.Seen, b *binding, li
 	if err != nil {
 		return nil, ctxOr(ctx, &linkFault{fmt.Sprintf("reading the links of %q: %v", root.Name, err)})
 	}
-	// A set of one is link 0, and the root of a larger one is link 1.
+	// A set of one is link 0, and the root of a larger one is link 1; so
+	// is a lone prim with somebody sitting on it.
 	i := int(link) - 1
-	if len(set) == 1 {
+	if len(set) == 1 && set[0].LinkNumber == 0 {
 		i = int(link)
 	}
 	if link < 0 || link > int64(len(set)) || i < 0 || i >= len(set) {

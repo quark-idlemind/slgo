@@ -23,13 +23,16 @@
 #     tools/check-identities                 what is staged for commit
 #     tools/check-identities --worktree      what is changed but not staged
 #     tools/check-identities --all           every tracked file, and the tags
-#     tools/check-identities FILE...         the files named
+#     tools/check-identities FILE...         the files named, which must be
+#                                            readable files in this checkout
 #     tools/check-identities --message FILE  a commit message, before it is made
 #     tools/check-identities --install-hook  run it before every commit
 #
 # Every check runs, whatever an earlier one found: it prints the file and line
 # of everything it finds, and what to write instead, and the exit status is 1
-# at the end if any of them found something, 0 if none did.  The checks are:
+# at the end if any of them found something, 0 if none did, and 2 when it
+# could not look: a named file it cannot read, or an option it does not
+# know.  The checks are:
 # a compiled binary, an image carrying metadata (tools/scan-images), a
 # network address, a 128-bit identifier that does not carry the signature
 # (tools/scan-ids, which doc/identities.md describes), a grid square that is
@@ -84,8 +87,30 @@ case "$scope" in
 --all)      files=$(git ls-files) ;;
 --message)  files=""; msgfile=${2:?check-identities: --message wants a file} ;;
 -*)         echo "check-identities: no such option $scope" >&2; exit 2 ;;
-*)          files=$* ;;
+*)          files=$*; named=1 ;;
 esac
+
+# A file named on the command line has to be one this can read, in this
+# checkout: one that is not -- a typo, or a path outside the checkout --
+# would otherwise be skipped and read as nothing real found.  An absolute
+# path inside the checkout is taken as the same file.
+if [ "${named:-0}" = 1 ]; then
+	rel="" bad=0
+	for f in $files; do
+		case "$f" in "$root"/*) f=${f#"$root"/} ;; esac
+		if [ ! -f "$root/$f" ] || [ ! -r "$root/$f" ]; then
+			echo "check-identities: $f is not a readable file in this checkout ($root)" >&2
+			bad=1
+		fi
+		rel="$rel $f"
+	done
+	[ "$bad" = 0 ] || exit 2
+	files=$rel
+fi
+if [ "$scope" = "--message" ] && [ ! -r "$msgfile" ]; then
+	echo "check-identities: $msgfile is not a readable file" >&2
+	exit 2
+fi
 
 [ -n "$files" ] || [ "$scope" = "--message" ] || { echo "check-identities: nothing to check"; exit 0; }
 

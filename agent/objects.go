@@ -115,15 +115,18 @@ type Object struct {
 	// LinkNumber is what a viewer calls this prim in its linkset: 0 when
 	// it is not linked, 1 for the root of a linkset that has children,
 	// and 2 and up for a child, by its place in the root's list of
-	// them.  The store fills it in on the copy it hands out; see
-	// Objects.kids.
+	// them.  An avatar sitting on the set is numbered after all of its
+	// prims, in the order the avatars sat.  The store fills it in on the
+	// copy it hands out; see Objects.kids and Objects.sitters.
 	// Why: doc/objects.md#link-numbers
 	LinkNumber int
 
 	// LinkKnown says LinkNumber can be believed: true for a prim that is
 	// not linked, and for the rest the state of its linkset, which a
-	// link made while the store watched leaves unknown.  See
-	// Objects.unordered.
+	// link made while the store watched leaves unknown.  A sitter's
+	// number does not depend on the prims' order, so it is known unless
+	// several sitters were described already seated.  See
+	// Objects.unordered and Objects.sitUnordered.
 	LinkKnown bool
 
 	// First and Last are when the simulator first and last said
@@ -182,7 +185,8 @@ type Objects struct {
 	// as llCreateLink does (measured), and the region's update for a link
 	// of several is not in link order, so that set is left unknown.  A
 	// child is removed when its parent changes or it goes, and the rest
-	// close up.
+	// close up.  Avatars sitting on the set are not in this list: see
+	// sitters.
 	//
 	// A parent that is not in the store yet has a list all the same,
 	// which is the viewer's orphans waiting in the order they came.
@@ -191,6 +195,21 @@ type Objects struct {
 	// a repeat must not reorder the linkset.
 	// Why: doc/objects.md#link-numbers
 	kids map[uint32][]msg.UUID
+
+	// sitters is each parent's children that are avatars, by the
+	// parent's local id, in the order they sat.  The viewer appends every
+	// child, so a sitter comes after all of the prims however it arrived:
+	// it is 1 plus the number of prims, root included, plus its place
+	// here.  A sitter is never inserted at the front, joins no window and
+	// takes no part in the prims' order; it leaves when its parent changes
+	// or it goes, and the later ones close up.
+	// Why: doc/objects.md#link-numbers
+	sitters map[uint32][]msg.UUID
+
+	// sitUnordered holds the parents with more than one sitter of which
+	// one was described already seated, which the region sends in no
+	// order we know.  It goes when one sitter or none is left.
+	sitUnordered map[uint32]bool
 
 	// unordered holds the parents whose child list is not known to be
 	// in link order: a set that several prims joined in one update
@@ -259,6 +278,7 @@ type viewpoint struct {
 func newObjects() *Objects {
 	return &Objects{byID: map[msg.UUID]*Object{}, viewers: map[string]viewpoint{},
 		kids: map[uint32][]msg.UUID{}, unordered: map[uint32]bool{},
+		sitters: map[uint32][]msg.UUID{}, sitUnordered: map[uint32]bool{},
 		misordered: map[msg.UUID]bool{}, links: map[uint32]namedLink{},
 		lastLive: map[uint32]time.Time{},
 		now:      time.Now}
@@ -339,7 +359,7 @@ func (o *Objects) All() []*Object {
 }
 
 // Linkset is the root with this local id and its children, in link
-// order, or nil if nothing here has that id.
+// order, the prims and then the sitters, or nil if nothing here has that id.
 func (o *Objects) Linkset(root uint32) []*Object {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
@@ -354,6 +374,13 @@ func (o *Objects) Linkset(root uint32) []*Object {
 		if v := o.byID[id]; v != nil {
 			k := *v
 			k.LinkNumber, k.LinkKnown = 2+i, !o.unordered[root]
+			out = append(out, &k)
+		}
+	}
+	for i, id := range o.sitters[root] {
+		if v := o.byID[id]; v != nil {
+			k := *v
+			k.LinkNumber, k.LinkKnown = 2+len(o.kids[root])+i, !o.sitUnordered[root]
 			out = append(out, &k)
 		}
 	}
@@ -372,6 +399,10 @@ func (o *Objects) numberLocked(c *Object, parentHere func(uint32) bool) {
 		set = c.Local
 	}
 	c.LinkKnown = !o.unordered[set]
+	// A sitter's number needs only the count of prims, not their order.
+	if c.PCode == pcodeAvatar && c.Parent != 0 {
+		c.LinkKnown = !o.sitUnordered[c.Parent]
+	}
 }
 
 // linkNumberLocked is v's link number, given whether a local id is in
@@ -379,12 +410,20 @@ func (o *Objects) numberLocked(c *Object, parentHere func(uint32) bool) {
 // viewer does not number either.
 func (o *Objects) linkNumberLocked(v *Object, parentHere func(uint32) bool) int {
 	if v.Parent == 0 {
-		if len(o.kids[v.Local]) > 0 {
+		if len(o.kids[v.Local]) > 0 || len(o.sitters[v.Local]) > 0 {
 			return 1
 		}
 		return 0
 	}
 	if !v.listed || !parentHere(v.Parent) {
+		return 0
+	}
+	if v.PCode == pcodeAvatar {
+		for i, id := range o.sitters[v.Parent] {
+			if id == v.ID {
+				return 2 + len(o.kids[v.Parent]) + i
+			}
+		}
 		return 0
 	}
 	for i, id := range o.kids[v.Parent] {
@@ -402,7 +441,9 @@ func (o *Objects) linkNumberLocked(v *Object, parentHere func(uint32) bool) int 
 // An object the store already held that changes parent is a live link,
 // and goes to the front of its new list.  One described for the first
 // time, or described again under the parent it had before its list was
-// dropped, is a fresh arrival, and goes to the end.
+// dropped, is a fresh arrival, and goes to the end.  An avatar is
+// neither: it is a sitter, goes to the end of the sitters, and leaves
+// the prims' order and JoinWindow alone.
 // Why: doc/objects.md#link-numbers
 func (o *Objects) linkLocked(v *Object) {
 	if v.listed && v.listedUnder == v.Parent {
@@ -423,6 +464,16 @@ func (o *Objects) linkLocked(v *Object) {
 		if described && o.misordered[v.ID] && len(o.kids[v.Local]) > 0 {
 			o.misorderLocked(v.Local)
 		}
+		return
+	}
+	if v.PCode == pcodeAvatar {
+		o.sitters[v.Parent] = append(o.sitters[v.Parent], v.ID)
+		// Avatars seen already seated come in no order we know; ones that
+		// sat while we watched are in the order they sat.
+		if !live && len(o.sitters[v.Parent]) > 1 {
+			o.sitUnordered[v.Parent] = true
+		}
+		v.listed, v.listedUnder = true, v.Parent
 		return
 	}
 	if live {
@@ -536,7 +587,7 @@ func (o *Objects) planJoins(moves []move) map[uint32]*setJoin {
 	byParent := map[uint32][]*Object{}
 	for _, m := range moves {
 		v := o.byID[m.id]
-		if m.parent == 0 || v == nil || !v.heard || v.heardParent == m.parent {
+		if m.parent == 0 || v == nil || v.PCode == pcodeAvatar || !v.heard || v.heardParent == m.parent {
 			continue
 		}
 		byParent[m.parent] = append(byParent[m.parent], v)
@@ -690,7 +741,8 @@ func (o *Objects) linked(m *msg.ObjectLink) {
 }
 
 // liveJoin says whether an update giving this prim this parent would be
-// a live link: the store holds it, under another parent or none.
+// a live link: the store holds it, under another parent or none.  An
+// avatar sitting down is not one.
 func (o *Objects) liveJoin(id msg.UUID, parent uint32) bool {
 	if parent == 0 {
 		return false
@@ -698,7 +750,7 @@ func (o *Objects) liveJoin(id msg.UUID, parent uint32) bool {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	v := o.byID[id]
-	return v != nil && v.heard && v.heardParent != parent
+	return v != nil && v.PCode != pcodeAvatar && v.heard && v.heardParent != parent
 }
 
 // settleLocked takes a parent out of unordered once no child in its
@@ -717,6 +769,19 @@ func (o *Objects) settleLocked(parent uint32) {
 
 func (o *Objects) unlinkLocked(v *Object) {
 	if !v.listed {
+		return
+	}
+	if i := slices.Index(o.sitters[v.listedUnder], v.ID); i >= 0 {
+		list := slices.Delete(o.sitters[v.listedUnder], i, i+1)
+		if len(list) == 0 {
+			delete(o.sitters, v.listedUnder)
+		} else {
+			o.sitters[v.listedUnder] = list
+		}
+		if len(list) < 2 {
+			delete(o.sitUnordered, v.listedUnder)
+		}
+		v.listed = false
 		return
 	}
 	list := o.kids[v.listedUnder]
@@ -751,7 +816,14 @@ func (o *Objects) forgetLocked(v *Object) {
 			c.listed = false
 		}
 	}
+	for _, id := range o.sitters[v.Local] {
+		if c := o.byID[id]; c != nil {
+			c.listed = false
+		}
+	}
 	delete(o.kids, v.Local)
+	delete(o.sitters, v.Local)
+	delete(o.sitUnordered, v.Local)
 	delete(o.lastLive, v.Local)
 	delete(o.byID, v.ID)
 }
@@ -813,7 +885,7 @@ func (o *Objects) absorb(from *Objects) int {
 		v.listed, v.heard, v.heardParent = false, false, 0
 		o.byID[v.ID] = v
 		o.linkLocked(v)
-		if v.Parent != 0 {
+		if v.Parent != 0 && v.PCode != pcodeAvatar {
 			v.moved = true
 			o.unordered[v.Parent] = true
 		}
@@ -834,6 +906,8 @@ func (o *Objects) Flush() int {
 	n := len(o.byID)
 	o.byID = map[msg.UUID]*Object{}
 	o.kids = map[uint32][]msg.UUID{}
+	o.sitters = map[uint32][]msg.UUID{}
+	o.sitUnordered = map[uint32]bool{}
 	o.unordered = map[uint32]bool{}
 	o.lastLive = map[uint32]time.Time{}
 	return n
