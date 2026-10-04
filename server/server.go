@@ -175,6 +175,11 @@ type Hosted struct {
 	seats   Seats
 	seating context.CancelFunc
 
+	// sitRefusals counts the region's "not in the same region" answers
+	// to a sit, which is how a seat that is gone is told from one that
+	// is slow.  See seat.go.
+	sitRefusals atomic.Uint64
+
 	// rank is the order this session came up in, lowest first.  It is
 	// what makes the default deterministic; see Server.Default.
 	rank uint64
@@ -373,9 +378,10 @@ func (s *Server) StartAgent(ctx context.Context, name string, login agent.Login,
 		opts.SendTap = func(p *msg.Packet) {
 			caller(p)
 			h.noteSent(p)
+			h.noteStandSent(p)
 		}
 	} else {
-		opts.SendTap = func(p *msg.Packet) { h.noteSent(p) }
+		opts.SendTap = func(p *msg.Packet) { h.noteSent(p); h.noteStandSent(p) }
 	}
 	// What the grid says of a payment, for the log.  Chained for the
 	// others' reason.  See pay.go.
@@ -834,6 +840,7 @@ func (s *Server) Close(ctx context.Context) {
 		// treat a deliberate logout as a failure to recover
 		// from.
 		h.stopped.Store(true)
+		h.standingAtStop()
 		if a := h.Agent(); a != nil {
 			_ = a.Logout(ctx, 10*time.Second)
 		}

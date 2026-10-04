@@ -197,9 +197,72 @@ A region does not hand over its contents at once. The avatar is in
 world and able to move some seconds before the object it was sitting on
 has been described, and a sit request naming an object the simulator
 has not got to yet is answered with nothing at all. So the request is
-repeated for a while and then given up on, which also covers the case
-that matters more: the seat is genuinely gone, taken home by its owner,
-and no amount of asking will bring it back.
+repeated for a while and then given up on. The pace already covers a
+region still describing itself: objects keep their ids across a region
+restart, so a seat that existed is in the region when the avatar logs
+in there, and the attempts are spaced to let it be described. What
+happens when the asking ends, for a seat that is gone, is the next
+section.
+
+### Gone, elsewhere, or only slow
+
+Giving up used to keep the seat, so a seat that was gone was asked for
+again, and given up on again, at every login.
+
+Measured (2026-10-03), with the test avatar and an invented box in a
+sandbox: a sit request naming an object the region does not hold is
+answered by the alert `SitFailNotSameRegion` ("Try moving closer.
+Can't sit on object because it is not in the same region as you.")
+about 70 ms later, whether the object is in ANOTHER region or has been
+DELETED. For an object beside the avatar it is seated and no alert
+comes. So the region's answer cannot tell "elsewhere" from "gone". The
+same happened on the test daemon: the avatar stood up and its seat was
+deleted, the daemon was stopped within a second of the stand, before
+the watch had noticed, and every attempt at the next login was refused
+this way, six times, fifteen seconds apart.
+
+So the region is remembered with the seat. The seats file is one line
+per avatar, `profile seat-id [region-id]`; the region is the id from
+the region's handshake, written when the seat is, and a line without one
+is from before it was kept and reads as not known. At login:
+
+- the avatar is not in the seat's region: nothing is asked, because it
+  cannot work from here, and the seat is not forgotten for that, since it
+  may well be there. One line says so. The watch then forgets it once it
+  sees the avatar standing, as it always has: what is remembered is what
+  the avatar is sitting on, and a standing avatar sits on nothing. So
+  what this saves is the attempts that could not work. Checked live: a
+  seat recorded in another region was not asked for, and was forgotten
+  when the avatar was seen standing.
+- the avatar is in the seat's region, or the region is not known: it is
+  asked for as above. If every attempt was answered by
+  `SitFailNotSameRegion` (recognised by the notification's name in the
+  alert, or failing that the shape of its text) and none seated the
+  avatar, then the seat is not in the region the avatar is in, which is
+  to say it is gone, and it is forgotten, with a line saying so and
+  why. If the attempts ended any other way -- no answer at all, a
+  different refusal -- nothing is proved and the seat is kept, as
+  before.
+
+A stand is written down when it is asked for. The region's word that
+the avatar is standing comes a moment after the request, and a daemon
+stopped in that moment kept a seat the avatar had left -- which is how
+this was found, and was seen again live with the stop-time read below
+alone. So when the avatar sends a stand (the stand-up control in an
+`AgentUpdate`, whoever asked for it: a client, a shell or a viewer), the
+seat is forgotten at once; a stand that does not take leaves the avatar
+on the seat, and the watch writes it down again. Checked live: sat,
+stood and stopped within a second, and the seat was forgotten.
+
+A stop reads the seat once more. When the session is logged out, or the
+daemon shut down, the daemon reads what the avatar is parented to from
+what the session already holds -- nothing is asked of the region -- and
+if the avatar is standing the seat is forgotten, so a stand the watch
+had not yet seen is not lost to the stop that followed it.
+
+The viewer has no such feature: nothing in Firestorm sits an avatar
+down after login, and it remembers no seat across logins. The alert's
+only use there is the notification. This re-sit is slgo's own.
 
 ### What counts as having sat down
 

@@ -12,12 +12,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
+	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 )
 
 // quickSeating makes the loop run in test time rather than in the
@@ -38,32 +40,42 @@ func quickSeating(t *testing.T) {
 type rememberedSeats struct {
 	mu     sync.Mutex
 	on     map[string]msg.UUID
+	in     map[string]msg.UUID
 	writes int
 }
 
 func newSeats(profile string, on msg.UUID) *rememberedSeats {
-	s := &rememberedSeats{on: map[string]msg.UUID{}}
+	return newSeatsIn(profile, on, msg.UUID{})
+}
+
+// newSeatsIn is a seat with the region it was in; a zero region is a
+// line from before regions were kept.
+func newSeatsIn(profile string, on, region msg.UUID) *rememberedSeats {
+	s := &rememberedSeats{on: map[string]msg.UUID{}, in: map[string]msg.UUID{}}
 	if !on.IsZero() {
 		s.on[profile] = on
+		s.in[profile] = region
 	}
 	return s
 }
 
-func (s *rememberedSeats) Seat(profile string) msg.UUID {
+func (s *rememberedSeats) Seat(profile string) (on, region msg.UUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.on[profile]
+	return s.on[profile], s.in[profile]
 }
 
-func (s *rememberedSeats) SetSeat(profile string, on msg.UUID) {
+func (s *rememberedSeats) SetSeat(profile string, on, region msg.UUID) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.writes++
 	if on.IsZero() {
 		delete(s.on, profile)
+		delete(s.in, profile)
 		return
 	}
 	s.on[profile] = on
+	s.in[profile] = region
 }
 
 func (s *rememberedSeats) wrote() int {
@@ -75,8 +87,20 @@ func (s *rememberedSeats) wrote() int {
 // seatRig is homeRig with a place to remember seats.
 func seatRig(t *testing.T, seats Seats) (*Hosted, *fakeSim) {
 	t.Helper()
+	h, sim, _ := seatRigWith(t, seats, nil, nil)
+	return h, sim
+}
+
+// seatRigWith sets the sim up before the login, and logs to log.
+func seatRigWith(t *testing.T, seats Seats, setup func(*fakeSim), log func(string, ...any)) (*Hosted, *fakeSim, *Server) {
+	t.Helper()
 	sim := newSim(t)
 	t.Cleanup(sim.close)
+	if setup != nil {
+		sim.mu.Lock() // the sim is already listening
+		setup(sim)
+		sim.mu.Unlock()
+	}
 
 	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, `<?xml version="1.0"?><methodResponse><params><param><value><struct>
@@ -96,6 +120,9 @@ func seatRig(t *testing.T, seats Seats) (*Hosted, *fakeSim) {
 
 	srv := New()
 	srv.SetSeats(seats)
+	if log != nil {
+		srv.SetLog(log)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
@@ -105,7 +132,7 @@ func seatRig(t *testing.T, seats Seats) (*Hosted, *fakeSim) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return h, sim
+	return h, sim, srv
 }
 
 // satOn is how many times this session has asked to sit.
@@ -224,5 +251,216 @@ func TestAnUnnameableSeatIsStillASeat(t *testing.T) {
 	if local, known := h.seatedLocal(); known || local != 0 {
 		t.Errorf("a session with no agent answered %d, %v; want zero and not known",
 			local, known)
+	}
+}
+
+// The region's answer to a sit on an object it does not hold, as the
+// log of a measurement shows it: the notification's name in AlertInfo,
+// and its text.  Why: doc/daemon.md#gone-elsewhere-or-only-slow
+func notSameRegion() *msg.AlertMessage {
+	m := &msg.AlertMessage{}
+	m.AlertData.Message = []byte("Try moving closer.  Can't sit on object because\nit is not in the same region as you.\x00")
+	m.AlertInfo = []msg.AlertMessage_AlertInfo{{Message: []byte("SitFailNotSameRegion\x00")}}
+	return m
+}
+
+var (
+	seatChair   = msg.MustParseUUID("5cb57e57-7e57-c0de-8a22-9bc748f03c36")
+	seatRegion  = msg.MustParseUUID("72497e57-7e57-c0de-09f6-f01db3576907")
+	otherRegion = msg.MustParseUUID("a6f37e57-7e57-c0de-375c-a1552202781c")
+	seatSelf    = msg.MustParseUUID("876e7e57-7e57-c0de-8597-66b760a8cb5f")
+)
+
+// inRegion makes the sim a region with this id.
+func inRegion(id msg.UUID) func(*fakeSim) { return func(f *fakeSim) { f.regionID = id } }
+
+// parentTo tells the session the avatar is parented to local, zero
+// being standing.
+func parentTo(sim *fakeSim, local uint32) {
+	sim.send(&msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{
+		ID: 77, FullID: seatSelf, PCode: 47, ParentID: local,
+		ObjectData: make([]byte, 60)}}}, 0)
+}
+
+// logLines collects what the session logs.
+type logLines struct {
+	mu    sync.Mutex
+	lines []string
+}
+
+func (l *logLines) add(f string, v ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.lines = append(l.lines, fmt.Sprintf(f, v...))
+}
+
+func (l *logLines) has(sub string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, s := range l.lines {
+		if strings.Contains(s, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestASeatTheRegionDoesNotHoldIsForgotten: the avatar is in the
+// seat's region, every attempt was refused as not in this region, so
+// the seat is gone.  An old line without a region is asked the same
+// way and ends the same way.
+func TestASeatTheRegionDoesNotHoldIsForgotten(t *testing.T) {
+	for _, c := range []struct {
+		what   string
+		region msg.UUID
+	}{
+		{"a seat with its region", seatRegion},
+		{"an old line without a region", msg.UUID{}},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			quickSeating(t)
+			seats := newSeatsIn("example", seatChair, c.region)
+			var logs logLines
+			_, sim, _ := seatRigWith(t, seats, func(f *fakeSim) {
+				f.regionID = seatRegion
+				f.onSit = func(int) { f.send(notSameRegion(), 0) }
+			}, logs.add)
+			_ = sim
+
+			waitFor(t, 3*time.Second, "the seat to be forgotten", func() bool {
+				on, _ := seats.Seat("example")
+				return on.IsZero()
+			})
+			if n := satOn(sim); n != SeatTries {
+				t.Errorf("it asked %d times, want %d", n, SeatTries)
+			}
+			if !logs.has("forgot the seat") {
+				t.Error("forgetting the seat was not logged")
+			}
+		})
+	}
+}
+
+// TestASeatInAnotherRegionIsNotAskedFor: the sit cannot work from
+// here and the seat may well be there, so nothing is sent and the seat
+// is kept.
+func TestASeatInAnotherRegionIsNotAskedFor(t *testing.T) {
+	quickSeating(t)
+	seats := newSeatsIn("example", seatChair, otherRegion)
+	var logs logLines
+	_, sim, _ := seatRigWith(t, seats, inRegion(seatRegion), logs.add)
+
+	waitFor(t, 3*time.Second, "the line saying why it did not ask", func() bool {
+		return logs.has("not asking to sit")
+	})
+	time.Sleep(150 * time.Millisecond)
+	if n := satOn(sim); n != 0 {
+		t.Errorf("it asked %d times for a seat in another region", n)
+	}
+	if on, in := seats.Seat("example"); on != seatChair || in != otherRegion {
+		t.Errorf("the seat is %v in %v, want it kept", on, in)
+	}
+}
+
+// TestAnUnansweredSeatIsKept: no answer proves nothing, so the seat
+// stays as it did before.
+func TestAnUnansweredSeatIsKept(t *testing.T) {
+	quickSeating(t)
+	seats := newSeatsIn("example", seatChair, seatRegion)
+	var logs logLines
+	_, sim, _ := seatRigWith(t, seats, inRegion(seatRegion), logs.add)
+
+	waitFor(t, 3*time.Second, "the giving up", func() bool {
+		return logs.has("could not sit on")
+	})
+	if n := satOn(sim); n != SeatTries {
+		t.Errorf("it asked %d times, want %d", n, SeatTries)
+	}
+	if on, _ := seats.Seat("example"); on != seatChair {
+		t.Errorf("the seat is %v, want it kept", on)
+	}
+}
+
+// TestASeatThatSeatsOnTheThirdTryIsKept: refused twice and then
+// seated is a seat that exists.
+func TestASeatThatSeatsOnTheThirdTryIsKept(t *testing.T) {
+	quickSeating(t)
+	seats := newSeatsIn("example", seatChair, seatRegion)
+	var logs logLines
+	_, sim, _ := seatRigWith(t, seats, func(f *fakeSim) {
+		f.regionID = seatRegion
+		f.onSit = func(n int) {
+			if n < 3 {
+				f.send(notSameRegion(), 0)
+				return
+			}
+			parentTo(f, 99)
+		}
+	}, logs.add)
+	_ = sim
+
+	waitFor(t, 3*time.Second, "the avatar to be seated again", func() bool {
+		return logs.has("again, after 3 attempts")
+	})
+	if on, _ := seats.Seat("example"); on != seatChair {
+		t.Errorf("the seat is %v, want it kept", on)
+	}
+	if logs.has("forgot") {
+		t.Error("a seat that seated the avatar was forgotten")
+	}
+}
+
+// TestAStandJustBeforeLogoutIsWrittenDown: the watch had not seen the
+// avatar stand, and the logout reads it one last time.
+func TestAStandJustBeforeLogoutIsWrittenDown(t *testing.T) {
+	quickSeating(t)
+	// The watch is slower than the test, which is the case.
+	SeatWatch = time.Hour
+	// And no sit is asked, so the seat is still there at the stop.
+	seats := newSeatsIn("example", seatChair, otherRegion)
+	h, sim, srv := seatRigWith(t, seats, inRegion(seatRegion), nil)
+
+	parentTo(sim, 0)
+	waitFor(t, 3*time.Second, "the avatar to be known standing", func() bool {
+		on, known := h.currentSeat()
+		return known && on.IsZero()
+	})
+	if on, _ := seats.Seat("example"); on != seatChair {
+		t.Fatalf("the seat was forgotten before the stop: %v", on)
+	}
+	if _, err := srv.Logout(context.Background(), &pb.LogoutRequest{Agent: "example"}); err != nil {
+		t.Fatal(err)
+	}
+	if on, _ := seats.Seat("example"); !on.IsZero() {
+		t.Errorf("the seat is %v after a stand and a logout, want it forgotten", on)
+	}
+}
+
+// TestAStandAskedForForgetsTheSeat: a stand this avatar asks for forgets
+// the seat at once, without waiting for the region to say the avatar is
+// standing; a daemon stopped in that moment kept the seat.  Any other
+// update leaves it.
+func TestAStandAskedForForgetsTheSeat(t *testing.T) {
+	quickSeating(t)
+	SeatWatch = time.Hour
+	seats := newSeatsIn("example", seatChair, otherRegion)
+	h, _, _ := seatRigWith(t, seats, inRegion(seatRegion), nil)
+
+	send := func(flags uint32) {
+		m := &msg.AgentUpdate{}
+		m.AgentData.ControlFlags = flags
+		body, err := m.Encode()
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.noteStandSent(&msg.Packet{ID: msg.IDOf(m), Body: body})
+	}
+	send(agent.ControlAtPos)
+	if on, _ := seats.Seat("example"); on != seatChair {
+		t.Fatalf("a walk forgot the seat: %v", on)
+	}
+	send(agent.ControlStandUp)
+	if on, _ := seats.Seat("example"); !on.IsZero() {
+		t.Errorf("the seat is %v after asking to stand, want it forgotten", on)
 	}
 }

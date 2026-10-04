@@ -199,6 +199,7 @@ func (s *Server) Logout(ctx context.Context, req *pb.LogoutRequest) (*pb.LogoutR
 	// logout as deliberate rather than as a session to recover.
 	h.stopped.Store(true)
 	h.logf("logging out on request")
+	h.standingAtStop()
 	if a := h.Agent(); a != nil {
 		out, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
