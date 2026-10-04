@@ -272,6 +272,11 @@ func (w *Session) ObjectByID(ctx context.Context, id msg.UUID, timeout time.Dura
 // them.  They are asked for in batches so a scan does not go out as a
 // flood, and the answers are remembered by the server, so the second
 // caller pays nothing.
+//
+// A name here is as last asked: an object a script has renamed is
+// listed under its old name until something asks again, which
+// ObjectsNamed does for the names it looks up and this does not.
+// Why: doc/objects.md#a-name-a-script-changed
 func (w *Session) AllObjects(ctx context.Context, timeout time.Duration) ([]*Seen, error) {
 	if timeout == 0 {
 		timeout = 90 * time.Second
@@ -374,11 +379,111 @@ func wornUnder(all []*Seen, local uint32) bool {
 // so the first call costs what AllObjects costs.  A region with
 // nothing of that name in it is not distinguishable from one where the
 // thing is beyond the draw distance.
+//
+// A script that renames its object puts nothing on the wire, so a name
+// the store holds is the name as last asked.  So a lookup asks again:
+// first for the names of the objects that have this one, so that one
+// renamed away drops out; and, if nothing then has it, for the name of
+// every object in range, so that a new name is found.  That second,
+// dear, re-ask is made at most once per Options.NamesAskedAgainEvery
+// for the whole session, however many lookups miss, and a lookup that
+// misses inside the window looks at what the last one left.  An object
+// that does not answer keeps the name it had.
+// Why: doc/objects.md#a-name-a-script-changed
 func (w *Session) ObjectsNamed(ctx context.Context, name string, timeout time.Duration) ([]*Seen, error) {
+	if timeout == 0 {
+		timeout = 90 * time.Second
+	}
 	if _, err := w.AllObjects(ctx, timeout); err != nil {
 		return nil, err
 	}
+	found, err := w.fetch(ctx, name, "")
+	if err != nil {
+		return nil, err
+	}
+	if len(found) > 0 {
+		if err := w.resolveAgain(ctx, notAvatars(found), timeout); err != nil {
+			return nil, err
+		}
+		if found, err = w.fetch(ctx, name, ""); err != nil || len(found) > 0 {
+			return found, err
+		}
+	}
+	if err := w.askAllNamesAgain(ctx, timeout); err != nil {
+		return nil, err
+	}
 	return w.fetch(ctx, name, "")
+}
+
+// notAvatars is the ids of what is not an avatar: a script does not
+// rename an avatar, and an avatar's name is not asked of the object.
+func notAvatars(seen []*Seen) []msg.UUID {
+	var ids []msg.UUID
+	for _, s := range seen {
+		if !s.IsAvatar() {
+			ids = append(ids, s.ID)
+		}
+	}
+	return ids
+}
+
+// reaskFlight is a full re-ask of the names in progress, which a lookup
+// that misses while it runs waits for rather than starting another.
+type reaskFlight struct {
+	done chan struct{}
+	err  error
+}
+
+// askAllNamesAgain asks for the name of every object in range, unless
+// that was done within Options.NamesAskedAgainEvery of the last one
+// finishing, and then does nothing.  A call that finds one in flight
+// waits for it.
+// Why: doc/objects.md#a-name-a-script-changed
+func (w *Session) askAllNamesAgain(ctx context.Context, timeout time.Duration) error {
+	w.mu.Lock()
+	if f := w.reaskFlight; f != nil {
+		w.mu.Unlock()
+		select {
+		case <-f.done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		// The asker giving up is its own affair; this one looks at
+		// what there is.
+		if f.err != nil && ctx.Err() == nil &&
+			(errors.Is(f.err, context.Canceled) || errors.Is(f.err, context.DeadlineExceeded)) {
+			return nil
+		}
+		return f.err
+	}
+	if !w.reaskDone.IsZero() && time.Since(w.reaskDone) < w.namesAskedAgainEvery() {
+		w.mu.Unlock()
+		return nil
+	}
+	f := &reaskFlight{done: make(chan struct{})}
+	w.reaskFlight = f
+	w.mu.Unlock()
+
+	seen, err := w.fetch(ctx, "", "")
+	if err == nil {
+		err = w.resolveWith(ctx, notAvatars(seen), timeout, true)
+	}
+
+	w.mu.Lock()
+	w.reaskFlight = nil
+	if err == nil {
+		w.reaskDone = time.Now()
+	}
+	w.mu.Unlock()
+	f.err = err
+	close(f.done)
+	return err
+}
+
+// resolveAgain asks again for the names of objects that already have
+// one, and waits for answers that come after the asking.
+func (w *Session) resolveAgain(ctx context.Context, want []msg.UUID, timeout time.Duration) error {
+	return w.resolveWith(ctx, want, timeout, true)
 }
 
 // Known is how many objects the session has heard about, without
@@ -435,10 +540,29 @@ const resolveBatch = 40
 // wait.  A child the selection did not name falls into that wait too.
 // Why: doc/objects.md#naming-an-object
 func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Duration) error {
+	return w.resolveWith(ctx, want, timeout, false)
+}
+
+// resolveWith is resolve, and with again set it is for objects that
+// already have a name: they are asked all the same, and an object counts
+// as answered only by an answer that arrives after the asking, not by
+// having a name.  One that never answers keeps the name it had.
+// Why: doc/objects.md#a-name-a-script-changed
+func (w *Session) resolveWith(ctx context.Context, want []msg.UUID, timeout time.Duration, again bool) error {
 	if len(want) == 0 {
 		return nil
 	}
-	deadline := time.Now().Add(timeout)
+	asked := time.Now()
+	deadline := asked.Add(timeout)
+	// answered says an object has been named: at all, or when asking
+	// again, since the asking.  Called under w.mu.
+	answered := func(id msg.UUID) bool {
+		if again {
+			return w.nameAt[id].After(asked)
+		}
+		_, ok := w.objectNames[id]
+		return ok
+	}
 
 	seen, err := w.fetch(ctx, "", "")
 	if err != nil {
@@ -463,12 +587,12 @@ func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Dur
 	// the selection did not name.
 	pending := append([]msg.UUID(nil), roots...)
 	if len(children) > 0 {
-		if err := w.selectForNames(ctx, children, deadline); err != nil {
+		if err := w.selectForNames(ctx, children, deadline, again); err != nil {
 			return err
 		}
 		w.mu.Lock()
 		for _, id := range children {
-			if _, ok := w.objectNames[id]; !ok {
+			if !answered(id) {
 				pending = append(pending, id)
 			}
 		}
@@ -498,17 +622,20 @@ func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Dur
 	// -- so this gives up when the answers stop rather than insisting
 	// on all of them.
 	//
-	// Giving up needs several quiet rounds and not one.  The first
+	// Giving up needs several quiet seconds and not one.  The first
 	// answer takes a moment, and stopping at the first second with
 	// nothing new in it stops before anything has arrived at all,
-	// which looks exactly like a region full of nameless objects.
-	const quietRounds = 4
-	last, quiet := -1, 0
+	// which looks exactly like a region full of nameless objects.  It
+	// looks often, though: a lookup by name asks again every time, and
+	// waiting a whole second for an answer that took a tenth would be
+	// paid by every command that names an object.
+	const quietFor = 4 * time.Second
+	last, since := -1, time.Now()
 	for time.Now().Before(deadline) {
 		w.mu.Lock()
 		have := 0
 		for _, id := range pending {
-			if _, ok := w.objectNames[id]; ok {
+			if answered(id) {
 				have++
 			}
 		}
@@ -516,23 +643,20 @@ func (w *Session) resolve(ctx context.Context, want []msg.UUID, timeout time.Dur
 		if have == len(pending) {
 			return nil
 		}
-		if have == last {
+		if have != last {
+			last, since = have, time.Now()
+		} else if time.Since(since) >= quietFor {
 			// Answers have stopped, which does not mean everything
 			// that is going to be named has been: what is left may be
 			// the kind this request is never answered for.  Stop
 			// waiting, but go on to ask the other way.
-			if quiet++; quiet >= quietRounds {
-				break
-			}
-		} else {
-			quiet = 0
+			break
 		}
-		last = have
-		if err := w.Settle(ctx, time.Second); err != nil {
+		if err := w.Settle(ctx, 100*time.Millisecond); err != nil {
 			return err
 		}
 	}
-	return w.selectForNames(ctx, pending, deadline)
+	return w.selectForNames(ctx, pending, deadline, again)
 }
 
 // selectByBatch is how many objects one ObjectSelect names at a time.
@@ -552,12 +676,15 @@ const selectByBatch = 64
 // the wait for whatever a root's family request left nameless.
 // Why: doc/objects.md#naming-an-object
 //
+// With again set, an object that already has a name is selected too:
+// asking again is the point.
+//
 // Selecting is cheaper here than asking, since one message carries
 // many objects where the family request carries one.  What it is not
 // is free of meaning: the simulator now believes these are being
 // edited, and an object another avatar has selected is one they cannot
 // always move.  So the selection is given back immediately.
-func (w *Session) selectForNames(ctx context.Context, want []msg.UUID, deadline time.Time) error {
+func (w *Session) selectForNames(ctx context.Context, want []msg.UUID, deadline time.Time, again bool) error {
 	if !time.Now().Before(deadline) {
 		return nil
 	}
@@ -570,7 +697,7 @@ func (w *Session) selectForNames(ctx context.Context, want []msg.UUID, deadline 
 		// Avatars are named by a name lookup, not by asking the object
 		// what it is called, and selecting one is a strange thing to
 		// do to somebody.
-		if s.Name != "" || s.IsAvatar() {
+		if (s.Name != "" && !again) || s.IsAvatar() {
 			continue
 		}
 		for _, id := range want {

@@ -289,6 +289,94 @@ before it is given back. The tests in `sl/names_by_select_test.go` show
 the same against a fake that never answers a family request for a
 child.
 
+## A name a script changed
+
+**Measured on 2026-10-03.** A script that renames its object
+(`llSetObjectName`), or changes its description, puts nothing on the
+wire: no `ObjectUpdate`, no properties. (Floating text does send a full
+`ObjectUpdate`. The CRC field moves for a rename too, but nothing is
+sent with it, so it is no signal.) A name in the store is therefore the
+name as last asked, for ever. With the test avatar standing by two
+invented boxes of one name, each renamed by a script, `ObjectsNamed` of
+the old name still found one of them minutes later, `ObjectsNamed` of the
+new name found nothing, and a Slate run's setup refused the old name as
+naming two objects.
+
+**What the viewer does.** It keeps no name to go stale: it asks for an
+object's properties again every time the mouse hovers onto a different
+object (`LLSelectMgr::setHoverObject`, `llselectmgr.cpp:1194-1216` at
+Firestorm 885631b93a) and on every selection.
+
+**What it costs to ask again for every name.** Measured in a busy
+region with the batching `resolve` uses: about 1,000 objects (275 roots,
+763 children, 19 attachment roots) took about 300 messages and 8 s --
+the roots 1.9 s, the children 5.8 s, mostly the 500 ms selection holds,
+the attachments 0.3 s. A 472-object run took about 3.6 s. Every root
+answered every time; in one run 79 of 684 children did not answer within
+four quiet seconds.
+
+**What slgo does.** A lookup by name, `Session.ObjectsNamed` -- which
+every name lookup in slsh, slbotd, slpic, Slate's object bindings and
+`internal/session` goes through -- does this:
+
+1. It names whatever is unnamed, as `AllObjects` does.
+2. It asks again for the names of the objects the store says have that
+   name, the candidates, and waits for answers that arrived *after* the
+   asking, not for a name being present; then it looks again. A match a
+   script renamed drops out, and a count is right. This is `resolve`
+   with its `again` flag: family requests for roots in batches of
+   `resolveBatch`, selection for children and attachments, and its quiet
+   rounds for giving up. The session keeps when each name last arrived
+   (`nameAt`, set where `objectNames` is) so that "newer than the asking"
+   can be told. An object that never answers keeps the name it had: it
+   is still found by the old name.
+3. If nothing then has the name, it asks again for every object in range
+   (avatars excepted: a script does not rename an avatar) and looks once
+   more, so that a new name is found.
+
+The names `fetch` returns are the backend's store's, which the same
+answers update (`Objects.named` in `agent/objects.go` overwrites, from
+`ObjectPropertiesFamily` and `ObjectProperties`), so nothing there
+changes.
+
+**The window.** Step 3 is the dear one, and a caller that looks a name up
+in a loop and keeps missing must not ask the whole region on every
+round. So it is bounded per session: at most one full re-ask in
+`Options.NamesAskedAgainEvery`, 30 s by default, counted from when the
+last one finished. Lookups that miss while one is in flight wait for it
+and share it; a lookup that misses inside the window after one does not
+start another and looks at what that one left. At about 8 s for 1,000
+objects, 30 s keeps a lookup that keeps missing to no more than about a
+quarter of its time re-asking. The bound is not a promise that the name
+is fresh to the second: a name changed just after a full re-ask is not
+found by a miss for up to the window.
+
+**Who polls, and what they get.** Nothing in the tree loops on
+`ObjectsNamed` by itself; what repeats is the caller.
+
+- Slate's setup looks each header name up once per run. A run whose
+  names have all been renamed or are new pays one full re-ask, on the
+  first miss; the names after it look at what that left.
+- slsh commands that take an object by name (`touch`, `take`, `dump`,
+  `move`, `walk`, `link` and the rest) look it up once per command; a
+  script that repeats one until it works, or waits for an object to
+  appear, gets a full re-ask at most every 30 s and the candidates asked
+  again each time.
+- slbotd's `objects` with a name, and its commands that take an object by
+  name, are the same, once per command; so are `slpic` and
+  `internal/session.RunIn`, which runs once per script run.
+
+A lookup with a short timeout (slsh `walk` gives it 5 s) gets as much of
+this as the timeout allows: the re-ask stops at the deadline, and counts
+as made.
+
+**A listing is as last asked.** `AllObjects` and slsh's `objects` do not
+ask again: they show each name as it was last asked, and an object a
+script renamed is listed under its old name until a lookup by name, or
+anything else that asks, brings the new one.
+
+The tests are in `sl/names_again_test.go`.
+
 ## Link numbers
 
 `Object.LinkNumber`, `Seen.LinkNumber` and `Session.Linkset` give a

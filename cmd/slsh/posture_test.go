@@ -107,7 +107,7 @@ func TestSittingOnAnObjectSaysWhatItSatOnAndWhereThatLeftTheAvatar(t *testing.T)
 	// sends is AgentRequestSit and then AgentSit; the second does
 	// nothing, and the avatar was seated six seconds before it in the
 	// run that measured this, so nothing here sends it.
-	sent := x.grid.Sent()
+	sent := x.grid.sentButNameAsks()
 	if len(sent) != 1 {
 		t.Fatalf("%d messages went out, want the one request: %v", len(sent), sent)
 	}
@@ -155,7 +155,7 @@ func TestAWordThatNamesTwoObjectsIsRefusedRatherThanGuessedAt(t *testing.T) {
 			t.Errorf("the refusal should mention %q:\n%s", want, got)
 		}
 	}
-	if sent := x.grid.Sent(); len(sent) != 0 {
+	if sent := x.grid.sentButNameAsks(); len(sent) != 0 {
 		t.Errorf("%d messages went out for a sit that was never resolved", len(sent))
 	}
 }

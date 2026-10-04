@@ -53,6 +53,15 @@ type Options struct {
 	// settle, for the region to say the HUD prim pressed has changed.
 	// Why: doc/hud-screen.md#a-drag
 	HUDChangeTimeout time.Duration
+
+	// NamesAskedAgainEvery is how often at most a lookup by name that
+	// finds nothing (ObjectsNamed) asks again for the name of every
+	// object in range, per session.  A full re-ask of about 1,000
+	// objects measured about 300 messages and 8 s; 30 s keeps a lookup
+	// that keeps missing to no more than about a quarter of its time
+	// re-asking.
+	// Why: doc/objects.md#a-name-a-script-changed
+	NamesAskedAgainEvery time.Duration
 }
 
 // The defaults for Options.  None of them is a measurement; each is a
@@ -81,6 +90,10 @@ const (
 	// DefaultHUDChangeTimeout is a wide margin over the 197 ms the
 	// slowest of 20 presses took to be reported changed.
 	DefaultHUDChangeTimeout = 5 * time.Second
+
+	// DefaultNamesAskedAgainEvery is about four times the 8 s a full
+	// re-ask of a busy region took.
+	DefaultNamesAskedAgainEvery = 30 * time.Second
 )
 
 // SetOptions replaces the session's Options.  A call already waiting
@@ -97,7 +110,8 @@ func (w *Session) Options() Options {
 }
 
 // moveWait, permissionsWait, deleteWait, moneyWait, regionInfoWait,
-// parcelInfoWait, objectWait, takeOffWait and hudChangeWait are the
+// parcelInfoWait, objectWait, takeOffWait, hudChangeWait and
+// namesAskedAgainEvery are the
 // bounds in force.
 func (w *Session) moveWait() time.Duration {
 	return orDefault(w.Options().MoveTimeout, DefaultMoveTimeout)
@@ -133,6 +147,10 @@ func (w *Session) takeOffWait() time.Duration {
 
 func (w *Session) hudChangeWait() time.Duration {
 	return orDefault(w.Options().HUDChangeTimeout, DefaultHUDChangeTimeout)
+}
+
+func (w *Session) namesAskedAgainEvery() time.Duration {
+	return orDefault(w.Options().NamesAskedAgainEvery, DefaultNamesAskedAgainEvery)
 }
 
 func orDefault(d, def time.Duration) time.Duration {

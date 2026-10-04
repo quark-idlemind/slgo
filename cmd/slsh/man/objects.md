@@ -52,6 +52,14 @@ where the thing is too far away.
 The first run is slow: names are asked for one by one.  The answers are
 kept, so the next run is quick.
 
+The names are as they were last asked for.  A script that renames its
+object tells nobody, so this listing keeps the old name of such an
+object until something asks again.  `take`, `move`, `touch` and the
+commands that look an object up by name do ask again, for the objects
+with that name and, when none has it, for every name in range (at most
+once in 30 seconds), and after one of them has run the listing shows
+what they learned.
+
 ## Whose things these are
 
 The owner heads each group.  Attachments are in the listing too.  Their

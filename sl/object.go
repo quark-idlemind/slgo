@@ -102,6 +102,7 @@ func (w *Session) SetName(ctx context.Context, o *Object, name string) error {
 	// freshly rezzed prim always reported that it was still "Object".
 	w.mu.Lock()
 	delete(w.objectNames, o.ID)
+	delete(w.nameAt, o.ID)
 	w.mu.Unlock()
 
 	deadline := time.Now().Add(20 * time.Second)

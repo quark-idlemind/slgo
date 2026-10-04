@@ -1844,7 +1844,80 @@ func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error
 	if onSend != nil {
 		onSend(m)
 	}
+	// After the test's own answer, so that one is heard first.
+	f.answerNames(m)
 	return nil
+}
+
+// answerNames answers a request for names the way a simulator does,
+// from the names the fake holds: a root to a family request, anything
+// to a selection.  A lookup by name asks again for names that are
+// already known and waits for an answer, so a fake that never answered
+// would cost every lookup the quiet rounds.
+// Why: doc/objects.md#a-name-a-script-changed
+func (f *fakeGrid) answerNames(m msg.Message) {
+	var replies []msg.Message
+	f.mu.Lock()
+	switch m := m.(type) {
+	case *msg.RequestObjectPropertiesFamily:
+		for _, o := range f.objects {
+			if o.ID == m.ObjectData.ObjectID && o.Parent == 0 && !o.IsAvatar() && o.Name != "" {
+				r := &msg.ObjectPropertiesFamily{}
+				r.ObjectData.ObjectID, r.ObjectData.OwnerID = o.ID, o.Owner
+				r.ObjectData.Name = append([]byte(o.Name), 0)
+				replies = append(replies, r)
+			}
+		}
+	case *msg.ObjectSelect:
+		for _, d := range m.ObjectData {
+			for _, o := range f.objects {
+				if o.Local == d.ObjectLocalID && !o.IsAvatar() && o.Name != "" {
+					r := &msg.ObjectProperties{ObjectData: []msg.ObjectProperties_ObjectData{{
+						ObjectID: o.ID, OwnerID: o.Owner, Name: append([]byte(o.Name), 0),
+					}}}
+					replies = append(replies, r)
+				}
+			}
+		}
+	}
+	f.mu.Unlock()
+	for _, r := range replies {
+		body, err := r.Encode()
+		if err != nil {
+			continue
+		}
+		// Followed by a number the template does not have, which the
+		// reader discards: its taking that means it has finished with
+		// the answer, so the lookup waiting for it sees it at once.
+		for _, raw := range []*sl.Message{
+			{ID: msg.IDOf(r), Name: r.MsgInfo().Name, Body: body, At: time.Now()},
+			{ID: msg.MakeID(msg.FreqLow, 65530), Name: "relay barrier", At: time.Now()},
+		} {
+			select {
+			case f.msgs <- raw:
+			case <-f.done:
+				return
+			case <-time.After(5 * time.Second):
+				return
+			}
+		}
+	}
+}
+
+// sentButNameAsks is Sent without the asking for names a lookup by name
+// makes: it asks again for the names of the objects that have the name
+// looked up, and that is not what a test of the command is about.
+// Why: doc/objects.md#a-name-a-script-changed
+func (f *fakeGrid) sentButNameAsks() []msg.Message {
+	var out []msg.Message
+	for _, m := range f.Sent() {
+		switch m.(type) {
+		case *msg.RequestObjectPropertiesFamily, *msg.ObjectSelect, *msg.ObjectDeselect:
+		default:
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func (f *fakeGrid) Messages() <-chan *sl.Message  { return f.msgs }
