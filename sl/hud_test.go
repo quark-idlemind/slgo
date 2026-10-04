@@ -202,8 +202,9 @@ func TestACylinderEndOnIsADisc(t *testing.T) {
 
 // TestAClickOnFaceFourIsItsST (test 11): on the unrotated box, S grows
 // to the right and T upward, and clicks at the pixels for five S,T came
-// back as those S,T.  The touch position is from the HUD point: the
-// middle of the face of a box half a metre in front is -0.75 along X.
+// back as those S,T.  The touch position is from the middle of the
+// screen, which on Center 2 is the HUD point: the middle of the face of a
+// box half a metre in front is -0.75 along X.
 func TestAClickOnFaceFourIsItsST(t *testing.T) {
 	linkset := []*Seen{prim(t, "box", 0.5, front, msg.Quaternion{})}
 	for _, st := range [][2]float32{{0.5, 0.5}, {0.1, 0.1}, {0.9, 0.1}, {0.1, 0.9}, {0.9, 0.9}} {
@@ -530,4 +531,57 @@ func TestAShapedPrimIsInTheWayAndNoMore(t *testing.T) {
 	if _, err := measured.Faces(linkset); !errors.Is(err, ErrShapeNotPlaced) {
 		t.Errorf("Faces of a linkset with a shaped prim: %v, want ErrShapeNotPlaced", err)
 	}
+}
+
+// TestATouchPositionOnAnotherPointIsFromTheMiddleOfTheScreen: off the
+// centre points the viewer's touch position is not from the point the
+// prim is worn on but from the middle of the screen.  Measured in
+// Firestorm on a world view of 3840x2050: a 0.1 x 0.4 x 0.2 box worn
+// unturned on Top Left, clicked on face 4 at S,T 0.97836, 0.02782, read
+// llDetectedTouchPos <-0.05, 0.74524, 0.40556> -- the point, half the
+// aspect across and half a metre up, plus the place on the box.
+func TestATouchPositionOnAnotherPointIsFromTheMiddleOfTheScreen(t *testing.T) {
+	box := prim(t, "box", 0.1, msg.Vector3{}, msg.Quaternion{})
+	box.Scale = msg.Vector3{X: 0.1, Y: 0.4, Z: 0.2}
+	box.AttachPoint = HUDTopLeft
+	linkset := []*Seen{box}
+	at, err := measured.PointOf(linkset, 1, 4, msg.Vector3{X: 0.97836, Y: 0.02782})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, ok, err := measured.Pick(linkset, at)
+	if err != nil || !ok {
+		t.Fatalf("Pick: %v %v", ok, err)
+	}
+	got := h.Touch.Position
+	within(t, "x", float64(got.X), -0.05, 0.001)
+	within(t, "y", float64(got.Y), 0.74524, 0.001)
+	within(t, "z", float64(got.Z), 0.40556, 0.001)
+}
+
+// TestADragsChangeOfPositionIsTheSameOnEveryPoint: a script that moves or
+// resizes a HUD by the change in the touch position sees the same change
+// on any point, since the points differ by a constant.
+func TestADragsChangeOfPositionIsTheSameOnEveryPoint(t *testing.T) {
+	change := func(point int) msg.Vector3 {
+		box := prim(t, "box", 0.2, msg.Vector3{}, msg.Quaternion{})
+		box.AttachPoint = point
+		linkset := []*Seen{box}
+		var at [2]msg.Vector3
+		for i, st := range []msg.Vector3{{X: 0.2, Y: 0.3}, {X: 0.7, Y: 0.9}} {
+			p, err := measured.PointOf(linkset, 1, 4, st)
+			if err != nil {
+				t.Fatal(err)
+			}
+			h, ok, err := measured.Pick(linkset, p)
+			if err != nil || !ok {
+				t.Fatalf("Pick on %d: %v %v", point, ok, err)
+			}
+			at[i] = h.Touch.Position
+		}
+		return msg.Vector3{X: at[1].X - at[0].X, Y: at[1].Y - at[0].Y, Z: at[1].Z - at[0].Z}
+	}
+	centre, corner := change(HUDCenter2), change(HUDTopLeft)
+	within(t, "the change across", float64(corner.Y), float64(centre.Y), 1e-5)
+	within(t, "the change up", float64(corner.Z), float64(centre.Z), 1e-5)
 }
