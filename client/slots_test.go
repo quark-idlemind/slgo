@@ -313,6 +313,38 @@ func TestAnAnswerThatArrivesAsTheWaitEndsIsGivenBack(t *testing.T) {
 	}
 }
 
+// TestAsksCarryPerAgent: a connection that said how many places per
+// avatar it wears sends it with every ask, the way a program with the
+// auto pool's twenty-four does, and one that never said sends zero,
+// which the daemon reads as the twelve of a client older than the field.
+func TestAsksCarryPerAgent(t *testing.T) {
+	t.Parallel()
+	d, conn := attachFake(t)
+
+	ask := func(try bool) *pb.Slots {
+		go func() {
+			if try {
+				conn.TrySlots(context.Background(), 1, time.Minute, "")
+			} else {
+				conn.SlotsWithin(context.Background(), 1, time.Minute, time.Second, "")
+			}
+		}()
+		s := waitForSlots(t, d)
+		d.relay <- grantFor(s.Request, "", "not free")
+		return s
+	}
+
+	if got := ask(true).GetPerAgent(); got != 0 {
+		t.Errorf("a connection that never said sent per_agent %d, want 0", got)
+	}
+	conn.SetSlotsPerAgent(24)
+	for _, try := range []bool{true, false} {
+		if got := ask(try).GetPerAgent(); got != 24 {
+			t.Errorf("per_agent = %d (try %v), want 24", got, try)
+		}
+	}
+}
+
 // waitForSlots reads the next request for places off the stream.
 func waitForSlots(t *testing.T, d *fakeDaemon) *pb.Slots {
 	t.Helper()

@@ -121,7 +121,7 @@ daemon and a fake stream.
 
 ## When an avatar is logged out, or leaves
 
-Each avatar the daemon hosts has twelve places. One that is logged out
+Each avatar the daemon hosts has twenty-four places. One that is logged out
 -- stopped, on request or by the grid throwing it off -- is still hosted
 and listed, but it comes back only when somebody hosts it again on
 purpose, with `Host` and force. So a request that names it is refused at
@@ -135,7 +135,7 @@ for it.
 
 An avatar leaves the daemon when it is removed, which is what a forced
 `Host` does to the stopped session it replaces before it logs in again.
-Its places go with it, and the name, hosted again, is given twelve new
+Its places go with it, and the name, hosted again, is given twenty-four new
 ones -- but not while a client still holds any of the old. An old place
 and a new one with the same avatar and number are the same object, and
 two holders of it is the failure this whole pool is built against. The
@@ -234,6 +234,130 @@ items of one name may be two different objects -- one built here, one
 given by another avatar and since edited -- so which one the copies came
 from would decide what a benchmark measures. The refusal says to keep
 one and delete the rest by id, which `slsh`'s `rm` takes.
+
+## One point, twenty-four objects
+
+Every auto object is a 0.05 m cube worn on HUD Bottom Left, and an
+avatar has twenty-four of them (`session.AutoPoints`, `SlotsPerAgent`).
+They used to be spread over the eight HUD points and doubled up past the
+eighth, which was only ever a way of getting round a ceiling that was not
+there.
+
+Measured 2026-10-03, on the live grid. An avatar may wear 38 attachments
+in all, HUD points and body points together; SimulatorFeatures says so
+(`MaxAgentAttachments`), and no one point has a smaller limit. System
+clothing does not count. The 39th is refused silently: no alert, and
+`sl`'s `Wear` just times out after its 40 seconds.
+
+`Place` (one `MultipleObjectUpdate`: position, rotation and scale) moves
+and resizes a worn single-prim HUD, with no script in it. A HUD keeps its
+position and size across a take-off and a wear, because they are saved in
+the item. So the objects are small and are moved, not spread:
+
+- Parked is off the screen, at local `<0, 1, -1>` with no rotation. The
+  HUD frame has +Y to the left and +Z up (`sl/hud.go`, `project`), and
+  from Bottom Left the screen lies at -Y and +Z, so this is a metre to
+  the left of the corner and a metre below it. The region clamps an
+  attachment to 3.5 m from its point; this is well inside that.
+- `auto show` tiles them along the bottom of the screen: slot *i* at
+  `<0, -0.025 - 0.05 i, 0.025>`, so twenty-four make one row 1.2 m long.
+- `auto hide` parks them again and leaves their size; `auto reset` parks
+  them and puts them back to 0.05 m.
+
+The list of points is still a list, and a slot is still its index: slot
+*i* is `AutoName(i)`, and the daemon grants slot numbers, so the names do
+not move.
+
+### An old client, or an old slgod
+
+The new `slgod` and the new clients are best deployed together, but a
+pair that is not must degrade rather than fail. `Slots.per_agent` is how:
+a client says how many places per avatar it can wear (`session.AutoPool`,
+24 now), and the daemon grants none numbered past that. Both directions
+are held by tests, not run against an old binary; the old side's
+behaviour is read from its code.
+
+- **An old client, a new `slgod`.** The client from before the field
+  sends no `per_agent`, which is zero, and the daemon reads zero as 12
+  (`server.OldSlotsPerAgent`): the number such clients wore. It is granted
+  places from the first twelve on each avatar. A try while those are
+  taken is refused as when busy, a wait is answered only when one of them
+  comes back and never with a free place past twelve, and a request for
+  more than twelve on one avatar is refused at once, by the same test as
+  "more than there is", counted in the client's own twelve. Without the
+  cap that client would index its twelve-entry list of points with slot
+  12 to 23 and panic.
+- **A new client, an old `slgod`.** The old daemon does not know the
+  field and ignores it, and has twelve places per avatar, so it grants at
+  most twelve. The new client runs fewer objects than it could, and a
+  request for more than twelve on one avatar is refused as more than
+  there is.
+
+Neither is a reason to wait for the other: deploy them together, since a
+mixed pair runs half the pool, but nothing breaks if they are not.
+
+## Counting what is worn
+
+How full an avatar is has to be known before wearing anything, because
+the region does not say when it refuses. "Worn" is counted as the union
+of two lists, because neither is whole:
+
+- the object links in the Current Outfit folder (links to wearables are
+  not counted, since they take no attachment slot); and
+- the attachments the region has described to the session.
+
+After a login the region does not describe HUD attachments, so the second
+list can miss a HUD that is plainly worn, which is the first list's use.
+An object put on with `Wear` alone leaves no link, which is the second
+list's (read from the code, not measured: `Wear` writes no link). The
+login half was measured 2026-10-03: the region does not describe HUDs
+after a login, so `WornObjects` can miss them.
+
+An object known only from the outfit folder has no local id to move, so
+`auto -n` and the arranging commands take it off and wear it again on
+Bottom Left, as `Worn` does for an attachment it was never told about.
+
+## Setting up and the limit
+
+`auto -n N` wears `auto` to `auto N` on Bottom Left, parks and sizes every
+one, wears again on Bottom Left any that were on another point (the old
+spread, Center, Center 2), and takes off any beyond N together with their
+links in the Current Outfit folder. One rebake follows, as a person's
+`detach` does.
+
+It counts first (the union above) against the region's limit less
+`session.AutoReserve`, one slot for the bridge a viewer wears, so `-n`
+stops at 37 worn in all, and it wears only what fits. If fewer than N fit
+it says so, for example `wore 7 of 12: the avatar wears 37, keeping 1 slot
+free`. If a wear times out anyway it stops at once, since that is the
+region refusing at the limit, and says so; that is the only wait, 40
+seconds at most. Objects it took off to wear again are put back first and
+are not counted against the room, since the avatar was no fuller for them.
+
+`sl`'s general `Wear`, and `slsh`'s `wear`, do not detect the refusal;
+that is held for the owner.
+
+Everything that moves or removes the objects (`-n`, `reset`, `show`,
+`hide`, `clear`, `delete`) takes all of this avatar's places first, as one
+grant, without waiting, and refuses while any is held. `delete` clears,
+then moves every item in Objects named exactly `auto` or `auto N` to the
+Trash and does not purge it; `autobench` and `automate` are never touched.
+
+## What a lease leaves free
+
+A run's lease (`session.wearSlots`) wears the objects for the places it was
+granted. One already worn is used where it is, whatever the count, so an
+`auto show` survives a run. One it has to put on is parked and sized after
+it goes on.
+
+Growth nobody asked for at that moment keeps a larger reserve than `-n`
+does: `session.AutoLeaseReserve`, 4, so a lease stops at 34 worn in all.
+A person who typed `auto -n 24` chose to fill the avatar; a benchmark that
+wants twelve objects did not. The room is for the owner's own attachments,
+a viewer's bridge and a product test's HUD, and the owner may change it.
+A lease that stops short gives the run what is there, says `wore K of N:
+keeping 4 slots free` on stderr, and does not fail for it, which is how a
+lease that is given fewer than it asked for already behaves.
 
 ## What was built and thrown away
 

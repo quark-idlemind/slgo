@@ -114,6 +114,14 @@ func (c *Conn) TrySlots(ctx context.Context, n int, timeout time.Duration, agent
 	return c.askSlots(ctx, n, timeout, 0, agent, true)
 }
 
+// SetSlotsPerAgent says how many places on one avatar the caller can
+// wear, which the daemon will not grant past.  A connection that never
+// says is read by the daemon as a client of twelve, so that an older
+// client is never handed a place it cannot use.
+func (c *Conn) SetSlotsPerAgent(n int) {
+	c.perAgent.Store(uint32(max(n, 0)))
+}
+
 func (c *Conn) askSlots(ctx context.Context, n int, timeout, wait time.Duration, agent string, try bool) (*Grant, error) {
 	if n < 1 {
 		return nil, fmt.Errorf("client: a request for %d objects", n)
@@ -133,6 +141,7 @@ func (c *Conn) askSlots(ctx context.Context, n int, timeout, wait time.Duration,
 		Slots: &pb.Slots{
 			Want: uint32(n), Seconds: uint32(timeout / time.Second),
 			Try: try, Agent: agent, Request: w.id, WaitSeconds: secs,
+			PerAgent: c.perAgent.Load(),
 		},
 	}}, time.Duration(secs)*time.Second)
 }

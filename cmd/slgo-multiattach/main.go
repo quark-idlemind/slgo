@@ -7,8 +7,8 @@
 //
 // This finds out, rather than assuming: it wears a second item on a
 // point with AttachAdd over it and counts what is on the point before
-// and after.  internal/session's AutoPoints double up on the strength of
-// what it found.
+// and after.  internal/session's AutoPoints are all one point, twenty-four
+// objects on HUD Bottom Left, on the strength of what it found.
 package main
 
 import (

@@ -111,29 +111,41 @@ func Connect(ctx context.Context, o Options) (*sl.Session, error) {
 // Why: doc/slots.md#what-is-being-shared-and-why-it-needs-sharing
 const AutoObject = "auto"
 
-// AutoPoints are where the auto objects are worn.
+// AutoPoints are where the auto objects are worn: one entry per slot,
+// and every entry the same point, HUD Bottom Left.
 //
-// The HUD points are used because nothing else wants them and they are
-// not part of how the avatar looks.  There are only EIGHT of them, so
-// the first eight entries are one each and the rest double up: a point
-// holds several objects when the attach asks to add rather than to
-// replace, which was measured rather than assumed (cmd/slgo-multiattach)
-// and puts the real ceiling at the 38-attachment total.
+// An avatar may wear 38 attachments in all, HUD points and body points
+// together, and no one point has a smaller limit (SimulatorFeatures
+// says 38, and the 39th is refused without a word).  So the eight HUD
+// points were never a ceiling, and spreading the objects over them
+// bought nothing but a layout nobody could read.  They are all worn on
+// one point now, small, and moved about by position: parked off the
+// screen when idle (AutoParked), or tiled along the bottom edge of it
+// for a person to look at (AutoTile).  Twenty-four is how many that
+// makes room for, with the owner's own attachments and a viewer's
+// bridge still to fit under the 38.
+// Why: doc/slots.md#one-point-twenty-four-objects
 //
-// THIS LIST IS APPEND-ONLY AND MUST NEVER BE REORDERED.  A slot is
-// identified by its INDEX -- that is what slgod grants, and what one
-// program tells another -- so moving an entry makes two versions
-// disagree about which object slot 5 is.  Nothing detects that: two
-// benchmarks quietly share an object and both report plausible numbers.
-// Adding to the end is safe; anything else is not.
-var AutoPoints = []int{
-	// The original four.
-	sl.HUDBottomLeft, sl.HUDBottom, sl.HUDBottomRight, sl.HUDTopLeft,
-	// The remaining HUD points, one object each.
-	sl.HUDTop, sl.HUDTopRight, sl.HUDCenter1, sl.HUDCenter2,
-	// Doubling up, which is what takes this past eight.
-	sl.HUDBottomLeft, sl.HUDBottom, sl.HUDBottomRight, sl.HUDTopLeft,
-}
+// The slice is kept, rather than a constant, because THE INDEX IS STILL
+// THE RULE.  A slot is identified by its index -- that is what slgod
+// grants, and what one program tells another -- and slot i is AutoName(i)
+// whatever the entry says, so AutoName must never change either.
+// Growing the pool means appending.
+//
+// SlotsPerAgent in server/slots.go is this length, and the new slgod and
+// the new clients are best deployed together, but need not be: the
+// client says how many places it wears (AutoPool) with every ask and the
+// daemon grants none past it, twelve for a client that says nothing.  A
+// mixed pair runs fewer objects than the new one could rather than
+// indexing past the end of an older list.
+// Why: doc/slots.md#an-old-client-or-an-old-slgod
+var AutoPoints = func() []int {
+	points := make([]int, 24)
+	for i := range points {
+		points[i] = sl.HUDBottomLeft
+	}
+	return points
+}()
 
 // AutoName is what the nth auto object is called.  The first keeps the
 // bare name, so an account that has only ever run one at a time is not
@@ -224,71 +236,6 @@ func EnsureAutoItems(ctx context.Context, s *sl.Session, folder msg.UUID, n int)
 		}
 	}
 	return nil
-}
-
-// SetupAuto makes an avatar ready for benchmarking: the items exist
-// and are worn, so that the first run of the day does not pay for it.
-//
-// It takes EVERY place the avatar has first, and refuses if any is busy.
-// Wearing things is not something to do underneath a benchmark: an
-// item that cannot be found worn is taken off and put back on, and a
-// run whose object went away reports nothing useful about why.
-func SetupAuto(ctx context.Context, s *sl.Session, n int) ([]*sl.Object, error) {
-	if n < 1 {
-		n = 1
-	}
-	if n > len(AutoPoints) {
-		n = len(AutoPoints)
-	}
-
-	// Every place this avatar has, taken as one grant.  Setting up moves
-	// attachments about, and an object moving under a running benchmark
-	// is a wrong number rather than a failure -- so this happens when
-	// nothing else is using any of them, or it does not happen.
-	//
-	// Without waiting: a person who ran this while a benchmark was going
-	// wants to be told, not to have their terminal hang until it
-	// finishes.
-	if g, ok := s.Backend().(granter); ok {
-		got, err := g.TrySlots(ctx, AutoPool(), time.Hour, s.Info().Name)
-		if err != nil {
-			return nil, fmt.Errorf("asking for the %s objects: %w", AutoObject, err)
-		}
-		if !got.Held() {
-			return nil, fmt.Errorf("the %s objects are in use (%s); "+
-				"setting up moves attachments about and cannot be done "+
-				"under a running benchmark",
-				AutoObject, got.Why)
-		}
-		// Left dirty deliberately: this moved things about, and what was
-		// in them is not what the next caller put there.
-		defer g.ReleaseSlots(got.ID, false)
-	}
-
-	folder, err := objectsFolder(ctx, s)
-	if err != nil {
-		return nil, err
-	}
-	if err := EnsureAutoItems(ctx, s, folder, n); err != nil {
-		return nil, err
-	}
-
-	var objs []*sl.Object
-	for i := 0; i < n; i++ {
-		// AttachAdd, because past the eighth slot two objects share a
-		// point and a bare attach would throw the first one off.
-		a, err := s.EnsureAttached(ctx, folder, AutoName(i), AutoPoints[i]|sl.AttachAdd)
-		if err != nil {
-			if i == 0 {
-				return nil, err
-			}
-			fmt.Fprintf(os.Stderr, "only %d of %d objects: %v\n", i, n, err)
-			break
-		}
-		obj := a.Object
-		objs = append(objs, &obj)
-	}
-	return objs, nil
 }
 
 // objectsFolder is where a taken object lands, and so where the auto

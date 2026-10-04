@@ -52,6 +52,10 @@ type grantingGrid struct {
 	// refuse is a daemon too old to answer for places at all.
 	refuse error
 
+	// perAgent is what the program last said it can wear on one avatar;
+	// zero until it said.
+	perAgent int
+
 	// sentAtAsk is how many messages the session had sent at each ask.
 	sentAtAsk []int
 }
@@ -105,9 +109,15 @@ func newGranting(t *testing.T, names ...string) (*sl.Session, *grantingGrid) {
 // SlotsPerAgentForTest is what these fakes pretend a daemon holds.  It
 // is the pool's number and not this package's: what this side knows is
 // how to wear a place, not how many there are.
-const SlotsPerAgentForTest = 12
+const SlotsPerAgentForTest = 24
 
 func (g *grantingGrid) Sessions(context.Context) ([]string, error) { return g.names, nil }
+
+func (g *grantingGrid) SetSlotsPerAgent(n int) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.perAgent = n
+}
 
 func (g *grantingGrid) SlotsWithin(ctx context.Context, n int, d, wait time.Duration, agent string) (*client.Grant, error) {
 	return g.grant(n, agent, false)
@@ -216,6 +226,40 @@ func TestASessionWithNoDaemonNeedsNoArbitration(t *testing.T) {
 		if d {
 			t.Errorf("object %d came back dirty from a session with no daemon", i)
 		}
+	}
+}
+
+// TestAsksSayHowManyPlacesPerAvatarTheProgramWears: a daemon grants no
+// place past what the client says it can wear, and reads silence as
+// twelve, so a program with twenty-four objects has to say so or run
+// half of them.  The client package puts it in the request
+// (TestAsksCarryPerAgent there); this holds that the ones that ask say
+// AutoPool, whichever way they ask.
+func TestAsksSayHowManyPlacesPerAvatarTheProgramWears(t *testing.T) {
+	s, g := newGranting(t, "quark")
+	if _, err := useAutoOn(context.Background(), Options{Agent: "quark"}, s, 4); err != nil {
+		t.Fatalf("useAutoOn: %v", err)
+	}
+	if g.perAgent != 24 || g.perAgent != AutoPool() {
+		t.Errorf("said %d places per avatar, want %d", g.perAgent, AutoPool())
+	}
+
+	s, g = newGranting(t, "quark")
+	if _, err := spreadOn(context.Background(), Options{}, s, 4); err != nil {
+		t.Fatalf("spreadOn: %v", err)
+	}
+	if g.perAgent != AutoPool() {
+		t.Errorf("spreadOn said %d places per avatar, want %d", g.perAgent, AutoPool())
+	}
+
+	s, g = newGranting(t, "quark")
+	g.free["quark"] = SlotsPerAgentForTest
+	g.fakeGrid.serveBake(t)
+	if _, err := SetupAuto(context.Background(), s, 4); err != nil {
+		t.Fatalf("SetupAuto: %v", err)
+	}
+	if g.perAgent != AutoPool() {
+		t.Errorf("SetupAuto said %d places per avatar, want %d", g.perAgent, AutoPool())
 	}
 }
 

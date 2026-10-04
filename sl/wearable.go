@@ -221,7 +221,18 @@ type OutfitLink struct {
 	// A link outlives what it points at, and one that has been left
 	// behind says nothing about its kind.
 	Found bool
+
+	// InvType is the inventory type the link itself carries, which is
+	// its target's: an object link says object (InvTypeObject) without
+	// the target being found.  Outfit walks only a few folders deep, so
+	// a thing kept deeper than that is not Found, and this is all there
+	// is to tell an attachment's link from a wearable's.
+	InvType int
 }
+
+// InvTypeObject is the inventory type of an object, an attachment's
+// item (IT_OBJECT, llinventorytype.h).
+const InvTypeObject = 6
 
 // Outfit reads the Current Outfit folder and follows every link in it.
 //
@@ -259,7 +270,7 @@ func (w *Session) outfitIn(ctx context.Context, cof msg.UUID) ([]OutfitLink, err
 		if !e.IsLink || e.Asset.IsZero() {
 			continue
 		}
-		l := OutfitLink{Link: e.ID, Item: e.Asset, Name: e.Name}
+		l := OutfitLink{Link: e.ID, Item: e.Asset, Name: e.Name, InvType: e.InvType}
 		if to, ok := byID[e.Asset]; ok {
 			l.Found, l.Folder, l.Parent = true, to.Folder, to.Parent
 			l.Kind = AssetType(to.Type)

@@ -90,6 +90,11 @@ type Conn struct {
 
 	agent string
 
+	// perAgent is how many places per avatar this client can wear, sent
+	// with every ask for places; zero says nothing, which a daemon reads
+	// as twelve.  Set by SetSlotsPerAgent.
+	perAgent atomic.Uint32
+
 	// dropped counts what this connection threw away because nobody was
 	// reading fast enough, and OnDrop says what each one was, so that a
 	// line lost here can be told from a line never said.

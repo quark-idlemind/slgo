@@ -694,7 +694,13 @@ type Slots struct {
 	// other number gives up after that many seconds with an answer saying
 	// so, why set and nothing granted.  A try is answered at once
 	// whatever this says.
-	WaitSeconds   uint32 `protobuf:"varint,6,opt,name=wait_seconds,json=waitSeconds,proto3" json:"wait_seconds,omitempty"`
+	WaitSeconds uint32 `protobuf:"varint,6,opt,name=wait_seconds,json=waitSeconds,proto3" json:"wait_seconds,omitempty"`
+	// PerAgent is how many places on one avatar the client can wear,
+	// which is the most slot indexes it can use: the daemon grants it no
+	// slot numbered this or more, and refuses a Want above it as more
+	// than there is.  Zero is a client older than the field, read as the
+	// twelve such clients wore.
+	PerAgent      uint32 `protobuf:"varint,7,opt,name=per_agent,json=perAgent,proto3" json:"per_agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -767,6 +773,13 @@ func (x *Slots) GetRequest() uint64 {
 func (x *Slots) GetWaitSeconds() uint32 {
 	if x != nil {
 		return x.WaitSeconds
+	}
+	return 0
+}
+
+func (x *Slots) GetPerAgent() uint32 {
+	if x != nil {
+		return x.PerAgent
 	}
 	return 0
 }
@@ -6896,14 +6909,15 @@ const file_slgo_proto_rawDesc = "" +
 	"\vrenew_slots\x18\a \x01(\v2\x13.slgo.v1.RenewSlotsH\x00R\n" +
 	"renewSlots\x12<\n" +
 	"\rrelease_slots\x18\b \x01(\v2\x15.slgo.v1.ReleaseSlotsH\x00R\freleaseSlotsB\x06\n" +
-	"\x04body\"\x9a\x01\n" +
+	"\x04body\"\xb7\x01\n" +
 	"\x05Slots\x12\x12\n" +
 	"\x04want\x18\x01 \x01(\rR\x04want\x12\x18\n" +
 	"\aseconds\x18\x02 \x01(\rR\aseconds\x12\x10\n" +
 	"\x03try\x18\x03 \x01(\bR\x03try\x12\x14\n" +
 	"\x05agent\x18\x04 \x01(\tR\x05agent\x12\x18\n" +
 	"\arequest\x18\x05 \x01(\x04R\arequest\x12!\n" +
-	"\fwait_seconds\x18\x06 \x01(\rR\vwaitSeconds\"V\n" +
+	"\fwait_seconds\x18\x06 \x01(\rR\vwaitSeconds\x12\x1b\n" +
+	"\tper_agent\x18\a \x01(\rR\bperAgent\"V\n" +
 	"\n" +
 	"RenewSlots\x12\x14\n" +
 	"\x05grant\x18\x01 \x01(\tR\x05grant\x12\x18\n" +

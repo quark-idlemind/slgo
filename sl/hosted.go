@@ -591,6 +591,10 @@ func (h *Hosted) Slots(ctx context.Context, n int, timeout time.Duration, agent 
 	return h.conn.Slots(ctx, n, timeout, agent)
 }
 
+// SetSlotsPerAgent says how many places per avatar the caller can wear;
+// see client.Conn.SetSlotsPerAgent.
+func (h *Hosted) SetSlotsPerAgent(n int) { h.conn.SetSlotsPerAgent(n) }
+
 // SlotsWithin is Slots giving up with client.ErrStillBusy when the
 // objects have not come free within wait.
 func (h *Hosted) SlotsWithin(ctx context.Context, n int, timeout, wait time.Duration, agent string) (*client.Grant, error) {

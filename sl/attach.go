@@ -188,6 +188,11 @@ type Attached struct {
 	Object Object
 	Item   msg.UUID // the inventory item it came from
 	Point  int
+
+	// Scale is the size the region last described the object as, in
+	// metres.  WornObjects and WornFromItem fill it; an attachment
+	// reported as it went on does not carry one, and it is zero.
+	Scale msg.Vector3
 }
 
 // attachPoint pulls the point out of an ObjectUpdate's State byte,
@@ -355,7 +360,7 @@ func (w *Session) WornObjects(ctx context.Context) ([]*Attached, error) {
 		if !worn(s, w.me, mine, knowMe, avatars) {
 			continue
 		}
-		out = append(out, &Attached{Object: s.Object, Item: s.AttachItem, Point: s.AttachPoint})
+		out = append(out, &Attached{Object: s.Object, Item: s.AttachItem, Point: s.AttachPoint, Scale: s.Scale})
 	}
 	return out, nil
 }
@@ -408,7 +413,7 @@ func (w *Session) WornFromItem(ctx context.Context, item msg.UUID) (*Attached, b
 		// WornObjects this needs no filter: nobody else's attachment
 		// can have been worn from this avatar's item.
 		if s.AttachItem == item {
-			return &Attached{Object: s.Object, Item: item, Point: s.AttachPoint}, true
+			return &Attached{Object: s.Object, Item: item, Point: s.AttachPoint, Scale: s.Scale}, true
 		}
 	}
 	return nil, false

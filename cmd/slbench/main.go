@@ -1807,6 +1807,12 @@ func runIn(ctx context.Context, o session.Options) ([]place, func(), error) {
 	// As many places as the searches would like, halving until the pool
 	// can grant it; see openLease for why fewer is slower rather than
 	// fatal.  The last attempt asks for one, which every avatar has.
+	//
+	// A pool is 24 objects an avatar on one HUD point, and a lease leaves
+	// session.AutoLeaseReserve attachment slots free, so it can hand
+	// back fewer than it was asked for without failing; the places in
+	// the lease are what the searches have, whatever they wanted.
+	// Why: doc/slots.md#what-a-lease-leaves-free
 	want := leaseSize()
 	var as []*session.Auto
 	var err error
