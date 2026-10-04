@@ -310,7 +310,9 @@ var ErrLinkOrderUnknown = errors.New("sl: the order of the linkset is not known"
 
 // Linkset returns root and its children, root first and then the
 // children in link order, so that each one's place in the list is its
-// LinkNumber less one.
+// LinkNumber less one.  Avatars sitting on it are not listed: they are
+// numbered after the prims, so the prims' numbers are the same with or
+// without them.
 //
 // root has to be the root of a linkset; a prim that is linked under
 // another is refused rather than guessed at.  A prim with no children

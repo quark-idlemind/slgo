@@ -638,6 +638,40 @@ func TestLinksetIsTheRootAndThenItsChildrenInLinkOrder(t *testing.T) {
 	}
 }
 
+// TestLinksetLeavesTheSittersOutAndKeepsThePrimsInPlace: avatars sitting
+// on a set are numbered after its prims, so the prims are 2, 3 and up
+// with them there as without, and each one's place in the list is its
+// number less one.
+func TestLinksetLeavesTheSittersOutAndKeepsThePrimsInPlace(t *testing.T) {
+	t.Parallel()
+	w, f := newFakeSession(t)
+	second := msg.MustParseUUID("397f7e57-7e57-c0de-28a6-d4e7227ab996")
+	sitter := msg.MustParseUUID("c7b27e57-7e57-c0de-5449-e0bf9a501f8a")
+	f.mu.Lock()
+	f.objects = []*Seen{
+		{Object: Object{ID: sitter, Local: 95}, PCode: pcodeAvatar, Parent: 77, LinkNumber: 4, LinkKnown: true},
+		{Object: Object{ID: theChild, Local: 78}, PCode: pcodePrim, Parent: 77, LinkNumber: 3, LinkKnown: true},
+		{Object: Object{ID: thePrim, Local: 77}, PCode: pcodePrim, LinkNumber: 1, LinkKnown: true},
+		{Object: Object{ID: second, Local: 79}, PCode: pcodePrim, Parent: 77, LinkNumber: 2, LinkKnown: true},
+	}
+	f.mu.Unlock()
+
+	got, err := w.Linkset(context.Background(), &Object{ID: thePrim})
+	if err != nil {
+		t.Fatalf("Linkset: %v", err)
+	}
+	var ids []msg.UUID
+	for i, s := range got {
+		ids = append(ids, s.ID)
+		if s.LinkNumber != i+1 {
+			t.Errorf("%s is link %d at place %d", s.ID, s.LinkNumber, i)
+		}
+	}
+	if want := []msg.UUID{thePrim, second, theChild}; !reflect.DeepEqual(ids, want) {
+		t.Errorf("Linkset is %v, want %v", ids, want)
+	}
+}
+
 // TestAWornObjectIsTheRootOfItsOwnLinkset: an attachment's root has the
 // avatar for its parent, and its children are numbered under it.
 func TestAWornObjectIsTheRootOfItsOwnLinkset(t *testing.T) {

@@ -443,6 +443,44 @@ watched, and one store was traced packet by packet:
 - Deleting a child prim deletes the whole linkset, so a kill in the
   middle of one could not be made live; the unit test covers it.
 
+**Sitters.** An avatar sitting on a set is a child of it (the store lists it under the parent the update gives), and the
+viewer appends every child, avatar or not (`LLViewerObject::addChild`,
+`llviewerobject.cpp:960`, Firestorm 885631b93a), so sitters are numbered
+after all of the prims, in the order they sat: on a set of N prims the
+first sitter is link N+1, the second N+2, and one that stands lets the
+later ones close up. A sitter is link 2 only on a single prim, which is
+then link 1. A prim linked while somebody sits goes in among the prims,
+as link 2, and the sitters stay after all of them. `Objects.sitters`
+keeps them apart from `Objects.kids`, so a sitter takes no part in the
+prims' order, the front insertion or `JoinWindow`.
+
+Measured on 2026-10-03 on an invented three-prim seat (root, prim2,
+prim3), linked by the test avatar, with a script in the root listing
+`llGetLinkKey` for every link at each change:
+
+| stage | LSL | the store, first version |
+|---|---|---|
+| built | root 1, prim2 2, prim3 3 | 1, 2, 3 |
+| the test avatar sits on the root | prims 1-3, the avatar 4 | root 1, avatar 2, prim2 3, prim3 4 |
+| a second avatar sits on prim2 | the test avatar 4, the second 5 | second 2, test 3, prim2 4, prim3 5 |
+| the test avatar stands | prims 1-3, the second avatar 4 | second 2, prim2 3, prim3 4 |
+| the second avatar stands | 1, 2, 3 | 1, 2, 3 |
+| the test avatar sits, then a fourth prim is linked 2.1 s later | root 1, new prim 2, prim2 3, prim3 4, avatar 5 | new prim 2, avatar 3, prim2 4, prim3 5 |
+
+The store's column is what it said before sitters were kept apart: it
+took a sitter for a prim linked live and put it at the front.
+
+A sitter's `LinkKnown` is true unless several sitters were described
+already seated (login, or a store taken from another agent), since the
+region describes those in no order we know; sitters that sat while the
+store watched are in the order they sat. It does not depend on the
+prims' order, only on how many prims there are, so a set whose prim
+order is unknown can still have known sitters. An avatar described
+already seated is appended to the sitters, and so comes after the prims
+whichever description arrives first. A root with only sitters is link 1.
+`Session.Linkset` lists prims only, so its invariant holds with
+sitters present.
+
 **Known and unknown.** One update that links several prims the store
 already held to one parent leaves that set's order unknown
 (`Objects.joinedTogether`), since its blocks are not in link order,
