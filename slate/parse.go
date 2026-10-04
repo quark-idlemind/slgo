@@ -1249,6 +1249,8 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.vec3Exp(e, true)
 	case p.kw("click"):
 		return p.clickExp(e)
+	case p.kw("text"):
+		return p.floatTextExp(e)
 	case p.kw("fullbright"):
 		return p.fullbrightExp(e)
 	case p.kw("glow"):
@@ -1788,6 +1790,39 @@ func (p *parser) clickExp(e *Expect) error {
 		}
 	}
 	e.Click = x
+	return nil
+}
+
+// floatTextExp reads text OBJ link? and the state: a string, matching, a
+// capture, or after is, any.
+func (p *parser) floatTextExp(e *Expect) error {
+	if err := p.want("text"); err != nil {
+		return err
+	}
+	name, err := p.ident()
+	if err != nil {
+		return err
+	}
+	link, err := p.optLink()
+	if err != nil {
+		return err
+	}
+	st, err := p.state()
+	if err != nil {
+		return err
+	}
+	x := &TextExp{Name: name, Link: link, State: st}
+	if st.Kind != StateChanges && !st.Original {
+		if p.kw("any") {
+			x.Any = true
+			if err := p.next(); err != nil {
+				return err
+			}
+		} else if x.Value, err = p.text(); err != nil {
+			return err
+		}
+	}
+	e.FloatText = x
 	return nil
 }
 

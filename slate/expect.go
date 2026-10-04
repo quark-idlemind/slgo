@@ -1,6 +1,6 @@
 package slate
 
-// State expectations (texture, offset, repeats, rotation, click, fullbright, glow, colour, alpha, position, size) and what
+// State expectations (texture, offset, repeats, rotation, click, fullbright, glow, colour, alpha, position, size, text) and what
 // reads them: the object poll, the readings it logs, the baseline and
 // `original` they are judged against, the click describe, and observe,
 // the one hook the step loop calls for everything that is not a heard
@@ -85,6 +85,7 @@ const (
 	kButton // the count of a button search (buttonexp.go)
 	kPosition
 	kSize
+	kText // a prim's floating text
 )
 
 // clickFace is the face of the key that reads a prim's click byte, and
@@ -127,6 +128,7 @@ type reading struct {
 	turns float64
 	click uint8
 	vec   [3]float64 // a position or a size, each a float32 held whole
+	str   string     // a prim's floating text
 
 	bright bool
 	glow   float64    // Glow / 255
@@ -228,6 +230,8 @@ func (k stateKind) equal(a, b *reading) bool {
 		return true
 	}
 	switch k {
+	case kText:
+		return a.str == b.str
 	case kPosition, kSize:
 		return near(a.vec[0], b.vec[0], vecTol) && near(a.vec[1], b.vec[1], vecTol) && near(a.vec[2], b.vec[2], vecTol)
 	case kButton:
@@ -292,6 +296,8 @@ func (k stateKind) capType() CaptureType {
 		return CapTriple
 	case kPosition, kSize:
 		return CapVector
+	case kText:
+		return CapText
 	}
 	return CapClick
 }
@@ -316,6 +322,8 @@ func (k stateKind) text(r *reading) string {
 	switch k {
 	case kButton:
 		return r.label
+	case kText:
+		return fmt.Sprintf("%q", r.str)
 	case kPosition, kSize:
 		return g3(r.vec)
 	case kTexture:
@@ -350,6 +358,9 @@ func (k stateKind) show(key readKey, r *reading) string {
 	if k == kButton {
 		return r.label
 	}
+	if k == kText {
+		return fmt.Sprintf("text %s %q", key.name, r.str)
+	}
 	if k == kPosition || k == kSize {
 		return fmt.Sprintf("%s %s %s", map[stateKind]string{kPosition: "position", kSize: "size"}[k], key.name, g3(r.vec))
 	}
@@ -374,6 +385,9 @@ func (k stateKind) value(r *reading) capValue {
 	}
 	if k == kPosition || k == kSize {
 		return capValue{typ: CapVector, vec: r.vec}
+	}
+	if k == kText {
+		return capValue{typ: CapText, text: r.str}
 	}
 	if r.all != nil {
 		v := capValue{typ: k.capType(), all: true}
@@ -416,6 +430,8 @@ func (k stateKind) want(v capValue) *reading {
 	switch k {
 	case kPosition, kSize:
 		r.vec = v.vec
+	case kText:
+		r.str = v.text
 	case kTexture:
 		r.tex = v.id
 	case kOffset:
@@ -446,6 +462,7 @@ type stateExp struct {
 	orig  bool
 	want  reading
 	any   bool          // is any: a real reading, whatever it is
+	text  *textMatch    // a floating text's value, a literal, a pattern or a capture
 	why   func() string // a button's refusal, said after "unmatched"; nil for the rest
 	noted bool          // the baseline note was printed
 	final bool          // a negative's window was judged
@@ -500,6 +517,8 @@ func stateKeyOf(e *Expect) (readKey, stateKind, bool) {
 		return readKey{keyName(e.Position.Name, e.Position.Link), primFace, kPosition}, kPosition, true
 	case e.Size != nil:
 		return readKey{keyName(e.Size.Name, e.Size.Link), primFace, kSize}, kSize, true
+	case e.FloatText != nil:
+		return readKey{keyName(e.FloatText.Name, e.FloatText.Link), primFace, kText}, kText, true
 	}
 	return readKey{}, 0, false
 }
@@ -690,6 +709,8 @@ func (w *watcher) poll(ctx context.Context, force bool) error {
 			rd = &reading{at: at, vec: vec3(o.Position)}
 		case k.kind == kSize:
 			rd = &reading{at: at, vec: vec3(o.Scale)}
+		case k.kind == kText:
+			rd = &reading{at: at, str: o.Text}
 		case k.face == clickFace:
 			if !o.ClickKnown {
 				continue
@@ -867,6 +888,8 @@ func (s *stepRun) stateExpect(x *expState) error {
 		base, link, st = e.Position.Name, e.Position.Link, e.Position.State
 	case e.Size != nil:
 		base, link, st = e.Size.Name, e.Size.Link, e.Size.State
+	case e.FloatText != nil:
+		base, link, st = e.FloatText.Name, e.FloatText.Link, e.FloatText.State
 	}
 	if err := s.linkKnown(base, link, k.name); err != nil {
 		return err
@@ -918,12 +941,14 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		use = e.Position.Use
 	case e.Size != nil:
 		use = e.Size.Use
+	case e.FloatText != nil:
+		use = e.FloatText.Value.Capture
 	}
 	switch {
 	case e.Texture != nil && e.Texture.Any, e.Offset != nil && e.Offset.Any, e.Repeats != nil && e.Repeats.Any,
 		e.Rot != nil && e.Rot.Any, e.Click != nil && e.Click.Any, e.Fullbright != nil && e.Fullbright.Any,
 		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any,
-		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any:
+		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any, e.FloatText != nil && e.FloatText.Any:
 		se.any = true
 	case use != nil:
 		v, err := s.captureOrTuple(use, se.kind.capType())
@@ -956,6 +981,12 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		se.want.vec = lit3(e.Position)
 	case e.Size != nil:
 		se.want.vec = lit3(e.Size)
+	case e.FloatText != nil:
+		tm, err := s.textMatch(e.FloatText.Value)
+		if err != nil {
+			return err
+		}
+		se.text = &tm
 	case e.Fullbright != nil:
 		se.want.bright = e.Fullbright.On
 	case e.Glow != nil:
@@ -1011,10 +1042,7 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 		case allFace:
 			what = "face all"
 		case primFace:
-			what = "position"
-			if se.kind == kSize {
-				what = "size"
-			}
+			what = map[stateKind]string{kPosition: "position", kSize: "size", kText: "text"}[se.kind]
 		}
 		if se.kind == kButton {
 			what = "button"
@@ -1028,6 +1056,14 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 	want := &se.want
 	if se.orig {
 		want = w.original(se.key)
+	}
+	// A floating text literal or pattern judges the string; everything else
+	// is compared with the wanted reading.
+	ok := func(r *reading) bool {
+		if se.text != nil {
+			return se.text.match(r.str)
+		}
+		return se.kind.matches(r, want)
 	}
 	var hit *reading
 	switch {
@@ -1045,7 +1081,7 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 	case want == nil:
 	case se.word == StateIs:
 		for _, r := range seq {
-			if se.kind.matches(r, want) {
+			if ok(r) {
 				hit = r
 				break
 			}
@@ -1053,7 +1089,7 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 	default: // becomes: a reading that is not X has to come first
 		left := false
 		for _, r := range seq {
-			if se.kind.matches(r, want) {
+			if ok(r) {
 				if left {
 					hit = r
 					break
@@ -1071,7 +1107,11 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 		} else {
 			x.matched = true
 			v := se.kind.value(hit)
-			s.bindMatched(x, &v)
+			if se.text != nil {
+				s.bindMatched(x, &v, groupSrc{*se.text, hit.str})
+			} else {
+				s.bindMatched(x, &v)
+			}
 		}
 	case x.neg && !now.Before(x.limit):
 		// The window is over and nothing was read: the store never having

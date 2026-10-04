@@ -920,6 +920,19 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 		}
 		_, err := c.reading(e, x.State, x.Any, x.Use, CapClick, same)
 		return err
+	case e.FloatText != nil:
+		x := e.FloatText
+		if err := c.ref(x.Name, same); err != nil {
+			return err
+		}
+		if err := c.linkN(x.Name, x.Link); err != nil {
+			return err
+		}
+		lit, err := c.reading(e, x.State, x.Any, x.Value.Capture, CapText, same)
+		if err != nil || !lit {
+			return err
+		}
+		return c.pattern(x.Value)
 	case e.Position != nil:
 		return c.vec3(e, e.Position, "position", same)
 	case e.Size != nil:
@@ -1196,6 +1209,8 @@ func asType(e Expect) (CaptureType, bool) {
 		return CapTriple, true
 	case e.Position != nil, e.Size != nil:
 		return CapVector, true
+	case e.FloatText != nil:
+		return CapText, true
 	case e.Button != nil:
 		return CapNumber, true
 	}
@@ -1227,6 +1242,8 @@ func patternsOf(e Expect) []Text {
 		}
 	case e.Link != nil:
 		ts = []Text{e.Link.Text}
+	case e.FloatText != nil:
+		ts = []Text{e.FloatText.Value}
 	}
 	var out []Text
 	for _, t := range ts {

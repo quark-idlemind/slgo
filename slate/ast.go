@@ -608,6 +608,7 @@ type Expect struct {
 	Repeats    *VecExp
 	Rot        *RotExp
 	Click      *ClickExp
+	FloatText  *TextExp
 	Fullbright *FullbrightExp
 	Glow       *GlowExp
 	Colour     *ColourExp
@@ -759,6 +760,18 @@ type ClickExp struct {
 	Action string
 	Any    bool
 	Use    *Capture
+}
+
+// TextExp is expect text OBJ link? changes / is / becomes: the floating text
+// of a prim. Value is the text of an is or becomes with a value, a literal,
+// a pattern or a capture (its Use); it is zero for changes and original.
+// Any is as for TextureExp.
+type TextExp struct {
+	Name  Ident
+	Link  *Int
+	State State
+	Value Text
+	Any   bool
 }
 
 // FullbrightExp is expect fullbright OBJ link? faceall changes / is on|off.

@@ -224,7 +224,7 @@ Watchers are armed before the stimulus so that a script that answers in the same
 
 An event can be consumed by at most one expectation, ever. Each event is offered to the step's unmatched expectations in source order and is consumed by the first it satisfies. Two expectations that ask for the same chat line need two chat lines. An event consumed by an earlier step is never offered again, and an unconsumed event from an earlier step is eligible for a later step only if it was observed at or after that step's arm point. Events from an earlier test are never eligible: no arm point is earlier than its test's start.
 
-State readings (texture, offset, repeats, rotation, position, size, click, fullbright, glow, colour, alpha) are events too, stamped when a poll observes them. Such an expectation is a reading of current state: it passes as soon as a reading matches, including a reading that already matched at the arm point, so it cannot by itself prove the stimulus changed anything. The author-side statement of that is in [Steps and timing](slate-language.md#steps-and-timing); `becomes`, `changes` and `original` are the words that do prove it ([State words](#state-words)).
+State readings (texture, offset, repeats, rotation, position, size, click, text, fullbright, glow, colour, alpha) are events too, stamped when a poll observes them. Such an expectation is a reading of current state: it passes as soon as a reading matches, including a reading that already matched at the arm point, so it cannot by itself prove the stimulus changed anything. The author-side statement of that is in [Steps and timing](slate-language.md#steps-and-timing); `becomes`, `changes` and `original` are the words that do prove it ([State words](#state-words)).
 
 ### Baselines and original
 
@@ -484,6 +484,12 @@ Before any command the worn root read position `0 0 0`, the attach point. Earlie
 
 There is no wait of its own and no field of `sl.Options`. The store has the value within about 160 ms of the script's change, so the step's `within`, or its default of 10 s, is the bound, as for every state expectation; 10 s is more than sixty times the slowest of those readings.
 
+### Floating text
+
+`text` is a reading of the prim itself and not of a face, keyed as `position` is (`primFace`). A poll reads `Seen.Text` of the prim from the session's store, with no request of its own, and keeps it in the reading as a string. The comparison is exact. A literal or a `matching` pattern is judged on the string by the same matcher `say` uses (`textMatch`), so the named groups of a pattern bind the text of the reading that matched, as they do for `say`; a capture is compared whole, as a literal is; `original` and `changes` compare two readings with `==`. The transcript line is `text <name> "<text>"` quoted with `%q`, the quoting of a chat line (`transcript.go`), so a newline in a text is `\n` and cannot forge a line.
+
+The store holds the text of the last ObjectUpdate for the prim, so there is no wait of its own and no field of `sl.Options`. **Measured** on 2026-10-03 with the test avatar and an invented box whose script called `llSetText` when touched, the session's store read every 10 ms: the text was in the store 96 to 171 ms after the touch, median 135 ms, in 20 of 20 touches. The step's `within`, or its default of 10 s, is the bound, as for every state expectation, and it is more than fifty times the slowest reading.
+
 ### Face all
 
 A key whose face is `all` reads every face of the prim. The tuple of a prim is its faces from face 0, exactly as many as the prim has, which `Seen.FaceCount` gives from its shape and the tuple is decoded with that count (`Faces(n)`). The count is the one the viewer computes, measured on 340 shapes on the grid ([How many faces a prim has](objects.md#how-many-faces-a-prim-has)). A prim with six faces reads as six elements, never with a phantom seventh, and a texture on face 8 of a hollow cut box with nine faces is read. The word comparisons are made on the tuple:
@@ -520,7 +526,7 @@ The semantics are those of `is` on a state expectation, and not of `becomes`: th
 
 ### State words
 
-The state expectations (texture, offset, repeats, rotation, position, size, click, fullbright, glow, colour, alpha, and the button reading) take one of three words. `equal` below is the comparison of the subsections above: exact for texture, click and fullbright, 2/32767 for offset, 1e-4 for repeats, 2/32768 of a turn for rotation, 0.001 m on each axis for position and size, 1/255 for glow, colour and alpha. Readings are the events of [Baselines and original](#baselines-and-original), taken in order of observation from the baseline.
+The state expectations (texture, offset, repeats, rotation, position, size, click, text, fullbright, glow, colour, alpha, and the button reading) take one of three words. `equal` below is the comparison of the subsections above: exact for texture, click and fullbright, 2/32767 for offset, 1e-4 for repeats, 2/32768 of a turn for rotation, 0.001 m on each axis for position and size, exact for text, 1/255 for glow, colour and alpha. Readings are the events of [Baselines and original](#baselines-and-original), taken in order of observation from the baseline.
 
 | Word | Passes when |
 |---|---|
@@ -528,7 +534,7 @@ The state expectations (texture, offset, repeats, rotation, position, size, clic
 | `becomes X` | a reading equals X and an earlier reading in the step's window did not; the baseline counts as the first reading. If the baseline already equals X, the value must leave X and come back |
 | `changes` | a reading differs from the baseline, by the same tolerance (no value follows) |
 
-`X` may be `original`, the reading that [Baselines and original](#baselines-and-original) fixes for the test; for offset and repeats the pair, for rotation, glow and alpha the number, for colour, position and size the triple, for fullbright on or off, for click the name. `X` may also be a capture, and, after `is` with an `as`, `any`: a reading that matches whatever it is, so the first reading is the match and is bound. `original` is meant for toggle tests: touch once and the value `changes`; touch again and it `becomes original`. A reading equal to `original` is compared with the same tolerance as any other value.
+`X` may be `original`, the reading that [Baselines and original](#baselines-and-original) fixes for the test; for offset and repeats the pair, for rotation, glow and alpha the number, for colour, position and size the triple, for fullbright on or off, for click the name, for text the string. `X` may also be a capture, and, after `is` with an `as`, `any`: a reading that matches whatever it is, so the first reading is the match and is bound. `original` is meant for toggle tests: touch once and the value `changes`; touch again and it `becomes original`. A reading equal to `original` is compared with the same tolerance as any other value.
 
 The button reading takes `is` and `becomes` with `shown`, `gone` or `count N`, `original`, and `changes`; it has no `any` ([Button observations](#button-observations)). The negative forms are in [Negative expectations](#negative-expectations). `becomes`, `changes`, `original` and `any` on any other expectation are refused by the static check. A `link N` on a state expectation selects that prim of the binding's linkset, from the probe when the binding has one and else from the store ([Objects and probes](#linksets-and-region-positions)).
 
