@@ -960,7 +960,7 @@ Two avatars may be standing in different regions, so a script that cares
 where it is may not say the same thing on both. `slbench` spreads too,
 and by default has to: it asks for one object per division of each of
 its two searches, plus three, which is nineteen at the defaults where an
-avatar wears twelve. Its readings turned out to agree across avatars --
+avatar holds twenty-four. Its readings turned out to agree across avatars --
 every row of the `--parts` sweep in [memory.md](memory.md) reported the
 same size over one avatar, two and three -- so this is not something a
 benchmark has to avoid.
@@ -986,7 +986,7 @@ rather than waited for:
 
 Waiting, when it happens, is silent: the daemon holds nothing while it
 waits and the client has nothing to report but that it has not returned.
-Naming an avatar is the exception -- more than twelve, the most one
+Naming an avatar is the exception -- more than twenty-four, the most one
 avatar can hold, is known to be too many before anybody is asked, so
 `slrun` says so and suggests leaving out `--agent`, which lets the
 objects come from more than one avatar.
@@ -1019,11 +1019,11 @@ is worse off than one who was told.
 ### Several runs at once
 
 A run takes as many objects as it asked for and holds them until it
-finishes. An avatar wears twelve and a default benchmark wants nineteen,
+finishes. An avatar holds twenty-four and a default benchmark wants nineteen,
 so what fits beside what is a question about the whole pool rather than
-about one avatar: three avatars are thirty-six objects, which is one
-benchmark and seventeen scripts, or nine `slrun`s of four, or any other
-way thirty-six divides up.
+about one avatar: three avatars are seventy-two objects, which is three
+benchmarks and fifteen scripts, or eighteen `slrun`s of four, or any other
+way seventy-two divides up.
 
 There is no walk from one avatar to the next. A run makes one request
 for the number it wants and the daemon answers it out of the whole pool,
@@ -1062,7 +1062,7 @@ while after that, and a run walked from one avatar to the next looking
 for room; one pool across all of them replaced it, which is what lets a
 single request span avatars.
 
-Set an avatar up with `slsh auto -n 12`, once per account. An avatar that
+Set an avatar up with `slsh auto -n 24`, once per account. An avatar that
 is not allowed to build can still be set up, provided somebody who can
 gives it one object: everything after the first is a copy, and copying
 something already owned asks the land nothing.

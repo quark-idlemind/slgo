@@ -58,6 +58,7 @@ var (
 	testRoot      = msg.MustParseUUID("23077e57-7e57-c0de-245c-d6b83f1a8b6d")
 	testObjects   = msg.MustParseUUID("a9a87e57-7e57-c0de-b748-062ee08c11ee")
 	testTrash     = msg.MustParseUUID("aa8f7e57-7e57-c0de-e8da-278417da2fea")
+	testOutfit    = msg.MustParseUUID("01157e57-7e57-c0de-6b79-30555437b9f2")
 	thePrim       = msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85")
 
 	// testRegion names the region the fake is in.  sl sends a local id
@@ -70,6 +71,21 @@ var (
 // than random so that a failure names the same thing twice.
 func autoItemID(n int) msg.UUID {
 	return msg.MustParseUUID(fmt.Sprintf("c75d7e57-7e57-c0de-b372-%012d", n))
+}
+
+// ownItemID, ownObjectID and linkID are the inventory item, the worn object
+// and the outfit link of the nth attachment that is NOT an auto object: the
+// owner's own, which fill an avatar up without being the pool's.
+func ownItemID(n int) msg.UUID {
+	return msg.MustParseUUID(fmt.Sprintf("21417e57-7e57-c0de-ebc8-%012d", n))
+}
+
+func ownObjectID(n int) msg.UUID {
+	return msg.MustParseUUID(fmt.Sprintf("389d7e57-7e57-c0de-3173-%012d", n))
+}
+
+func linkID(n int) msg.UUID {
+	return msg.MustParseUUID(fmt.Sprintf("97a37e57-7e57-c0de-cddb-%012d", n))
 }
 
 // invDir is a folder in the fake inventory, and invItem a thing in one.
@@ -85,6 +101,15 @@ type invItem struct {
 	ID   msg.UUID
 	Name string
 	Type int
+
+	// IsLink puts it under "links", where Asset goes out as linked_id:
+	// the shape of the Current Outfit folder.
+	IsLink bool
+	Asset  msg.UUID
+
+	// InvType, when set, is the inv_type served instead of Type: a link
+	// carries its target's inventory type, as AIS sends it.
+	InvType int
 }
 
 // fakeGrid is an sl.Backend with nothing behind it.
@@ -116,6 +141,17 @@ type fakeGrid struct {
 	afterObjects func()
 
 	presenceErr, objectsErr, sendErr, capErr error
+
+	// failSend, when set, refuses the messages it returns an error for
+	// and sends the rest: sendErr is every message, and a test of one
+	// message failing among others needs this.
+	failSend func(msg.Message) error
+
+	// nextLocal is the local id the next object worn is given, and
+	// wearLimit, when set, how many attachments the region lets be worn
+	// before it refuses the next without a word.
+	nextLocal uint32
+	wearLimit int
 
 	// inv is the inventory tree, served over the capability rather than
 	// answered from here: everything that reads inventory goes through
@@ -164,6 +200,7 @@ func newFakeGrid(t *testing.T) *fakeGrid {
 			Dirs: []*invDir{
 				{ID: testObjects, Name: "Objects", Type: 6},
 				{ID: testTrash, Name: "Trash", Type: sl.FolderTrash},
+				{ID: testOutfit, Name: "Current Outfit", Type: sl.FolderCurrentOutfit},
 			},
 		},
 	}
@@ -209,6 +246,26 @@ func (f *fakeGrid) stock(n int) {
 func (f *fakeGrid) serveInventory(t *testing.T) {
 	t.Helper()
 	f.ServeCap(t, agent.InventoryCap, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "DELETE" {
+			// An item is deleted, which is how a link leaves the
+			// Current Outfit folder.
+			parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+			gone := false
+			if len(parts) == 2 && parts[0] == "item" {
+				if item, err := msg.ParseUUID(parts[1]); err == nil {
+					f.mu.Lock()
+					gone = removeItem(f.inv, item)
+					f.mu.Unlock()
+				}
+			}
+			if !gone {
+				http.Error(w, "no such item", http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/llsd+xml")
+			io.WriteString(w, `<?xml version="1.0" ?><llsd><map/></llsd>`)
+			return
+		}
 		id := capFolderID(r.URL.Path)
 		depth, _ := strconv.Atoi(r.URL.Query().Get("depth"))
 
@@ -260,6 +317,37 @@ func capFolderID(path string) msg.UUID {
 	return id
 }
 
+// findItem is the item with this id, wherever in the tree it is.
+func findItem(d *invDir, id msg.UUID) *invItem {
+	for _, it := range d.Items {
+		if it.ID == id {
+			return it
+		}
+	}
+	for _, sub := range d.Dirs {
+		if got := findItem(sub, id); got != nil {
+			return got
+		}
+	}
+	return nil
+}
+
+// removeItem takes an item out of wherever in the tree it is.
+func removeItem(d *invDir, id msg.UUID) bool {
+	for i, it := range d.Items {
+		if it.ID == id {
+			d.Items = append(d.Items[:i], d.Items[i+1:]...)
+			return true
+		}
+	}
+	for _, sub := range d.Dirs {
+		if removeItem(sub, id) {
+			return true
+		}
+	}
+	return false
+}
+
 func findDir(d *invDir, id msg.UUID) *invDir {
 	if d == nil {
 		return nil
@@ -295,21 +383,42 @@ func dirLLSD(d *invDir, parent msg.UUID, depth int) string {
 		// Named but not opened: the folder itself, with nothing in it.
 		b.WriteString(dirLLSD(&invDir{ID: sub.ID, Name: sub.Name, Type: sub.Type}, d.ID, 0))
 	}
-	b.WriteString(`</map><key>items</key><map>`)
+	b.WriteString(`</map>`)
+	itemsLLSD(&b, d, "items", false)
+	itemsLLSD(&b, d, "links", true)
+	b.WriteString(`</map></map>`)
+	return b.String()
+}
+
+// itemsLLSD writes one of the two maps a folder's contents arrive in.  A
+// link goes in the second and names what it points at with linked_id,
+// where an item names its asset with asset_id.
+func itemsLLSD(b *strings.Builder, d *invDir, key string, links bool) {
+	fmt.Fprintf(b, `<key>%s</key><map>`, key)
 	for _, it := range d.Items {
-		fmt.Fprintf(&b, `<key>%s</key><map>`, it.ID)
-		fmt.Fprintf(&b, `<key>item_id</key><string>%s</string>`, it.ID)
-		fmt.Fprintf(&b, `<key>parent_id</key><string>%s</string>`, d.ID)
-		fmt.Fprintf(&b, `<key>asset_id</key><string>%s</string>`, it.ID)
-		fmt.Fprintf(&b, `<key>name</key><string>%s</string>`, xmlText(it.Name))
-		fmt.Fprintf(&b, `<key>type</key><integer>%d</integer>`, it.Type)
-		fmt.Fprintf(&b, `<key>inv_type</key><integer>%d</integer>`, it.Type)
+		if it.IsLink != links {
+			continue
+		}
+		fmt.Fprintf(b, `<key>%s</key><map>`, it.ID)
+		fmt.Fprintf(b, `<key>item_id</key><string>%s</string>`, it.ID)
+		fmt.Fprintf(b, `<key>parent_id</key><string>%s</string>`, d.ID)
+		if links {
+			fmt.Fprintf(b, `<key>linked_id</key><string>%s</string>`, it.Asset)
+		} else {
+			fmt.Fprintf(b, `<key>asset_id</key><string>%s</string>`, it.ID)
+		}
+		fmt.Fprintf(b, `<key>name</key><string>%s</string>`, xmlText(it.Name))
+		fmt.Fprintf(b, `<key>type</key><integer>%d</integer>`, it.Type)
+		invType := it.Type
+		if it.InvType != 0 {
+			invType = it.InvType
+		}
+		fmt.Fprintf(b, `<key>inv_type</key><integer>%d</integer>`, invType)
 		b.WriteString(`<key>permissions</key><map>`)
 		b.WriteString(`<key>owner_mask</key><integer>581632</integer>`)
 		b.WriteString(`</map></map>`)
 	}
-	b.WriteString(`</map><key>links</key><map/></map></map>`)
-	return b.String()
+	b.WriteString(`</map>`)
 }
 
 func xmlText(s string) string {
@@ -335,6 +444,9 @@ func (f *fakeGrid) Control(ctx context.Context, flags uint32) error { return nil
 func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error {
 	f.mu.Lock()
 	err, onSend := f.sendErr, f.onSend
+	if err == nil && f.failSend != nil {
+		err = f.failSend(m)
+	}
 	if err == nil {
 		f.sent = append(f.sent, m)
 	}
@@ -347,6 +459,7 @@ func (f *fakeGrid) Send(ctx context.Context, m msg.Message, reliable bool) error
 	}
 	// After the test's own answer, so that one is heard first.
 	f.answerNames(m)
+	f.answerAttachments(m)
 	return nil
 }
 
@@ -402,6 +515,89 @@ func (f *fakeGrid) answerNames(m msg.Message) {
 				return
 			}
 		}
+	}
+}
+
+// answerAttachments does what the region does with a wear and a take-off.
+//
+// A wear puts the object into the region, parented to this avatar, and
+// tells the session so with the update the session recognises it by; a
+// take-off makes the region stop listing it, and the item stays in
+// inventory.  An item that is already worn is not worn twice, and the
+// region's refusal past a limit is a test's to arrange with wearLimit.
+func (f *fakeGrid) answerAttachments(m msg.Message) {
+	switch m := m.(type) {
+	case *msg.DetachAttachmentIntoInv:
+		f.mu.Lock()
+		keep := f.objects[:0:0]
+		for _, o := range f.objects {
+			if o.AttachItem != m.ObjectData.ItemID {
+				keep = append(keep, o)
+			}
+		}
+		f.objects = keep
+		f.mu.Unlock()
+
+	case *msg.MoveInventoryItem:
+		f.mu.Lock()
+		for _, d := range m.InventoryData {
+			it, to := findItem(f.inv, d.ItemID), findDir(f.inv, d.FolderID)
+			if it == nil || to == nil {
+				continue
+			}
+			removeItem(f.inv, d.ItemID)
+			to.Items = append(to.Items, it)
+		}
+		f.mu.Unlock()
+
+	case *msg.RezSingleAttachmentFromInv:
+		item := m.ObjectData.ItemID
+		f.mu.Lock()
+		worn := 0
+		for _, o := range f.objects {
+			if o.AttachItem.IsZero() {
+				continue
+			}
+			if o.AttachItem == item {
+				f.mu.Unlock()
+				return
+			}
+			worn++
+		}
+		if f.wearLimit > 0 && worn >= f.wearLimit {
+			// Refused without a word.
+			f.mu.Unlock()
+			return
+		}
+		f.nextLocal++
+		local := 5000 + f.nextLocal
+		id := msg.UUID(autoItemID(int(local)))
+		point := int(m.ObjectData.AttachmentPt &^ uint8(sl.AttachAdd))
+		f.objects = append(f.objects, &sl.Seen{
+			Object: sl.Object{ID: id, Local: local}, PCode: 9,
+			AttachItem: item, AttachPoint: point,
+		})
+		f.mu.Unlock()
+		f.relayAttached(id, local, point, item)
+	}
+}
+
+// relayAttached tells the session an attachment went on.
+func (f *fakeGrid) relayAttached(id msg.UUID, local uint32, point int, item msg.UUID) {
+	u := &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{
+		FullID: id, ID: local,
+		// The point rides in the State byte with its nibbles swapped.
+		State:     uint8((point&0x0f)<<4 | (point>>4)&0x0f),
+		NameValue: []byte("AttachItemID STRING RW DS " + item.String() + "\n"),
+	}}}
+	body, err := u.Encode()
+	if err != nil {
+		return
+	}
+	select {
+	case f.msgs <- &sl.Message{ID: msg.IDOf(u), Name: u.MsgInfo().Name, Body: body, At: time.Now()}:
+	case <-f.done:
+	case <-time.After(5 * time.Second):
 	}
 }
 
@@ -862,29 +1058,54 @@ func TestThePoolIsAsBigAsThePointsThereAre(t *testing.T) {
 	}
 }
 
-// TestAutoPointsIsAppendOnly: a slot is identified by its INDEX -- that
-// is what slgod grants and what one program tells another -- so
-// reordering this list makes two versions disagree about which object
-// slot five is, and nothing anywhere detects it.
-func TestAutoPointsIsAppendOnly(t *testing.T) {
+// TestAutoPointsIsTwentyFourOnBottomLeft: every object is worn on the one
+// point, and an avatar has twenty-four of them.  An avatar wears 38
+// attachments in all and no one point has a smaller limit, so the eight
+// HUD points were never a ceiling.
+// Why: doc/slots.md#one-point-twenty-four-objects
+func TestAutoPointsIsTwentyFourOnBottomLeft(t *testing.T) {
 	t.Parallel()
-	want := []int{
-		sl.HUDBottomLeft, sl.HUDBottom, sl.HUDBottomRight, sl.HUDTopLeft,
-		sl.HUDTop, sl.HUDTopRight, sl.HUDCenter1, sl.HUDCenter2,
-		sl.HUDBottomLeft, sl.HUDBottom, sl.HUDBottomRight, sl.HUDTopLeft,
+	if len(AutoPoints) != 24 {
+		t.Fatalf("AutoPoints has %d entries, want 24", len(AutoPoints))
 	}
-	if len(AutoPoints) < len(want) {
-		t.Fatalf("AutoPoints has shrunk to %d entries", len(AutoPoints))
-	}
-	for i, p := range want {
-		if AutoPoints[i] != p {
-			t.Errorf("slot %d is attachment point %d, want %d: this list is append-only",
-				i, AutoPoints[i], p)
+	for i, p := range AutoPoints {
+		if p != sl.HUDBottomLeft {
+			t.Errorf("slot %d is attachment point %d, want HUD Bottom Left (%d)",
+				i, p, sl.HUDBottomLeft)
 		}
 	}
 	if len(AutoPoints)%AutoGroupSize != 0 {
 		t.Errorf("%d points do not divide into groups of %d, so the last group is short",
 			len(AutoPoints), AutoGroupSize)
+	}
+}
+
+// TestASlotIsItsIndexAndItsName: the list is one point twenty-four times,
+// and what tells slots apart is still the index.  Slot i is AutoName(i),
+// which grants and the objects in inventory have agreed on, so the names
+// are held as they were.
+func TestASlotIsItsIndexAndItsName(t *testing.T) {
+	t.Parallel()
+	for i, want := range map[int]string{0: "auto", 1: "auto 2", 11: "auto 12", 23: "auto 24"} {
+		if got := AutoName(i); got != want {
+			t.Errorf("AutoName(%d) = %q, want %q", i, got, want)
+		}
+		if slot, ok := autoSlot(want); !ok || slot != i {
+			t.Errorf("autoSlot(%q) = %d, %v, want %d", want, slot, ok, i)
+		}
+	}
+	for _, name := range []string{"auto 1", "auto 07", "autobench", "automate", "auto  3", "Auto", "auto x"} {
+		if slot, ok := autoSlot(name); ok {
+			t.Errorf("autoSlot(%q) = %d, but that is no slot's name", name, slot)
+		}
+	}
+	for name, want := range map[string]bool{
+		"auto": true, "auto 2": true, "auto 24": true, "auto 1": true,
+		"autobench": false, "automate": false, "auto ": false, "auto 2x": false, "an auto": false,
+	} {
+		if got := IsAutoName(name); got != want {
+			t.Errorf("IsAutoName(%q) = %v, want %v", name, got, want)
+		}
 	}
 }
 
@@ -1327,13 +1548,14 @@ func TestSetupTakesEveryPlaceBeforeMovingAnything(t *testing.T) {
 	s, g := newGranting(t, "quark")
 	g.fakeGrid.stock(1)
 	answerCopies(g.fakeGrid)
+	g.fakeGrid.serveBake(t)
 
-	objs, err := SetupAuto(context.Background(), s, 4)
+	rep, err := SetupAuto(context.Background(), s, 4)
 	if err != nil {
 		t.Fatalf("SetupAuto: %v", err)
 	}
-	if len(objs) != 4 {
-		t.Fatalf("SetupAuto made %d objects ready", len(objs))
+	if len(rep.Placed) != 4 {
+		t.Fatalf("SetupAuto made %d objects ready", len(rep.Placed))
 	}
 	want := fmt.Sprintf("quark:%d:true", AutoPool())
 	if got := g.askedFor(); len(got) != 1 || got[0] != want {
@@ -1371,6 +1593,7 @@ func TestSetupRefusesUnderARunningBenchmark(t *testing.T) {
 	// The whole pool free, and it goes ahead -- and gives the places
 	// back afterwards, since it holds them only while it moves things.
 	g.free["quark"] = SlotsPerAgentForTest
+	g.fakeGrid.serveBake(t)
 	if _, err := SetupAuto(context.Background(), s, 4); err != nil {
 		t.Fatalf("SetupAuto with nothing running: %v", err)
 	}
@@ -1381,26 +1604,21 @@ func TestSetupRefusesUnderARunningBenchmark(t *testing.T) {
 
 // TestSetupAsksForAtLeastOneAndAtMostThePool: the number comes off a
 // command line, and neither nought objects nor a hundred is a thing the
-// pool can be asked for -- clamping is better than a refusal because
-// there is an obvious right answer to both.
+// pool can be asked for.  It is refused with the range, as it would be
+// by the command, rather than clamped to an answer nobody asked for.
 func TestSetupAsksForAtLeastOneAndAtMostThePool(t *testing.T) {
 	t.Parallel()
 	s, f := newFakeSession(t)
 	f.stock(len(AutoPoints))
 
-	objs, err := SetupAuto(context.Background(), s, 0)
-	if err != nil {
-		t.Fatalf("SetupAuto: %v", err)
+	for _, n := range []int{0, -3, AutoPool() + 1, AutoPool() + 50} {
+		_, err := SetupAuto(context.Background(), s, n)
+		if err == nil || !strings.Contains(err.Error(), "1 to 24") {
+			t.Errorf("SetupAuto(%d) = %v, want a refusal that says 1 to 24", n, err)
+		}
 	}
-	if len(objs) != 1 {
-		t.Errorf("asking for none made %d ready, want one", len(objs))
-	}
-
-	if objs, err = SetupAuto(context.Background(), s, len(AutoPoints)+50); err != nil {
-		t.Fatalf("SetupAuto: %v", err)
-	}
-	if len(objs) != len(AutoPoints) {
-		t.Errorf("asking for more than the pool made %d ready, want %d", len(objs), len(AutoPoints))
+	if sent := f.Sent(); len(sent) != 0 {
+		t.Errorf("%d messages went out for a number that was refused", len(sent))
 	}
 }
 
@@ -1416,16 +1634,25 @@ func TestSetupStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
 	// either -- so the third slot is where this stops.
 	f.stock(2)
 	f.mu.Lock()
-	f.sendErr = fmt.Errorf("the circuit is gone")
+	// Only the copying fails: the two that exist are still parked.
+	f.failSend = func(m msg.Message) error {
+		if _, ok := m.(*msg.CopyInventoryItem); ok {
+			return fmt.Errorf("the circuit is gone")
+		}
+		return nil
+	}
 	f.presenceErr = fmt.Errorf("the parcel will not have it")
 	f.mu.Unlock()
 
-	objs, err := SetupAuto(context.Background(), s, 4)
+	rep, err := SetupAuto(context.Background(), s, 4)
 	if err != nil {
 		t.Fatalf("SetupAuto: %v", err)
 	}
-	if len(objs) != 2 {
-		t.Errorf("SetupAuto made %d ready, want the two that exist", len(objs))
+	if len(rep.Placed) != 2 {
+		t.Errorf("SetupAuto made %d ready, want the two that exist", len(rep.Placed))
+	}
+	if !strings.Contains(rep.Note, "wore 2 of 4") {
+		t.Errorf("SetupAuto did not say it fell short: %q", rep.Note)
 	}
 
 	// Nothing at all is a different matter: there is no benchmark to
@@ -1435,10 +1662,12 @@ func TestSetupStopsAtTheFirstObjectAndCarriesOnAfterIt(t *testing.T) {
 	f.stock(1)
 	f.mu.Lock()
 	f.objects = nil
+	f.failSend = nil
+	f.sendErr = fmt.Errorf("the circuit is gone")
 	f.mu.Unlock()
-	objs, err = SetupAuto(context.Background(), s, 4)
+	rep, err = SetupAuto(context.Background(), s, 4)
 	if err == nil {
-		t.Errorf("SetupAuto made %d ready and reported success, with none of them worn", len(objs))
+		t.Errorf("SetupAuto made %d ready and reported success, with none of them worn", len(rep.Placed))
 	} else if strings.Contains(err.Error(), "making the first") {
 		t.Errorf("SetupAuto = %v, want it to fail wearing the first, not making it", err)
 	}

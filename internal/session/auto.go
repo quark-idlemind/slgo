@@ -116,6 +116,17 @@ type granter interface {
 	ReleaseSlots(id string, clean bool) error
 }
 
+// declarePool tells the daemon how many places per avatar this program
+// wears, before it asks for any.  A daemon grants none past that and, to
+// a client that did not say, none past twelve: so a mixed old and new
+// pair runs fewer objects rather than indexing AutoPoints out of range.
+// Why: doc/slots.md#an-old-client-or-an-old-slgod
+func declarePool(g granter) {
+	if d, ok := g.(interface{ SetSlotsPerAgent(int) }); ok {
+		d.SetSlotsPerAgent(AutoPool())
+	}
+}
+
 // UseAutoAnywhere finds somewhere to run n objects' worth of work, all
 // of it on ONE avatar.
 //
@@ -214,6 +225,7 @@ func grantOn(ctx context.Context, o Options, asked *sl.Session, g granter, n int
 		got *client.Grant
 		err error
 	)
+	declarePool(g)
 	if wait {
 		got, err = g.SlotsWithin(ctx, n, autoTimeout, o.Wait, agent)
 	} else {
@@ -296,6 +308,7 @@ func spreadOn(ctx context.Context, o Options, s *sl.Session, n int) ([]*Auto, er
 		return []*Auto{a}, nil
 	}
 
+	declarePool(g)
 	got, err := g.SlotsWithin(ctx, n, autoTimeout, o.Wait, "")
 	if err != nil {
 		return nil, askFailed(ctx, err)
@@ -434,6 +447,16 @@ func countUp(n int) []int {
 }
 
 // wearSlots makes sure the objects for these places exist and are on.
+//
+// An object that is already worn is used where it is, whatever the
+// count, so a layout a person made with `auto show` survives a run.  One
+// the lease has to put on is parked and sized after it goes on, and is
+// only put on while the avatar keeps AutoLeaseReserve attachment slots
+// free: growth nobody asked for at that moment must not take the room
+// the owner's own attachments, a viewer's bridge or a product test's
+// HUD need.  When it stops short the run gets what is there and is told
+// so, as it is for any other fewer-than-asked, and does not fail for it.
+// Why: doc/slots.md#what-a-lease-leaves-free
 func wearSlots(ctx context.Context, s *sl.Session, slots []int, dirty []bool) (*Auto, error) {
 	if len(slots) == 0 {
 		return nil, fmt.Errorf("no objects to run in")
@@ -449,11 +472,45 @@ func wearSlots(ctx context.Context, s *sl.Session, slots []int, dirty []bool) (*
 		return nil, err
 	}
 
+	// What the avatar wears, to tell an object already on from one that
+	// has to be put on, and to keep within the limit.  A count that
+	// cannot be had leaves the wearing as it was before there was one.
+	limit := attachmentLimit(ctx, s)
+	st, err := readWorn(ctx, s, folder)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "could not count what is worn, so not limiting it: %v\n", err)
+		st = nil
+	}
+
+	items, err := s.FolderItems(ctx, folder)
+	if err != nil {
+		return nil, err
+	}
+
 	a := &Auto{Session: s, Agent: s.Info().Name}
 	for i, slot := range slots {
-		// AttachAdd, because past the eighth slot two objects share a
-		// point and a bare attach would throw the first one off.
-		at, err := s.EnsureAttached(ctx, folder, AutoName(slot), AutoPoints[slot]|sl.AttachAdd)
+		name := AutoName(slot)
+		already := st != nil && st.named(name) != nil
+		if st != nil && !already && st.total() >= limit-AutoLeaseReserve {
+			note := fmt.Sprintf("wore %d of %d: keeping %d slots free",
+				len(a.Objects), len(slots), AutoLeaseReserve)
+			if len(a.Objects) == 0 {
+				return nil, errors.New(note)
+			}
+			fmt.Fprintln(os.Stderr, note)
+			break
+		}
+		// One already worn is found, or put back on if the region has
+		// not described it, and so is any when what is worn could not be
+		// counted; the rest, known not to be worn, are put on as they
+		// are, without taking them off first.
+		var at *sl.Attached
+		var err error
+		if already || st == nil {
+			at, err = s.EnsureAttached(ctx, folder, name, AutoPoints[slot]|sl.AttachAdd)
+		} else {
+			at, err = putOn(ctx, s, folder, items, slot)
+		}
 		if err != nil {
 			if len(a.Objects) == 0 {
 				return nil, err
@@ -462,6 +519,12 @@ func wearSlots(ctx context.Context, s *sl.Session, slots []int, dirty []bool) (*
 			break
 		}
 		obj := at.Object
+		if st != nil && !already {
+			st.items[at.Item] = &wornItem{Item: at.Item, Name: name}
+			if err := park(ctx, s, &obj); err != nil {
+				fmt.Fprintf(os.Stderr, "could not park %s: %v\n", name, err)
+			}
+		}
 		a.Objects = append(a.Objects, &obj)
 		a.Slots = append(a.Slots, slot)
 		a.Dirty = append(a.Dirty, i < len(dirty) && dirty[i])

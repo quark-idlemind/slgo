@@ -10,7 +10,10 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
+	"fmt"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -733,11 +736,14 @@ func TestAutoCountsWhatIsWornAndSaysWhatThatBuys(t *testing.T) {
 	// benchmarks beside it, from a constant slbench had outgrown; a
 	// benchmark's width is slbench's own and moves with its flags, so
 	// there is nothing here to print it from.
-	if !strings.Contains(got, "so 12 scripts at once") {
+	if !strings.Contains(got, "so 24 scripts at once") {
 		t.Errorf("auto should say what the objects buy:\n%s", got)
 	}
 	if strings.Contains(got, "benchmark") {
 		t.Errorf("auto cannot say how many benchmarks fit and should not try:\n%s", got)
+	}
+	if !strings.Contains(got, "the pool is 24, every one worn on HUD bottom left") {
+		t.Errorf("auto should name the pool and the one point:\n%s", got)
 	}
 	if strings.Contains(got, "sets up the rest") {
 		t.Errorf("a full set has no rest to set up:\n%s", got)
@@ -1205,5 +1211,205 @@ func TestARegionCalledHomeIsStillReachable(t *testing.T) {
 	if sent := lastTeleport(t, x); sent.Info.RegionHandle != goguenHandle {
 		t.Errorf("the teleport named region %d, want the one the map found",
 			sent.Info.RegionHandle)
+	}
+}
+
+// ------------------------------------------------------------- auto layout
+
+// wearAuto makes these slots worn and described, each on the point
+// given, with an item in Objects named for it.
+func wearAuto(x *testShell, points map[int]int) {
+	x.grid.mu.Lock()
+	defer x.grid.mu.Unlock()
+	objs := x.grid.inv.Dirs[0]
+	for i := 0; i < session.AutoPool(); i++ {
+		objs.Items = append(objs.Items, &invItem{
+			ID: msg.UUID{15: byte(i + 1)}, Name: session.AutoName(i), Type: int(sl.AssetObject),
+		})
+	}
+	for slot, point := range points {
+		x.grid.objects = append(x.grid.objects, &sl.Seen{
+			Object: sl.Object{ID: msg.UUID{14: byte(slot + 1)}, Local: uint32(slot + 1)},
+			PCode:  9, Owner: testMe, AttachItem: msg.UUID{15: byte(slot + 1)}, AttachPoint: point,
+			Scale: msg.Vector3{X: 0.2, Y: 0.2, Z: 0.2},
+		})
+	}
+}
+
+// placed is the position and size each Place sent, by local id.
+func placed(t *testing.T, x *testShell) map[uint32][2]msg.Vector3 {
+	t.Helper()
+	out := map[uint32][2]msg.Vector3{}
+	for _, m := range x.grid.Sent() {
+		u, ok := m.(*msg.MultipleObjectUpdate)
+		if !ok {
+			continue
+		}
+		for _, d := range u.ObjectData {
+			f := func(i int) float32 {
+				return math.Float32frombits(binary.LittleEndian.Uint32(d.Data[i*4:]))
+			}
+			out[d.ObjectLocalID] = [2]msg.Vector3{
+				{X: f(0), Y: f(1), Z: f(2)}, {X: f(6), Y: f(7), Z: f(8)},
+			}
+		}
+	}
+	return out
+}
+
+func closeTo(a, b msg.Vector3) bool {
+	d := func(x, y float32) bool { return math.Abs(float64(x-y)) < 1e-5 }
+	return d(a.X, b.X) && d(a.Y, b.Y) && d(a.Z, b.Z)
+}
+
+// TestAutoRefusesACountOutsideTheRangeAndSaysWhatIsTheRange: -n 0 is not
+// a request to report, and a number past the pool is not clamped.
+func TestAutoRefusesACountOutsideTheRangeAndSaysWhatIsTheRange(t *testing.T) {
+	x := newTestShell(t)
+	for _, n := range []string{"0", "25", "-3", "many", "100"} {
+		got := x.do(t, "auto -n "+n)
+		if !strings.Contains(got, "1 to 24") {
+			t.Errorf("auto -n %s printed %q, want a refusal that says 1 to 24", n, got)
+		}
+	}
+	if sent := x.grid.Sent(); len(sent) != 0 {
+		t.Errorf("%d messages went out for a count that was refused", len(sent))
+	}
+	for _, line := range []string{"auto frob", "auto -n 3 show", "auto show hide"} {
+		if got := x.do(t, line); !strings.Contains(got, "usage: auto") {
+			t.Errorf("%q printed %q, want the usage", line, got)
+		}
+	}
+}
+
+// TestAutoSetupListsWhichObjectWentWhere: the listing after -n names the
+// slot, the item, the object and the one point, and every object it lists
+// was parked and sized.
+func TestAutoSetupListsWhichObjectWentWhere(t *testing.T) {
+	x := newTestShell(t)
+	wearAuto(x, map[int]int{0: sl.HUDBottomLeft, 1: sl.HUDBottomLeft})
+
+	got := x.do(t, "auto -n 2")
+	for _, want := range []string{"2 of 2 ready", "auto 2", "on HUD bottom left"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("auto -n 2 printed %q, lacks %q", got, want)
+		}
+	}
+	for local, p := range placed(t, x) {
+		if !closeTo(p[0], session.AutoParked) || !closeTo(p[1], msg.Vector3{X: 0.05, Y: 0.05, Z: 0.05}) {
+			t.Errorf("object %d was placed at %v size %v, want parked at a cube", local, p[0], p[1])
+		}
+	}
+	if n := len(placed(t, x)); n != 2 {
+		t.Errorf("%d objects placed, want 2", n)
+	}
+}
+
+// TestAutoLaysTheObjectsOutAndPutsThemAway: show tiles, hide parks and
+// keeps the size, reset parks and sets the size.
+func TestAutoLaysTheObjectsOutAndPutsThemAway(t *testing.T) {
+	x := newTestShell(t)
+	wearAuto(x, map[int]int{0: sl.HUDBottomLeft, 1: sl.HUDBottomLeft, 2: sl.HUDBottomLeft})
+
+	if got := x.do(t, "auto show"); !strings.Contains(got, "3 auto objects tiled") {
+		t.Errorf("auto show printed %q", got)
+	}
+	for local, p := range placed(t, x) {
+		want := session.AutoTile(int(local) - 1)
+		if !closeTo(p[0], want) || p[1].X != 0.2 {
+			t.Errorf("show put object %d at %v size %v, want %v and its own size", local, p[0], p[1], want)
+		}
+	}
+
+	x.grid.mu.Lock()
+	x.grid.sent = nil
+	x.grid.mu.Unlock()
+	if got := x.do(t, "auto hide"); !strings.Contains(got, "3 auto objects parked") {
+		t.Errorf("auto hide printed %q", got)
+	}
+	for local, p := range placed(t, x) {
+		if !closeTo(p[0], session.AutoParked) || p[1].X != 0.2 {
+			t.Errorf("hide put object %d at %v size %v, want parked at its own size", local, p[0], p[1])
+		}
+	}
+
+	x.grid.mu.Lock()
+	x.grid.sent = nil
+	x.grid.mu.Unlock()
+	if got := x.do(t, "auto reset"); !strings.Contains(got, "3 auto objects reset") {
+		t.Errorf("auto reset printed %q", got)
+	}
+	for local, p := range placed(t, x) {
+		if !closeTo(p[0], session.AutoParked) || p[1].X != 0.05 {
+			t.Errorf("reset put object %d at %v size %v, want parked at a cube", local, p[0], p[1])
+		}
+	}
+}
+
+// TestAutoClearAndDeleteTakeThemOffAndOnlyThemToTheTrash: clear takes off
+// every auto object, delete clears and then moves exactly the auto items
+// to the Trash, and what merely begins with auto stays where it is.
+func TestAutoClearAndDeleteTakeThemOffAndOnlyThemToTheTrash(t *testing.T) {
+	x := newTestShell(t)
+	wearAuto(x, map[int]int{0: sl.HUDBottomLeft, 4: sl.HUDTop})
+	x.grid.AnswerDetach(0)
+	x.grid.mu.Lock()
+	x.grid.inv.Dirs[0].Items = append(x.grid.inv.Dirs[0].Items,
+		&invItem{ID: msg.UUID{13: 1}, Name: "autobench", Type: int(sl.AssetObject)},
+		&invItem{ID: msg.UUID{13: 2}, Name: "automate", Type: int(sl.AssetObject)})
+	x.grid.mu.Unlock()
+
+	if got := x.do(t, "auto clear"); !strings.Contains(got, "took off 2 auto objects") {
+		t.Errorf("auto clear printed %q", got)
+	}
+	if got := x.do(t, "auto"); !strings.Contains(got, "0 auto objects worn") {
+		t.Errorf("auto after clear printed %q", got)
+	}
+
+	got := x.do(t, "auto delete")
+	if !strings.Contains(got, fmt.Sprintf("moved %d auto items to the Trash", session.AutoPool())) {
+		t.Errorf("auto delete printed %q", got)
+	}
+	x.grid.mu.Lock()
+	defer x.grid.mu.Unlock()
+	var left, binned []string
+	for _, it := range x.grid.inv.Dirs[0].Items {
+		left = append(left, it.Name)
+	}
+	for _, it := range findDirOfType(x.grid.inv, sl.FolderTrash).Items {
+		binned = append(binned, it.Name)
+	}
+	if strings.Join(left, ",") != "a lamp,autobench,automate" {
+		t.Errorf("Objects holds %v afterwards, want only what is not an auto object", left)
+	}
+	if len(binned) != session.AutoPool() {
+		t.Errorf("the Trash holds %d items, want %d", len(binned), session.AutoPool())
+	}
+	for _, name := range binned {
+		if !session.IsAutoName(name) {
+			t.Errorf("%q was moved to the Trash and is not an auto name", name)
+		}
+	}
+}
+
+// TestAutoWillNotMoveOrRemoveAnythingUnderARunningBenchmark: every one of
+// the commands that moves or removes the objects takes the whole share
+// first, and none does anything while it is held.
+func TestAutoWillNotMoveOrRemoveAnythingUnderARunningBenchmark(t *testing.T) {
+	for _, line := range []string{
+		"auto -n 4", "auto reset", "auto show", "auto hide", "auto clear", "auto delete",
+	} {
+		x := newTestShell(t)
+		wearAuto(x, map[int]int{0: sl.HUDBottomLeft})
+		x.grid.lockedBy = "slbench"
+
+		got := x.do(t, line)
+		if !strings.Contains(got, "in use by slbench") ||
+			!strings.Contains(got, "cannot be done under a running benchmark") {
+			t.Errorf("%q printed %q, want a refusal that says who has the objects", line, got)
+		}
+		if sent := x.grid.Sent(); len(sent) != 0 {
+			t.Errorf("%q sent %d messages while the objects were held", line, len(sent))
+		}
 	}
 }

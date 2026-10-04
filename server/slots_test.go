@@ -14,6 +14,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -628,7 +629,7 @@ func TestAGrantSettledAsItsStreamEndsIsNotKept(t *testing.T) {
 	gone := &Client{ctl: make(chan *pb.ServerPacket, 4), jammed: make(chan struct{})}
 	gone.closed.Store(true)
 	sp.releaseAll(gone)
-	sp.ask(ctx, gone, &pb.Slots{Want: SlotsPerAgent, Try: true, Request: 1})
+	sp.ask(ctx, gone, &pb.Slots{PerAgent: SlotsPerAgent, Want: SlotsPerAgent, Try: true, Request: 1})
 
 	sp.mu.Lock()
 	kept := len(sp.grants)
@@ -638,7 +639,7 @@ func TestAGrantSettledAsItsStreamEndsIsNotKept(t *testing.T) {
 	}
 
 	next := &Client{ctl: make(chan *pb.ServerPacket, 4), jammed: make(chan struct{})}
-	sp.ask(ctx, next, &pb.Slots{Want: SlotsPerAgent, Try: true, Request: 2})
+	sp.ask(ctx, next, &pb.Slots{PerAgent: SlotsPerAgent, Want: SlotsPerAgent, Try: true, Request: 2})
 	select {
 	case p := <-next.ctl:
 		if g := p.GetGranted(); g.GetGrant() == "" {
@@ -716,13 +717,13 @@ func TestALoggedOutAvatarKeepsItsPlaces(t *testing.T) {
 		t.Fatalf("forcing it back up: %v", err)
 	}
 	all := asker()
-	sp.ask(ctx, all, &pb.Slots{Want: SlotsPerAgent, Try: true, Agent: "example", Request: 4})
+	sp.ask(ctx, all, &pb.Slots{PerAgent: SlotsPerAgent, Want: SlotsPerAgent, Try: true, Agent: "example", Request: 4})
 	if g := answerTo(t, all, 5*time.Second); g.GetGrant() == "" || len(g.GetHeld()) != SlotsPerAgent {
 		t.Fatalf("once it was back, a request for all its places got %d (%s), want %d",
 			len(g.GetHeld()), g.GetWhy(), SlotsPerAgent)
 	}
 	more := asker()
-	sp.ask(ctx, more, &pb.Slots{Want: 1, Try: true, Agent: "example", Request: 5})
+	sp.ask(ctx, more, &pb.Slots{PerAgent: SlotsPerAgent, Want: 1, Try: true, Agent: "example", Request: 5})
 	if g := answerTo(t, more, 5*time.Second); g.GetGrant() != "" {
 		t.Errorf("a thirteenth place came out of one avatar: %v", g.GetHeld())
 	}
@@ -737,7 +738,7 @@ func TestAWaiterOnAnAvatarThatLogsOutIsRefused(t *testing.T) {
 	sp := srv.slotsOf()
 
 	holder := asker()
-	sp.ask(ctx, holder, &pb.Slots{Want: SlotsPerAgent, Try: true, Agent: "example", Request: 1})
+	sp.ask(ctx, holder, &pb.Slots{PerAgent: SlotsPerAgent, Want: SlotsPerAgent, Try: true, Agent: "example", Request: 1})
 	if g := answerTo(t, holder, 5*time.Second); g.GetGrant() == "" {
 		t.Fatalf("all its places would not go to one client: %s", g.GetWhy())
 	}
@@ -809,7 +810,7 @@ func TestAPlaceHeldAcrossItsAvatarLeavingIsNotGrantedTwice(t *testing.T) {
 	}
 
 	waiter := asker()
-	go sp.ask(ctx, waiter, &pb.Slots{Want: SlotsPerAgent, Agent: "example", WaitSeconds: 30, Request: 2})
+	go sp.ask(ctx, waiter, &pb.Slots{PerAgent: SlotsPerAgent, Want: SlotsPerAgent, Agent: "example", WaitSeconds: 30, Request: 2})
 	time.Sleep(200 * time.Millisecond) // the wait is on the daemon
 	select {
 	case p := <-waiter.ctl:
@@ -840,7 +841,7 @@ func TestAPlaceHeldAcrossItsAvatarLeavingIsNotGrantedTwice(t *testing.T) {
 		seen[p.GetSlot()] = true
 	}
 	more := asker()
-	sp.ask(ctx, more, &pb.Slots{Want: 1, Try: true, Agent: "example", Request: 4})
+	sp.ask(ctx, more, &pb.Slots{PerAgent: SlotsPerAgent, Want: 1, Try: true, Agent: "example", Request: 4})
 	if g := answerTo(t, more, 5*time.Second); g.GetGrant() != "" {
 		t.Errorf("a place given back after its avatar left came back beside the new ones: %v", g.GetHeld())
 	}
@@ -919,7 +920,7 @@ func TestARequestMadeWhileItsAvatarLogsInWaitsForIt(t *testing.T) {
 	})
 
 	waiter := asker()
-	go sp.ask(ctx, waiter, &pb.Slots{Want: SlotsPerAgent, Agent: "example", WaitSeconds: 30, Request: 1})
+	go sp.ask(ctx, waiter, &pb.Slots{PerAgent: SlotsPerAgent, Want: SlotsPerAgent, Agent: "example", WaitSeconds: 30, Request: 1})
 	time.Sleep(200 * time.Millisecond) // the wait is on the daemon
 	select {
 	case p := <-waiter.ctl:
@@ -935,5 +936,128 @@ func TestARequestMadeWhileItsAvatarLogsInWaitsForIt(t *testing.T) {
 	if g.GetGrant() == "" || len(g.GetHeld()) != SlotsPerAgent {
 		t.Fatalf("once it had logged in, the waiting request got %d places (%s), want %d",
 			len(g.GetHeld()), g.GetWhy(), SlotsPerAgent)
+	}
+}
+
+// slotsOf is the places an answer names, by number.
+func slotsOf(g *pb.SlotsGranted) map[uint32]bool {
+	got := map[uint32]bool{}
+	for _, p := range g.GetHeld() {
+		got[p.GetSlot()] = true
+	}
+	return got
+}
+
+// TestAnOldClientIsOnlyGrantedTheFirstTwelve: a client from before
+// per_agent says nothing and wears twelve, so a slot numbered past that
+// is an index out of range in it.  It is granted from 0..11 on each
+// avatar, a try is refused as when busy while those are taken, and a
+// request waiting for one is granted only when one of them is given
+// back, never a free place past twelve.
+// Why: doc/slots.md#an-old-client-or-an-old-slgod
+func TestAnOldClientIsOnlyGrantedTheFirstTwelve(t *testing.T) {
+	srv, ctx := hostedOnDemand(t)
+	sp := srv.slotsOf()
+
+	holder := asker()
+	sp.ask(ctx, holder, &pb.Slots{Want: OldSlotsPerAgent, Try: true, Agent: "example", Request: 1})
+	held := answerTo(t, holder, 5*time.Second)
+	if held.GetGrant() == "" || len(held.GetHeld()) != OldSlotsPerAgent {
+		t.Fatalf("an old client asking for twelve got %d (%s)", len(held.GetHeld()), held.GetWhy())
+	}
+	for n := range slotsOf(held) {
+		if n >= OldSlotsPerAgent {
+			t.Errorf("an old client was granted slot %d", n)
+		}
+	}
+
+	// 12..23 are free and not for it: a try is refused as when busy.
+	try := asker()
+	sp.ask(ctx, try, &pb.Slots{Want: 1, Try: true, Agent: "example", Request: 2})
+	if g := answerTo(t, try, 5*time.Second); g.GetGrant() != "" || !strings.Contains(g.GetWhy(), "not free") {
+		t.Errorf("an old client's try with 0..11 taken was answered %v (%s), want not free", g.GetHeld(), g.GetWhy())
+	}
+
+	// A waiting one is not answered by the free places past twelve ...
+	waiter := asker()
+	go sp.ask(ctx, waiter, &pb.Slots{Want: 1, Agent: "example", WaitSeconds: 30, Request: 3})
+	time.Sleep(200 * time.Millisecond) // the wait is on the daemon
+	select {
+	case p := <-waiter.ctl:
+		t.Fatalf("an old client waiting was answered from past twelve: %v", p.GetGranted().GetHeld())
+	default:
+	}
+
+	// ... and a new client can have them meanwhile.
+	newer := asker()
+	sp.ask(ctx, newer, &pb.Slots{PerAgent: SlotsPerAgent, Want: SlotsPerAgent - OldSlotsPerAgent, Try: true, Agent: "example", Request: 4})
+	rest := answerTo(t, newer, 5*time.Second)
+	if rest.GetGrant() == "" {
+		t.Fatalf("a client wearing twenty-four was not granted 12..23: %s", rest.GetWhy())
+	}
+	for n := range slotsOf(rest) {
+		if n < OldSlotsPerAgent {
+			t.Errorf("slot %d was granted while the old client held it", n)
+		}
+	}
+
+	// It is answered when one of 0..11 comes back, and with that one.
+	sp.release(holder, held.GetGrant(), true)
+	g := answerTo(t, waiter, 10*time.Second)
+	if g.GetGrant() == "" || len(g.GetHeld()) != 1 || g.GetHeld()[0].GetSlot() >= OldSlotsPerAgent {
+		t.Errorf("the waiting old client got %v (%s), want one of 0..11", g.GetHeld(), g.GetWhy())
+	}
+}
+
+// TestAClientWearingTwentyFourCanBeGrantedAllOfThem: per_agent 24 takes
+// 12..23 as well as 0..11.
+func TestAClientWearingTwentyFourCanBeGrantedAllOfThem(t *testing.T) {
+	srv, ctx := hostedOnDemand(t)
+	sp := srv.slotsOf()
+
+	c := asker()
+	sp.ask(ctx, c, &pb.Slots{PerAgent: SlotsPerAgent, Want: SlotsPerAgent, Try: true, Agent: "example", Request: 1})
+	g := answerTo(t, c, 5*time.Second)
+	got := slotsOf(g)
+	if g.GetGrant() == "" || len(got) != SlotsPerAgent {
+		t.Fatalf("got %d places (%s), want %d", len(got), g.GetWhy(), SlotsPerAgent)
+	}
+	for n := uint32(OldSlotsPerAgent); n < SlotsPerAgent; n++ {
+		if !got[n] {
+			t.Errorf("slot %d was not granted", n)
+		}
+	}
+}
+
+// TestMoreThanThereIsUsesTheClientsOwnCount: an old client that asks for
+// thirteen on one avatar is refused at once, rather than left waiting
+// for a place it cannot be given, and the refusal counts what that
+// client could have.  So does one that asks for more than all the
+// avatars it could use between them, and one that says more than the
+// daemon has is held to what the daemon has.
+func TestMoreThanThereIsUsesTheClientsOwnCount(t *testing.T) {
+	srv, ctx := hostedOnDemand(t)
+	sp := srv.slotsOf()
+
+	for _, tc := range []struct {
+		name   string
+		req    *pb.Slots
+		refuse string
+	}{
+		{"old client, one avatar", &pb.Slots{Want: OldSlotsPerAgent + 1, Agent: "example", WaitSeconds: 30},
+			"13 objects were asked for and example has 12"},
+		{"old client, anywhere", &pb.Slots{Want: OldSlotsPerAgent + 1, WaitSeconds: 30},
+			"13 objects were asked for and this daemon's avatars have 12"},
+		{"new client, one avatar", &pb.Slots{PerAgent: SlotsPerAgent, Want: SlotsPerAgent + 1, Agent: "example", WaitSeconds: 30},
+			"25 objects were asked for and example has 24"},
+		{"a client claiming more than the daemon has", &pb.Slots{PerAgent: 100, Want: SlotsPerAgent + 1, Agent: "example", WaitSeconds: 30},
+			"25 objects were asked for and example has 24"},
+	} {
+		c := asker()
+		tc.req.Request = 1
+		sp.ask(ctx, c, tc.req)
+		if g := answerTo(t, c, 5*time.Second); g.GetGrant() != "" || g.GetWhy() != tc.refuse {
+			t.Errorf("%s: answered %v (%q), want %q", tc.name, g.GetHeld(), g.GetWhy(), tc.refuse)
+		}
 	}
 }

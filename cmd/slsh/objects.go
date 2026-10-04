@@ -78,9 +78,10 @@ var objectCommands = map[string]*command{
 		run:      cmdLogout,
 	},
 	"auto": {
+		params:   "[reset|show|hide|clear|delete]",
 		flags:    func() any { return new(autoOptions) },
-		brief:    "the objects benchmarks run in; -n sets up that many",
-		keywords: "benchmark slots hud objects scripts run at once parallel set up how many",
+		brief:    "the objects benchmarks run in; -n sets up that many, reset, show, hide, clear and delete lay them out",
+		keywords: "benchmark slots hud objects scripts run at once parallel set up how many reset show hide clear delete tile park layout",
 		man:      "auto",
 		run:      cmdAuto,
 	},
@@ -903,61 +904,131 @@ func (sh *Shell) conn() (*client.Conn, bool) {
 }
 
 // autoOptions is what auto was asked for.
+//
+// The count is text so that "-n 0" can be told from no -n at all: a
+// number outside 1 to 24 is refused with the range, not taken for a
+// request to report.
 type autoOptions struct {
-	N    int  `getopt:"-n=COUNT   set up this many, rather than only reporting"`
-	Help bool `getopt:"--help -h  show what this command takes"`
+	N    string `getopt:"-n=COUNT   set the number of auto objects worn to COUNT, 1 to 24"`
+	Help bool   `getopt:"--help -h  show what this command takes"`
 }
 
-// cmdAuto reports or sets up the objects benchmarks run in.
+// cmdAuto reports on the objects benchmarks run in, and lays them out.
+//
+// Everything that moves or removes them takes this avatar's whole share
+// of the pool first and refuses while any of it is held, so none of it
+// happens under a running benchmark.
+// Why: doc/slots.md#one-point-twenty-four-objects
 func cmdAuto(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o autoOptions
-	_, done, err := subOptions("auto", &o, out, args)
+	args, done, err := subOptions("auto", &o, out, args)
 	if err != nil || done {
 		return err
 	}
-
-	if o.N > 0 {
-		start := time.Now()
-		objs, err := session.SetupAuto(ctx, sh.s, o.N)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(out, "%d of %d ready in %v\n",
-			len(objs), o.N, time.Since(start).Round(time.Second))
-		// Which slot went where.  Past the eighth two objects share a
-		// point, so the listing is the only way to see that the pool
-		// is arranged the way it was meant to be.
-		for i, obj := range objs {
-			fmt.Fprintf(out, "  %2d  %-10s %s  on %s\n",
-				i, session.AutoName(i), obj.ID, sl.AttachPointName(session.AutoPoints[i]))
-		}
-		if len(objs) < o.N {
-			fmt.Fprintf(out, "\nonly %d of %d: fewer objects means less can run at once, "+
-				"not that anything is broken\n", len(objs), o.N)
-		}
-		return nil
+	if len(args) > 1 || (len(args) == 1 && o.N != "") {
+		return usageError("auto", "-n and a subcommand are two things to do; ask for one at a time")
 	}
 
-	worn, err := sh.s.WornObjects(ctx)
-	if err != nil {
+	if o.N != "" {
+		n, err := strconv.Atoi(strings.TrimSpace(o.N))
+		if pool := session.AutoPool(); err != nil || n < 1 || n > pool {
+			return fmt.Errorf("auto -n takes a number from 1 to %d, not %q", pool, o.N)
+		}
+		start := time.Now()
+		rep, err := session.SetupAuto(ctx, sh.s, n)
+		if rep != nil {
+			fmt.Fprintf(out, "%d of %d ready in %v\n",
+				len(rep.Placed), n, time.Since(start).Round(time.Second))
+			// Which slot went where: every one is on the same point,
+			// and the listing is how a person sees that it is.
+			for _, p := range rep.Placed {
+				fmt.Fprintf(out, "  %2d  %-10s %s  on %s\n",
+					p.Slot, p.Name, p.Object.ID, sl.AttachPointName(p.Point))
+			}
+			autoSummary(out, rep)
+			if rep.Note != "" {
+				fmt.Fprintf(out, "\n%s: fewer objects means less can run at once, "+
+					"not that anything is broken\n", rep.Note)
+			}
+		}
 		return err
 	}
-	names := sh.itemNames(ctx)
-	have := 0
-	for _, a := range worn {
-		if strings.HasPrefix(names[a.Item], session.AutoObject) {
-			have++
-		}
+
+	if len(args) == 1 {
+		return autoSubcommand(ctx, sh, out, args[0])
+	}
+
+	have, err := session.CountAuto(ctx, sh.s)
+	if err != nil {
+		return err
 	}
 	// What is worn is what can run at once, one object per script.  How
 	// many benchmarks that makes is slbench's to say, since what one
 	// leases moves with its flags, so no count of them is printed.
 	// Why: doc/slsh.md#why-auto-prints-no-count-of-benchmarks
 	fmt.Fprintf(out, "%d auto objects worn, so %d scripts at once\n", have, have)
-	if have < len(session.AutoPoints) {
-		fmt.Fprintf(out, "auto -n %d sets up the rest\n", len(session.AutoPoints))
+	fmt.Fprintf(out, "the pool is %d, every one worn on %s\n",
+		session.AutoPool(), sl.AttachPointName(session.AutoPoints[0]))
+	if have < session.AutoPool() {
+		fmt.Fprintf(out, "auto -n %d sets up the rest\n", session.AutoPool())
 	}
 	return nil
+}
+
+// autoSubcommand is reset, show, hide, clear and delete.
+func autoSubcommand(ctx context.Context, sh *Shell, out io.Writer, sub string) error {
+	var (
+		rep  *session.AutoReport
+		err  error
+		verb string
+	)
+	switch sub {
+	case "reset":
+		rep, err = session.ArrangeAuto(ctx, sh.s, session.AutoReset)
+		verb = "reset to %.2f m and parked"
+	case "show":
+		rep, err = session.ArrangeAuto(ctx, sh.s, session.AutoShow)
+		verb = "tiled along the bottom of the screen"
+	case "hide":
+		rep, err = session.ArrangeAuto(ctx, sh.s, session.AutoHide)
+		verb = "parked"
+	case "clear":
+		rep, err = session.ClearAuto(ctx, sh.s)
+	case "delete":
+		rep, err = session.DeleteAuto(ctx, sh.s)
+	default:
+		return usageError("auto", fmt.Sprintf("%q is not one of reset, show, hide, clear or delete", sub))
+	}
+	if rep != nil {
+		switch sub {
+		case "clear":
+			fmt.Fprintf(out, "took off %d auto objects\n", rep.Removed)
+		case "delete":
+			fmt.Fprintf(out, "took off %d auto objects and moved %d auto items to the Trash\n",
+				rep.Removed, rep.Trashed)
+		default:
+			if sub == "reset" {
+				verb = fmt.Sprintf(verb, session.AutoSize)
+			}
+			fmt.Fprintf(out, "%d auto objects %s\n", len(rep.Placed), verb)
+		}
+		autoSummary(out, rep)
+	}
+	return err
+}
+
+// autoSummary says what else a command did, and what went wrong that
+// did not stop the rest.
+func autoSummary(out io.Writer, rep *session.AutoReport) {
+	if rep.Moved > 0 {
+		fmt.Fprintf(out, "%d worn again on %s\n", rep.Moved, sl.AttachPointName(session.AutoPoints[0]))
+	}
+	if rep.Removed > 0 && rep.Want > 0 {
+		fmt.Fprintf(out, "%d taken off, being beyond %d\n", rep.Removed, rep.Want)
+	}
+	for _, w := range rep.Warnings {
+		fmt.Fprintf(out, "warning: %s\n", w)
+	}
 }
 
 // near is whether an object has arrived where it was sent.  Loose

@@ -447,6 +447,13 @@ message Slots {
   // so, why set and nothing granted.  A try is answered at once
   // whatever this says.
   uint32 wait_seconds = 6;
+
+  // PerAgent is how many places on one avatar the client can wear,
+  // which is the most slot indexes it can use: the daemon grants it no
+  // slot numbered this or more, and refuses a Want above it as more
+  // than there is.  Zero is a client older than the field, read as the
+  // twelve such clients wore.
+  uint32 per_agent = 7;
 }
 
 // RenewSlots puts a grant's clock back, for work that cannot say in

@@ -15,7 +15,7 @@ package main
 // What is being pinned is the verdict.  The whole program is a count of
 // what is on one attachment point before and after, and one of its three
 // answers is a claim about the grid that the rest of this tree is built
-// on: session.AutoPoints doubles up past its eighth slot BECAUSE this
+// on: session.AutoPoints puts every object on one point BECAUSE this
 // printed YES.  A run that printed the wrong one would be believed, and
 // two benchmarks would quietly share an object ever afterwards.
 //
@@ -482,9 +482,9 @@ func runMain(t *testing.T, args ...string) string {
 
 // TestAPointHoldingSeveralObjectsIsTheAnswerTheToolWasWrittenFor: this
 // is the reading the rest of the tree is built on.  session.AutoPoints
-// doubles up past its eighth slot because AttachAdd was measured to
-// work, and a run that had printed NO would have left the object pool
-// capped at eight for no reason at all.
+// wears twenty-four objects on one point because AttachAdd was measured
+// to work, and a run that had printed NO would have left the object pool
+// capped at the eight HUD points for no reason at all.
 //
 // It also takes the path where the probe has to be MADE, which is the
 // ordinary first run: the copy is confirmed by the item appearing in the

@@ -629,6 +629,13 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 	// ceiling and it is known without asking anybody.  Unnamed, the
 	// ceiling is every avatar the daemon holds and the refusal comes
 	// from there, where the count is.
+	//
+	// The pool is 24 objects an avatar, all on one HUD point, and a
+	// lease puts on an object that is not yet worn only while the avatar
+	// keeps session.AutoLeaseReserve attachment slots free.  So a lease
+	// may hold fewer than --jobs on an avatar that wears much else, and
+	// says so on stderr; the run goes on with the places it has.
+	// Why: doc/slots.md#what-a-lease-leaves-free
 	if most := session.AutoPool(); flags.Agent != "" && flags.Jobs > most {
 		return nil, nil, fmt.Errorf("--jobs %d wants %d objects and one "+
 			"avatar holds at most %d; leave out --agent to take them from "+

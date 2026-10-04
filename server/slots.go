@@ -32,7 +32,31 @@ import (
 // that turn a place into an object: a place the client cannot wear is a
 // grant nobody can use.  A test in cmd/slgod holds it to
 // session.AutoPool, the number the clients wear.
-const SlotsPerAgent = 12
+//
+// Twenty-four, all of them worn on one HUD point (session.AutoPoints).
+// The new slgod and the new clients are best shipped together, but need
+// not be: a client says in Slots.per_agent how many places it can wear,
+// and is granted none numbered past that (see perAgentOf).  An old slgod
+// grants twelve, and a new client runs fewer objects than it could.
+// Why: doc/slots.md#one-point-twenty-four-objects
+const SlotsPerAgent = 24
+
+// OldSlotsPerAgent is how many places per avatar a client wears that
+// does not say: those built before Slots.per_agent existed had twelve
+// entries in their list of points, and indexing it with a higher slot
+// is a panic.  A request with per_agent zero is read as this.
+const OldSlotsPerAgent = 12
+
+// perAgentOf is how many of each avatar's places a request may be
+// granted from: what the client said it can wear, OldSlotsPerAgent when
+// it said nothing, and never more than the daemon has.
+func perAgentOf(req *pb.Slots) int {
+	n := int(req.GetPerAgent())
+	if n == 0 {
+		n = OldSlotsPerAgent
+	}
+	return min(n, SlotsPerAgent)
+}
 
 // where is what one slot stands for.  Only the daemon looks at it.
 type where struct {
@@ -234,14 +258,13 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 	}
 
 	timeout := time.Duration(req.GetSeconds()) * time.Second
-	var match func(any) bool
-	if only := req.GetAgent(); only != "" {
-		// A caller that named an avatar gets that avatar's places and
-		// no others.
-		match = func(data any) bool {
-			w, ok := data.(*where)
-			return ok && w.agent == only
-		}
+	// A caller gets no place numbered past what it can wear, and one that
+	// named an avatar gets that avatar's places and no others.
+	per := perAgentOf(req)
+	only := req.GetAgent()
+	match := func(data any) bool {
+		w, ok := data.(*where)
+		return ok && w.slot < per && (only == "" || w.agent == only)
 	}
 	// A bounded wait gives up with an answer saying so.  A try never
 	// reaches the select, so it needs no clock.
@@ -270,7 +293,7 @@ func (sp *slotPool) ask(ctx context.Context, c *Client, req *pb.Slots) {
 		// ever, and the daemon is the only thing that knows how many
 		// there are.  The pool cannot say -- a place away being tidied
 		// is not in it at all -- and would simply never fill.
-		if most := sp.most(req.GetAgent()); want > most {
+		if most := sp.most(req.GetAgent(), per); want > most {
 			c.answer(sp.granted(req.GetRequest(), "", nil, time.Time{}, fmt.Sprintf(
 				"%d objects were asked for and %s %d",
 				want, hasOrHave(req.GetAgent()), most)))
@@ -346,17 +369,15 @@ func (sp *slotPool) named(agent string) (why string, ended <-chan struct{}) {
 	return "", h.ended()
 }
 
-// most is how many places there could ever be: one avatar's worth when
-// one was named, and every hosted avatar's otherwise -- a logged-out one
-// included, whose places are passed over until it is hosted again.
-func (sp *slotPool) most(agent string) int {
-	if agent != "" {
-		return SlotsPerAgent
+// most is how many places there could ever be for a client that can use
+// per of each avatar's: one avatar's worth when one was named, and every
+// hosted avatar's otherwise -- a logged-out one included, whose places
+// are passed over until it is hosted again.
+func (sp *slotPool) most(agent string, per int) int {
+	if agent != "" || sp.srv == nil {
+		return per
 	}
-	if sp.srv == nil {
-		return SlotsPerAgent
-	}
-	return SlotsPerAgent * len(sp.srv.hosted())
+	return per * len(sp.srv.hosted())
 }
 
 // hasOrHave keeps the refusal readable whichever way it was asked.

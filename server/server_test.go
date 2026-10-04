@@ -366,6 +366,9 @@ func (r *rig) dial(t *testing.T, subscribe ...string) *client.Conn {
 	if _, err := c.Attach(context.Background(), "example", subscribe...); err != nil {
 		t.Fatalf("attach: %v", err)
 	}
+	// A client of the current width: one that says nothing is read as
+	// the twelve of a client older than per_agent.
+	c.SetSlotsPerAgent(SlotsPerAgent)
 	return c
 }
 

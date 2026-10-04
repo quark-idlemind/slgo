@@ -1218,6 +1218,20 @@ Only slbench can say it, and it says it when it settles for less. A
 figure printed here could only go stale again, which is worse than not
 printing one.
 
+### What auto's count is, and what its subcommands do
+
+The number is the objects worn counted as the union of the Current Outfit
+folder's object links and the attachments the region has described,
+because the region does not describe HUDs after a login and a count of
+only the described ones reads low. All twenty-four are worn on HUD Bottom
+Left, so the report names the pool and the one point.
+
+`auto reset`, `show`, `hide`, `clear` and `delete`, and `-n`, each take
+all of the avatar's places before they move anything and refuse while any
+is held; the layout, the limit on how many may be worn and the reserve
+that `-n` keeps free are in
+[slots.md](slots.md#one-point-twenty-four-objects).
+
 ## Starting a viewer from slsh
 
 `viewer`, in `cmd/slsh/viewer.go`, says where slgod serves viewer
