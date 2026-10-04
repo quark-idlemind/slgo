@@ -39,12 +39,12 @@ const (
 	TeleportWithinRegion    uint32 = 1 << 17 // TELEPORT_FLAGS_WITHIN_REGION
 )
 
-// TeleportCauseKept is how long a TeleportStart's flags wait for the
+// teleportCauseKept is how long a TeleportStart's flags wait for the
 // arrival they belong to.  A teleport takes about a third of a second
 // from start to arrival when it is measured (doc/history/teleport.md), so
 // a minute is long enough for a slow one and short enough that flags
 // from a teleport that never arrived are not given to something else.
-const TeleportCauseKept = time.Minute
+const teleportCauseKept = time.Minute
 
 // teleportStarts is the latest TeleportStart: its flags, and when.
 type teleportStarts struct {
@@ -64,12 +64,12 @@ func (s *teleportStarts) note(flags uint32, at time.Time) {
 }
 
 // take hands over what has been kept and forgets it: the flags of the
-// latest start if there was one and it is no older than TeleportCauseKept
+// latest start if there was one and it is no older than teleportCauseKept
 // at now, otherwise zero.  It forgets either way.
 func (s *teleportStarts) take(now time.Time) uint32 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	flags, fresh := s.flags, s.set && now.Sub(s.at) <= TeleportCauseKept
+	flags, fresh := s.flags, s.set && now.Sub(s.at) <= teleportCauseKept
 	s.flags, s.at, s.set = 0, time.Time{}, false
 	if !fresh {
 		return 0

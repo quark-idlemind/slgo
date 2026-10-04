@@ -361,6 +361,8 @@ func (w *Session) Lookup(ctx context.Context, want string) ([]Found, error) {
 // one.  Nothing here asks for the next page -- a person who typed too
 // little of a name wants to type more of it, not to read a hundred more
 // names -- which is why the number stays modest.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const LookupLimit = 100
 
 func (w *Session) lookupByCap(ctx context.Context, want string) ([]Found, error) {

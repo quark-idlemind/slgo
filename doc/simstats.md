@@ -50,7 +50,7 @@ A report that is kept does two things:
   `sl/landscripts.go` reads the flags that stop scripts.  Nothing here
   flies, so the viewer's third step has nothing to do.
 - It is added to the history: the statistics in the order they came,
-  with the time they arrived.  The history covers `agent.StatsKept`, a
+  with the time they arrived.  The history covers a
   minute, and a report older than that is dropped.  It belongs to one
   region: a report from another starts it again, and until one comes
   the history reads as empty.

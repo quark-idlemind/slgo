@@ -217,6 +217,8 @@ type groupChatSub struct {
 
 // DefaultGroupChatDepth is the buffer a subscription gets when none is
 // asked for.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultGroupChatDepth = 64
 
 // GroupChats returns a channel of what happens in group chats, closed

@@ -53,7 +53,7 @@ import (
 // one: across a teleport, across a crossing, for as long as the session
 // and the option last.  DisableSimulator on the child's own circuit is
 // what closes it -- or, for a simulator that went away without saying
-// so, NeighbourTimeout with nothing heard, or an offer of the same
+// so, childSilence with nothing heard, or an offer of the same
 // region at another address.  A region the avatar came back to within
 // seconds of leaving offered none of its neighbours again, measured, so
 // a session that let its children go on every move came back holding
@@ -90,7 +90,7 @@ import (
 // neighbour.
 const MaxNeighbours = 8
 
-// NeighbourTimeout is how long a child circuit may hear nothing from its
+// childSilence is how long a child circuit may hear nothing from its
 // simulator before it is closed.
 //
 // It is the viewer's circuit timeout (newview/llstartup.cpp:916), which
@@ -100,7 +100,7 @@ const MaxNeighbours = 8
 // last packet of any kind, as the root's watchdog does.  A live
 // neighbour is never that quiet: it pinged a child five times in thirty
 // seconds.
-const NeighbourTimeout = 100 * time.Second
+const childSilence = 100 * time.Second
 
 // A Neighbour is one region beside this one, or beside one the avatar
 // has left, and what this session has of it.
@@ -706,12 +706,13 @@ func (c *child) heardAt() time.Time { return time.Unix(0, c.lastHeard.Load()) }
 // which is what the viewer calls a dead circuit.
 func (c *child) silent(timeout time.Duration) bool { return time.Since(c.heardAt()) > timeout }
 
-// neighbourTimeout is NeighbourTimeout, or what a test put in its place.
+// neighbourTimeout is childSilence, or what a test put in its place in
+// Options.
 func (a *Agent) neighbourTimeout() time.Duration {
 	if a.opts.neighbourTimeout > 0 {
 		return a.opts.neighbourTimeout
 	}
-	return NeighbourTimeout
+	return childSilence
 }
 
 func (c *child) setRegionName(name string) {

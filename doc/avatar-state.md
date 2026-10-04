@@ -135,7 +135,7 @@ cases come:
   `arrive` takes the flags and gives them to `OnRegionChange`, and so
   to the notice the daemon sends every client (`AgentEvent.teleport_flags`),
   `client.RegionChange.TeleportFlags` and `sl.RegionChange`.
-- **A start older than a minute** (`agent.TeleportCauseKept`) is not
+- **A start older than a minute** is not
   attached, only dropped: it was for a teleport that never arrived.
 - **A second start for one teleport** replaces the first, so the two
   the viewer's comment says a landmark teleport is sent are one cause,

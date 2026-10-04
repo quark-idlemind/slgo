@@ -68,6 +68,8 @@ var ErrSitRefused = errors.New("sl: the simulator refused the sit")
 // borrowAnimations -- the next full list is along within about three
 // seconds, so a timeout shorter than a few resends would turn a race
 // nobody can see into a failure.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultSitTimeout = 15 * time.Second
 
 // A Seat is what an avatar is sitting on.

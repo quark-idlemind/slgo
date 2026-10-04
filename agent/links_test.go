@@ -696,7 +696,7 @@ func TestAMissingChildAfterTheWindowLeavesTheSetUnknown(t *testing.T) {
 	a, _, o, advance := linkRig(t)
 	sendLink(t, a, o, 1, 3, 4, 2)
 	feed(t, a, blocks(t, 4, 3))
-	advance(LinkWindow + time.Second)
+	advance(linkWindow + time.Second)
 	feed(t, a, blocks(t, 2))
 
 	expectKnown(t, o, []bool{false, false, false, false}, linkRoot, linkA, linkB, linkC)
@@ -710,14 +710,14 @@ func TestALinkTheUpdateOutlastsIsNotUsed(t *testing.T) {
 
 	a, _, o, advance := linkRig(t)
 	sendLink(t, a, o, 1, 3, 4, 2)
-	advance(LinkWindow + time.Second)
+	advance(linkWindow + time.Second)
 	feed(t, a, blocks(t, 4, 3, 2))
 	expectKnown(t, o, []bool{false, false, false, false}, linkRoot, linkA, linkB, linkC)
 
 	// Just inside the window it is used.
 	a, _, o, advance = linkRig(t)
 	sendLink(t, a, o, 1, 3, 4, 2)
-	advance(LinkWindow - time.Second)
+	advance(linkWindow - time.Second)
 	feed(t, a, blocks(t, 4, 3, 2))
 	expectKnown(t, o, []bool{true, true, true, true}, linkRoot, linkA, linkB, linkC)
 }
@@ -1045,7 +1045,7 @@ func TestASitFollowedByALinkIsNotTakenForALinkOfSeveral(t *testing.T) {
 	told(o, linkSpare, 4, 0)
 	sat(o, sitterOne, 10, 0)
 
-	// Both at the same instant, well inside JoinWindow.
+	// Both at the same instant, well inside joinWindow.
 	sat(o, sitterOne, 10, 1)
 	told(o, linkSpare, 4, 1)
 	expectNumbers(t, o, []int{1, 2, 3, 4}, linkRoot, linkSpare, linkA, sitterOne)

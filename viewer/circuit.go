@@ -41,7 +41,7 @@ const Backlog = 2048
 // is taken as gone, as though it had logged out.
 //
 // It is the viewer's own circuit timeout (newview/llstartup.cpp:916),
-// the figure agent.NeighbourTimeout uses too.  A viewer that is there
+// the figure the agent uses for a child circuit too.  A viewer that is there
 // is never that quiet: it sends an AgentUpdate several times a second.
 const SilenceTimeout = 100 * time.Second
 

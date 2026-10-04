@@ -5,7 +5,7 @@ package agent
 // A SimStats carries a list of numbered statistics -- time dilation,
 // frame rate, script time, how many agents and objects -- and, beside
 // them, the region's flags and its object capacity.  The statistics are
-// kept for the last StatsKept, so that a client asking later can be
+// kept for the last statsKept, so that a client asking later can be
 // told how they have gone and not only where they are; the flags and
 // capacity go into Region, so that an estate change made while the
 // avatar is there is seen without a second handshake, as the viewer
@@ -19,11 +19,11 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-// StatsKept is how far back SimStats keeps what the simulator said.
-const StatsKept = time.Minute
+// statsKept is how far back SimStats keeps what the simulator said.
+const statsKept = time.Minute
 
 // statsMax bounds the samples kept whatever their age: thirty arrive
-// in a StatsKept, and a simulator sending faster is kept to this.
+// in a statsKept, and a simulator sending faster is kept to this.
 const statsMax = 256
 
 // Stat is one statistic: its number, from the viewer's ESimStatID
@@ -48,7 +48,7 @@ type simStats struct {
 }
 
 // SimStats returns what the simulator has said about itself over the
-// last StatsKept, oldest first, and the handle of the region it said
+// last statsKept, oldest first, and the handle of the region it said
 // it of.  It is empty before the first SimStats and after a move, until
 // the new region's first.
 func (a *Agent) SimStats() (uint64, []StatSample) {
@@ -67,10 +67,10 @@ func (a *Agent) simStatsAt(now time.Time) (uint64, []StatSample) {
 	return s.handle, append([]StatSample(nil), s.samples...)
 }
 
-// prune drops what is older than StatsKept.  The caller holds mu.
+// prune drops what is older than statsKept.  The caller holds mu.
 func (s *simStats) prune(now time.Time) {
 	i := 0
-	for i < len(s.samples) && now.Sub(s.samples[i].At) > StatsKept {
+	for i < len(s.samples) && now.Sub(s.samples[i].At) > statsKept {
 		i++
 	}
 	if len(s.samples)-i > statsMax {

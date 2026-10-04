@@ -226,13 +226,13 @@ func (a *Agent) Control(ctx context.Context, flags uint32) error {
 	return a.Send.SendReliable(ctx, a.agentUpdate(l))
 }
 
-// TrimInterval is how often the object cache is trimmed to the draw
+// trimInterval is how often the object cache is trimmed to the draw
 // distance.
 //
 // It is not urgent work.  A stale entry is wrong about where something
 // is, not about whether it exists, and the cost of holding one is a
 // map entry.
-const TrimInterval = 15 * time.Second
+const trimInterval = 15 * time.Second
 
 // trimObjects keeps the cache to what is within the draw distance.
 //

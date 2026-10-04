@@ -13,7 +13,7 @@ const (
 	layerLandVar = 'M'
 )
 
-// TerrainLimit bounds what is kept, in bytes.
+// terrainLimit bounds what is kept, in bytes.
 //
 // A whole region measured on Aditi was 38 packets and 41,905 bytes, so
 // this is generous by a factor of six.  It exists because terraforming
@@ -21,7 +21,7 @@ const (
 // can tell an edit from a fresh patch -- so without a bound, a session
 // left running on a region somebody is landscaping would grow without
 // end.
-const TerrainLimit = 256 << 10
+const terrainLimit = 256 << 10
 
 // Terrain is the land the simulator described, kept as it arrived.
 //
@@ -83,7 +83,7 @@ func (t *Terrain) note(m *msg.LayerData) {
 	// that can be found without decoding.  Reaching this at all means
 	// the region is being terraformed hard enough that the first burst
 	// is no longer what a viewer should be told.
-	for t.bytes > TerrainLimit && len(t.patches) > 1 {
+	for t.bytes > terrainLimit && len(t.patches) > 1 {
 		t.bytes -= len(t.patches[0].Data)
 		t.patches = t.patches[1:]
 		t.dropped++

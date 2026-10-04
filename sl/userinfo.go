@@ -23,6 +23,8 @@ const UserInfoCap = "UserInfo"
 
 // DefaultUserInfoTimeout bounds the wait when the caller's context does
 // not.  The one reply measured took 190 ms.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultUserInfoTimeout = 5 * time.Second
 
 // UserInfo is what the grid keeps about the avatar's own account.

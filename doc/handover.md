@@ -106,7 +106,7 @@ as gone, exactly as a logout takes it (`Circuit.leave`, the one path
 both use), and the log says why. The figure is the viewer's own: its
 circuit timeout is 100 seconds (`newview/llstartup.cpp:916`), which is
 how long a viewer gives a simulator before calling the circuit dead,
-and `agent.NeighbourTimeout` uses it for a child circuit on the same
+and the agent uses it for a child circuit on the same
 reasoning. A viewer that is there is never that quiet -- it sends an
 `AgentUpdate` several times a second -- so nothing live is let go. Any
 datagram from the admitted address counts as hearing from it,

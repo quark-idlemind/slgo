@@ -66,7 +66,7 @@ known.
 
 The heights take 256 KiB a session, beside the 40 KiB or so the bodies
 take, and are decoded as each body arrives rather than when asked for:
-a body dropped for `TerrainLimit` would otherwise take its land with
+a body dropped for `terrainLimit` would otherwise take its land with
 it.
 
 ## Checked against the grid

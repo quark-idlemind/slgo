@@ -137,7 +137,7 @@ type Object struct {
 	// leaving is when this object was first found out of everybody's
 	// range, and zero while it is in somebody's.  Being out of range
 	// puts an object on notice rather than out of the store: see
-	// OutOfRangeGrace.
+	// outOfRangeGrace.
 	leaving time.Time
 
 	// listed says this object is in the child list of listedUnder, and
@@ -165,7 +165,7 @@ type Object struct {
 // been heard, not a query against the region.
 //
 // Trim drops what is out of range, and the agent calls it every
-// TrimInterval, so a store shrinks when the camera pulls in -- a little
+// trimInterval, so a store shrinks when the camera pulls in -- a little
 // behind the camera rather than with it.
 // Why: doc/objects.md#before-trim
 //
@@ -242,23 +242,23 @@ type Objects struct {
 	now func() time.Time
 
 	// lastLive is when a prim last joined each parent live, by the
-	// parent's local id; see JoinWindow.
+	// parent's local id; see joinWindow.
 	lastLive map[uint32]time.Time
 }
 
-// LinkWindow is how long the order an ObjectLink named is kept for the
+// linkWindow is how long the order an ObjectLink named is kept for the
 // region's update that makes it.
 // Why: doc/objects.md#link-numbers
-const LinkWindow = 20 * time.Second
+const linkWindow = 20 * time.Second
 
-// JoinWindow is how close together two live joins to one parent must
+// joinWindow is how close together two live joins to one parent must
 // be to count as one link of several.  A watching session was measured
 // to get a link of several split over two packets 75 microseconds apart,
 // and two agents sharing a store hear one update at nearly the same time;
 // a link of one is slower than this whatever makes it, since
 // llCreateLink sleeps its script for a second and a person links by hand.
 // Why: doc/objects.md#link-numbers
-const JoinWindow = 250 * time.Millisecond
+const joinWindow = 250 * time.Millisecond
 
 // namedLink is the children an ObjectLink named, by local id in the
 // order named, and when it was sent.
@@ -337,7 +337,7 @@ func within(at, camera msg.Vector3, far float32) bool {
 	if far <= 0 {
 		return true
 	}
-	limit := far + TrimMargin
+	limit := far + trimMargin
 	return dist2(at, camera) <= limit*limit
 }
 
@@ -443,7 +443,7 @@ func (o *Objects) linkNumberLocked(v *Object, parentHere func(uint32) bool) int 
 // time, or described again under the parent it had before its list was
 // dropped, is a fresh arrival, and goes to the end.  An avatar is
 // neither: it is a sitter, goes to the end of the sitters, and leaves
-// the prims' order and JoinWindow alone.
+// the prims' order and joinWindow alone.
 // Why: doc/objects.md#link-numbers
 func (o *Objects) linkLocked(v *Object) {
 	if v.listed && v.listedUnder == v.Parent {
@@ -482,7 +482,7 @@ func (o *Objects) linkLocked(v *Object) {
 		// split over packets or shared between agents: its order is not
 		// known, however each join on its own would number it.
 		now := o.now()
-		if t, ok := o.lastLive[v.Parent]; ok && now.Sub(t) < JoinWindow {
+		if t, ok := o.lastLive[v.Parent]; ok && now.Sub(t) < joinWindow {
 			o.misorderLocked(v.Parent)
 			if r := o.byLocalLocked(v.Parent); r != nil {
 				o.misordered[r.ID] = true
@@ -662,10 +662,10 @@ func (o *Objects) applyJoin(parent uint32, j *setJoin) {
 }
 
 // namedLocked is the record for a root, dropped and not returned once it
-// is older than LinkWindow.
+// is older than linkWindow.
 func (o *Objects) namedLocked(parent uint32) (namedLink, bool) {
 	rec, ok := o.links[parent]
-	if ok && o.now().Sub(rec.at) > LinkWindow {
+	if ok && o.now().Sub(rec.at) > linkWindow {
 		delete(o.links, parent)
 		return namedLink{}, false
 	}
@@ -733,7 +733,7 @@ func (o *Objects) linked(m *msg.ObjectLink) {
 	defer o.mu.Unlock()
 	now := o.now()
 	for root, rec := range o.links {
-		if now.Sub(rec.at) > LinkWindow {
+		if now.Sub(rec.at) > linkWindow {
 			delete(o.links, root)
 		}
 	}
@@ -913,14 +913,14 @@ func (o *Objects) Flush() int {
 	return n
 }
 
-// TrimMargin is how far past the draw distance an object is kept.
+// trimMargin is how far past the draw distance an object is kept.
 //
 // Trimming at exactly the draw distance would fight the simulator over
 // anything sitting on the boundary: dropped, described again, dropped
 // again.  The margin costs a few entries and stops the flapping.
-const TrimMargin = 32
+const trimMargin = 32
 
-// OutOfRangeGrace is how long an object found out of range is kept
+// outOfRangeGrace is how long an object found out of range is kept
 // before it is dropped for it.
 //
 // Out of range is judged against cameras, and a camera can be wrong for
@@ -936,7 +936,7 @@ const TrimMargin = 32
 // one that put it on notice.  The cost is holding a little of the view
 // just left for half a minute longer.
 // Why: doc/objects.md#out-of-range-for-a-while
-const OutOfRangeGrace = 2 * TrimInterval
+const outOfRangeGrace = 2 * trimInterval
 
 // orphanGrace is how long a child is kept after the last word about it,
 // when nothing here says where its root is.
@@ -1051,13 +1051,13 @@ func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
 
 // goneLocked puts an object that is out of range on notice, and says
 // whether it has been out of range long enough to drop.  See
-// OutOfRangeGrace.
+// outOfRangeGrace.
 func (o *Objects) goneLocked(v *Object, now time.Time) bool {
 	if v.leaving.IsZero() {
 		v.leaving = now
 		return false
 	}
-	return now.Sub(v.leaving) >= OutOfRangeGrace
+	return now.Sub(v.leaving) >= outOfRangeGrace
 }
 
 func dist2(a, b msg.Vector3) float32 {
@@ -1090,7 +1090,7 @@ const pcodeAvatar = 47
 // time this finds nothing -- but after the avatar has moved, a stray
 // update from the far end of the old view is put on notice at once
 // rather than taken back in as current.  It is recorded either way and
-// dropped only by Trim, once OutOfRangeGrace has passed: the camera it
+// dropped only by Trim, once outOfRangeGrace has passed: the camera it
 // was judged by may be the moment's wrong one, and an update refused
 // here is never sent again.
 //
@@ -1247,7 +1247,7 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 // takes the object off notice, out of range puts it on notice if it is
 // not already.  It is never dropped here, only by Trim once the notice
 // has run out -- the camera an update is judged by can be the moment's
-// wrong one, and see OutOfRangeGrace for what dropping on the spot cost.
+// wrong one, and see outOfRangeGrace for what dropping on the spot cost.
 func (o *Objects) judgedLocked(v *Object, far bool) {
 	switch {
 	case !far:
@@ -1787,7 +1787,7 @@ func (a *Agent) askAfter(parents []uint32) {
 	}
 }
 
-// AskAgainAfter is how long to leave a local id alone once it has been
+// askAgainAfter is how long to leave a local id alone once it has been
 // asked about.
 //
 // Something moving just inside the draw distance is described, kept,
@@ -1796,7 +1796,7 @@ func (a *Agent) askAfter(parents []uint32) {
 // costs one request rather than a stream, short enough that a thing
 // which really did arrive and was really missed is not invisible for
 // long.
-const AskAgainAfter = 15 * time.Second
+const askAgainAfter = 15 * time.Second
 
 // askAgain says whether this local id may be asked about now, and
 // remembers that it was.
@@ -1808,14 +1808,14 @@ func (a *Agent) askAgain(local uint32) bool {
 	if a.asked == nil {
 		a.asked = map[uint32]time.Time{}
 	}
-	if when, seen := a.asked[local]; seen && now.Sub(when) < AskAgainAfter {
+	if when, seen := a.asked[local]; seen && now.Sub(when) < askAgainAfter {
 		return false
 	}
 	// Swept here rather than on a timer: this runs only when something
 	// unknown turns up, which is exactly when the map grows.
 	if len(a.asked) > 4096 {
 		for id, when := range a.asked {
-			if now.Sub(when) >= AskAgainAfter {
+			if now.Sub(when) >= askAgainAfter {
 				delete(a.asked, id)
 			}
 		}

@@ -901,7 +901,7 @@ func TestAReOfferAtAnotherAddressReplacesTheChild(t *testing.T) {
 }
 
 // TestAReOfferOfASilentChildReplacesIt: a child that has heard nothing
-// for NeighbourTimeout is dead, and an offer of its region at the same
+// for childSilence is dead, and an offer of its region at the same
 // address dials it afresh rather than being taken as a repeat, as the
 // viewer replaces a region whose circuit died.  The child is made silent
 // by hand, well inside the watchdog's first look, so it is the offer
@@ -932,7 +932,7 @@ func TestAReOfferOfASilentChildReplacesIt(t *testing.T) {
 		return a.neighbours[handle].heard.Load() >= wrote
 	})
 	a.neighMu.Lock()
-	a.neighbours[handle].lastHeard.Store(time.Now().Add(-2 * NeighbourTimeout).UnixNano())
+	a.neighbours[handle].lastHeard.Store(time.Now().Add(-2 * childSilence).UnixNano())
 	a.neighMu.Unlock()
 
 	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))

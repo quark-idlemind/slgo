@@ -116,13 +116,13 @@ func TestAStaleTeleportStartIsNotAttached(t *testing.T) {
 	a, told := watchingRegions(t)
 	feed(t, a, movementTo(westHandle))
 
-	a.teleports.note(TeleportViaLure, time.Now().Add(-TeleportCauseKept-time.Second))
+	a.teleports.note(TeleportViaLure, time.Now().Add(-teleportCauseKept-time.Second))
 	feed(t, a, movementTo(eastHandle))
 	if got := <-told; got.flags != 0 {
 		t.Errorf("a start from over a minute before was attached: flags %#x", got.flags)
 	}
 
-	a.teleports.note(TeleportViaLure, time.Now().Add(-TeleportCauseKept+5*time.Second))
+	a.teleports.note(TeleportViaLure, time.Now().Add(-teleportCauseKept+5*time.Second))
 	feed(t, a, movementTo(farHandle))
 	if got := <-told; got.flags != TeleportViaLure {
 		t.Errorf("a start from just under a minute before was dropped: flags %#x", got.flags)

@@ -306,6 +306,8 @@ func (w *Session) Permissions(depth int) <-chan *Permission {
 
 // DefaultPermissionDepth is the buffer a subscription gets when none is
 // asked for.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultPermissionDepth = 16
 
 // StopPermissions closes a subscription, and returns once it is closed.

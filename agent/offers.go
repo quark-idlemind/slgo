@@ -7,7 +7,7 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-// OfferHold is how long something addressed to the person is worth
+// offerHold is how long something addressed to the person is worth
 // showing to a viewer that turns up afterwards.
 //
 // Long enough that starting a viewer because somebody has just offered
@@ -15,11 +15,11 @@ import (
 // short enough that a viewer started an hour later is not handed a pile
 // of expired offers to dismiss.  The simulator times these out at its
 // own end regardless; answering a stale one gets a shrug.
-const OfferHold = 10 * time.Minute
+const offerHold = 10 * time.Minute
 
-// OfferLimit bounds how many are kept, because a session can be talked
+// offerLimit bounds how many are kept, because a session can be talked
 // at all day and nothing here is obliged to remember it.
-const OfferLimit = 64
+const offerLimit = 64
 
 // Offers is what was said to the person while no viewer was there to
 // show it.
@@ -65,7 +65,7 @@ func (o *Offers) note(m msg.Message, at time.Time) {
 	o.kept = append(o.kept, offer{at: at, raw: raw})
 	// Oldest first: the recent ones are the ones still worth
 	// answering.
-	for len(o.kept) > OfferLimit {
+	for len(o.kept) > offerLimit {
 		o.kept = o.kept[1:]
 		o.dropped++
 	}
@@ -88,7 +88,7 @@ func (o *Offers) take(now time.Time) []msg.Message {
 
 	out := make([]msg.Message, 0, len(kept))
 	for _, k := range kept {
-		if now.Sub(k.at) > OfferHold {
+		if now.Sub(k.at) > offerHold {
 			continue
 		}
 		m, err := msg.DecodeBody(k.raw)

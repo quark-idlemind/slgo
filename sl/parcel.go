@@ -39,6 +39,8 @@ import (
 // 90 and 130 milliseconds, so this is generous by a factor of fifty and
 // still short enough that a person typing "parcel" does not sit and
 // wonder.
+//
+// The value is not promised and may change in any release: refer to it by name.
 const DefaultParcelTimeout = 5 * time.Second
 
 // parcelSeqBase is where this package's sequence ids start, counting

@@ -118,8 +118,8 @@ func TestSimStatsKeepAMinute(t *testing.T) {
 	if len(got) != 31 {
 		t.Fatalf("%d samples, want 31", len(got))
 	}
-	if first := got[0].At; now.Sub(first) != StatsKept {
-		t.Errorf("the oldest is %v old, want %v", now.Sub(first), StatsKept)
+	if first := got[0].At; now.Sub(first) != statsKept {
+		t.Errorf("the oldest is %v old, want %v", now.Sub(first), statsKept)
 	}
 
 	// Asked later with nothing new, less is left.
