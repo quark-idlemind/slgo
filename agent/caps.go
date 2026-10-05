@@ -45,6 +45,10 @@ var DefaultCaps = []string{
 	"GetTexture",
 	"GetMesh2",
 	"ObjectMedia",
+	// A face's legacy material -- normal and specular maps and the alpha
+	// mode -- which the texture entry names only by id.  See
+	// sl.Session.Materials.
+	"RenderMaterials",
 	"ParcelPropertiesUpdate",
 	"RemoteParcelRequest",
 	"ViewerStats",

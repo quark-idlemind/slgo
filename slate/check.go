@@ -1135,6 +1135,12 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 		}
 		_, err := c.reading(e, x.State, x.Any, x.Use, CapOnOff, same)
 		return err
+	case e.AlphaMode != nil:
+		x := e.AlphaMode
+		if x.FaceAll {
+			return c.err(x.Face.Span, "alphamode reads one face's material at a time; there is no face all")
+		}
+		return c.faceRef(x.Name, x.Link, x.Face, false, same)
 	case e.Glow != nil:
 		x := e.Glow
 		return c.level(e, "glow", x.Name, x.Link, x.Face, x.FaceAll, x.State, x.Any, x.Use, same, x.Value)
@@ -1353,6 +1359,8 @@ func (c *checker) captureBinds(st Step) ([]capBind, error) {
 			switch {
 			case e.Neg:
 				return nil, c.err(e.As.Span, "a negative expectation matches nothing to bind; as %s needs a positive one", e.As)
+			case !ok && e.AlphaMode != nil:
+				return nil, c.err(e.As.Span, "alphamode has no capture to bind; as %s is not allowed on it", e.As)
 			case !ok && e.Rez != nil:
 				return nil, c.err(e.As.Span, "a rez names the new object with as NAME before within; %s binds nothing here", e.As)
 			case !ok:

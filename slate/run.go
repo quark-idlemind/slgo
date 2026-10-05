@@ -256,6 +256,13 @@ func (r *runner) ended() error {
 	return errors.New("slate: the session ended")
 }
 
+// envError is a step that cannot be taken in this environment -- the
+// daemon or its session lacks what the step needs -- rather than a product
+// that failed it: exit 3, and the run stops.
+type envError struct{ msg string }
+
+func (e *envError) Error() string { return e.msg }
+
 // setupError is a setup failure with its sentence.
 type setupError struct{ msg string }
 

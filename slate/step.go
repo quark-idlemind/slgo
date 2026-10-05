@@ -176,6 +176,16 @@ func (s *stepRun) armed(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
+			// The run cannot go on in this environment: said once, as a
+			// setup failure, exit 3, and the run stops, as for a click
+			// byte that stays unknown.
+			var ee *envError
+			if errors.As(err, &ee) {
+				s.r.printf("slate: setup: %s", ee.msg)
+				s.quiet = true
+				s.fail(3, "%s", ee.msg)
+				return nil
+			}
 			s.sent = "not sent: " + err.Error()
 			if s.st.Stimulus == nil {
 				s.sent = err.Error()
@@ -440,7 +450,7 @@ func (s *stepRun) expectFor(ctx context.Context, x *expState) error {
 	case e.TextBox != nil:
 		return s.dialogExpect(x, e.TextBox.Name, e.TextBox.To, e.TextBox.Link, e.TextBox.Text, nil)
 	case e.Texture != nil, e.Offset != nil, e.Repeats != nil, e.Rot != nil, e.Click != nil,
-		e.Fullbright != nil, e.Glow != nil, e.Colour != nil, e.Alpha != nil,
+		e.Fullbright != nil, e.Glow != nil, e.Colour != nil, e.Alpha != nil, e.AlphaMode != nil,
 		e.Position != nil, e.Size != nil, e.FloatText != nil:
 		return s.stateExpect(x)
 	case e.Button != nil:

@@ -91,15 +91,16 @@ The author-side rules (the grammar, names, scoping and the lines printed) are in
 
 After a failed test the runner goes on to the next one. It does not stand, answer, retry a payment or delete anything between tests, except what a `rez` step made, which it deletes at the end of that test, and what a `drop` step changed, which it puts back then ([Cleanup](#cleanup-and-what-a-failure-leaves-behind)).
 
-**What stops the whole run.** Only these three do. The test that was running is reported failed, none of its remaining steps run (`after each` included), no later test runs, and cleanup still runs.
+**What stops the whole run.** Only these four do. The test that was running is reported failed, none of its remaining steps run (`after each` included), no later test runs, and cleanup still runs.
 
 | Cause | Exit |
 |---|---|
 | A setup failure | 3 |
 | A click byte still unknown when its 30 s describe ends | 3 |
+| An `alphamode` expectation in a session that holds no `RenderMaterials` capability | 3 |
 | A dropped chat or IM subscription | 1 |
 
-Why: the first two say the environment is wrong, not the product, and the third means events were lost, so the next test could not be trusted either. Every other failure fails its step and so its test.
+Why: the first three say the environment is wrong, not the product, and the fourth means events were lost, so the next test could not be trusted either. Every other failure fails its step and so its test.
 
 **Once per file.** Setup (dial, then in this order the header bindings, the item headers, the active group of each second avatar a `group` step names, the linksets of the header bindings, the bridge, the probes and the hello map, and the described click bytes of header bindings) happens once before the first test, and cleanup once after the last ([Cleanup](#cleanup-and-what-a-failure-leaves-behind)). Saving the 6 s per prim of the probe install and removal on every test is what several tests per file are for.
 
@@ -224,7 +225,7 @@ Watchers are armed before the stimulus so that a script that answers in the same
 
 An event can be consumed by at most one expectation, ever. Each event is offered to the step's unmatched expectations in source order and is consumed by the first it satisfies. Two expectations that ask for the same chat line need two chat lines. An event consumed by an earlier step is never offered again, and an unconsumed event from an earlier step is eligible for a later step only if it was observed at or after that step's arm point. Events from an earlier test are never eligible: no arm point is earlier than its test's start.
 
-State readings (texture, offset, repeats, rotation, position, size, click, text, fullbright, glow, colour, alpha) are events too, stamped when a poll observes them. Such an expectation is a reading of current state: it passes as soon as a reading matches, including a reading that already matched at the arm point, so it cannot by itself prove the stimulus changed anything. The author-side statement of that is in [Steps and timing](slate-language.md#steps-and-timing); `becomes`, `changes` and `original` are the words that do prove it ([State words](#state-words)).
+State readings (texture, offset, repeats, rotation, position, size, click, text, fullbright, glow, colour, alpha, alphamode) are events too, stamped when a poll observes them. Such an expectation is a reading of current state: it passes as soon as a reading matches, including a reading that already matched at the arm point, so it cannot by itself prove the stimulus changed anything. The author-side statement of that is in [Steps and timing](slate-language.md#steps-and-timing); `becomes`, `changes` and `original` are the words that do prove it ([State words](#state-words)).
 
 ### Baselines and original
 
@@ -472,6 +473,16 @@ Fullbright, glow, colour and alpha are readings of the texture entry that a text
 
 `Face.Colour` is decoded already: the entry stores each byte inverted, and the face holds the byte the script set. The tolerance is one step of a byte, `1/255`, plus `1e-9` for the float arithmetic. It is a step because glow and every colour channel travel as `round(value × 255)`, measured on 2026-10-01 ([Fifth round](#fifth-round)): a literal 0.5 reads as the byte 128, which is 0.50196 and within a step. A reading is kept as the byte over 255 and is printed, and bound as a capture, rounded to four places. The transcript line of each property is of its own kind, and a key's line is printed whenever it differs from the last printed for that object, face and kind; offset, repeats and rotation go on printing the texture line, as they always have.
 
+### Alpha mode
+
+`alphamode` is a reading of one face, keyed as the face properties are (`kAlphaMode`), but its value is not in the texture entry. The entry holds the face's material id (`Face.Material`) and the mode is in the material, so a poll reads it in two steps: the id from the face it has already decoded, then `Session.AlphaModeOf` for the face, which returns `AlphaModeDefault` for a zero id with no request and otherwise asks `Session.Materials`. That POSTs the ids not yet read to `RenderMaterials` and keeps each by id, so a material is fetched once for the run however often it is polled: an id is content-addressed, and a change of mode is a new id, never an edit of an old one ([Materials](materials.md#the-capability)). The poll that sees a new id therefore pays one request of about 80 ms, and the polls after it none.
+
+The reading carries the mode and the cutoff of a mask (0 for the other modes). A literal names a mode and not a level, so a wanted `mask` carries no cutoff and matches any; two readings, a baseline and a later one, or an `original`, are compared with the cutoff, so a mask that moves from 128 to 64 `changes`. The transcript line is `alphamode OBJ face N MODE`, with the cutoff after it for a mask.
+
+A step with an `alphamode` expectation is refused before anything is sent when the session holds no `RenderMaterials` capability (`Backend.HasCap`): `slate: setup: this session holds no RenderMaterials capability, which alphamode reads a face's material from; slgod is likely older than this slate, or the session logged in before it was upgraded: restart it from the same release`, exit 3, and the run stops ([What stops the whole run](#tests-and-the-run)). The environment is the likely cause, not the product: slgod asks for the capability at login, so an slgod older than this slate, or a session that logged in before an upgrade, holds none. It does not wait to find out from a face: a face with no material never asks, and would pass without the capability, which would make the same script pass or fail by which faces it happens to name. When the capability is held and a material cannot be read -- the request failed, or the region has no material of that id -- there is no reading for that poll, the next poll tries again, and the `unmatched` line of the failure block says `the material could not be read:` and why. Nothing is cached for it.
+
+Why it reads `default` and not `blend` for a face with no material: [Materials](materials.md#a-face-with-no-material).
+
 ### Position and size
 
 `position` and `size` are readings of the prim itself and not of a face. A poll reads `Seen.Position` and `Seen.Scale` of the prim from the session's store, with no request of its own, and keeps them in the reading as float32 values held whole; a literal is converted to float32 too. `Seen.Position` is the position of the last update the region sent for the prim, and the store does not compose it, so it is what that prim's frame says:
@@ -537,7 +548,7 @@ The semantics are those of `is` on a state expectation, and not of `becomes`: th
 
 ### State words
 
-The state expectations (texture, offset, repeats, rotation, position, size, click, text, fullbright, glow, colour, alpha, and the button reading) take one of three words. `equal` below is the comparison of the subsections above: exact for texture, click and fullbright, 2/32767 for offset, 1e-4 for repeats, 2/32768 of a turn for rotation, 0.001 m on each axis for position and size, exact for text, 1/255 for glow, colour and alpha. Readings are the events of [Baselines and original](#baselines-and-original), taken in order of observation from the baseline.
+The state expectations (texture, offset, repeats, rotation, position, size, click, text, fullbright, glow, colour, alpha, alphamode, and the button reading) take one of three words. `equal` below is the comparison of the subsections above: exact for texture, click, fullbright and alphamode, 2/32767 for offset, 1e-4 for repeats, 2/32768 of a turn for rotation, 0.001 m on each axis for position and size, exact for text, 1/255 for glow, colour and alpha. Readings are the events of [Baselines and original](#baselines-and-original), taken in order of observation from the baseline.
 
 | Word | Passes when |
 |---|---|
@@ -545,7 +556,7 @@ The state expectations (texture, offset, repeats, rotation, position, size, clic
 | `becomes X` | a reading equals X and an earlier reading in the step's window did not; the baseline counts as the first reading. If the baseline already equals X, the value must leave X and come back |
 | `changes` | a reading differs from the baseline, by the same tolerance (no value follows) |
 
-`X` may be `original`, the reading that [Baselines and original](#baselines-and-original) fixes for the test; for offset and repeats the pair, for rotation, glow and alpha the number, for colour, position and size the triple, for fullbright on or off, for click the name, for text the string. `X` may also be a capture, and, after `is` with an `as`, `any`: a reading that matches whatever it is, so the first reading is the match and is bound. `original` is meant for toggle tests: touch once and the value `changes`; touch again and it `becomes original`. A reading equal to `original` is compared with the same tolerance as any other value.
+`X` may be `original`, the reading that [Baselines and original](#baselines-and-original) fixes for the test; for offset and repeats the pair, for rotation, glow and alpha the number, for colour, position and size the triple, for fullbright on or off, for click the name, for text the string, for alphamode the mode and its cutoff. `X` may also be a capture, and, after `is` with an `as`, `any`: a reading that matches whatever it is, so the first reading is the match and is bound. `original` is meant for toggle tests: touch once and the value `changes`; touch again and it `becomes original`. A reading equal to `original` is compared with the same tolerance as any other value.
 
 The button reading takes `is` and `becomes` with `shown`, `gone` or `count N`, `original`, and `changes`; it has no `any` ([Button observations](#button-observations)). The negative forms are in [Negative expectations](#negative-expectations). `becomes`, `changes`, `original` and `any` on any other expectation are refused by the static check. A `link N` on a state expectation selects that prim of the binding's linkset, from the probe when the binding has one and else from the store ([Objects and probes](#linksets-and-region-positions)).
 
