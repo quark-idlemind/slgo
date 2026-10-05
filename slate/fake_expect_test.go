@@ -53,6 +53,7 @@ type fakeExtra struct {
 	onReq  map[uint32][]func(*sl.Seen) // applied when the prim is described again
 	props  map[msg.UUID]fakeProps
 	invURL string
+	matURL string // the RenderMaterials server, when a test serves one (alphamode_test.go)
 	inv    *fakeInv
 	offers map[msg.UUID]fakeOffer // item delivered when the offer with this transaction is accepted
 	acks   []*msg.ImprovedInstantMessage
@@ -457,14 +458,17 @@ func folderType(name string) int {
 func (f *fakeGrid) hasCap(name string) bool {
 	f.ex.mu.Lock()
 	defer f.ex.mu.Unlock()
-	return name == agent.InventoryCap && f.ex.invURL != ""
+	return name == agent.InventoryCap && f.ex.invURL != "" || name == sl.MaterialsCap && f.ex.matURL != ""
 }
 
 func (f *fakeGrid) doCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
 	f.ex.mu.Lock()
 	base := f.ex.invURL
+	if r.Cap == sl.MaterialsCap {
+		base = f.ex.matURL
+	}
 	f.ex.mu.Unlock()
-	if r.Cap != agent.InventoryCap || base == "" {
+	if r.Cap != agent.InventoryCap && r.Cap != sl.MaterialsCap || base == "" {
 		return nil, fmt.Errorf("the fake grid serves no %s capability", r.Cap)
 	}
 	method := r.Method
@@ -474,6 +478,9 @@ func (f *fakeGrid) doCap(ctx context.Context, r agent.CapRequest) (*agent.CapRes
 	req, err := http.NewRequestWithContext(ctx, method, base+r.Path, bytes.NewReader(r.Body))
 	if err != nil {
 		return nil, err
+	}
+	if r.Type != "" {
+		req.Header.Set("Content-Type", r.Type)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

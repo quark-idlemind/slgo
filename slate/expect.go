@@ -85,7 +85,8 @@ const (
 	kButton // the count of a button search (buttonexp.go)
 	kPosition
 	kSize
-	kText // a prim's floating text
+	kText      // a prim's floating text
+	kAlphaMode // a face's alpha mode, read from its material (sl.Session.AlphaModeOf)
 )
 
 // clickFace is the face of the key that reads a prim's click byte, and
@@ -134,6 +135,13 @@ type reading struct {
 	glow   float64    // Glow / 255
 	col    [3]float64 // red, green, blue, each / 255
 	alpha  float64    // Colour[3] / 255
+
+	// mode is the alpha mode of a face, and cutoff its mask cutoff, which
+	// is -1 in a wanted literal: a literal names a mode and not a level,
+	// so any cutoff matches it. A reading's is the material's, 0 for
+	// every mode but a mask.
+	mode   sl.AlphaMode
+	cutoff int
 
 	// A button reading: the tuples found, and the line it prints. A wanted
 	// value with atLeast is any count from count up.
@@ -255,6 +263,8 @@ func (k stateKind) equal(a, b *reading) bool {
 		return near(a.col[0], b.col[0], levelTol) && near(a.col[1], b.col[1], levelTol) && near(a.col[2], b.col[2], levelTol)
 	case kAlpha:
 		return near(a.alpha, b.alpha, levelTol)
+	case kAlphaMode:
+		return a.mode == b.mode && (a.mode != sl.AlphaModeMask || a.cutoff < 0 || b.cutoff < 0 || a.cutoff == b.cutoff)
 	}
 	return a.click == b.click
 }
@@ -296,7 +306,7 @@ func (k stateKind) capType() CaptureType {
 		return CapTriple
 	case kPosition, kSize:
 		return CapVector
-	case kText:
+	case kText, kAlphaMode:
 		return CapText
 	}
 	return CapClick
@@ -345,6 +355,11 @@ func (k stateKind) text(r *reading) string {
 		return fmt.Sprintf("%g %g %g", r4(r.col[0]), r4(r.col[1]), r4(r.col[2]))
 	case kAlpha:
 		return fmt.Sprintf("%g", r4(r.alpha))
+	case kAlphaMode:
+		if r.mode == sl.AlphaModeMask {
+			return fmt.Sprintf("%s %d", r.mode, r.cutoff)
+		}
+		return r.mode.String()
 	}
 	return fmt.Sprintf("%d", r.click)
 }
@@ -365,7 +380,7 @@ func (k stateKind) show(key readKey, r *reading) string {
 		return fmt.Sprintf("%s %s %s", map[stateKind]string{kPosition: "position", kSize: "size"}[k], key.name, g3(r.vec))
 	}
 	word := [...]string{kTexture: "texture", kOffset: "offset", kRepeats: "repeats", kRotation: "rotation",
-		kFullbright: "fullbright", kGlow: "glow", kColour: "colour", kAlpha: "alpha"}[k]
+		kFullbright: "fullbright", kGlow: "glow", kColour: "colour", kAlpha: "alpha", kAlphaMode: "alphamode"}[k]
 	face := fmt.Sprintf("%d", key.face)
 	if key.face == allFace {
 		face = "all"
@@ -413,6 +428,8 @@ func (k stateKind) value(r *reading) capValue {
 		return capValue{typ: CapTriple, triple: [3]float64{r4(r.col[0]), r4(r.col[1]), r4(r.col[2])}}
 	case kAlpha:
 		return capValue{typ: CapNumber, num: r4(r.alpha)}
+	case kAlphaMode:
+		return capValue{typ: CapText, text: k.text(r)}
 	}
 	return capValue{typ: CapClick, click: r.click}
 }
@@ -502,6 +519,9 @@ func stateKeyOf(e *Expect) (readKey, stateKind, bool) {
 	case e.Fullbright != nil:
 		x := e.Fullbright
 		return readKey{keyName(x.Name, x.Link), face(x.FaceAll, x.Face), kFullbright}, kFullbright, true
+	case e.AlphaMode != nil:
+		x := e.AlphaMode
+		return readKey{keyName(x.Name, x.Link), face(x.FaceAll, x.Face), kAlphaMode}, kAlphaMode, true
 	case e.Glow != nil:
 		x := e.Glow
 		return readKey{keyName(x.Name, x.Link), face(x.FaceAll, x.Face), kGlow}, kGlow, true
@@ -535,8 +555,9 @@ type watcher struct {
 	// allStep is the first step with a face all of a name, which is the
 	// step a note about its face count is printed under.
 	allStep map[string]int
-	btn     btnState          // button readings (buttonexp.go)
-	linkWhy map[string]string // a link name -> why its last poll found no prim
+	btn     btnState           // button readings (buttonexp.go)
+	linkWhy map[string]string  // a link name -> why its last poll found no prim
+	modeWhy map[readKey]string // an alphamode key -> why its last poll could not read the material
 
 	initial  bool
 	lastPoll time.Time
@@ -557,7 +578,7 @@ type watcher struct {
 // included, for what has to be read from the start.
 func newWatcher(t *testRun) *watcher {
 	w := &watcher{
-		t: t, linkWhy: map[string]string{}, nfac: map[string]int{}, allStep: map[string]int{},
+		t: t, linkWhy: map[string]string{}, modeWhy: map[readKey]string{}, nfac: map[string]int{}, allStep: map[string]int{},
 		reads: map[readKey][]*reading{}, printed: map[readKey]string{},
 		orig: map[readKey]*reading{}, first: map[msg.UUID]time.Time{},
 		lastReq: map[msg.UUID]time.Time{},
@@ -711,6 +732,14 @@ func (w *watcher) poll(ctx context.Context, force bool) error {
 			rd = &reading{at: at, vec: vec3(o.Scale)}
 		case k.kind == kText:
 			rd = &reading{at: at, str: o.Text}
+		case k.kind == kAlphaMode:
+			rd = w.readMode(ctx, k, o, at)
+			if rd == nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				continue
+			}
 		case k.face == clickFace:
 			if !o.ClickKnown {
 				continue
@@ -748,6 +777,39 @@ func (w *watcher) poll(ctx context.Context, force bool) error {
 		}
 	}
 	return nil
+}
+
+// alphaModeNamed is the sl.AlphaMode a script's word names.
+func alphaModeNamed(word string) sl.AlphaMode {
+	for m := sl.AlphaModeNone; m <= sl.AlphaModeDefault; m++ {
+		if m.String() == word {
+			return m
+		}
+	}
+	return sl.AlphaModeDefault
+}
+
+// readMode is the reading of a face's alpha mode: the face's material
+// id from the texture entry the poll already holds, and that material
+// from the session, which asks the region once for an id and remembers
+// it. A face with no material is the default and asks nothing. When the
+// material cannot be read the reason is kept for the step's note and
+// there is no reading; the next poll tries again.
+// Why: doc/slate-runner.md#alpha-mode
+func (w *watcher) readMode(ctx context.Context, k readKey, o *sl.Seen, at time.Time) *reading {
+	faces, err := o.Faces(w.nfac[k.name])
+	if err != nil || k.face >= len(faces) {
+		return nil
+	}
+	mode, cutoff, err := w.t.r.sess.AlphaModeOf(ctx, faces[k.face])
+	if err != nil {
+		if ctx.Err() == nil {
+			w.modeWhy[k] = err.Error()
+		}
+		return nil
+	}
+	delete(w.modeWhy, k)
+	return &reading{at: at, mode: mode, cutoff: int(cutoff)}
 }
 
 // linkFailed keeps why a link has no prim, for the step that waits on it:
@@ -876,6 +938,8 @@ func (s *stepRun) stateExpect(x *expState) error {
 		base, link, st = e.Rot.Name, e.Rot.Link, e.Rot.State
 	case e.Fullbright != nil:
 		base, link, st = e.Fullbright.Name, e.Fullbright.Link, e.Fullbright.State
+	case e.AlphaMode != nil:
+		base, link, st = e.AlphaMode.Name, e.AlphaMode.Link, e.AlphaMode.State
 	case e.Glow != nil:
 		base, link, st = e.Glow.Name, e.Glow.Link, e.Glow.State
 	case e.Colour != nil:
@@ -896,6 +960,29 @@ func (s *stepRun) stateExpect(x *expState) error {
 	}
 	if link != nil && !s.r.probed(s.r.lookup(base.Text)) {
 		se.why = s.linkWhy(k.name)
+		x.noteFn = se.why
+	}
+	if kind == kAlphaMode {
+		// A face's mode is its material's, which only RenderMaterials
+		// serves, so a session without it cannot say, however the face is.
+		// Why: doc/slate-runner.md#alpha-mode
+		if !s.r.sess.Backend().HasCap(sl.MaterialsCap) {
+			// The environment, not the product: slgod asks for the
+			// capability at login, so an slgod older than this slate,
+			// or a session that logged in before the upgrade, has none.
+			return &envError{fmt.Sprintf("this session holds no %s capability, which alphamode reads a face's material from; slgod is likely older than this slate, or the session logged in before it was upgraded: restart it from the same release", sl.MaterialsCap)}
+		}
+		prev, w := se.why, s.t.watch
+		se.why = func() string {
+			note := ""
+			if prev != nil {
+				note = prev()
+			}
+			if why := w.modeWhy[k]; why != "" {
+				note += fmt.Sprintf("; slate: step %d: the material could not be read: %s", s.n, why)
+			}
+			return note
+		}
 		x.noteFn = se.why
 	}
 	if !st.Original && st.Kind != StateChanges {
@@ -989,6 +1076,8 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		se.text = &tm
 	case e.Fullbright != nil:
 		se.want.bright = e.Fullbright.On
+	case e.AlphaMode != nil:
+		se.want.mode, se.want.cutoff = alphaModeNamed(e.AlphaMode.Mode), -1
 	case e.Glow != nil:
 		se.want.glow = e.Glow.Value.Value
 	case e.Colour != nil:

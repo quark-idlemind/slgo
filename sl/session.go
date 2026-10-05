@@ -92,6 +92,9 @@ type Session struct {
 
 	mu sync.Mutex
 
+	// materials is what Materials has read.
+	materials materialCache
+
 	// at is the visit the avatar is on: which region, and which run of
 	// it, a local id means something in.  See Object and Session.local.
 	at visit

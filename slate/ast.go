@@ -683,6 +683,7 @@ type Expect struct {
 	Glow       *GlowExp
 	Colour     *ColourExp
 	Alpha      *AlphaExp
+	AlphaMode  *AlphaModeExp
 	Position   *VecExp3
 	Size       *VecExp3
 	Give       *GiveExp
@@ -898,6 +899,26 @@ type AlphaExp struct {
 	Any     bool
 	Use     *Capture
 }
+
+// AlphaModeExp is expect alphamode OBJ link? face N changes / is / becomes:
+// how a face is drawn where its texture has alpha. Mode is the word of an
+// is or becomes with a value, one of AlphaModes; it is empty for changes
+// and original. FaceAll is kept so that the check can refuse it with the
+// place it was written: a mode is read from one face's material.
+// Why: doc/slate-runner.md#alpha-mode
+type AlphaModeExp struct {
+	Name    Ident
+	Link    *Int
+	Face    Int
+	FaceAll bool
+	State   State
+	Mode    string
+	ModeAt  Span
+}
+
+// AlphaModes are the words an alphamode expectation takes, as sl.AlphaMode
+// names them.
+var AlphaModes = []string{"default", "none", "blend", "mask", "emissive"}
 
 // GiveExp is an inventory offer of Item from Name.
 type GiveExp struct {

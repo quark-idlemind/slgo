@@ -3,6 +3,7 @@ package slate
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -1371,6 +1372,8 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.colourExp(e)
 	case p.kw("alpha"):
 		return p.alphaExp(e)
+	case p.kw("alphamode"):
+		return p.alphaModeExp(e)
 	case p.kw("give"):
 		return p.giveExp(e)
 	case p.kw("rez"):
@@ -2028,6 +2031,28 @@ func (p *parser) alphaExp(e *Expect) error {
 		return err
 	}
 	e.Alpha = x
+	return nil
+}
+
+// alphaModeExp reads alphamode OBJ link? face N and the state, and for an
+// is or becomes one of AlphaModes. Unlike the other face properties it has
+// no any and no capture.
+func (p *parser) alphaModeExp(e *Expect) error {
+	name, link, face, all, st, err := p.faceProp("alphamode")
+	if err != nil {
+		return err
+	}
+	x := &AlphaModeExp{Name: name, Link: link, Face: face, FaceAll: all, State: st}
+	if hasValue(st) {
+		if p.tok.kind != kWord || !slices.Contains(AlphaModes, p.tok.text) {
+			return p.unexpected("expected default, none, blend, mask, emissive or original")
+		}
+		x.Mode, x.ModeAt = p.tok.text, p.tok.span
+		if err := p.next(); err != nil {
+			return err
+		}
+	}
+	e.AlphaMode = x
 	return nil
 }
 
