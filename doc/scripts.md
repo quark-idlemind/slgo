@@ -35,6 +35,77 @@ Once, and then the error stands. A far end that is still failing a
 second later is having more than a moment, and a program that kept
 asking would be adding to whatever is wrong.
 
+## Dropping a script into an object
+
+`UpdateTaskInventory` puts an inventory item into an object, and for a
+script it puts one in that does not run. Measured on Agni on 5 October
+2026: three scripts the avatar may not modify, dropped into a box with
+`slsh drop`, never ran, and `slsh start` on them got "no answer", which
+is `SetScriptRunning` having nothing compiled to start. A script with
+full permissions ran only once it was recreated from its text with `slsh
+new --in`, which uploads the source through `UpdateScriptTask`. That
+way in needs the source, and an avatar cannot read the source of a
+script it may not modify, so for those there was no way in that ran.
+
+The viewer does not send `UpdateTaskInventory` for a script. In
+Firestorm 885631b93a there are two ways to drop one in, and both end in
+`LLToolDragAndDrop::dropScript` (`lltooldraganddrop.cpp:1828-1880`),
+which calls `LLViewerObject::saveScript` (`llviewerobject.cpp:2886-2922`)
+on the prim chosen:
+
+- the edit window's Contents tab, which drops into the prim selected,
+  child or root (`llpanelobjectinventory.cpp:837-856`); and
+- a drag onto the object in the world, `dad3dRezScript`
+  (`lltooldraganddrop.cpp:2644-2679`), which moves a child to its root
+  (2667-2676), since there the mouse chose the prim.
+
+`saveScript` sends `RezScript` (Low 304, zerocoded):
+
+- `AgentData`: the agent, the session, and `GroupID`, the agent's active
+  group.
+- `UpdateBlock`: `ObjectLocalID`, the prim it goes into, and `Enabled`,
+  true, and false only with Control held (`lltooldraganddrop.cpp:2665`,
+  `llpanelobjectinventory.cpp:855`).
+- `InventoryBlock`: the item as `LLInventoryItem::packMessage` packs it
+  (`llinventory.cpp:590-607`), with that prim as its folder
+  (`llviewerobject.cpp:2900`), plus a
+  `TransactionID` the item carries (null for an item taken from
+  inventory), and the same checksum `UpdateTaskInventory` carries.
+
+An item the avatar may not copy is moved: the viewer deletes its own
+local copy (`lltooldraganddrop.cpp:1846-1853`).
+
+`Session.PutInObject` sends it for an item of LSL text, with `Enabled`
+set, and `Session.PutScriptInObject` takes `running` for the Control
+case. Both put the script into the prim they are given, as the Contents
+tab does: a caller that names a child has chosen it. `InstallScript` and `Run`
+keep their own path, the copy through `UpdateTaskInventory` followed by
+the source saved into the object, because they have the source and read
+the compile's verdict from it.
+
+Measured on Agni on 5 October 2026, with `RezScript` from this branch:
+
+- A full-permission script dropped into a one-prim box ran: its
+  `state_entry` line arrived about one second after the drop, and
+  `slsh start` then said `already`.
+- Three scripts the avatar may copy but not modify ran the same way, and
+  stayed in inventory, being copyable.
+- Dropped with `Enabled` false (`slsh drop --stopped`), the script lay
+  stopped, and `slsh start` then started it: the region had compiled it,
+  where the copy through `UpdateTaskInventory` gave `start` nothing.
+- Slate's `drop ITEM into OBJ` of the full-permission script: the copy
+  showed in the contents and was matched as the drop's own, so the entry
+  carries the asset Slate compares; the script ran, and the copy was
+  taken out at the end of the test.
+- A notecard dropped in still goes with `UpdateTaskInventory`, as before.
+- Into the child of a two-prim linkset, by `slsh drop` naming the child
+  and by Slate's `drop ITEM into OBJ link 2`: the script landed in the
+  child, ran there (its `llGetObjectName` was the child's), and the root
+  held nothing; Slate found its copy in the child and took it out.
+
+Nothing comes back to say the script went in or started: the contents
+and `GetScriptRunning` are how a caller finds out.
+
 ## Whether a script is running
 
 `SetScriptRunning` is answered by nothing at all, so `ScriptRunning`

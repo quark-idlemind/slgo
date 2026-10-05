@@ -385,7 +385,9 @@ What `save` does not do is start anything, or touch the world.  A script
 in inventory is not running and cannot be made to run: an object is the
 only place a script runs at all, and putting one there is `new --in
 OBJECT`, which compiles it inside the object and starts it (see
-`sl.InstallScript`).  Saving compiles too -- the capability answers with
+`sl.InstallScript`), or `drop OBJECT PATH`, which sends the viewer's
+drop of a script and asks it to run
+([Scripts](scripts.md#dropping-a-script-into-an-object)).  Saving compiles too -- the capability answers with
 the verdict -- but what it has changed is the item, and the copies
 already inside objects are untouched.  So the output says whether it
 compiled and says nothing whatever about running, and there is no
@@ -476,7 +478,8 @@ logout, and a half-renamed pair would be worse than either.
 an operation the shell already has somewhere else, and `--in` only says
 which container to perform it in. Starting a script has no counterpart:
 a script in inventory does not run and cannot be made to, because an
-object is the only place a script runs at all. So there is nothing for
+object is the only place a script runs at all (`drop` is the way to put
+one there; it asks it to run). So there is nothing for
 a flag to choose between. `run --in Box1 hello.lsl` would be a flag
 with one legal value, which is a verb spelled at length -- and it would
 put the object, the one argument that is never optional, behind a

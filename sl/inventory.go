@@ -365,16 +365,92 @@ func (w *Session) NewScript(ctx context.Context, name, source string) (*Item, *U
 	return it, res, nil
 }
 
-// PutInObject copies an inventory item into an object.
+// PutInObject copies an inventory item into an object, as dragging it
+// onto the object does.
+//
+// A script goes in as the viewer drops one, with RezScript and Enabled
+// set, which asks for it to run (Firestorm 885631b93a:
+// LLToolDragAndDrop::dad3dRezScript, lltooldraganddrop.cpp:2644-2679,
+// and dropScript, 1828-1880, which calls LLViewerObject::saveScript,
+// llviewerobject.cpp:2886-2922).  The same item through
+// UpdateTaskInventory was measured landing not running, with nothing
+// compiled for SetScriptRunning to start.  Anything else goes in with
+// UpdateTaskInventory.  A script that goes in stopped, as the viewer's
+// Ctrl-drag does, is PutScriptInObject with running false.
+// Why: doc/scripts.md#dropping-a-script-into-an-object
 //
 // An object keeps every copy it is given and renames the newcomer, so
-// putting the same item in twice leaves "thing" and "thing 1".
+// putting the same item in twice leaves "thing" and "thing 1".  An item
+// the avatar may not copy is moved: the simulator takes it out of
+// inventory, as it does for the viewer.
+func (w *Session) PutInObject(ctx context.Context, o *Object, it *Item) error {
+	if IsScript(it) {
+		return w.PutScriptInObject(ctx, o, it, true)
+	}
+	return w.copyIntoObject(ctx, o, it)
+}
+
+// IsScript says whether an item is a script the way the viewer decides
+// to send RezScript: by what it holds, LSL text, and not by its name.
+func IsScript(it *Item) bool {
+	return AssetType(it.Type) == AssetLSLText || AssetType(it.InvType) == AssetLSLText
+}
+
+// PutScriptInObject puts a script from inventory into an object with
+// RezScript, the viewer's drop of a script: running when running is
+// true, and stopped when it is false, which is what holding Control while
+// dropping asks for (lltooldraganddrop.cpp:2665).
+//
+// The script goes into the prim named, child or root, as the viewer's
+// Contents tab puts one into the prim selected in the edit window
+// (llpanelobjectinventory.cpp:837-856, which calls dropScript on that
+// object).  A drag onto the object in the world is the other way in, and
+// there the viewer moves a child to its root (lltooldraganddrop.cpp:
+// 2667-2676) because the mouse, not the user, chose the prim; a caller
+// that names a prim has chosen.  The group is the avatar's active group,
+// as saveScript sends it.  No reply comes; an object that took the
+// script shows it in TaskInventory.
+// Why: doc/scripts.md#dropping-a-script-into-an-object
+func (w *Session) PutScriptInObject(ctx context.Context, o *Object, it *Item, running bool) error {
+	local, err := w.local(ctx, o)
+	if err != nil {
+		return err
+	}
+	group, err := w.ActiveGroup(ctx)
+	if err != nil {
+		return err
+	}
+	m := &msg.RezScript{}
+	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
+	m.AgentData.GroupID = group
+	m.UpdateBlock.ObjectLocalID = local
+	m.UpdateBlock.Enabled = running
+	// saveScript makes the item with the prim it runs on for its folder
+	// (llviewerobject.cpp:2900).
+	d := taskItemData(o, it)
+	m.InventoryBlock = msg.RezScript_InventoryBlock{
+		ItemID: d.ItemID, FolderID: d.FolderID,
+		CreatorID: d.CreatorID, OwnerID: d.OwnerID, GroupID: d.GroupID,
+		BaseMask: d.BaseMask, OwnerMask: d.OwnerMask, GroupMask: d.GroupMask,
+		EveryoneMask: d.EveryoneMask, NextOwnerMask: d.NextOwnerMask,
+		// TransactionID stays null: an item in inventory has none, and
+		// saveScript copies the item's own (llviewerobject.cpp:2900).
+		Type: d.Type, InvType: d.InvType, Flags: d.Flags,
+		SaleType: d.SaleType, SalePrice: d.SalePrice,
+		Name: d.Name, Description: d.Description,
+		CreationDate: d.CreationDate, CRC: d.CRC,
+	}
+	return w.Send(ctx, m)
+}
+
+// copyIntoObject is UpdateTaskInventory: the copy that lands in an
+// object without being compiled or run.
 //
 // The item goes as the viewer builds it (LLViewerObject::updateInventory,
 // llviewerobject.cpp:3735-3766): with the object as its folder, its
 // creation date, and the checksum taskItemCRC gives, which sums the
 // asset and the last owner the message does not carry.
-func (w *Session) PutInObject(ctx context.Context, o *Object, it *Item) error {
+func (w *Session) copyIntoObject(ctx context.Context, o *Object, it *Item) error {
 	local, err := w.local(ctx, o)
 	if err != nil {
 		return err
@@ -383,7 +459,16 @@ func (w *Session) PutInObject(ctx context.Context, o *Object, it *Item) error {
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.UpdateData.LocalID = local
 	m.UpdateData.Key = 0 // 0 selects the object's inventory
-	d := &m.InventoryData
+	m.InventoryData = taskItemData(o, it)
+	return w.Send(ctx, m)
+}
+
+// taskItemData is an item as the viewer packs one to go into an object
+// (LLInventoryItem::packMessage, llinventory.cpp:590-607): the object as
+// its folder, and the checksum.  UpdateTaskInventory and RezScript carry
+// the same fields.
+func taskItemData(o *Object, it *Item) msg.UpdateTaskInventory_InventoryData {
+	var d msg.UpdateTaskInventory_InventoryData
 	d.ItemID, d.FolderID = it.ID, o.ID
 	d.CreatorID, d.OwnerID, d.GroupID = it.CreatorID, it.OwnerID, it.GroupID
 	d.BaseMask, d.OwnerMask = it.BaseMask, it.OwnerMask
@@ -395,8 +480,8 @@ func (w *Session) PutInObject(ctx context.Context, o *Object, it *Item) error {
 	d.SaleType, d.SalePrice = uint8(it.SaleType), int32(it.SalePrice)
 	d.Name = append([]byte(it.Name), 0)
 	d.Description = append([]byte(it.Desc), 0)
-	d.CRC = taskItemCRC(d, it.AssetID, it.LastOwnerID)
-	return w.Send(ctx, m)
+	d.CRC = taskItemCRC(&d, it.AssetID, it.LastOwnerID)
+	return d
 }
 
 // RemoveFromObject deletes an item from inside an object.

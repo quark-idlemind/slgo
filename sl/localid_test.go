@@ -123,6 +123,8 @@ func localsSent(f *fakeBackend) []uint32 {
 			}
 		case *msg.UpdateTaskInventory:
 			out = append(out, m.UpdateData.LocalID)
+		case *msg.RezScript:
+			out = append(out, m.UpdateBlock.ObjectLocalID)
 		case *msg.RemoveTaskInventory:
 			out = append(out, m.InventoryData.LocalID)
 		case *msg.MoveTaskInventory:
@@ -181,6 +183,11 @@ var sendsLocal = []struct {
 	}},
 	{"PutInObject", func(ctx context.Context, w *Session, a, _ *Object) error {
 		return w.PutInObject(ctx, a, anItem(theOther, "a script"))
+	}},
+	{"PutInObject, a script", func(ctx context.Context, w *Session, a, _ *Object) error {
+		it := anItem(theOther, "a script")
+		it.Type, it.InvType = int(AssetLSLText), int(AssetLSLText)
+		return w.PutInObject(ctx, a, it)
 	}},
 	{"RemoveFromObject", func(ctx context.Context, w *Session, a, _ *Object) error {
 		return w.RemoveFromObject(ctx, a, theOther)

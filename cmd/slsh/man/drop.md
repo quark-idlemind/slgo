@@ -36,16 +36,26 @@ caught up.
 What goes in is the whole item, permissions and all, so something whose
 permissions were set carefully is inside the object set that way.
 
-## A script dropped in does not run
+## A script dropped in is asked to run
 
-Copying a script into an object leaves it there uncompiled, and
-nothing about it will change that: `start` has nothing to start,
-because there is nothing compiled to start.  Putting a script into an
-object by hand looks like one action and is really two -- the copy, and
-the save that compiles it inside the object.  `new --in OBJECT` does
-both, and is the way in for anything that has to run.  Notecards,
-textures and everything else that only has to be there are what this
-command is for.
+A script goes in as the viewer drops one: with a message that asks for
+it to run, and `drop` says so, `put "greeter" in lantern, asked to run`.
+Nothing answers, so that is what was asked for and not what happened;
+`start OBJECT` and `ls --in` say whether it runs.  The script is
+compiled inside the object, so a script this avatar may not modify
+goes in as well as one it may.
+
+    drop --stopped lantern Scripts/greeter
+
+`--stopped` puts it in without asking it to run, as the viewer does
+with Control held, and `start` runs it afterwards.  It is for a script
+and nothing else.  Notecards, textures and everything else that only has
+to be there go in as they always did.
+
+A script this avatar may not copy is moved: it is gone from inventory
+afterwards, as the viewer's drop of one removes it, and the line says so.
+A script named for a child prim goes into that child, as the viewer's
+Contents tab puts one into the prim selected.  What was measured is in `doc/scripts.md`.
 
 ## Examples
 
