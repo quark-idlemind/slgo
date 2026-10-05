@@ -469,7 +469,7 @@ func (p *parser) startsStimulus() bool {
 		return false
 	}
 	switch p.tok.text {
-	case "touch", "drag", "say", "pay", "sit", "stand", "choose", "answer", "send", "wear", "rez", "take", "wait":
+	case "touch", "drag", "say", "pay", "sit", "stand", "choose", "answer", "send", "wear", "rez", "take", "wait", "drop", "group":
 		return true
 	default:
 		return false
@@ -558,6 +558,10 @@ func (p *parser) stimulus() (*Stimulus, error) {
 		s.Rez, err = p.rezItem()
 	case "take":
 		s.TakeOff, err = p.takeOff()
+	case "drop":
+		s.Drop, err = p.drop()
+	case "group":
+		s.Group, err = p.setGroup()
 	default:
 		return nil, p.unexpected("expected a stimulus")
 	}
@@ -2271,6 +2275,63 @@ func (p *parser) takeOff() (*TakeOff, error) {
 		return nil, err
 	}
 	return &TakeOff{Name: name}, nil
+}
+
+// drop reads drop ident (into | onto) binding link? and, for onto, face
+// integer.
+func (p *parser) drop() (*Drop, error) {
+	if err := p.want("drop"); err != nil {
+		return nil, err
+	}
+	item, err := p.ident()
+	if err != nil {
+		return nil, err
+	}
+	d := &Drop{Item: item}
+	switch {
+	case p.kw("into"):
+	case p.kw("onto"):
+		d.Onto = true
+	default:
+		return nil, p.unexpected("expected into or onto")
+	}
+	if err := p.next(); err != nil {
+		return nil, err
+	}
+	if d.Name, err = p.ident(); err != nil {
+		return nil, err
+	}
+	if d.Link, err = p.optLink(); err != nil {
+		return nil, err
+	}
+	if d.Onto {
+		if err := p.want("face"); err != nil {
+			return nil, err
+		}
+		if d.Face, err = p.integer(); err != nil {
+			return nil, err
+		}
+	}
+	return d, nil
+}
+
+// setGroup reads group ident (string | none).
+func (p *parser) setGroup() (*SetGroup, error) {
+	if err := p.want("group"); err != nil {
+		return nil, err
+	}
+	av, err := p.ident()
+	if err != nil {
+		return nil, err
+	}
+	g := &SetGroup{Avatar: av}
+	if p.kw("none") {
+		g.None = true
+		g.GroupSpan = p.tok.span
+		return g, p.next()
+	}
+	g.Group, g.GroupSpan, err = p.str()
+	return g, err
 }
 
 // buttonExp reads button binding link? part+ face? ( changes / state

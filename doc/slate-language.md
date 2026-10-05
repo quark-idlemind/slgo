@@ -12,7 +12,7 @@ Link messages do not leave a linkset. A HUD that changes another object is obser
 
 A person can write a test after reading this page, with no Go and no pixel coordinates for an ordinary button. One stimulus can require several effects, on the prim touched or on another, and newly rezzed objects can be named for the rest of the file. A test can wear a HUD or another attachment from the tester's inventory, rez an item from it, watch a button appear and disappear, and take the attachment off again. Every wait has a deadline.
 
-Slate drives the tester, and a second avatar only when the run is given one explicitly ([A second avatar](#a-second-avatar)); it does not pick other avatars for itself, drive the camera, walk or teleport, check animations, particles, sounds or the product's inventory, edit the product's scripts, or delete objects (except those its own `rez` steps made), refund payments or remove items a run produced. A permission request is printed and refused with no bits granted, so the product script is not left waiting, unless the file names the permission and the object with `allow permission` ([Pay](#stimuli) has the paragraph); `debit` is never one of them. `allow permission` covers the tester's requests only: a request to a second avatar is always refused. A file that does not start with `slate 1` is rejected.
+Slate drives the tester, and a second avatar only when the run is given one explicitly ([A second avatar](#a-second-avatar)); it does not pick other avatars for itself, drive the camera, walk or teleport, check animations, particles, sounds or the product's inventory, edit the product's scripts, or delete objects (except those its own `rez` steps made), refund payments or remove items a run produced (except the copies its own `drop` steps put into an object). A permission request is printed and refused with no bits granted, so the product script is not left waiting, unless the file names the permission and the object with `allow permission` ([Pay](#stimuli) has the paragraph); `debit` is never one of them. `allow permission` covers the tester's requests only: a request to a second avatar is always refused. A file that does not start with `slate 1` is rejected.
 
 ## A first script
 
@@ -122,7 +122,7 @@ step        = stimulus expectation*
 call        = "do" ident
 
 stimulus    = touch / drag / say / pay / sit / stand / choose / answer / send / wait
-            / wear / rezitem / takeoff
+            / wear / rezitem / takeoff / drop / setgroup
 
 touch       = "touch" binding target guard? asavatar?
 asavatar    = "as" ident   (* a second avatar's binding *)
@@ -170,6 +170,8 @@ key         = uuid / "null" / capture
 wear        = "wear" ident "on" string "as" ident   (* item, attach point, new binding *)
 rezitem     = "rez" ident ("at" / "by") number number number "as" ident   (* item, region position or offset from the tester, new binding *)
 takeoff     = "take" "off" binding
+drop        = "drop" ident ( "into" binding link? / "onto" binding link? "face" integer )   (* item *)
+setgroup    = "group" avatar ( string / "none" )
 
 expectation = "expect" "no"? expectbody ("within" duration)? ("as" capture)?
 expectbody  = sayexp / dialogexp / boxexp / textureexp / offsetexp
@@ -229,9 +231,9 @@ binding     = ident
 number      = float / integer
 ```
 
-A stimulus not listed with `asavatar` or `stimspeaker` (`pay`, `sit`, `stand`, `wait`, `send`, `wear`, `rez`, `take off` and `drag ... on screen`) is read with an optional trailing `as ident` as well, so that [the static check](#static-checks) can say that it stays the tester's and not leave a grammar error at the word. In `stimspeaker`, `avatar` is a name written bare (`say "hi" on 0 as visitor`), and `avatar string` is the in-world name of the tester.
+A stimulus not listed with `asavatar` or `stimspeaker` (`pay`, `sit`, `stand`, `wait`, `send`, `wear`, `rez`, `take off`, `drop`, `group` and `drag ... on screen`) is read with an optional trailing `as ident` as well, so that [the static check](#static-checks) can say that it stays the tester's and not leave a grammar error at the word. In `stimspeaker`, `avatar` is a name written bare (`say "hi" on 0 as visitor`), and `avatar string` is the in-world name of the tester.
 
-The in-world name appears only in `objectDecl` and `itemDecl`; a step refers to a prim by `binding`, one identifier, and to an item only in `wear` and `rezitem`. The word `object` in `from object sign` is not a use of either. A stimulus and the `expect` lines right after it are one step, so the step after a guarded touch is written `then expect ...`. `button` in `buttonexp` reads the parts of a touch. The parser accepts a number before them, as a touch has, so that the static check can say it is not legal there. A file may open with a step that has no stimulus (the third `step` alternative); its failure block prints `stimulus: (none)`. A bare `then` is rejected. A `call` is a step of its own and takes no expectations: an expectation after `do NAME` starts a new step.
+The in-world name appears only in `objectDecl` and `itemDecl`; a step refers to a prim by `binding`, one identifier, and to an item only in `wear`, `rezitem` and `drop`. The word `object` in `from object sign` is not a use of either. A stimulus and the `expect` lines right after it are one step, so the step after a guarded touch is written `then expect ...`. `button` in `buttonexp` reads the parts of a touch. The parser accepts a number before them, as a touch has, so that the static check can say it is not legal there. A file may open with a step that has no stimulus (the third `step` alternative); its failure block prints `stimulus: (none)`. A bare `then` is rejected. A `call` is a step of its own and takes no expectations: an expectation after `do NAME` starts a new step.
 
 `named` is a value that is not written out: `original` is the reading when the test began, `any` is a reading whatever it is, and a capture is a value an earlier step bound. The grammar lets all three stand wherever a value goes, and [Static checks](#static-checks) says where each is legal: `any` only after `is` and only with `as`, a capture only where its type fits. A rez names the object it finds with `as` followed by a name, before `within`; `as` followed by a `$` name, after `within`, is the capture of any other positive expectation. The parser reads `face`, `link` and `button` beside `showing` so that the static check can name the clash, and `showing` takes a UUID or a capture only.
 
@@ -249,8 +251,10 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Permissions | Each name of an `allow permission` is one of the eight words; any other is `X is not a permission a file can name (one of ...)`, and `debit` is `a permission never grants debit; pay with allow pay and --pay`. `from` names an `object` header or an `item` header, else `X is not an object or an item`; the header may come before the one it names. The same name twice for one object, or in several headers, is harmless: the allowed bits are added. |
 | Objects | Binding identifiers are unique across objects, items and the names `wear` and `rez` bind, and any word may be one. In-world name strings are non-empty. One in-world name may be written on several headers only when every one of them has a `description` and no two are written the same: `description "x"` and `description matching "x"` are different, two of either are not. Otherwise the error is `in-world name "N" is already used; objects of one name need a description each`, or `... is already used with that description`. |
 | Descriptions | A description is a string or `matching "RE"`; the pattern compiles. A capture is refused, because a description is read at setup, before any step. The empty string is legal. |
-| Avatars | An `avatar` binding is neither an object nor an item and shares their names: a name bound twice (`X is already bound`), by an `avatar`, an `object`, an `item`, or by the name `wear`, `rez` or a rez expectation binds, is refused. An avatar is used only after `as` on `touch`, a face `drag`, `say`, `choose` and `answer`, after `to` on `dialog`, `textbox` and `give` expectations, and after `from avatar` on `say`. A name that is not an avatar there is `X is not an avatar; declare it with avatar X and give it with --avatar`, an object there is `X is an object, not an avatar`, and an avatar where an object is wanted is `X is an avatar, not an object`. `as NAME` on `pay`, `sit`, `stand`, `wait`, `send`, `take off` and `drag ... on screen` is `<stimulus> stays the tester's: a second avatar only touches, drags a face, says, chooses and answers (a second avatar never pays)`; `wear` and `rez` take `as` for the new object, and an avatar's name there is `X is a second avatar, and a second avatar never wears` (`rezzes`). The check does not know whether the run is given the avatar: that is a setup error ([A second avatar](#a-second-avatar)). |
-| Items | An item binding is not an object: it is used only by `wear` and `rez`, and any other use is `X is an item; only wear and rez use an item`. The item name and the folder name are non-empty after trimming. |
+| Avatars | An `avatar` binding is neither an object nor an item and shares their names: a name bound twice (`X is already bound`), by an `avatar`, an `object`, an `item`, or by the name `wear`, `rez` or a rez expectation binds, is refused. An avatar is used only after `as` on `touch`, a face `drag`, `say`, `choose` and `answer`, after `to` on `dialog`, `textbox` and `give` expectations, after `from avatar` on `say`, and as the first name of `group`. A name that is not an avatar there is `X is not an avatar; declare it with avatar X and give it with --avatar`, an object there is `X is an object, not an avatar`, and an avatar where an object is wanted is `X is an avatar, not an object`. `as NAME` on `pay`, `sit`, `stand`, `wait`, `send`, `take off`, `drop` and `drag ... on screen` is `<stimulus> stays the tester's: a second avatar only touches, drags a face, says, chooses and answers (a second avatar never pays)`; `wear` and `rez` take `as` for the new object, and an avatar's name there is `X is a second avatar, and a second avatar never wears` (`rezzes`). The check does not know whether the run is given the avatar: that is a setup error ([A second avatar](#a-second-avatar)). |
+| Items | An item binding is not an object: it is used only by `wear`, `rez` and `drop`, and any other use is `X is an item; only wear, rez and drop use an item`. The item name and the folder name are non-empty after trimming. |
+| Drop | `drop` takes an item and an object (`X is an object; drop takes an item`, or `X is not an item`; the object is checked as any reference is). `link N` is 0 or more and `face N` is 0 or more, and each fits an integer. A drop is the tester's alone: `drop ... as NAME` is `drop stays the tester's: a second avatar only touches, ...`. |
+| Group | `group` names a second avatar, declared with an `avatar` header (`X is not an avatar; ...`, `X is an object, not an avatar`). `group tester ...` is refused: `group stays off the tester: its active group decides where it may build, and a test does not change it; group takes a second avatar`. The group is a non-empty string or the word `none`; a quoted `"none"` is a group of that name. An `as` after it is `group names the avatar whose group is set (group NAME "Group Name"); an as does not follow it`. Whether the avatar has joined the group is not known here: that fails the step. |
 | Probes | The identifier is an object binding, with at most one probe per object. A probe has no channels; the runner picks them. |
 | Listens | Each `listen` channel is a 32-bit integer, not 0 and not 2147483647. Duplicates are an error, and there are at most 63 of them. The bridge script opens one listen for its own control channel and one per `listen` channel; LSL allows 65 in one script (published, not measured here), and one is kept spare. |
 | References | Every object in a step is a header binding, a name bound with `as` on a positive rez expectation in an earlier step of the same test, or a name bound by `wear` or by a `rez` step. A name bound in a step is not usable in that same step, except a name `wear` or `rez` binds, which that step's own expectations may use. A name `take off` ends is not usable from the next step on: `h was taken off at line N; it cannot be used again in this test`. A capture is a different thing and has its own rows below. |
@@ -310,7 +314,7 @@ This section states the timing rules once. [Step lifecycle](slate-runner.md#step
 
 **Timeouts.** The default is 10 seconds, from the `timeout` header or the built-in value. `within D` replaces it for that expectation only. A step's deadline is its start time, plus the time any blocking stimulus actually blocked on the way to success, plus the longest expectation duration in the step. A positive expectation still unmatched when its own duration has elapsed fails the step at that moment, even if another has time left. A negative expectation fails the step the moment the forbidden event is seen.
 
-**Stimulus budget.** A blocking stimulus (`drag`, `sit`, `stand`, `wait`, `pay`, `wear`, `rez`, `take off`) may take the longest `within` in its step, or the default if there is none; a step with no expectations passes when the stimulus returns inside that budget. If the stimulus fails, the step fails at once. Setup, the tester-position read and the 30 s click wait are not on the step's deadline; setup budgets are under [Reading the result](#reading-the-result).
+**Stimulus budget.** A blocking stimulus (`drag`, `sit`, `stand`, `wait`, `pay`, `wear`, `rez`, `take off`, `drop`, `group`) may take the longest `within` in its step, or the default if there is none; a step with no expectations passes when the stimulus returns inside that budget. If the stimulus fails, the step fails at once. Setup, the tester-position read and the 30 s click wait are not on the step's deadline; setup budgets are under [Reading the result](#reading-the-result).
 
 **When a step passes.** With only positive expectations, as soon as all have matched. With any negative expectation, after the positives have matched and every negative window has elapsed. A step with no expectations passes when the stimulus succeeds; one with only negative expectations passes when its windows elapse. A step with a positive `rez` waits one more 250 ms object poll before passing, and a second prim that matches the same claim in that wait fails the step. A click expectation on a name bound with `as` makes the rez step wait up to 30 s to read the click action; see [Step lifecycle](slate-runner.md#step-lifecycle).
 
@@ -463,6 +467,30 @@ Every refusal is made before anything is sent: so are no held dialog and a held 
 
 **Take off.** `take off NAME` takes off the item `NAME` is worn from, which is a name `wear` bound or an object the tester is wearing. A binding that is not worn fails the step with `NAME is not worn`. It is a blocking stimulus, and it completes when the store no longer lists the worn root, about 0.1 s after the request (measured, [Eighth round](slate-runner.md#eighth-round)), or fails with `"<item>" is still in the store <budget> after the take off`. `NAME` is not usable after this step, and this step's own expectations, such as `expect attached NAME off`, are what it is for.
 
+**Drop into.** `drop ITEM into OBJ [link N]` puts a copy of an inventory item into a prim's contents, as a viewer does when an item is dragged onto an object. `ITEM` is an `item` header, as for `wear` and `rez`. It sends what `Session.PutInObject` sends: one `UpdateTaskInventory` for the prim (key 0, which selects the object's own contents), carrying the item as the viewer builds it: the prim as its folder, its masks, name, type, creation date and the checksum the simulator expects. Nothing answers it. The step is blocking, under the stimulus budget: it reads the prim's contents until the copy shows, and fails with `"<item>" did not show in the contents of OBJ within <budget> of the drop; the prim may not take it, or something took it out again` when it does not. A product sees `changed()` with `CHANGED_INVENTORY`. The copy is the entry that was not in the contents before, of the item's type and, where the contents show an asset, of its asset, whose name is the item's or, when the prim already held one of that name, the name, a space and a number (a prim renames a newcomer: measured for a script put in twice, inferred for other kinds, [Names](names.md#measured); the runner accepts either). Nothing else is taken for it: an item a product puts in as the drop arrives, named like the drop with more after it, is the product's. `drop` is the tester's alone; a non-owner's drop into an object that has `llAllowInventoryDrop` on is a later extension ([Known limitations](#known-limitations)).
+
+- **A no-copy item is refused.** A viewer's drag of an item the avatar may not copy moves it: it leaves the tester's inventory for the object, and removing it from the object afterwards deletes it. The run could not give it back, so the step fails before anything is sent: `slate: step N: "<item>" may not be copied, so dropping it would move it out of the tester's inventory and the run could not give it back; the drop was not sent`. (Allowing it would leave the tester without the item after every run; a drop of a no-copy item is a test for a person to set up by hand.)
+- **Removed afterwards.** Whatever the outcome, at the end of each test, after `after each`, the runner removes from the prim every copy a `drop` in that test put there, newest first, and prints `slate: removed "<item>" from OBJ` for each (the name the prim gave the copy, and the binding, with its link when one was named). It finds the copy by its id, which it noted when the copy showed, and reads the contents until it is gone. It removes nothing else: what the prim held before, and what the product put in or took out meanwhile, stays. A removal that fails prints `slate: remove failed: "<item>" from OBJ: <error>`, fails the test (exit 1, `slate: fail test "<test>": could not put back OBJ` when nothing else had failed it), and the copy is left where it is. A copy that shows only after its step gave up is looked for once more at the end of the test, by the same rule, and removed the same way; if it is still not there the runner prints `slate: the copy of "<item>" never showed in OBJ; nothing removed`. The removal is itself a change of the contents, which a product may react to as it did to the drop.
+
+**Drop onto.** `drop ITEM onto OBJ [link N] face N` puts a texture on one face, as a viewer does when a texture is dragged onto a face. `ITEM` must be a texture, else the step fails before anything is sent: `slate: step N: "<item>" is not a texture; drop onto a face needs one, and the drop was not sent`. What it does follows the viewer (`LLToolDragAndDrop::dropTextureOneFace`, `handleDropMaterialProtections`), in this order:
+
+| The prim's contents and the item | The step does |
+|---|---|
+| The prim already holds an item of that asset | Sets the face. Nothing goes in. |
+| The tester may copy it and transfer it | Sets the face. Nothing goes in. |
+| The tester may copy it and not transfer it | Puts a copy into the prim as `drop ... into` does, then sets the face. |
+| The tester may not copy it | Fails: `"<item>" may not be copied, so putting it into OBJ would move it out of the tester's inventory and the run could not give it back; the face was not changed`. |
+
+The face is set with `Session.SetFace`, which reads the prim's faces and sends them all back with the texture of that one changed (`ObjectImage`), so the face keeps its colour, glow, tiling and the rest. A face the prim does not have fails the step (`OBJ has 6 faces, so there is no face 7`). It is a blocking stimulus. The stimulus line says what happened (`dropped "<item>" onto OBJ face N; nothing went into the prim`, `...; a copy went into the prim first`, `...; the prim already held it`).
+
+- **Put back afterwards.** At the end of each test, after `after each`, the runner sets the face back to the texture it had before the drop, and prints `slate: restored OBJ face N to texture <uuid>`, then removes a copy the drop put into the prim, printing `slate: removed ...` as above. A face that already had the texture is not set again. Both are newest first across the test's drops. A failure to set the face back prints `slate: restore failed: OBJ face N: <error>` and fails the test as a failed removal does. Setting the texture back is itself a texture change: a product that reacts to its face's texture changing reacts to the restoration as it did to the drop, after `after each` has run, and the test should not be written to watch for the absence of that.
+
+**Group.** `group NAME "Group Name"` sets the active group of the second avatar `NAME` ([A second avatar](#a-second-avatar)) and `group NAME none` sets it to no group. A product's group mode admits an avatar only while it wears the group's tag, and this is how a test puts the second avatar in or out of it. The group is found in the avatar's own list of the groups it has joined, by name and ignoring case, as slsh's `group` finds one; the step is done when the avatar's active group is that one (`ActivateGroup` waits for the simulator to say so, within the stimulus budget). If the group is already the active one nothing is sent. The tester's group is not a target: `group tester ...` is a static error, because the group the tester acts as decides where it may build and a test does not change it.
+
+A group the avatar has not joined fails the step with a sentence that names the binding and not the avatar or its profile: `visitor has not joined a group called "Example Club"`. A list that has not arrived says `visitor has no groups that are known yet, so "..." matches none; the list arrives on its own after login`, and two groups of one name `visitor is in 2 groups called "..." , and a step cannot say which`.
+
+- **Put back at the end of the run.** At setup, before anything runs, the runner reads the active group of each second avatar that a `group` step names. When the run ends, after the last test and before the verdict, each of those whose group a step changed is set back to the group it had, and the runner prints `slate: cleanup: put the group of NAME back to what it was`. This is the end of the run and not of each test, because a test that changes a group is followed by one that may rely on it, and a lent avatar is only to be left as found. A failure to put it back is a cleanup warning, `slate: cleanup: warning: the group of NAME was not put back: <error>`, as the probe's is: it changes neither the exit code nor an earlier failure, and the avatar is left in the group the run gave it. The transcript never prints the avatar's name, only its binding.
+
 ## A second avatar
 
 A product with a public, a group and a private mode needs a second avatar's touch, chat and dialog answers in the same test. A file declares one with a header, and the run is told who it is:
@@ -489,11 +517,11 @@ slate: setup: the profile given for visitor is the tester's own
 slate: setup: the profile given for visitor is not held by the daemon (dial: ...)
 ```
 
-**What it can do.** A second avatar touches (`touch OBJ ... as NAME`, with any target the tester's touch has), drags on a face (`drag OBJ face ... as NAME`; `drag ... on screen` is about the tester's own HUD and has no `as`), says (`say "..." on N as NAME`), and answers the dialogs that came to it (`choose ... on OBJ as NAME`, `answer "..." on OBJ as NAME`). It does nothing else: `pay`, `sit`, `stand`, `wear`, `take off`, `rez`, `send` and `drag ... on screen` are the tester's, and `as NAME` on them is a static error. It never pays. The second avatar must be in the same region as the tester and near what it touches; the runner does not move it.
+**What it can do.** A second avatar touches (`touch OBJ ... as NAME`, with any target the tester's touch has), drags on a face (`drag OBJ face ... as NAME`; `drag ... on screen` is about the tester's own HUD and has no `as`), says (`say "..." on N as NAME`), and answers the dialogs that came to it (`choose ... on OBJ as NAME`, `answer "..." on OBJ as NAME`). Its active group is set by `group NAME "Group Name"` or `group NAME none` ([Stimuli](#stimuli)), the one stimulus that names an avatar and not an object. It does nothing else: `pay`, `sit`, `stand`, `wear`, `take off`, `rez`, `send` and `drag ... on screen` are the tester's, and `as NAME` on them is a static error. It never pays. The second avatar must be in the same region as the tester and near what it touches; the runner does not move it.
 
 **What reaches it.** `expect dialog from OBJ to NAME ...`, `expect textbox from OBJ to NAME ...` and `expect give TEXT from OBJ to NAME` are what an object sent to the second avatar; without `to` they are the tester's, as before. What the second avatar says is heard by the tester, and is matched by `expect say ... from avatar NAME`, by the second avatar's id and not by its name. A dialog is held for the object and for whom it came to, so `choose "A" on sign` answers the tester's dialog from the sign and `choose "A" on sign as visitor` the second avatar's, and neither replaces the other. Both go to the same event log, with the same arming and consumption rules as any other event.
 
-**Left as found.** The second avatar must come out of a run as it went in. An inventory offer to it is **declined** the moment the runner sees it, after the log has it for an `expect give ... to NAME`, and never accepted, so its inventory does not change. A permission request to it is **refused**, whatever `allow permission` names: `allow permission` covers the tester's requests only. A dialog or text box to it that no step answered is left to expire, as the tester's is.
+**Left as found.** The second avatar must come out of a run as it went in. An inventory offer to it is **declined** the moment the runner sees it, after the log has it for an `expect give ... to NAME`, and never accepted, so its inventory does not change. A permission request to it is **refused**, whatever `allow permission` names: `allow permission` covers the tester's requests only. A dialog or text box to it that no step answered is left to expire, as the tester's is. A group a `group` step set is put back at the end of the run, to the one it had when the run began.
 
 **Transcript.** An event for the second avatar is labelled with its binding: `dialog to visitor from sign: "Pick one" buttons "Red"`, `textbox to visitor from sign: ...`, `give to visitor from sign: "..."`, `give to visitor declined, transaction ...`, `permission denied to visitor from sign: ...`, and a chat line it spoke as `chat public from visitor: "..."`. Neither its displayed name nor its profile appears in the output, in the failure block, or in an error.
 
@@ -903,6 +931,29 @@ sl: "Example Box" was not rezzed: the simulator said "Can't rez object 'Example 
 
 The position is the one sent, with a `by` worked out from the tester. The delete lines come after the test's failure block, if any, and before `slate: pass test`.
 
+**Drop and group sentences.** The stimulus line of a drop and of a group step that succeeded, the refusals that are lines of their own, and the lines the end of the test and the end of the run print:
+
+```text
+dropped "Example Red Swatch" into sign
+dropped "Example Red Swatch" onto sign face 2; nothing went into the prim
+dropped "Example Red Swatch" onto sign face 2; a copy went into the prim first
+dropped "Example Red Swatch" onto sign face 2; the prim already held it
+slate: step N: "Example Red Swatch" may not be copied, so dropping it would move it out of the tester's inventory and the run could not give it back; the drop was not sent
+slate: step N: "Example Red Swatch" is not a texture; drop onto a face needs one, and the drop was not sent
+slate: restored sign face 2 to texture <uuid>
+slate: restore failed: sign face 2: <error>
+slate: removed "Example Red Swatch" from sign
+slate: remove failed: "Example Red Swatch" from sign: <error>
+slate: fail test "<test>": could not put back sign
+set the group of visitor to "Example Group"
+the group of visitor was already "Example Group"
+visitor has not joined a group called "Example Club"
+slate: cleanup: put the group of visitor back to what it was
+slate: cleanup: warning: the group of visitor was not put back: <error>
+```
+
+The restore and remove lines come after the test's failure block, if any, and before the delete lines of `rez`, and before `slate: pass test`. The group line comes at the end of the run, before the verdict.
+
 **Choose sentences.** A `choose` that cannot press one button fails the step before anything is sent, exit 1. The stimulus line of the block reads `not sent: ` and the sentence, with `OBJ` the script's name for the prim and the buttons quoted in the dialog's list order:
 
 ```text
@@ -1024,7 +1075,7 @@ The click line also appears, as exit 3, when a prim just bound with `as` is stil
 
 **The command's streams.** A usage error (`slate: need exactly one FILE`, an unknown flag, a `-run` that does not compile or matches no test) and a file that did not parse go to standard error, and so does a failed dial, `slate: dial: <error>`, exit 3. Everything else, including a setup failure, is on standard output once.
 
-**What a run leaves behind.** When a step fails, the test stops and its remaining steps are skipped; `after each` still runs, and the next test runs. A setup failure, an unknown click byte or a dropped subscription stops the whole run. The runner does not stand the avatar up, answer a dialog it has not answered, or send a payment again. A sit that succeeded leaves the avatar seated and the transcript says so. A `wear` leaves the item worn until a `take off`, and the runner does not take it off. A `rez` step's object is deleted to the Trash when its test ends, whatever the outcome ([Rez](#stimuli)). A pending permission request is always answered and printed: denied (`permission denied`) unless an `allow permission` header names bits for the requesting object, which are granted (`permission granted to`) and the rest refused. On every exit after setup started, the runner removes the `slate probe` scripts and takes the bridge off, keeping it in inventory for the next run, printing `slate: cleanup: removed the probe from <n> prims, settling 6s after each` first (`1 prim` for one), and that line comes before the verdict, so the run's last line is its result; a 20-prim object can spend about two minutes settling after the result is known. A cleanup error is a warning and changes neither the exit code nor an earlier failure. Objects the product rezzed, a received item and a payment are not undone. The runner itself leaves nothing in the region, apart from an object a `rez` step made and whose delete failed, which the transcript names. A run killed mid-way can leave the bridge worn and probes in the product; the next run reuses or replaces them.
+**What a run leaves behind.** When a step fails, the test stops and its remaining steps are skipped; `after each` still runs, and the next test runs. A setup failure, an unknown click byte or a dropped subscription stops the whole run. The runner does not stand the avatar up, answer a dialog it has not answered, or send a payment again. A sit that succeeded leaves the avatar seated and the transcript says so. A `wear` leaves the item worn until a `take off`, and the runner does not take it off. A `rez` step's object is deleted to the Trash when its test ends, whatever the outcome ([Rez](#stimuli)). What a `drop` step put into an object, or a face it textured, is put back when its test ends ([Drop](#stimuli)), and a second avatar's group a `group` step changed is put back when the run ends ([Group](#stimuli)); a put back that fails fails the test (a drop) or is a cleanup warning (a group). A pending permission request is always answered and printed: denied (`permission denied`) unless an `allow permission` header names bits for the requesting object, which are granted (`permission granted to`) and the rest refused. On every exit after setup started, the runner removes the `slate probe` scripts and takes the bridge off, keeping it in inventory for the next run, printing `slate: cleanup: removed the probe from <n> prims, settling 6s after each` first (`1 prim` for one), and that line comes before the verdict, so the run's last line is its result; a 20-prim object can spend about two minutes settling after the result is known. A cleanup error is a warning and changes neither the exit code nor an earlier failure. Objects the product rezzed, a received item and a payment are not undone. The runner itself leaves nothing in the region, apart from an object a `rez` step made and whose delete failed, which the transcript names. A run killed mid-way can leave the bridge worn and probes in the product; the next run reuses or replaces them.
 
 ## Worked examples
 
@@ -1517,6 +1568,53 @@ expect say "pong" on 1 from object vendor within 1s
 ```
 
 
+### An item dropped into an object, and a texture onto a face
+
+A product that reacts to what is put into it or onto it. The first test drops the item in and expects the product's word that its contents changed; the second drops the same item onto face 2 and expects the product's word about the face. The `item` header names it once for both. After each test the runner takes out the copy it put in and sets face 2 back to the texture it had, and prints a line for each (`slate: removed "Example Red Swatch" from box`, `slate: restored panel face 2 to texture ...`), so the next run begins as this one did.
+
+```slate
+slate 1
+
+object box is "Example Box"
+object panel is "Example Panel"
+item swatch is "Example Red Swatch" in "Objects"
+
+test "an item dropped in is noticed" {
+  drop swatch into box
+  expect say "got it" on public from object box within 5s
+}
+
+test "a texture dropped on a face is noticed" {
+  drop swatch onto panel face 2
+  expect say "painted" on public from object panel within 5s
+}
+```
+
+If the tester may copy the texture but not give it away, the second test puts a copy into `panel` first, as a viewer does, and the runner removes that copy at the end of the test too. A texture the tester may not copy fails the step: `slate: step 1: "Example Red Swatch" may not be copied, ...`.
+
+### A second avatar in a group
+
+A product that lets a visitor in only while the visitor acts as the product's group. `group visitor "Example Group"` makes the second avatar's active group that one and returns when the simulator agrees; the touch is then the visitor's. A second test sets no group: `none` is the avatar acting as nobody. At the end of the run the visitor is put back to the group it had when the run began, and the transcript says `slate: cleanup: put the group of visitor back to what it was`. The run is given the avatar as any second avatar is (`--avatar visitor=example-two`).
+
+```slate
+slate 1
+
+object panel is "Example Panel"
+avatar visitor
+
+test "a member is let in" {
+  group visitor "Example Group"
+  touch panel anywhere as visitor
+  expect say "welcome" on public from object panel within 5s
+}
+
+test "an avatar with no group is turned away" {
+  group visitor none
+  touch panel anywhere as visitor
+  expect say "members only" on public from object panel within 5s
+}
+```
+
 ## Known limitations
 
 Each is discussed under [Open questions](slate-runner.md#open-questions).
@@ -1527,6 +1625,9 @@ Each is discussed under [Open questions](slate-runner.md#open-questions).
 - A button reading is the finder's count. A label the finder never reads is a count of 0, which is why `becomes gone` is the form to write. A planar or animated face is no reading.
 - A guarded touch takes no `button N`: two tuples fail the step, and it is not a way to choose one.
 - `wear` and `rez` take an item from a top-level folder by name. The runner does not take off what a test wore.
+- `drop` takes an item from a top-level folder by name, as `wear` and `rez` do, and is the tester's alone. It refuses an item the tester may not copy, since the drop would move it out of inventory and the run could not give it back. A non-owner's drop into an object that has `llAllowInventoryDrop` on, which a product reacts to with `CHANGED_ALLOWED_DROP`, is a later extension: `drop ... as NAME` is a static error today. The copy a drop made is found by its id once it shows in the object's contents, and the step fails when it does not show, which includes a product that takes a dropped item out again faster than the contents are read.
+- `drop ... onto` sets a texture on one face, and only a plain texture: a drop onto a face that has a PBR material is not modelled. Putting the face's texture back at the end of a test is itself a texture change.
+- `group` sets a second avatar's active group and nothing else about it: not the group's title, not the avatar's role. The tester's group is never set. A group is put back at the end of the run, not between tests, and a put back that fails is a warning only.
 - A worn HUD's position and size are read (`expect position`, `expect size`), as an offset in the HUD's own frame and a scale. Where it is on the screen is not: an expectation such as `expect position hud on screen at X Y` is not built, and the author works the offset out from the drag and the world view's height, as [the worked example](#move-and-resize-a-hud-by-its-glass) does.
 - `touch ... button` does not use `Pick` yet: a button hidden behind another prim of a worn HUD is not reported as hidden, because the finder reads the picture of the face and does not ask what the viewer would press at that point.
 - A child prim is named with `link N`, whose numbers come from the object store when there is no probe. The store cannot give the order of a set that several prims joined in one update while it watched, nor one it took from another agent, and `link N` on such a set fails with `the link order of "<name>" is not known; a probe, or taking and rezzing it, gives it`. A probe gives the order, but only in a product the tester owns; taking the object and rezzing it again makes the store know it ([Link numbers](objects.md#link-numbers)). A daemon older than the link numbers reports every order as not known. The link messages `send` and `expect link` always need a probe.

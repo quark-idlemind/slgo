@@ -328,12 +328,36 @@ type invItem struct {
 	id, folder msg.UUID
 	name       string
 	typ        int
+
+	// An item that says what it is made of: its asset (the item's own id
+	// when zero) and the owner's permissions (none are served when zero).
+	asset     msg.UUID
+	ownerMask uint32
 }
 
 func (v *fakeInv) add(folder, id msg.UUID, name string, typ int) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	v.items = append(v.items, invItem{id, folder, name, typ})
+	v.items = append(v.items, invItem{id: id, folder: folder, name: name, typ: typ})
+}
+
+// addAsset is add for an item with an asset of its own and the owner's
+// permissions.
+func (v *fakeInv) addAsset(folder, id msg.UUID, name string, typ int, asset msg.UUID, ownerMask uint32) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.items = append(v.items, invItem{id: id, folder: folder, name: name, typ: typ, asset: asset, ownerMask: ownerMask})
+}
+
+// setOwnerMask changes the owner's permissions on an item already added.
+func (v *fakeInv) setOwnerMask(id msg.UUID, mask uint32) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for i := range v.items {
+		if v.items[i].id == id {
+			v.items[i].ownerMask = mask
+		}
+	}
 }
 
 // withInventory serves an inventory with a Scripts and an Objects folder
@@ -405,8 +429,15 @@ func (v *fakeInv) serve(w http.ResponseWriter, r *http.Request) {
 		if it.folder != id {
 			continue
 		}
-		fmt.Fprintf(&b, `<key>%s</key><map><key>item_id</key><string>%s</string><key>parent_id</key><string>%s</string><key>asset_id</key><string>%s</string><key>name</key><string>%s</string><key>desc</key><string></string><key>type</key><integer>%d</integer><key>inv_type</key><integer>%d</integer><key>flags</key><integer>0</integer><key>created_at</key><integer>1265521621</integer></map>`,
-			it.id, it.id, id, it.id, it.name, it.typ, it.typ)
+		asset, perms := it.id, ""
+		if !it.asset.IsZero() {
+			asset = it.asset
+		}
+		if it.ownerMask != 0 {
+			perms = fmt.Sprintf(`<key>permissions</key><map><key>owner_mask</key><integer>%d</integer></map>`, it.ownerMask)
+		}
+		fmt.Fprintf(&b, `<key>%s</key><map><key>item_id</key><string>%s</string><key>parent_id</key><string>%s</string><key>asset_id</key><string>%s</string><key>name</key><string>%s</string><key>desc</key><string></string><key>type</key><integer>%d</integer><key>inv_type</key><integer>%d</integer><key>flags</key><integer>0</integer><key>created_at</key><integer>1265521621</integer>%s</map>`,
+			it.id, it.id, id, asset, it.name, it.typ, it.typ, perms)
 	}
 	b.WriteString(`</map><key>links</key><map/></map></map></llsd>`)
 	w.Header().Set("Content-Type", "application/llsd+xml")

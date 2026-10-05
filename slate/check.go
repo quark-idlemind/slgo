@@ -79,7 +79,7 @@ type checker struct {
 	curTest  *Test
 	suffix   string                // names the test and do calls for a step from a sequence
 	world    map[string][]worldUse // in-world names of the object headers, with their descriptions
-	items    map[string]Span       // item headers: not bindings of the grid, only wear and rez use them
+	items    map[string]Span       // item headers: not bindings of the grid, only wear, rez and drop use them
 	gone     map[string]Span       // names taken off in this test, and where
 	phase    Phase                 // the part of the test the step being checked came from
 	probes   map[string]Probe
@@ -527,6 +527,9 @@ func (c *checker) budget(st Step) time.Duration {
 }
 
 func (c *checker) stimulus(s *Stimulus, same map[string]bool) error {
+	if s.OtherAs != nil && s.Group != nil {
+		return c.err(s.OtherAs.Span, "group names the avatar whose group is set (group NAME \"Group Name\"); an as does not follow it")
+	}
 	if s.OtherAs != nil {
 		return c.err(s.OtherAs.Span, "%s stays the tester's: a second avatar only touches, drags a face, says, chooses and answers (a second avatar never pays)", stimulusWord(s))
 	}
@@ -557,6 +560,10 @@ func (c *checker) stimulus(s *Stimulus, same map[string]bool) error {
 		return c.rezItem(s.Rez)
 	case s.TakeOff != nil:
 		return c.ref(s.TakeOff.Name, same)
+	case s.Drop != nil:
+		return c.drop(s.Drop, same)
+	case s.Group != nil:
+		return c.setGroup(s.Group)
 	default:
 		return c.err(s.Span, "stimulus has no body")
 	}
@@ -581,6 +588,8 @@ func stimulusWord(s *Stimulus) string {
 		return "rez"
 	case s.TakeOff != nil:
 		return "take off"
+	case s.Drop != nil:
+		return "drop"
 	case s.Drag != nil && s.Drag.Screen != nil:
 		return "drag on screen"
 	}
@@ -648,6 +657,54 @@ func (c *checker) rezItem(r *RezItem) error {
 	c.bound[as] = r.As.Span
 	c.names[as] = r.As.Span
 	c.wornAt[as] = notWorn
+	return nil
+}
+
+// drop checks drop ITEM into OBJ and drop ITEM onto OBJ face N. ITEM is an
+// item header, OBJ an object binding. A drop is the tester's alone: the
+// as of a second avatar is refused by stimulus.
+// Why: doc/slate-language.md#static-checks
+func (c *checker) drop(d *Drop, same map[string]bool) error {
+	if _, ok := c.items[d.Item.Text]; !ok {
+		if _, obj := c.bound[d.Item.Text]; obj {
+			return c.err(d.Item.Span, "%s is an object; drop takes an item (item NAME is \"item\" in \"folder\")", d.Item.Text)
+		}
+		return c.err(d.Item.Span, "%s is not an item", d.Item.Text)
+	}
+	if err := c.ref(d.Name, same); err != nil {
+		return err
+	}
+	if d.Link != nil {
+		if err := c.linkRange(*d.Link); err != nil {
+			return err
+		}
+	}
+	if d.Onto {
+		v, err := c.fit(d.Face, "face")
+		if err != nil {
+			return err
+		}
+		if v < 0 {
+			return c.err(d.Face.Span, "face %d is below 0", v)
+		}
+	}
+	return nil
+}
+
+// setGroup checks group NAME "Group Name" and group NAME none: NAME is a
+// second avatar, never the tester, whose active group decides where it
+// may build and which a test does not change.
+// Why: doc/slate-language.md#static-checks
+func (c *checker) setGroup(g *SetGroup) error {
+	if g.Avatar.Text == "tester" {
+		return c.err(g.Avatar.Span, "group stays off the tester: its active group decides where it may build, and a test does not change it; group takes a second avatar")
+	}
+	if err := c.avatarRef(g.Avatar); err != nil {
+		return err
+	}
+	if !g.None && g.Group == "" {
+		return c.err(g.GroupSpan, "a group is named by a non-empty string, or none")
+	}
 	return nil
 }
 
@@ -1707,7 +1764,7 @@ func (c *checker) ref(id Ident, same map[string]bool) error {
 		return c.err(id.Span, "%s was taken off at line %d; it cannot be used again in this test", id.Text, at.Line)
 	}
 	if _, ok := c.items[id.Text]; ok {
-		return c.err(id.Span, "%s is an item; only wear and rez use an item", id.Text)
+		return c.err(id.Span, "%s is an item; only wear, rez and drop use an item", id.Text)
 	}
 	if _, ok := c.avatars[id.Text]; ok {
 		return c.err(id.Span, "%s is an avatar, not an object; only as and to take an avatar", id.Text)

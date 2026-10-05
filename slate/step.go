@@ -486,6 +486,10 @@ func (s *stepRun) stimulusFor(st *Stimulus) (*stimulus, error) {
 		return s.rezStimulus(st.Rez)
 	case st.TakeOff != nil:
 		return s.takeOffStimulus(st.TakeOff)
+	case st.Drop != nil:
+		return s.dropStimulus(st.Drop)
+	case st.Group != nil:
+		return s.groupStimulus(st.Group)
 	}
 	return nil, notYet("this stimulus")
 }
