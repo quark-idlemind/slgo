@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -685,7 +686,15 @@ func TestAHandshakeArrivingBehindTheMovementStillNamesTheNewRegion(t *testing.T)
 // region it had not reached around a position in the one it had not yet
 // left.
 func TestTheNewRegionsNameIsNotTakenBeforeTheAvatarIsThere(t *testing.T) {
-	a, from, to := twoRegions(t, Options{SkipCaps: true})
+	// Every packet dropped as a duplicate, kept for the failure message below.
+	var dupMu sync.Mutex
+	var dups []string
+	a, from, to := twoRegions(t, Options{SkipCaps: true, OnDuplicate: func(p *msg.Packet) {
+		dupMu.Lock()
+		defer dupMu.Unlock()
+		dups = append(dups, fmt.Sprintf("%s %T seq %d flags %#x from %v",
+			time.Now().Format("15:04:05.000"), p.Message, p.Header.Sequence, p.Header.Flags, p.Addr))
+	}})
 	to.sim.mu.Lock()
 	to.sim.lateMovement = true
 	to.sim.mu.Unlock()
@@ -705,7 +714,15 @@ func TestTheNewRegionsNameIsNotTakenBeforeTheAvatarIsThere(t *testing.T) {
 	}
 
 	if err := <-moved; err != nil {
-		t.Fatalf("moveTo: %v", err)
+		// What each side did, so that one failure says where the
+		// movement went: the simulator's sends (was it written?), the
+		// session's duplicates, and what the receiver and the
+		// dispatcher counted.
+		dupMu.Lock()
+		dropped := append([]string(nil), dups...)
+		dupMu.Unlock()
+		t.Fatalf("moveTo: %v\nthe new simulator sent:\n  %s\ndropped as duplicates: %q\nreceiver: %+v\ndispatcher: %+v",
+			err, strings.Join(to.sim.sentLog(), "\n  "), dropped, a.Recv.Stats(), a.Disp.Stats())
 	}
 	if got := a.RegionName(); got != to.sim.regionNm {
 		t.Errorf("region = %q after the move, want %q", got, to.sim.regionNm)

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -58,6 +59,18 @@ type fakeSim struct {
 	// counts the packets it has written; see hush.
 	hushed *net.UDPAddr
 	wrote  int
+
+	// sent is every message send was asked for, with its number, when,
+	// and whether it went: what a test that waited in vain prints, so
+	// that a failure seen once says which side lost the packet.
+	sent []string
+}
+
+// sentLog is what the simulator was asked to send, in order.
+func (f *fakeSim) sentLog() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.sent...)
 }
 
 // waitSeen blocks until the simulator has received a message, or the
@@ -269,9 +282,16 @@ func (f *fakeSim) react(name string) {
 const lateBy = 300 * time.Millisecond
 
 func (f *fakeSim) send(m msg.Message, flags uint8) {
-	if out := f.packet(m, flags); out != nil {
-		f.write(out)
+	out := f.packet(m, flags)
+	if out == nil {
+		return
 	}
+	h, _, _ := msg.DecodeHeader(out)
+	wrote := f.write(out)
+	f.mu.Lock()
+	f.sent = append(f.sent, fmt.Sprintf("%s %s seq %d written %v",
+		time.Now().Format("15:04:05.000"), m.MsgInfo().Name, h.Sequence, wrote))
+	f.mu.Unlock()
 }
 
 // packet numbers and encodes a message without sending it, so that one
@@ -290,7 +310,7 @@ func (f *fakeSim) packet(m msg.Message, flags uint8) []byte {
 	return append(out, body...)
 }
 
-func (f *fakeSim) write(out []byte) {
+func (f *fakeSim) write(out []byte) bool {
 	f.mu.Lock()
 	peer := f.peer
 	quiet := peer == nil || f.hushed != nil &&
@@ -300,9 +320,10 @@ func (f *fakeSim) write(out []byte) {
 	}
 	f.mu.Unlock()
 	if quiet {
-		return
+		return false
 	}
-	f.conn.WriteToUDP(out, peer)
+	_, err := f.conn.WriteToUDP(out, peer)
+	return err == nil
 }
 
 // hush stops this simulator writing to the circuit it is talking to now,

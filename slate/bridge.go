@@ -412,11 +412,13 @@ func (r *runner) isProtocol(l sl.Line) bool {
 }
 
 // cleanup undoes what setup did, once, on every exit after the bridge
-// began: the probes, then the bridge script, then the bridge is taken
+// began: the second avatars' groups a step changed (restoreGroups), then
+// the probes, then the bridge script, then the bridge is taken
 // off. Every failure is a warning. It runs after a cancel, so it does not
 // take the run's own context.
 // Why: doc/slate-runner.md#cleanup-and-what-a-failure-leaves-behind
 func (r *runner) cleanup(ctx context.Context) {
+	r.restoreGroups(ctx)
 	pr := r.pr
 	if pr == nil || pr.done {
 		return

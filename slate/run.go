@@ -47,6 +47,12 @@ type second struct {
 	name string
 	sess *sl.Session
 	ims  <-chan *sl.IM
+
+	// The active group it had when the run began, read at setup for an
+	// avatar a group step names (group.go), and whether a step changed it.
+	group     msg.UUID
+	groupRead bool
+	changed   bool
 }
 
 // setupSeconds matches the file's avatar headers to the sessions given,
@@ -361,6 +367,7 @@ func (r *runner) setupSteps() []setupStep {
 	return []setupStep{
 		{"objects", r.setupObjects},
 		{"items", r.setupItems},
+		{"groups", r.setupGroups},
 		{"linksets", r.setupLinksets},
 		{"probe", r.setupProbe},
 		{"click", r.setupClick},
@@ -464,7 +471,9 @@ type testRun struct {
 	failed      bool
 	afterFailed bool
 	dropped     string
-	rezzed      []*rezzed // what rez steps made, deleted at the end (rezitem.go)
+	rezzed      []*rezzed  // what rez steps made, deleted at the end (rezitem.go)
+	drops       []*dropped // what drop steps changed, put back at the end (drop.go)
+	late        []lateDrop // drops whose copy had not shown when the step gave up (drop.go)
 	blocks      []*failBlock
 }
 
@@ -546,8 +555,9 @@ func (r *runner) dropped() string {
 }
 
 // finish ends a test: an unconsumed hold is forgotten and reported, the
-// failure blocks are printed with it, what its rez steps made is deleted
-// (a delete that fails fails the test), and the as bindings go with t.
+// failure blocks are printed with it, what its drop steps changed is put
+// back and what its rez steps made is deleted (either that fails fails
+// the test), and the as bindings go with t.
 // Why: doc/slate-runner.md#dialog-hold
 func (t *testRun) finish(ctx context.Context) {
 	t.r.denyPermissions()
@@ -559,11 +569,20 @@ func (t *testRun) finish(ctx context.Context) {
 	if t.dropped != "" {
 		t.r.printf("slate: %s", t.dropped)
 	}
+	// What a drop changed in an object goes back before the objects a rez
+	// made are deleted.
+	var could []string
+	if undone := t.undoDrops(ctx); len(undone) > 0 {
+		could = append(could, "put back "+strings.Join(undone, ", "))
+	}
 	if undeleted := t.deleteRezzed(ctx); len(undeleted) > 0 {
+		could = append(could, "delete "+strings.Join(undeleted, ", "))
+	}
+	if len(could) > 0 {
 		wasPassing := !t.failed
 		t.failed = true
 		if wasPassing {
-			t.r.printf("slate: fail test %q: could not delete %s", t.et.Test.Name, strings.Join(undeleted, ", "))
+			t.r.printf("slate: fail test %q: could not %s", t.et.Test.Name, strings.Join(could, "; could not "))
 		}
 	}
 	if !t.failed {

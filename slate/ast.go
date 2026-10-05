@@ -346,7 +346,7 @@ type Avatar struct {
 }
 
 // Item is one item header: an inventory item, by name, in a top-level
-// folder. Name is the script binding, which only wear uses.
+// folder. Name is the script binding, which wear, rez and drop use.
 type Item struct {
 	Span       Span
 	Name       Ident
@@ -398,6 +398,8 @@ type Stimulus struct {
 	Wear    *Wear
 	Rez     *RezItem
 	TakeOff *TakeOff
+	Drop    *Drop
+	Group   *SetGroup
 
 	// OtherAs is an as NAME written after a stimulus that is the
 	// tester's alone; Check refuses it.
@@ -426,6 +428,29 @@ type RezItem struct {
 
 // TakeOff is take off NAME: the binding stops being usable.
 type TakeOff struct{ Name Ident }
+
+// Drop is drop ITEM into OBJ (link N)? or drop ITEM onto OBJ (link N)? face N:
+// an inventory item put into a prim's contents, or a texture put on one
+// face. Item is an item header; Name is the object. Face is set only with
+// Onto.
+// Why: doc/slate-language.md#stimuli
+type Drop struct {
+	Item Ident
+	Onto bool
+	Name Ident
+	Link *Int
+	Face Int
+}
+
+// SetGroup is group NAME "Group Name" or group NAME none: the active group
+// of the second avatar NAME. Group is as written; None is the word none.
+// Why: doc/slate-language.md#stimuli
+type SetGroup struct {
+	Avatar    Ident
+	Group     string
+	GroupSpan Span
+	None      bool
+}
 
 // Touch is touch OBJ, then anywhere, a link, a face, or a button.
 // A link with no further refine is the zero touch on that prim.
