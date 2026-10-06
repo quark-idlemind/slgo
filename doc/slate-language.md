@@ -77,6 +77,7 @@ drag from to over press dwell say on as tester owner of avatar anyone
 public debug direct sit stand wait choose answer send num key
 expect no within then dialog textbox texture offset repeats rotation
 position size turn click give rez name description heard by reason only null
+light projector intensity radius falloff fov focus ambiance
 all others children this root
 buy play open media zoom disabled none
 matching becomes changes original
@@ -180,7 +181,7 @@ expectation = "expect" "no"? expectbody tolerance? ("within" duration)? ("as" ca
 tolerance   = "near" number "percent"?
 expectbody  = sayexp / dialogexp / boxexp / textureexp / offsetexp
             / repeatsexp / rotationexp / positionexp / sizeexp / turnexp / clickexp
-            / textexp / fullbrightexp / glowexp / colourexp / alphaexp / alphamodeexp / materialexp
+            / lightexp / projectorexp / textexp / fullbrightexp / glowexp / colourexp / alphaexp / alphamodeexp / materialexp
             / buttonexp / attachexp
             / giveexp / rezexp / linkexp
 
@@ -206,6 +207,12 @@ positionexp = "position" binding link? ( "changes" / state vecval )
 sizeexp     = "size" binding link? ( "changes" / state vecval )
 turnexp     = "turn" binding link? ( "changes" / state vecval )   (* vecval is Euler degrees X Y Z *)
 clickexp    = "click" binding link? ( "changes" / state clickval )
+lightexp    = "light" binding link? ( "changes" / state onoff
+                                    / lightprop ( "changes" / state ( numval / triple ) ) )
+lightprop   = "colour" / "intensity" / "radius" / "falloff"   (* colour takes a triple, the rest a number *)
+projectorexp = "projector" binding link? ( "changes" / state ( "off" / uuidval )
+                                         / projprop ( "changes" / state numval ) )
+projprop    = "fov" / "focus" / "ambiance"
 textexp     = "text" binding link? ( "changes" / state textval )
 textval     = "original" / "any" / text      (* any only after is, with as *)
 fullbrightexp = "fullbright" binding link? faceall ( "changes" / state onoff )
@@ -265,7 +272,7 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Avatars | An `avatar` binding is neither an object nor an item and shares their names: a name bound twice (`X is already bound`), by an `avatar`, an `object`, an `item`, or by the name `wear`, `rez` or a rez expectation binds, is refused. An avatar is used only after `as` on `touch`, a face `drag`, `say`, `choose` and `answer`, after `to` on `dialog`, `textbox` and `give` expectations, after `from avatar` on `say`, and as the first name of `group`. A name that is not an avatar there is `X is not an avatar; declare it with avatar X and give it with --avatar`, an object there is `X is an object, not an avatar`, and an avatar where an object is wanted is `X is an avatar, not an object`. `as NAME` on `pay`, `sit`, `stand`, `wait`, `send`, `take off`, `drop` and `drag ... on screen` is `<stimulus> stays the tester's: a second avatar only touches, drags a face, says, chooses and answers (a second avatar never pays)`; `wear` and `rez` take `as` for the new object, and an avatar's name there is `X is a second avatar, and a second avatar never wears` (`rezzes`). The check does not know whether the run is given the avatar: that is a setup error ([A second avatar](#a-second-avatar)). |
 | Items | An item binding is not an object: it is used only by `wear`, `rez` and `drop`, and any other use is `X is an item; only wear, rez and drop use an item`. The item name and the folder name are non-empty after trimming. |
 | Drop | `drop` takes an item and an object (`X is an object; drop takes an item`, or `X is not an item`; the object is checked as any reference is). `link N` is 0 or more and `face N` is 0 or more, and each fits an integer. A drop is the tester's alone: `drop ... as NAME` is `drop stays the tester's: a second avatar only touches, ...`. |
-| Near | `near` is read after any expectation, and only a state expectation of a number takes one: position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness and environment. On any other, `say`, `dialog`, `textbox`, `give`, `rez`, `link`, `attached`, `button`, `texture`, `click`, `text`, `fullbright`, `alphamode`, `normalmap` or `specularmap`, it is refused with `<word> takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness and environment are numbers a reading can be off by`, and beside `is any` with `is any takes no near: it matches whatever the reading is`. The number is exact and above 0 (`near 0 is not above 0; leave near out to compare as the reading is quantised`); with `percent` it is at most 100 (`near 100.5 percent is above 100`). A rotation takes no `percent` (`a rotation takes near in turns, not percent: an angle has no size to be a share of`), and neither does a turn (`a turn takes near in degrees, not percent: an angle has no size to be a share of`). |
+| Near | `near` is read after any expectation, and only a state expectation of a number takes one: position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment, and the numbers of a light and a projector. On any other, `say`, `dialog`, `textbox`, `give`, `rez`, `link`, `attached`, `button`, `texture`, `click`, `text`, `fullbright`, `alphamode`, `normalmap`, `specularmap`, a `light` with no property word or a `projector` with none, it is refused with `<word> takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment and the numbers of a light or a projector are numbers a reading can be off by`, and beside `is any` with `is any takes no near: it matches whatever the reading is`. The number is exact and above 0 (`near 0 is not above 0; leave near out to compare as the reading is quantised`); with `percent` it is at most 100 (`near 100.5 percent is above 100`). A rotation takes no `percent` (`a rotation takes near in turns, not percent: an angle has no size to be a share of`), and neither does a turn (`a turn takes near in degrees, not percent: an angle has no size to be a share of`). |
 | Group | `group` names a second avatar, declared with an `avatar` header (`X is not an avatar; ...`, `X is an object, not an avatar`). `group tester ...` is refused: `group stays off the tester: its active group decides where it may build, and a test does not change it; group takes a second avatar`. The group is a non-empty string or the word `none`; a quoted `"none"` is a group of that name. An `as` after it is `group names the avatar whose group is set (group NAME "Group Name"); an as does not follow it`. Whether the avatar has joined the group is not known here: that fails the step. |
 | Probes | The identifier is an object binding, with at most one probe per object. A probe has no channels; the runner picks them. |
 | Listens | Each `listen` channel is a 32-bit integer, not 0 and not 2147483647. Duplicates are an error, and there are at most 63 of them. The bridge script opens one listen for its own control channel and one per `listen` channel; LSL allows 65 in one script (published, not measured here), and one is kept spare. |
@@ -282,12 +289,13 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Tests | A `test` name is a non-empty string, unique in the file, and there is at least one test in a suite. At most one `before each` and at most one `after each`. Top-level items may come in any order. |
 | Sequences | Sequence names are unique. A `do` names a defined sequence (it may be defined after its use). A sequence may `do` another but not cyclically; a cycle or an undefined name is an error. The other checks run on each test's expanded steps, so a sequence no test calls is checked only for its `do` calls. |
 | Matching | A `matching` pattern is a regular expression in Go's RE2 syntax and must compile. `matching` is legal only where the grammar writes `text`: `say`, `dialog` and `textbox` message, a `dialog` button clause, `give`, `rez` name and description, link text, a floating text expectation, and an object's `description`; and in `choose matching` and `sorted matching`, which take a string. |
-| State words | `becomes`, `changes`, `original` and `any` are legal only on the state expectations (texture, offset, repeats, rotation, position, size, turn, click, text, fullbright, glow, colour, alpha, alphamode, normalmap, specularmap, glossiness, environment, and the button reading, which has no `any`; alphamode has no `any` either). `changes` takes no value; `is` and `becomes` require one. |
+| State words | `becomes`, `changes`, `original` and `any` are legal only on the state expectations (texture, offset, repeats, rotation, position, size, turn, light, projector, click, text, fullbright, glow, colour, alpha, alphamode, normalmap, specularmap, glossiness, environment, and the button reading, which has no `any`; alphamode has no `any` either). `changes` takes no value; `is` and `becomes` require one. |
 | Length | A `say` on a negative channel is at most 254 bytes (it travels as a dialog reply). A `say` on any other channel is at most 1023 bytes, so the chat field does not cut it. An `answer` body is at most 254 bytes. A `send` text, once quoted, must leave the whole relayed control line within 1023 bytes, because the tester sends the command to the worn bridge as one chat line on a positive channel (measured: a 1000-byte line arrived whole). `choose` has no length check; a label the dialog did not offer fails at the step. A capture used in `send` text is checked at the step, before anything is sent. |
 | Link text | A `send` text, and a link expectation's literal text, is printable ASCII (0x20 to 0x7E) plus tab and newline, written `\t` and `\n`. The probe's length check is then a character count, and any other character is a static error rather than a mangled report. A capture used as link text is checked at the step. A `matching` pattern on a link expectation is not limited to that character set, because only a literal is put on the wire. |
 | Floats | An offset or rotation literal lies in [−1, 1]. Repeats are unrestricted. `original`, `any` and a capture are not literals and are not range-checked. |
 | Position and size | A `position` or `size` literal is three numbers. A position may be any number, negative or zero. Each of the three numbers of a size is above 0: `size 0 is not above 0`. `link N` is checked as on every expectation, and neither has a `face`. |
 | Turn | A `turn` literal is three numbers, Euler degrees X Y Z, each any number, negative, zero or past 360. `link N` is checked as on every expectation, and there is no `face`. |
+| Light and projector | `light` and `projector` take no `face`, and `link N` is checked as on every expectation. A property word of a light is `colour`, `intensity`, `radius` or `falloff`, and of a projector `fov`, `focus` or `ambiance`; the other kind's word is `expected is, becomes, or changes`. A light's literal is `on` or `off`, and a projector's is a texture id or `off`. A light colour is three numbers and an intensity one, each in 0 to 1 (`light colour 1.5 is outside 0 to 1`); a radius, falloff, field of view, focus and ambiance are any exact number. A capture has the type of what is read: on or off, a triple, a number, a texture id. Only a property takes `near`. |
 | Floating text | A `text` expectation takes a string, `matching "RE"`, `original`, `any` (after `is`, with `as`) or a capture. A pattern must compile, and its named groups bind text as in any other `matching` clause. A capture must be text: one bound by `say`, `dialog`, `textbox`, `give` or another `text`, and a text capture is usable here and wherever text is. `link N` is checked as on every expectation, and there is no `face`. |
 | Material maps | A `normalmap` or `specularmap` takes a uuid, `none`, `original`, `any` (after `is`, with `as`) or a uuid capture; another word is `expected a UUID, none or original`. A `glossiness` or `environment` takes a number, `original`, `any` or a number capture. A capture of the one kind is refused where the other is wanted (`capture type mismatch`), and a `face all` capture is for `face all`, as for every face property. `near` is refused on a map and allowed on a level. |
 | Alpha mode | An `alphamode` expectation names one face: `face all` is refused (`alphamode reads one face's material at a time; there is no face all`). Its value is `default`, `none`, `blend`, `mask`, `emissive` or `original`; `any` and a capture are parse errors as its value, since a mode is a word; `as $x` after it binds the mode as text ([Captures](#expectations)), and a text capture is usable wherever text is, a `say` expectation's text for one, and is refused where a uuid, a number or any other type is wanted. `link N` is checked as on every expectation. |
@@ -615,7 +623,7 @@ A text box does not match `expect dialog`. The matching dialog is held for the b
 
 **Text box.** The same as a dialog, for a text box, with a message that is a string or a pattern, no button list, and the same linkset and `link N` rules. Answer it with `answer`, not `choose`.
 
-**State expectations.** Texture, offset, repeats, rotation, position, size, turn, click, text, fullbright, glow, colour, alpha, alphamode, normalmap, specularmap, glossiness and environment are readings of state. Each takes one of three forms, and a value may be written `original`, as a capture (`$x`), or, after `is` only and with `as $x`, as `any`:
+**State expectations.** Texture, offset, repeats, rotation, position, size, turn, light, projector, click, text, fullbright, glow, colour, alpha, alphamode, normalmap, specularmap, glossiness and environment are readings of state. Each takes one of three forms, and a value may be written `original`, as a capture (`$x`), or, after `is` only and with `as $x`, as `any`:
 
 | Form | Passes when |
 |---|---|
@@ -627,7 +635,7 @@ A text box does not match `expect dialog`. The matching dialog is held for the b
 
 **Baseline.** A step's baseline for an expectation (taken again, afresh, when a `wait` in its step returns) is the latest reading of that face (or click byte) observed at or before the step's arm point, taken from the event log. The runner reads every prim and face that any state expectation in the test names, from the start of the test. If no reading exists at the arm point, the first reading after it is the baseline, and the transcript says so with a line `baseline for <object> face <n> taken after the arm point`.
 
-**Tolerances.** `changes` and `becomes` compare as `is` does: offset within 2/32767, repeats within 1e-4, rotation within 2/32768 of a turn, position and size within 0.001 m on each axis, turn within 0.007 degrees of angle, glow, colour and alpha within 1/255, texture, click, fullbright, alphamode, normalmap, specularmap, glossiness and environment exactly. A reading that differs from the baseline by less than the tolerance is not a change.
+**Tolerances.** `changes` and `becomes` compare as `is` does: offset within 2/32767, repeats within 1e-4, rotation within 2/32768 of a turn, position and size within 0.001 m on each axis, turn within 0.007 degrees of angle, glow, colour and alpha within 1/255, a light's colour and intensity within 1/255, a light's radius and falloff and a projector's field of view, focus and ambiance as the float32 they are, and texture, click, fullbright, alphamode, normalmap, specularmap, glossiness, environment, whether a light is on and a projector's texture exactly. A reading that differs from the baseline by less than the tolerance is not a change.
 
 **Near.** A file can widen the tolerance of one expectation with `near`, written after the value and before `within`:
 
@@ -638,7 +646,7 @@ expect position hud changes near 0.005 within 5s
 expect no alpha hud face 0 changes near 0.1 within 2s
 ```
 
-`near N` is an amount in the reading's own unit: metres for position and size, the same fraction of a face for offset and repeats, a fraction of a turn for rotation, degrees of angle for turn, and 0 to 1 for glow, colour and alpha, and a step of the 0 to 255 level for glossiness and environment. `near N percent` is a share of the wanted value, of each component by itself, and is refused on a turn, and on a rotation: a share of an angle depends on which of its equal spellings it is taken from (1 percent of 0.9972 is 0.01 turns, 1 percent of -0.0028 almost nothing), so a rotation takes `near N` in turns only. For a size, `size ... is 0.8 0.4 0.016 near 2 percent` allows 0.016, 0.008 and 0.00032. A resize that comes back about 1 percent off in each side is that share at any size, where an amount in metres says it for one size only. The word is `near` because `within` is time; it is one word, and `percent` is a word beside the number because `%` is not a character a file has. A share is of the value the reading is compared with, so it is no help for a component at or near 0: a percentage of 0 is nothing, and the component is compared with its quantisation. Use an amount for a position.
+`near N` is an amount in the reading's own unit: metres for position and size, the same fraction of a face for offset and repeats, a fraction of a turn for rotation, degrees of angle for turn, and 0 to 1 for glow, colour and alpha, and a step of the 0 to 255 level for glossiness and environment, and for a light's colour and intensity, and the number's own unit for a light's radius and falloff (metres for the radius) and a projector's field of view (radians), focus and ambiance. `near N percent` is a share of the wanted value, of each component by itself, and is refused on a turn, and on a rotation: a share of an angle depends on which of its equal spellings it is taken from (1 percent of 0.9972 is 0.01 turns, 1 percent of -0.0028 almost nothing), so a rotation takes `near N` in turns only. For a size, `size ... is 0.8 0.4 0.016 near 2 percent` allows 0.016, 0.008 and 0.00032. A resize that comes back about 1 percent off in each side is that share at any size, where an amount in metres says it for one size only. The word is `near` because `within` is time; it is one word, and `percent` is a word beside the number because `%` is not a character a file has. A share is of the value the reading is compared with, so it is no help for a component at or near 0: a percentage of 0 is nothing, and the component is compared with its quantisation. Use an amount for a position.
 
 - **Where it applies.** `is`, `becomes`, `changes`, the negative forms of each, and `original` or a capture as the value. With `changes`, a reading is a change when it is further from the baseline than the tolerance, so `changes near 0.005` says that a HUD moved by more than 5 mm. With `becomes`, the value must be left and reached again as before, both judged by the tolerance, so `becomes original near 0.005` checks that a HUD dragged away and back is back. With `face all`, each face is compared by itself.
 - **The norm.** Each component is compared by itself: every one has to be within the tolerance, and they are not combined. A position 4 mm out on each of three axes is within `near 0.005`. A turn is the exception: it is one angle, the angle of the rotation between the reading and the wanted value, and `near 1` allows one degree of it, however the error is spread over the three axes.
@@ -674,6 +682,24 @@ This is the `Position` of the prim's `sl.Seen`, and `Seen.Scale` for `size`; a p
 **Turn.** `expect turn OBJ [link N] (is X Y Z | becomes X Y Z | changes)` reads the prim's own rotation, which `rotation` is not: `rotation` is a face's texture rotation, and `turn` is how the prim itself is turned. The value is Euler degrees X Y Z, the three numbers the build tool shows for the prim, and the ones a script sets with `llEuler2Rot(<x, y, z> * DEG_TO_RAD)`. It takes no `face`, and a value may be `original`, a capture or, after `is` with `as`, `any`, as every state expectation does. What a rotation is depends on the prim, as a position does: a rezzed root's is in the region's frame, a child's (`link N`, N of 2 or more) is relative to its root, as the region reports it and without the root's turn composed into it, and a worn root's is relative to its attachment point. Those are read from the code and the protocol, as the child's position is, and not measured here ([Turn](slate-runner.md#turn)).
 
 The comparison is of rotations and not of the three numbers, because two triples can be one rotation: `180 0 0` and `0 180 180` are the same turn, and either one matches a prim set to the other. The reading and the wanted value are compared by the angle of the rotation that takes one to the other, in degrees. That angle is within 0.007 degrees, which is twice the most the region's quantisation of a rotation can lose, and `near N` widens it to N degrees: `expect turn lid link 2 becomes 0 45 0 near 0.5` allows half a degree of angle, however it is spread over the axes. A turn takes `near` in degrees and never `percent`. The transcript line is `turn <name> X Y Z`, the Euler degrees of the reading rounded to a thousandth of a degree, and `as $x` binds the numbers as that line prints them, which another `turn` can use. A capture rounded that way is within the default tolerance of the rotation it came from.
+
+**Light and projector.** A prim's point light and its projector are two of its extra parameters, and `light` and `projector` read them from the object store, as `turn` reads the rotation, with no request of their own.
+
+```text
+expect light OBJ [link N] (is on|off | becomes on|off | changes)
+expect light OBJ [link N] colour (is R G B | becomes R G B | changes)
+expect light OBJ [link N] intensity|radius|falloff (is N | becomes N | changes)
+expect projector OBJ [link N] (is TEXTURE|off | becomes TEXTURE|off | changes)
+expect projector OBJ [link N] fov|focus|ambiance (is N | becomes N | changes)
+```
+
+Each is one reading, so each takes `original`, a capture, `any` after `is` with `as`, `near` and `expect no`, as every state expectation does, and each has its own transcript line and its own capture type. They are separate words and not one expectation with several values (`is on colour 1 0 0 radius 5`) because a reading here is one value that is compared, remembered as a baseline and bound as a capture, and a combination would have to say which part of it `changes` or `becomes` is about. A test that wants the whole lamp writes a line for each part; the cost is that a state of two parts is two readings.
+
+A light is on while its block is in the prim's updates and off when an update has none: an update with no block is how the viewer learns a light is off, so that is what is read, and a block with zero intensity is a light that is on (read from the viewer, [Lights](lights.md#the-light); what the region sends when a script switches a light off was not seen). A projector is off when its block is not there, and a block with the null texture is off as well. The numbers of a light that is off, or of a prim with no projector, have no reading: nothing says what they are, so `expect light OBJ radius is 5` waits, and fails with no reading shown, until the light is on, and `expect no light OBJ radius ...` cannot pass on a prim that has none. A test that means "the light went out" says `light OBJ becomes off`.
+
+A colour is the three bytes the region sends over 255, which is the linear colour the viewer feeds its shaders, written as the 0 to 1 a script gives `PRIM_POINT_LIGHT`, and intensity is the fourth byte over 255. Both are compared within 1/255, one step of the byte. Radius, falloff, field of view, focus and ambiance are float32 on the wire and read whole: a literal is made a float32 as written and compared exactly, so `near` is for a number a script worked out. The field of view is in radians. That `PRIM_POINT_LIGHT`'s colour is the linear value, and that the region sends what a script set without changing it, are what the viewer and the protocol say and were not measured here ([Lights](lights.md#the-light)); `expect light OBJ colour` against a script's own number is the test of that, and a colour that comes back off by a curve says the region converts. The cutoff of a light is kept by the store and not read here: `PRIM_POINT_LIGHT` has no cutoff.
+
+The transcript lines are `light <name> on|off`, `light colour <name> R G B`, `light intensity|radius|falloff <name> N`, `projector <name> TEXTURE|off`, `projector fov|focus|ambiance <name> N`. An object is any binding, and a word of this production is a fixed word wherever it is written, so a prim may be called `light` or `radius`.
 
 **Floating text.** `expect text OBJ [link N] (is TEXT | becomes TEXT | changes)` reads the text a script puts above a prim with `llSetText`, as the object store holds it from the prim's last update. It takes no `face`. `TEXT` is what the other text clauses take: a string, `matching "RE"` (a Go RE2 expression, matched anywhere in the text unless anchored, whose named groups bind text), a text capture, `original`, or after `is` with `as $x`, `any`. A string is compared exactly, byte for byte, newlines and trailing spaces included; a prim with no text reads as the empty string, so `expect text sign is ""` says there is none, and `becomes "x"` after `is ""` is how a script's first `llSetText` is shown. `as $x` binds the whole text, and `link N`, the baseline, `original`, `becomes` meaning a change to a text and the negative forms are those of every state expectation. With a pattern, `becomes` needs a text that does not match before one that does, as it needs a reading that is not X before X: a sign that goes from "Example text 1" to "Example text 2" never `becomes matching "^Example text"`, since it matched all along. To see one matching text replaced by another, expect `changes` and then, in the next step, `is matching`. A floating text is at most 254 bytes. The reading is `Seen.Text` of the prim ([`sl/query.go`](../sl/query.go)); a poll reads it with no request of its own. Measured on the grid on 2026-10-03 with the test avatar and an invented box whose script called `llSetText` when touched: the text was in the store 96 to 171 ms after the touch, median 135 ms, in 20 of 20 touches, so the default window of 10 s has a wide margin and no `within` is needed ([Floating text](slate-runner.md#floating-text)).
 
@@ -762,7 +788,7 @@ expect button hud text "Open" box becomes shown within 8s
 | `as $x` after `say` | The line's text (the raw tail, for a channel the bridge forwards) | text |
 | `as $x` after `dialog` or `textbox` | The message | text |
 | `as $x` after `give` | The item's name; after `give folder`, the folder's | text |
-| `as $x` after a state expectation | The reading that matched; with `face all`, the tuple. After `turn`, the Euler degrees the transcript prints | its own type |
+| `as $x` after a state expectation | The reading that matched; with `face all`, the tuple. After `turn`, the Euler degrees the transcript prints; after `light` or `projector`, the value the line prints (on or off, a triple, a number, a texture id) | its own type |
 | `as $x` after `normalmap` or `specularmap` | The map's id, the null key for a face with none; with `face all`, the tuple | uuid |
 | `as $x` after `glossiness` or `environment` | The level, 0 to 255; with `face all`, the tuple | number |
 | `as $x` after `alphamode` | The mode as the transcript writes it: `default`, `none`, `blend`, `emissive`, or `mask 128` with the cutoff for a mask. It has no `face all`, so there is no tuple | text |
@@ -939,6 +965,11 @@ HH:MM:SS.mmm capture $<name> = <value> (step <N>)
 HH:MM:SS.mmm position <object> <x> <y> <z>
 HH:MM:SS.mmm size <object> <x> <y> <z>
 HH:MM:SS.mmm turn <object> <x> <y> <z>
+HH:MM:SS.mmm light <object> on|off
+HH:MM:SS.mmm light colour <object> <r> <g> <b>
+HH:MM:SS.mmm light intensity|radius|falloff <object> <n>
+HH:MM:SS.mmm projector <object> <texture>|off
+HH:MM:SS.mmm projector fov|focus|ambiance <object> <n>
 HH:MM:SS.mmm click <object> <byte>
 HH:MM:SS.mmm pay L$<amount> to "<name>" <uuid> reason "<reason>"
 HH:MM:SS.mmm probe link <object> heard-by <n> from <sender> num <num> [key <uuid>] "<text>"
@@ -1572,6 +1603,34 @@ expect turn jar link 2 becomes $shut within 8s
 ```
 
 `180 0 0` and `0 180 180` are one rotation, so a lid written either way is matched, and `$shut` is the three numbers of the first line as the transcript printed them.
+
+### A lamp that lights
+
+An invented lamp stands in a region with a script that lights it on a touch and puts it out on the next one. The lamp is the root; its shade is the second prim of the linkset and carries the point light. The script sets `PRIM_POINT_LIGHT` on the shade, `<1.0, 0.8, 0.4>` at full intensity and a radius of 8, and `PRIM_PROJECTOR` with a field of view of 1.2 radians. It starts off, and the next touch switches both off.
+
+```slate
+slate 1
+
+object lamp is "Example Lamp"
+
+expect light lamp link 2 is off within 5s
+expect projector lamp link 2 is off within 5s
+expect light lamp link 2 is any within 100ms as $before
+
+touch lamp link 2 anywhere
+expect light lamp link 2 becomes on within 5s
+expect light lamp link 2 colour is 1 0.8 0.4 within 5s
+expect light lamp link 2 intensity is 1 within 5s
+expect light lamp link 2 radius is 8 within 5s
+expect projector lamp link 2 fov becomes 1.2 near 0.01 within 5s
+expect no light lamp link 2 becomes off within 1s
+
+touch lamp link 2 anywhere
+expect light lamp link 2 becomes $before within 5s
+expect projector lamp link 2 becomes off within 5s
+```
+
+`0.8` and `0.4` are what the script wrote, and the region sends them as the bytes 204 and 102, which read back as the same two numbers within a step of the byte. `$before` is the reading of the first light line, which is the lamp off. The radius is the float32 8, so it is compared exactly, and the field of view is one a script works out from degrees, so it takes a `near`.
 
 ### A HUD worn for each test
 

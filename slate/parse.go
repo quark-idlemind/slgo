@@ -1390,6 +1390,10 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.vec3Exp(e, "size")
 	case p.kw("turn"):
 		return p.vec3Exp(e, "turn")
+	case p.kw("light"):
+		return p.lightExp(e, false)
+	case p.kw("projector"):
+		return p.lightExp(e, true)
 	case p.kw("click"):
 		return p.clickExp(e)
 	case p.kw("text"):
@@ -1902,6 +1906,91 @@ func (p *parser) vec3Exp(e *Expect, word string) error {
 		e.Position = v
 	}
 	return nil
+}
+
+// lightExp reads light or projector, the object, an optional property
+// word and the state, and its value.  The property word is read where the
+// state word would be, so the position holds one of two fixed words and
+// never a name.
+// Why: doc/slate-language.md#light-and-projector
+func (p *parser) lightExp(e *Expect, projector bool) error {
+	word := "light"
+	props := LightProps
+	if projector {
+		word, props = "projector", ProjectorProps
+	}
+	if err := p.want(word); err != nil {
+		return err
+	}
+	name, err := p.ident()
+	if err != nil {
+		return err
+	}
+	link, err := p.optLink()
+	if err != nil {
+		return err
+	}
+	x := &LightExp{Name: name, Link: link, Projector: projector}
+	for _, w := range props {
+		if p.kw(w) {
+			x.Prop, x.PropSpan = w, p.tok.span
+			if err := p.next(); err != nil {
+				return err
+			}
+			break
+		}
+	}
+	if x.State, err = p.state(); err != nil {
+		return err
+	}
+	if hasValue(x.State) {
+		if x.Any, x.Use, err = p.reading(); err != nil {
+			return err
+		}
+		if !x.Any && x.Use == nil {
+			if err := p.lightValue(x); err != nil {
+				return err
+			}
+		}
+	}
+	e.Light = x
+	return nil
+}
+
+// lightValue reads the literal a light or projector expectation compares
+// with, which is of the kind its property says.
+func (p *parser) lightValue(x *LightExp) error {
+	var err error
+	switch {
+	case x.Prop == "" && !x.Projector:
+		switch {
+		case p.kw("on"):
+			x.On = true
+		case p.kw("off"):
+		default:
+			return p.unexpected("expected on, off, original, or a capture")
+		}
+		return p.next()
+	case x.Prop == "" && x.Projector:
+		switch {
+		case p.kw("off"):
+			x.Off = true
+		case p.tok.kind == kUUID:
+			x.ID = p.tok.text
+		default:
+			return p.unexpected("expected a UUID, off, original, or a capture")
+		}
+		return p.next()
+	case x.Prop == "colour":
+		for _, n := range []*Number{&x.R, &x.G, &x.B} {
+			if *n, err = p.number(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	x.Num, err = p.number()
+	return err
 }
 
 func (p *parser) rotExp(e *Expect) error {

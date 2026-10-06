@@ -635,6 +635,8 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 			AttachPoint: 6, AttachItem: theChild.String(),
 			Click: 0, ClickKnown: true,
 			SculptKind: 5, SculptId: theChild.String(), LinkNumber: 3, LinkKnown: true,
+			Light:     &pb.PrimLight{Red: 255, Green: 128, Intensity: 0.5, Radius: 10, Cutoff: 1, Falloff: 0.75},
+			Projector: &pb.PrimProjector{Texture: theChild.String(), Fov: 1.5, Focus: -0.25, Ambiance: 0.125},
 		},
 		{Id: "not a uuid", Local: 78},
 	}
@@ -667,6 +669,12 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 	}
 	if o.Sculpt != (msg.SculptMark{Kind: msg.SculptMesh, ID: theChild}) {
 		t.Errorf("sculpt %+v, want a mesh of %s", o.Sculpt, theChild)
+	}
+	if o.Light == nil || *o.Light != (msg.Light{Colour: [3]uint8{255, 128, 0}, Intensity: 0.5, Radius: 10, Cutoff: 1, Falloff: 0.75}) {
+		t.Errorf("light %+v", o.Light)
+	}
+	if o.Projector == nil || *o.Projector != (msg.LightImage{Texture: theChild, FOV: 1.5, Focus: -0.25, Ambiance: 0.125}) {
+		t.Errorf("projector %+v", o.Projector)
 	}
 	if o.LinkNumber != 3 {
 		t.Errorf("link number %d, want 3", o.LinkNumber)

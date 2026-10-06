@@ -1451,6 +1451,34 @@ message ObjectInfo {
   // while the daemon watched leaves unknown.
   // Why: doc/objects.md#link-numbers
   bool link_known = 21;
+
+  // The point light and the projector of the prim, each present only
+  // while the prim has the block: a light switched off has none.
+  // Why: doc/lights.md
+  PrimLight light = 22;
+  PrimProjector projector = 23;
+}
+
+// PrimLight is the light block of a prim's extra parameters. The colour
+// is the three bytes of the wire, which are linear, and the intensity is
+// the fourth byte over 255.
+message PrimLight {
+  uint32 red = 1;
+  uint32 green = 2;
+  uint32 blue = 3;
+  float intensity = 4;
+  float radius = 5;
+  float cutoff = 6;
+  float falloff = 7;
+}
+
+// PrimProjector is the light image block: the texture, and the field of
+// view in radians, the focus and the ambiance.
+message PrimProjector {
+  string texture = 1;
+  float fov = 2;
+  float focus = 3;
+  float ambiance = 4;
 }
 
 // Quaternion is a rotation, unpacked: the wire form is three floats

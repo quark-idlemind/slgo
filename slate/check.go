@@ -1133,6 +1133,8 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 		return c.vec3(e, e.Size, "size", same)
 	case e.Turn != nil:
 		return c.vec3(e, e.Turn, "turn", same)
+	case e.Light != nil:
+		return c.lightExp(e, e.Light, same)
 	case e.Fullbright != nil:
 		x := e.Fullbright
 		if err := c.faceRef(x.Name, x.Link, x.Face, x.FaceAll, same); err != nil {
@@ -1227,6 +1229,11 @@ func nearWord(e Expect) string {
 		return "text"
 	case e.Fullbright != nil:
 		return "fullbright"
+	case e.Light != nil && e.Light.Prop == "":
+		if e.Light.Projector {
+			return "projector"
+		}
+		return "light"
 	case e.AlphaMode != nil:
 		return "alphamode"
 	case e.Material != nil && e.Material.IsMap():
@@ -1247,7 +1254,7 @@ func (c *checker) near(e Expect) error {
 	}
 	n := e.Near
 	if w := nearWord(e); w != "" {
-		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness and environment are numbers a reading can be off by", w)
+		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment and the numbers of a light or a projector are numbers a reading can be off by", w)
 	}
 	if e.Turn != nil && n.Percent {
 		return c.err(n.Span, "a turn takes near in degrees, not percent: an angle has no size to be a share of")
@@ -1277,6 +1284,8 @@ func (c *checker) near(e Expect) error {
 		any = e.Alpha.Any
 	case e.Material != nil:
 		any = e.Material.Any
+	case e.Light != nil:
+		any = e.Light.Any
 	}
 	if any {
 		return c.err(n.Span, "is any takes no near: it matches whatever the reading is")
@@ -1317,6 +1326,62 @@ func (c *checker) buttonExp(x *ButtonExp, same map[string]bool) error {
 		if v < 0 {
 			return c.err(x.Count.Span, "count %d is below 0", v)
 		}
+	}
+	return nil
+}
+
+// lightType is the type of what a light or projector expectation reads.
+func lightType(x *LightExp) CaptureType {
+	switch {
+	case x.Prop == "colour":
+		return CapTriple
+	case x.Prop != "":
+		return CapNumber
+	case x.Projector:
+		return CapUUID
+	}
+	return CapOnOff
+}
+
+// lightExp checks light and projector: the object, its link, the reading,
+// and that a literal is a number the thing can have.  A light's colour and
+// intensity are 0 to 1, as a face's colour is; the others are only
+// numbers, since the region's own limits are the region's to say.
+// Why: doc/slate-language.md#light-and-projector
+func (c *checker) lightExp(e Expect, x *LightExp, same map[string]bool) error {
+	if err := c.ref(x.Name, same); err != nil {
+		return err
+	}
+	if err := c.linkN(x.Name, x.Link); err != nil {
+		return err
+	}
+	lit, err := c.reading(e, x.State, x.Any, x.Use, lightType(x), same)
+	if err != nil || !lit {
+		return err
+	}
+	switch x.Prop {
+	case "":
+		return nil
+	case "colour":
+		for _, n := range []Number{x.R, x.G, x.B} {
+			if err := c.unitLevel(n, "light colour"); err != nil {
+				return err
+			}
+		}
+		return nil
+	case "intensity":
+		return c.unitLevel(x.Num, "light intensity")
+	}
+	return c.exact(x.Num)
+}
+
+// unitLevel checks an exact number in 0 to 1.
+func (c *checker) unitLevel(n Number, what string) error {
+	if err := c.exact(n); err != nil {
+		return err
+	}
+	if n.Value < 0 || n.Value > 1 {
+		return c.err(n.Span, "%s %g is outside 0 to 1", what, n.Value)
 	}
 	return nil
 }
@@ -1560,6 +1625,8 @@ func asType(e Expect) (CaptureType, bool) {
 		return CapTriple, true
 	case e.Position != nil, e.Size != nil, e.Turn != nil:
 		return CapVector, true
+	case e.Light != nil:
+		return lightType(e.Light), true
 	case e.FloatText != nil:
 		return CapText, true
 	case e.AlphaMode != nil:

@@ -15,8 +15,11 @@ package server
 // came up -- so each has to be reachable and each has to say which.
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"io"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -96,7 +99,7 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	anim := []byte{1, 0xff, 4, 4, 0, 0, 0, 0, 0, 0, 0x80, 0x40, 0, 0, 0x20, 0x41}
 	upd := &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{ID: 4242, FullID: prim, PCode: 9,
 		TextureEntry: []byte{7, 7, 7}, TextureAnim: anim, ClickAction: 2,
-		ExtraParams: append([]byte{1, 0x30, 0, 17, 0, 0, 0}, append(prim[:], 5)...)}}}
+		ExtraParams: lightedMesh(prim)}}}
 	r.sim.send(upd, 0)
 	waitFor(t, 5*time.Second, "the object update to be recorded", func() bool {
 		return h.Agent().Objects().Count() > 0
@@ -120,6 +123,16 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	// A mesh block is its kind and the asset it names.
 	if o := all.GetObjects()[0]; o.GetSculptKind() != 5 || o.GetSculptId() != prim.String() {
 		t.Errorf("sculpt kind %d id %q, want a mesh of %s", o.GetSculptKind(), o.GetSculptId(), prim)
+	}
+	// A light and a projector are what their blocks say, as the wire
+	// carries them: the colour bytes, the intensity byte over 255.
+	if o := all.GetObjects()[0]; o.GetLight().GetRed() != 255 || o.GetLight().GetGreen() != 128 || o.GetLight().GetBlue() != 0 ||
+		o.GetLight().GetIntensity() != 1 || o.GetLight().GetRadius() != 10 || o.GetLight().GetFalloff() != 0.75 {
+		t.Errorf("light %v, want 255 128 0 at full intensity, radius 10, falloff 0.75", o.GetLight())
+	}
+	if o := all.GetObjects()[0]; o.GetProjector().GetTexture() != prim.String() ||
+		o.GetProjector().GetFov() != 1.5 || o.GetProjector().GetFocus() != -0.25 || o.GetProjector().GetAmbiance() != 0.125 {
+		t.Errorf("projector %v, want %s with 1.5, -0.25, 0.125", o.GetProjector(), prim)
 	}
 	// An object nobody is wearing has no item, so "is it worn" is a
 	// test on the field being set rather than on a zero uuid.
@@ -1270,4 +1283,20 @@ func TestHealthIsHandedOverInPresenceWithWhetherItIsKnown(t *testing.T) {
 	if !got.GetHealthKnown() || got.GetHealth() != 0 {
 		t.Errorf("health %v known %v, want 0 known", got.GetHealth(), got.GetHealthKnown())
 	}
+}
+
+// lightedMesh is the extra parameters of a mesh with a point light and a
+// projector: three blocks, a type and a four byte length each.
+func lightedMesh(tex msg.UUID) []byte {
+	f32 := func(v float32) []byte { return binary.LittleEndian.AppendUint32(nil, math.Float32bits(v)) }
+	cat := func(parts ...[]byte) []byte { return bytes.Join(parts, nil) }
+	b := []byte{3}
+	b = append(b, 0x30, 0, 17, 0, 0, 0)
+	b = append(b, tex[:]...)
+	b = append(b, 5)
+	b = append(b, 0x20, 0, 16, 0, 0, 0)
+	b = append(b, cat([]byte{255, 128, 0, 255}, f32(10), f32(0.5), f32(0.75))...)
+	b = append(b, 0x40, 0, 28, 0, 0, 0)
+	b = append(b, cat(tex[:], f32(1.5), f32(-0.25), f32(0.125))...)
+	return b
 }
