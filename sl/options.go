@@ -50,7 +50,9 @@ type Options struct {
 	TakeOffTimeout time.Duration
 
 	// HUDChangeTimeout bounds DragOnScreen's wait, when it is asked to
-	// settle, for the region to say the HUD prim pressed has changed.
+	// settle, for the region to say the HUD prim pressed has changed,
+	// and its wait after the release, when the prim is not at its size
+	// from the press, for it to keep one size for a second.
 	// Why: doc/hud-screen.md#a-drag
 	HUDChangeTimeout time.Duration
 

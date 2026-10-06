@@ -222,6 +222,45 @@ cursor moves. So as it moves, `DragOnScreen` reads the HUD again every
 it, as the viewer does, and a glass that grows mid-drag is under the
 cursor from the step after the region says so.
 
+**After the release.** The same HUD's glass went back 400 ms after the
+release, and a drag placed on it before then is placed on the grown
+glass: a second drag from a face of the glass, put on the screen from the
+prim as it then was, started at 390,3745 in a 1920x1025 view, and the
+product moved the HUD off the screen. So `DragOnScreen` lets go and then
+reads the prim it pressed. If its scale is the one it had at the press,
+the drag returns at once, and a prim that was never changed costs no
+wait. Otherwise it waits until the scale has stayed the same for a quiet
+period, one second, whatever size that is, and fails with `ErrTimeout`,
+"the HUD was still changing", only if the prim is still changing when
+`Options.HUDChangeTimeout` runs out. The quiet period is the measured
+400 ms plus margin. It does not ask for the size from the press: a
+resize leaves the glass at a new size for good (measured live, 0.5 x 0.25
+became 0.58 x 0.29), and waiting for the old one failed that drag. A
+glass that stays grown is therefore taken as settled, and the next
+drag placed on it is refused if its point is off the view. This was
+chosen over waiting where a face point is placed, because a point placed
+from a face is placed from whatever the test last saw, and a HUD left
+grown is wrong for anything that follows. The wait is inside the drag's
+time budget, and a timeout shorter than the quiet period cannot see a
+prim settle. A grow that the region reports only after the release is
+not waited for, since nothing is read for it. Two drags straight after
+each other on the HUD above were **measured** to pass with the first
+rule; the quiet-period rule is tested over fakes and not yet measured.
+
+**A point off the view.** A mouse held down cannot leave the window: the
+viewer clips it while a button is down, for any tool that does not say
+otherwise (`LLViewerWindow::handleAnyMouseClick`,
+llviewerwindow.cpp:1180-1183, `LLTool::clipMouseWhenDown`, lltool.h:80,
+which the grab tool does not override), and a drag on a window's
+menu bar is not a drag on the world view. So `DragOnScreen` refuses a
+drag with a point outside 0 to Width-1 by 0 to Height-1, with `ErrOffView`
+and before anything is sent, and Slate refuses a start or an end off the
+view with `the drag would start at 390,3745, off the 1920x1025 view;
+nothing was sent`. The end is refused rather than clamped: a clamped end
+is a drag the test did not write, and a test written for a window that
+does not fit its numbers should be told. A straight line between two
+points on the view is on it, so the points between need no check.
+
 **Measured.** A box whose script set its own scale on `touch_start` was
 reported changed 95 to 197 ms after the press, median 146, in 20
 presses. `Options.HUDChangeTimeout` defaults to 5 s.
