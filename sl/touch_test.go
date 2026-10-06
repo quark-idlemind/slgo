@@ -497,3 +497,91 @@ func TestUVIsWorkedOutInOnePlace(t *testing.T) {
 		})
 	}
 }
+
+// TestASecondGrabWaitsOutTheGap: a grab of an object right after its
+// degrab is sent no sooner than touchGap after it; a grab of another
+// object, and one after a long gap, are not delayed.
+func TestASecondGrabWaitsOutTheGap(t *testing.T) {
+	w, _ := newFakeSession(t)
+	ctx := context.Background()
+	a := aThing(w)
+	other := foundHere(w, &Object{ID: thePrim, Local: 4243, Name: "another thing"})
+
+	if err := w.Touch(ctx, a, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	released := time.Now()
+	if err := w.TouchStart(ctx, a, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := time.Since(released); got < touchGap {
+		t.Errorf("the second grab was sent %v after the degrab, want at least %v", got, touchGap)
+	}
+
+	if err := w.Touch(ctx, a, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if err := w.TouchStart(ctx, other, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := time.Since(start); got > touchGap/2 {
+		t.Errorf("a grab of another object waited %v", got)
+	}
+
+	if err := w.Touch(ctx, other, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(touchGap + 30*time.Millisecond)
+	start = time.Now()
+	if err := w.TouchStart(ctx, other, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := time.Since(start); got > touchGap/2 {
+		t.Errorf("a grab after a long gap waited %v", got)
+	}
+}
+
+// TestTheGapIsKeptPerLinkset: a grab of a child right after a degrab of
+// its root waits, and a grab of a prim of another linkset does not.
+func TestTheGapIsKeptPerLinkset(t *testing.T) {
+	w, _ := newFakeSession(t)
+	ctx := context.Background()
+	root := aThing(w)
+	child := foundHere(w, &Object{ID: thePrim, Local: 4300, Name: "a child"})
+	stranger := foundHere(w, &Object{ID: thePrim, Local: 4400, Name: "a stranger"})
+	w.mu.Lock()
+	w.parents[root.Local] = 0
+	w.parents[child.Local] = root.Local
+	w.parents[stranger.Local] = 0
+	w.mu.Unlock()
+
+	if err := w.Touch(ctx, root, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	released := time.Now()
+	if err := w.TouchStart(ctx, stranger, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := time.Since(released); got > touchGap/2 {
+		t.Errorf("a grab of another linkset waited %v", got)
+	}
+	if err := w.TouchStart(ctx, child, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := time.Since(released); got < touchGap {
+		t.Errorf("a child was grabbed %v after its root's degrab, want at least %v", got, touchGap)
+	}
+
+	// Released the other way round: the child's degrab holds the root.
+	if err := w.TouchEnd(ctx, child, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	released = time.Now()
+	if err := w.TouchStart(ctx, root, Touch{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := time.Since(released); got < touchGap {
+		t.Errorf("the root was grabbed %v after a child's degrab, want at least %v", got, touchGap)
+	}
+}

@@ -84,6 +84,7 @@ test before after each sequence do
 showing count any fullbright glow colour alpha on off
 alphamode default blend mask emissive
 item wear rez take attached ordered sorted shown gone if in near percent
+folder holding
 ```
 
 A capture is a `$` and a name: `$first`, `$tile_2`. It is its own token and not a word, so `$button` and an object called `button` never meet. `$` is a capture only before a letter. `L$5` and `L$ 5` keep their meaning because `L$` is tried first, and a `$` inside a string is an ordinary character, so `"L$5"` and the pattern `"L\\$[0-9]+"` are unchanged. A bare `$` is an illegal byte.
@@ -226,6 +227,7 @@ vecval      = number number number / named
 clickname   = "touch" / "none" / "sit" / "buy" / "pay" / "open"
             / "play" / "media" / "zoom" / "disabled"
 giveexp     = "give" text "from" binding toavatar?
+            / "give" "folder" text "from" binding ("holding" text+)?
 rezexp      = "rez" "name" text ("description" text)? "from" binding ("as" ident)?
 linkexp     = "link" "on" binding "from" "link" integer "num" integer
               "text" text ("key" key)? ("heard" "by" integer)?
@@ -318,6 +320,8 @@ This section states the timing rules once. [Step lifecycle](slate-runner.md#step
 - An expectation-only first step arms when its test started (for a plain-steps file, when setup finished).
 
 **`then` and ordering.** `then` means "after what the previous set matched". It can order only events whose order the grid preserves. Reports from two different prims have no guaranteed relative order. A texture update and a chat line from a script are not ordered by any promise the region makes either. Write `then` only for a real sequence; otherwise put the expectations in one set.
+
+**Touches close together.** Slate keeps 90 ms between a release of a linkset and the next press of any prim of it, so two touches of one object in a row are both delivered and a test needs no `wait` for it ([a second touch waits for the first to be over](touch-spacing.md)).
 
 **Timeouts.** The default is 10 seconds, from the `timeout` header or the built-in value. `within D` replaces it for that expectation only. A step's deadline is its start time, plus the time any blocking stimulus actually blocked on the way to success, plus the longest expectation duration in the step. A positive expectation still unmatched when its own duration has elapsed fails the step at that moment, even if another has time left. A negative expectation fails the step the moment the forbidden event is seen.
 
@@ -517,6 +521,16 @@ A group the avatar has not joined fails the step with a sentence that names the 
 
 - **Put back at the end of the run.** At setup, before anything runs, the runner reads the active group of each second avatar that a `group` step names. When the run ends, after the last test and before the verdict, each of those whose group a step changed is set back to the group it had, and the runner prints `slate: cleanup: put the group of NAME back to what it was`. This is the end of the run and not of each test, because a test that changes a group is followed by one that may rely on it, and a lent avatar is only to be left as found. A failure to put it back is a cleanup warning, `slate: cleanup: warning: the group of NAME was not put back: <error>`, as the probe's is: it changes neither the exit code nor an earlier failure, and the avatar is left in the group the run gave it. The transcript never prints the avatar's name, only its binding.
 
+## The tester is left as found
+
+At the end of each test, after `after each` and the put-backs, the runner leaves the tester's waiting list as the run found it, for what arrived during the run:
+
+- An **inventory offer an object made** to the tester that is still waiting is **declined**, as the viewer's Decline button does, and printed as `slate: declined offer "Example Thank You" from vendor`. The decline is the instant message the offer's own dialog plus two (`IM_TASK_INVENTORY_DECLINED`), quoting the offer's transaction id, sent to the giver on the tester's session; a give of a folder is declined the same way.
+- An **inventory offer from a person** is **left waiting**: the tester is somebody's avatar, and a friend's give during a run is theirs to answer, not the run's. It is printed as `slate: left offer "Example Thank You" from Kerra Yule waiting; a person's offer is not the run's to answer`, and nothing is sent to the person. The giver is the binding that names the object, else its name marked `[Object]`. An offer the tester has already stopped holding costs nothing. An offer an `expect give` accepted is not waiting any more and is not declined, and the item it delivered stays in inventory: removing it is not done.
+- A **script dialog or text box** to the tester that is still waiting, whether or not a step matched it, is **ignored** and printed as `slate: left dialog from vendor "Pick one" unanswered` (`textbox` for a text box). The viewer's Ignore button sends nothing, so nothing is sent to the grid and the script is not told; what the runner does is tell slgod that the dialog has been dealt with (`ignored`), so slgod stops listing it to the next program that attaches. Without that, slgod keeps an unanswered dialog for an hour, 32 of them at most, and `slsh waiting` shows each as from before the shell. (`slsh no` and `slsh ignore` on a dialog only drop it from that shell's list.)
+
+Only what arrived after the run began is touched; an offer or a dialog that was already waiting belongs to nobody here and is left. A decline or an ignore that fails is printed (`slate: the offer "..." from ... could not be declined: <error>`) and does not fail the test. A second avatar's offers are declined the moment they are seen and its dialogs are left to expire, as [A second avatar](#a-second-avatar) says.
+
 ## A second avatar
 
 A product with a public, a group and a private mode needs a second avatar's touch, chat and dialog answers in the same test. A file declares one with a header, and the run is told who it is:
@@ -547,7 +561,7 @@ slate: setup: the profile given for visitor is not held by the daemon (dial: ...
 
 **What reaches it.** `expect dialog from OBJ to NAME ...`, `expect textbox from OBJ to NAME ...` and `expect give TEXT from OBJ to NAME` are what an object sent to the second avatar; without `to` they are the tester's, as before. What the second avatar says is heard by the tester, and is matched by `expect say ... from avatar NAME`, by the second avatar's id and not by its name. A dialog is held for the object and for whom it came to, so `choose "A" on sign` answers the tester's dialog from the sign and `choose "A" on sign as visitor` the second avatar's, and neither replaces the other. Both go to the same event log, with the same arming and consumption rules as any other event.
 
-**Left as found.** The second avatar must come out of a run as it went in. An inventory offer to it is **declined** the moment the runner sees it, after the log has it for an `expect give ... to NAME`, and never accepted, so its inventory does not change. A permission request to it is **refused**, whatever `allow permission` names: `allow permission` covers the tester's requests only. A dialog or text box to it that no step answered is left to expire, as the tester's is. A group a `group` step set is put back at the end of the run, to the one it had when the run began.
+**Left as found.** The second avatar must come out of a run as it went in. An inventory offer to it is **declined** the moment the runner sees it, after the log has it for an `expect give ... to NAME`, and never accepted, so its inventory does not change. A permission request to it is **refused**, whatever `allow permission` names: `allow permission` covers the tester's requests only. A dialog or text box to it that no step answered is left to expire; the tester's are ignored at the end of each test ([The tester is left as found](#the-tester-is-left-as-found)). A group a `group` step set is put back at the end of the run, to the one it had when the run began.
 
 **Transcript.** An event for the second avatar is labelled with its binding: `dialog to visitor from sign: "Pick one" buttons "Red"`, `textbox to visitor from sign: ...`, `give to visitor from sign: "..."`, `give to visitor declined, transaction ...`, `permission denied to visitor from sign: ...`, and a chat line it spoke as `chat public from visitor: "..."`. Neither its displayed name nor its profile appears in the output, in the failure block, or in an error.
 
@@ -562,10 +576,12 @@ slate: setup: the profile given for visitor is not held by the daemon (dial: ...
 | dialog button | `expect dialog from v button "Red"` | `expect dialog from v button matching "^Re"` |
 | text box message | `expect textbox from b text "Name?"` | `expect textbox from b text matching "name"` |
 | give item name | `expect give "Example Red Swatch" from v` | `expect give matching "Swatch$" from v` |
+| give folder name | `expect give folder "Example Starter Folder" from v` | `expect give folder matching "^Example Starter" from v` |
+| give folder, an item it holds | `expect give folder "F" from v holding "Example Red Swatch"` | `expect give folder "F" from v holding matching "Swatch$"` |
 | rez name, description | `rez name "B" description "left" ...` | `rez name matching "^B" description matching "left" ...` |
 | link text | `... text "go"` | `... text matching "^go"` |
 
-A pattern is Go RE2 syntax and is unanchored, as a button `pattern` is; write `^` and `$` to anchor it, and `(?i)` to ignore case. It is compiled at static check, and one that does not compile is exit 2. In a Slate string a backslash is doubled, so the pattern `L\$[0-9]+` is written `"L\\$[0-9]+"`. Wherever the Exact column takes a string, a capture that holds text takes its place and is compared as that string would be ([Captures](#expectations)); a capture is never a pattern. The `choose` forms are under [Stimuli](#stimuli). `answer` and the text of the stimulus `say` take strings only, and the text of `send` takes a string or a capture. With `give matching`, two new items whose names match are ambiguous, as two new items of one name are.
+A pattern is Go RE2 syntax and is unanchored, as a button `pattern` is; write `^` and `$` to anchor it, and `(?i)` to ignore case. It is compiled at static check, and one that does not compile is exit 2. In a Slate string a backslash is doubled, so the pattern `L\$[0-9]+` is written `"L\\$[0-9]+"`. Wherever the Exact column takes a string, a capture that holds text takes its place and is compared as that string would be ([Captures](#expectations)); a capture is never a pattern. The `choose` forms are under [Stimuli](#stimuli). `answer` and the text of the stimulus `say` take strings only, and the text of `send` takes a string or a capture. With `give matching`, two new items whose names match are ambiguous, as two new items of one name are, and so are two new folders with `give folder matching`. A pattern after `holding` binds nothing: a named group in it is refused at static check.
 
 An expectation passes when its match has been seen after the arm point. When the deadline passes it fails with the line that was written, the duration and a transcript of what was heard instead ([Reading the result](#reading-the-result)).
 
@@ -726,7 +742,7 @@ expect button hud text "Open" box becomes shown within 8s
 | A named group `(?P<name>...)` in any `matching` pattern of a positive expectation, including a button clause | `$name`, the group's text in the event that matched | text |
 | `as $x` after `say` | The line's text (the raw tail, for a channel the bridge forwards) | text |
 | `as $x` after `dialog` or `textbox` | The message | text |
-| `as $x` after `give` | The item's name | text |
+| `as $x` after `give` | The item's name; after `give folder`, the folder's | text |
 | `as $x` after a state expectation | The reading that matched; with `face all`, the tuple | its own type |
 | `as $x` after `alphamode` | The mode as the transcript writes it: `default`, `none`, `blend`, `emissive`, or `mask 128` with the cutoff for a mask. It has no `face all`, so there is no tuple | text |
 | `as $x` after a button reading | The count | number |
@@ -746,6 +762,10 @@ A capture is data. It is never parsed as Slate, never compiled as a pattern and 
 ```text
 unmatched give "Example Thank You" from vendor within 10s; accept was sent and inventory still has 1 item of that name
 ```
+
+**A folder given.** An object's script can give a folder (`llGiveInventoryList` to its owner), which arrives as an offer of a category. `expect give` refuses that offer, and `expect give folder` takes it: `expect give folder "Example Starter Folder" from vendor holding "Example Red Swatch" "Example Blue Swatch" within 10s`. The name is a string or a `matching` pattern, as for an item, and the offer is the one whose object is a prim of the binding's linkset, as for an item. The runner accepts it into the root of the inventory, as the viewer accepts one ([A folder given](slate-runner.md#a-folder-given)), and says so with the same `give accept sent` line, `into My Inventory`. The expectation passes when the inventory holds a folder of that name whose id was not there at the arm point; an older folder of the name does not count and does not block. With `holding`, each text, a string or a `matching` pattern, must also match the name of an item directly in that new folder (a link is not an item, and a folder inside it is not looked into). The items are listed after the folder, so a folder that is there and does not yet hold them is looked at again until the deadline. `as $x` binds the folder's name, and a named group in the folder's own pattern binds as for an item. Two new folders of the name are ambiguous. `folder` and `holding` are words only where the grammar expects them. `to NAME` is not allowed with `folder`: a second avatar's offer is declined as it is heard, so there is no folder to hold.
+
+The two forms refuse each other's offer. An `expect give` meeting an offer of a folder, and an `expect give folder` meeting an offer of an item, does not accept it, and says so on the unmatched line: `; the offer of that name is a folder, and expect give folder takes it`, and `; the offer of that name is an item, and expect give without folder takes it`. What neither takes is declined at the end of the test with any other offer. When the accept was sent and a new folder of the name is there that does not hold what was asked, the line says what it held, `; the new folder holds "Example Blue Swatch", "Example Red Swatch"` (names in sorted order), or `; the new folder holds nothing`; when no new folder came, `; accept was sent and inventory still has 1 folder of that name`. The runner does not delete the folder afterwards, as it does not delete an item. Not measured: no folder given by a script has been accepted on the grid yet, so the offer text of a folder, taken to be the item's form (the viewer's own comment on it says so), and where it lands are read from the viewer's source.
 
 The runner does not decline an offer, and does not delete the item afterwards. A later run passes on a newer id.
 
@@ -874,6 +894,7 @@ HH:MM:SS.mmm chat <how> from <who>: "<text>"
 HH:MM:SS.mmm dialog from <who>: "<message>" buttons <labels>
 HH:MM:SS.mmm textbox from <who>: "<message>"
 HH:MM:SS.mmm give from <who>: "<item>"
+HH:MM:SS.mmm give from <who>: folder "<name>"
 HH:MM:SS.mmm give accept sent to <uuid> transaction <uuid> into <folder>
 HH:MM:SS.mmm dialog to <avatar> from <who>: "<message>" buttons <labels>
 HH:MM:SS.mmm textbox to <avatar> from <who>: "<message>"
@@ -1141,7 +1162,7 @@ The click line also appears, as exit 3, when a prim just bound with `as` is stil
 
 **The command's streams.** A usage error (`slate: need exactly one FILE`, an unknown flag, a `-run` that does not compile or matches no test) and a file that did not parse go to standard error, and so does a failed dial, `slate: dial: <error>`, exit 3. Everything else, including a setup failure, is on standard output once.
 
-**What a run leaves behind.** When a step fails, the test stops and its remaining steps are skipped; `after each` still runs, and the next test runs. A setup failure, an unknown click byte, an `alphamode` expectation without the `RenderMaterials` capability, or a dropped subscription stops the whole run. The runner does not stand the avatar up, answer a dialog it has not answered, or send a payment again. A sit that succeeded leaves the avatar seated and the transcript says so. A `wear` leaves the item worn until a `take off`, and the runner does not take it off. A `rez` step's object is deleted to the Trash when its test ends, whatever the outcome ([Rez](#stimuli)). What a `drop` step put into an object, or a face it textured, is put back when its test ends ([Drop](#stimuli)), and a second avatar's group a `group` step changed is put back when the run ends ([Group](#stimuli)); a put back that fails fails the test (a drop) or is a cleanup warning (a group). A pending permission request is always answered and printed: denied (`permission denied`) unless an `allow permission` header names bits for the requesting object, which are granted (`permission granted to`) and the rest refused. On every exit after setup started, the runner removes the `slate probe` scripts and takes the bridge off, keeping it in inventory for the next run, printing `slate: cleanup: removed the probe from <n> prims, settling 6s after each` first (`1 prim` for one), and that line comes before the verdict, so the run's last line is its result; a 20-prim object can spend about two minutes settling after the result is known. A cleanup error is a warning and changes neither the exit code nor an earlier failure. Objects the product rezzed, a received item and a payment are not undone. The runner itself leaves nothing in the region, apart from an object a `rez` step made and whose delete failed, which the transcript names. A run killed mid-way can leave the bridge worn and probes in the product; the next run reuses or replaces them.
+**What a run leaves behind.** When a step fails, the test stops and its remaining steps are skipped; `after each` still runs, and the next test runs. A setup failure, an unknown click byte, an `alphamode` expectation without the `RenderMaterials` capability, or a dropped subscription stops the whole run. The runner does not stand the avatar up, answer a dialog it has not answered (it only ignores it, [The tester is left as found](#the-tester-is-left-as-found)), or send a payment again. A sit that succeeded leaves the avatar seated and the transcript says so. A `wear` leaves the item worn until a `take off`, and the runner does not take it off. A `rez` step's object is deleted to the Trash when its test ends, whatever the outcome ([Rez](#stimuli)). What a `drop` step put into an object, or a face it textured, is put back when its test ends ([Drop](#stimuli)), and a second avatar's group a `group` step changed is put back when the run ends ([Group](#stimuli)); a put back that fails fails the test (a drop) or is a cleanup warning (a group). An inventory offer an object made to the tester that no step accepted is declined and printed, one from a person is left waiting and printed, and an unanswered dialog is ignored and printed, when its test ends ([The tester is left as found](#the-tester-is-left-as-found)). A pending permission request is always answered and printed: denied (`permission denied`) unless an `allow permission` header names bits for the requesting object, which are granted (`permission granted to`) and the rest refused. On every exit after setup started, the runner removes the `slate probe` scripts and takes the bridge off, keeping it in inventory for the next run, printing `slate: cleanup: removed the probe from <n> prims, settling 6s after each` first (`1 prim` for one), and that line comes before the verdict, so the run's last line is its result; a 20-prim object can spend about two minutes settling after the result is known. A cleanup error is a warning and changes neither the exit code nor an earlier failure. Objects the product rezzed, a received item and a payment are not undone. The runner itself leaves nothing in the region, apart from an object a `rez` step made and whose delete failed, which the transcript names. A run killed mid-way can leave the bridge worn and probes in the product; the next run reuses or replaces them.
 
 ## Worked examples
 
@@ -1169,6 +1190,21 @@ expect give "Example Red Swatch" from vendor
 ```
 
 If the tester does not own the tip jar, step 1 fails with `as owner of vendor but the tester does not own "Example Tip Jar"` and nothing is said.
+
+### A folder given
+
+A vendor that gives a folder when the tester asks for the kit. The folder is expected by name and by two of the items it holds; the folder and the items are invented. The offer is accepted into the root of the inventory, and `$kit` holds the folder's name for a later step.
+
+```slate
+slate 1
+
+object vendor is "Example Tip Jar"
+
+say "kit" on 0
+expect give folder "Example Starter Folder" from vendor holding "Example Red Swatch" matching "Blue Swatch$" within 15s as $kit
+```
+
+If the vendor gives the folder as a plain item offer, or the folder is short of the blue swatch, the step fails and the unmatched line says which, and what the folder held.
 
 ### Pay, a give, two new objects, then touch one
 

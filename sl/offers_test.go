@@ -569,6 +569,30 @@ func TestAnsweringAKeptDialogAsksTheDaemonFirst(t *testing.T) {
 	}
 }
 
+// TestIgnoringAKeptDialogTellsTheDaemonAndSendsNothing: the viewer's Ignore
+// sends no message, but slgod is told, so it stops keeping the dialog.
+func TestIgnoringAKeptDialogTellsTheDaemonAndSendsNothing(t *testing.T) {
+	t.Parallel()
+	w, k := newKeptSession(t, &OfferRecord{})
+	defer k.Close()
+	live := keptDialog(t, "dialog:5", time.Now(), someBox, -4242, "Yes", "No")
+	live.Recorded = false
+	k.RelayRaw(t, live)
+
+	if err := w.IgnoreDialog(context.Background(), w.Dialogs()[0]); err != nil {
+		t.Fatal(err)
+	}
+	if got := k.Asked(); len(got) != 1 || got[0] != "dialog:5 ignored" {
+		t.Errorf("the daemon was asked %q", got)
+	}
+	if r := sentReplies(k); len(r) != 0 {
+		t.Errorf("an ignored dialog sent %+v", r)
+	}
+	if n := len(w.Dialogs()); n != 0 {
+		t.Errorf("%d listed after ignoring", n)
+	}
+}
+
 // TestADialogAnsweredElsewhereLeavesTheListAndIsSaid: the daemon's notice
 // drops a dialog, and a text box is called one.
 func TestADialogAnsweredElsewhereLeavesTheListAndIsSaid(t *testing.T) {

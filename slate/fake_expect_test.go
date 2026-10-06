@@ -43,6 +43,10 @@ var (
 	idRootD         = msg.MustParseUUID("c5ff7e57-7e57-c0de-1e50-efcf22d04cfc")
 	idOwnerOther    = msg.MustParseUUID("d0c27e57-7e57-c0de-f6e7-cc9d1cafe61d")
 	idChildOfA      = msg.MustParseUUID("e9e77e57-7e57-c0de-9ff0-a8c23feda1a8")
+	idNewFolder     = msg.MustParseUUID("0cee7e57-7e57-c0de-194b-d4951dd06a3e")
+	idKitItemA      = msg.MustParseUUID("1dd57e57-7e57-c0de-dc5e-ecb2f024a387")
+	idKitItemB      = msg.MustParseUUID("45687e57-7e57-c0de-501d-67e54ef6f573")
+	idOldFolder     = msg.MustParseUUID("47917e57-7e57-c0de-a775-00a9a2d2a18a")
 )
 
 // fakeExtra is the part of the fake that PR 6's tests add. It has its own
@@ -75,6 +79,12 @@ type fakeOffer struct {
 	item msg.UUID
 	name string
 	typ  int
+
+	// A folder offer delivers a new folder, called name, holding these
+	// items under the ids in holdIDs, into the folder the accept names.
+	folder  msg.UUID
+	holds   []string
+	holdIDs []msg.UUID
 }
 
 // afterSend is what the far end does with what it was sent.
@@ -133,6 +143,13 @@ func (f *fakeGrid) afterSend(m msg.Message) {
 		if ok && inv != nil && len(x.MessageBlock.BinaryBucket) == 16 {
 			var folder msg.UUID
 			copy(folder[:], x.MessageBlock.BinaryBucket)
+			if !offer.folder.IsZero() {
+				inv.addFolder(folder, offer.folder, offer.name)
+				for i, n := range offer.holds {
+					inv.add(offer.folder, offer.holdIDs[i], n, 6)
+				}
+				return
+			}
 			inv.add(folder, offer.item, offer.name, offer.typ)
 		}
 	}
@@ -342,6 +359,25 @@ func (v *fakeInv) add(folder, id msg.UUID, name string, typ int) {
 	v.items = append(v.items, invItem{id: id, folder: folder, name: name, typ: typ})
 }
 
+// addFolder adds a folder under parent.
+func (v *fakeInv) addFolder(parent, id msg.UUID, name string) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.folders = append(v.folders, invFolder{id, parent, name})
+}
+
+// parentOf is the folder a folder is in.
+func (v *fakeInv) parentOf(id msg.UUID) msg.UUID {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for _, f := range v.folders {
+		if f.id == id {
+			return f.parent
+		}
+	}
+	return msg.UUID{}
+}
+
 // addAsset is add for an item with an asset of its own and the owner's
 // permissions.
 func (v *fakeInv) addAsset(folder, id msg.UUID, name string, typ int, asset msg.UUID, ownerMask uint32) {
@@ -385,7 +421,18 @@ func (f *fakeGrid) offer(txn, item msg.UUID, name string, typ int) {
 	if f.ex.offers == nil {
 		f.ex.offers = map[msg.UUID]fakeOffer{}
 	}
-	f.ex.offers[txn] = fakeOffer{item, name, typ}
+	f.ex.offers[txn] = fakeOffer{item: item, name: name, typ: typ}
+}
+
+// offerFolder says that accepting the offer with a transaction delivers a
+// new folder, folder, called name and holding the named items under ids.
+func (f *fakeGrid) offerFolder(txn, folder msg.UUID, name string, holds []string, ids []msg.UUID) {
+	f.ex.mu.Lock()
+	defer f.ex.mu.Unlock()
+	if f.ex.offers == nil {
+		f.ex.offers = map[msg.UUID]fakeOffer{}
+	}
+	f.ex.offers[txn] = fakeOffer{name: name, folder: folder, holds: holds, holdIDs: ids}
 }
 
 // serve answers a read of one folder: its folders and its items, with

@@ -932,11 +932,15 @@ type AlphaModeExp struct {
 // names them.
 var AlphaModes = []string{"default", "none", "blend", "mask", "emissive"}
 
-// GiveExp is an inventory offer of Item from Name.
+// GiveExp is an inventory offer of Item from Name. Folder is the form
+// `give folder`: Item then names a folder, and Holding the items it must
+// hold (none when the form has no holding).
 type GiveExp struct {
-	Item Text
-	From Ident
-	To   *Ident // to NAME: the offer came to a second avatar; nil is the tester
+	Folder  bool
+	Item    Text
+	From    Ident
+	Holding []Text
+	To      *Ident // to NAME: the offer came to a second avatar; nil is the tester
 }
 
 // RezExp is a new root. As is set on a positive rez and absent on a negative one.

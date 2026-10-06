@@ -16,6 +16,12 @@ It is this shell's, not the session's.  Another client attached to the
 same avatar has its own idea of what it has dealt with, and ignoring
 something here does not reach it.
 
+This is the same for every kind of thing `waiting` lists, a dialog
+included.  To be rid of a dialog altogether -- so that slgod stops
+listing it to every program, as the viewer's Ignore button does -- use
+`no`, which on a dialog or a text box sends nothing to the grid and
+tells slgod.
+
 `waiting -a` lists what has been set aside.  Answering or declining
 one takes it out of the set again, and out of the listing in the same
 breath.

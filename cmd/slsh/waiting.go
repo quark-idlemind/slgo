@@ -71,7 +71,7 @@ var waitingCommands = map[string]*command{
 	"ignore": {
 		params:   "N",
 		flags:    func() any { return new(helpOnly) },
-		brief:    "leave it waiting, but stop counting it at the prompt",
+		brief:    "leave it waiting, but stop counting it at this prompt",
 		keywords: "dismiss skip hide set aside waiting count prompt later",
 		man:      "ignore",
 		run:      cmdIgnore,
@@ -745,10 +745,25 @@ func cmdNo(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 
 	switch {
 	case w.dialog != nil:
-		// There is no message for the close box, so the honest thing
-		// is to drop it here and let it expire where it was raised.
-		sh.s.ForgetDialog(*w.dialog)
-		fmt.Fprintf(out, "left %s unanswered; a dialog cannot be declined, only left to expire\n", w.who())
+		// The viewer's Ignore: no message exists for the close box, so
+		// nothing goes to the grid, but slgod is told so that it stops
+		// listing the dialog to every program.
+		if err := sh.s.IgnoreDialog(ctx, *w.dialog); err != nil {
+			return err
+		}
+		kind := "dialog"
+		if w.dialog.IsTextBox() {
+			kind = "text box"
+		}
+		// Without a daemon keeping the waiting list (a direct login)
+		// there is no list but this shell's, and the line says only what
+		// is true there.
+		if _, kept := sh.s.Backend().(sl.OfferKeeper); kept {
+			fmt.Fprintf(out, "ignored the %s from %s; nothing is sent, as the viewer's Ignore sends nothing, "+
+				"and slgod stops listing it for every program\n", kind, w.who())
+		} else {
+			fmt.Fprintf(out, "ignored the %s from %s; nothing is sent, as the viewer's Ignore sends nothing\n", kind, w.who())
+		}
 	case w.lure != nil:
 		if err := sh.s.DeclineLure(ctx, w.lure); err != nil {
 			return err
