@@ -117,6 +117,26 @@ const (
 	kProjFOV
 	kProjFocus
 	kProjAmbiance
+
+	// A face's GLTF material and the override on it, read from the object
+	// store (sl.Seen.RenderMaterials and GLTF).  The order is that of
+	// GLTFProps.  A field the override does not set has an unset reading,
+	// which is what `none` says.
+	// Why: doc/slate-runner.md#gltf-materials
+	kGLTFOverride
+	kGLTFMaterial
+	kGLTFColour
+	kGLTFAlpha
+	kGLTFEmissive
+	kGLTFMetallic
+	kGLTFRoughness
+	kGLTFAlphaMode
+	kGLTFCutoff
+	kGLTFDoubleSided
+	kGLTFBaseTexture
+	kGLTFNormalTexture
+	kGLTFORMTexture
+	kGLTFEmissiveTexture
 )
 
 // readsMaterial is whether a kind is read from a face's material, which
@@ -131,7 +151,18 @@ func materialKind(prop string) stateKind {
 }
 
 // isLight is whether a kind reads a prim's light or projector.
-func (k stateKind) isLight() bool { return k >= kLight }
+func (k stateKind) isLight() bool { return k >= kLight && k <= kProjAmbiance }
+
+// isGLTF is whether a kind reads a face's GLTF material or its override.
+func (k stateKind) isGLTF() bool { return k >= kGLTFOverride }
+
+// gltfKind is the kind a gltf expectation's prop reads.
+func gltfKind(prop string) stateKind {
+	return kGLTFOverride + stateKind(slices.Index(GLTFProps, prop))
+}
+
+// gltfWord is how a gltf kind is written, and as the transcript says it.
+func (k stateKind) gltfWord() string { return "gltf " + GLTFProps[k-kGLTFOverride] }
 
 // lightWords is how each light kind is written, and as the transcript
 // says it.
@@ -150,6 +181,13 @@ const (
 	// position or its size.
 	primFace = -3
 )
+
+// gltfTol is the tolerance of an override's colours and factors: each travels
+// as a number the region prints and the session holds as a float32, so only
+// the printing could be off, and a millionth is above that.  Inferred: the
+// region's own rounding of a value has not been measured.
+// Why: doc/slate-runner.md#gltf-materials
+const gltfTol = 1e-6
 
 // levelTol is the tolerance of glow, colour and alpha: one step of the
 // byte they travel as, round(value * 255).
@@ -184,8 +222,13 @@ type reading struct {
 	quat    quat4      // a turn as read; hasQuat is false for a wanted value, which is vec
 	hasQuat bool
 	str     string  // a prim's floating text
-	num     float64 // a light's intensity, radius or falloff, a projector's fov, focus or ambiance
-	on      bool    // a light is on
+	num     float64 // a light's intensity, radius or falloff, a projector's fov, focus or ambiance, an override's factor
+	on      bool    // a light is on; an override's double sided, or that a face has an override
+	// unset is a GLTF reading of a field the override does not set, or of
+	// a face with no GLTF material: what `none` says.  Its other fields
+	// mean nothing.
+	unset bool
+	gmode msg.GLTFAlphaMode
 
 	bright bool
 	glow   float64    // Glow / 255
@@ -353,6 +396,8 @@ func (k stateKind) floor() (float64, bool) {
 		return 0, true // whole numbers: exact unless the file widens it
 	case kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
 		return lightTol, true
+	case kGLTFColour, kGLTFAlpha, kGLTFEmissive, kGLTFMetallic, kGLTFRoughness, kGLTFCutoff:
+		return gltfTol, true
 	}
 	return 0, false
 }
@@ -380,6 +425,9 @@ func (k stateKind) word() string {
 	if k.isLight() {
 		return lightWords[k]
 	}
+	if k.isGLTF() {
+		return k.gltfWord()
+	}
 	return [...]string{kOffset: "offset", kRepeats: "repeats", kRotation: "rotation", kGlow: "glow", kColour: "colour",
 		kAlpha: "alpha", kPosition: "position", kSize: "size", kTurn: "turn",
 		kGlossiness: "glossiness", kEnvironment: "environment"}[k]
@@ -398,6 +446,9 @@ func (k stateKind) gapOf(a, ref *reading, t *tolerance, byDiff bool) (gap, bool)
 		// One angle: the rotation between the two, not a triple a component
 		// at a time, since two Euler triples can be one rotation.
 		return gap{turnAngle(a.rot(), ref.rot()), t.allowed(turnTol, 0)}, true
+	}
+	if a.unset || ref.unset {
+		return gap{}, false
 	}
 	var xs, ys []float64
 	var floor float64
@@ -426,6 +477,10 @@ func (k stateKind) gapOf(a, ref *reading, t *tolerance, byDiff bool) (gap, bool)
 		xs, ys, floor = []float64{a.num}, []float64{ref.num}, levelTol
 	case kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
 		xs, ys, floor = []float64{a.num}, []float64{ref.num}, lightTol
+	case kGLTFColour, kGLTFEmissive:
+		xs, ys, floor = a.col[:], ref.col[:], gltfTol
+	case kGLTFAlpha, kGLTFMetallic, kGLTFRoughness, kGLTFCutoff:
+		xs, ys, floor = []float64{a.num}, []float64{ref.num}, gltfTol
 	default:
 		return gap{}, false
 	}
@@ -486,11 +541,20 @@ func (k stateKind) equalTol(a, ref *reading, t *tolerance) bool {
 		}
 		return true
 	}
+	if k.isGLTF() && (a.unset || ref.unset) {
+		return a.unset == ref.unset
+	}
 	if g, ok := k.gapOf(a, ref, t, false); ok {
 		return g.ok()
 	}
 	b := ref
 	switch k {
+	case kGLTFOverride, kGLTFDoubleSided:
+		return a.on == b.on
+	case kGLTFMaterial, kGLTFBaseTexture, kGLTFNormalTexture, kGLTFORMTexture, kGLTFEmissiveTexture:
+		return a.tex == b.tex
+	case kGLTFAlphaMode:
+		return a.gmode == b.gmode
 	case kText:
 		return a.str == b.str
 	case kButton:
@@ -550,17 +614,21 @@ func (k stateKind) capType() CaptureType {
 		return CapPair
 	case kRotation, kGlow, kAlpha, kButton:
 		return CapNumber
-	case kFullbright, kLight:
+	case kFullbright, kLight, kGLTFOverride, kGLTFDoubleSided:
 		return CapOnOff
-	case kColour, kLightColour:
+	case kColour, kLightColour, kGLTFColour, kGLTFEmissive:
 		return CapTriple
+	case kGLTFAlpha, kGLTFMetallic, kGLTFRoughness, kGLTFCutoff:
+		return CapNumber
+	case kGLTFMaterial, kGLTFBaseTexture, kGLTFNormalTexture, kGLTFORMTexture, kGLTFEmissiveTexture:
+		return CapUUID
 	case kLightIntensity, kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
 		return CapNumber
 	case kProjector:
 		return CapUUID
 	case kPosition, kSize, kTurn:
 		return CapVector
-	case kText, kAlphaMode:
+	case kText, kAlphaMode, kGLTFAlphaMode:
 		return CapText
 	}
 	return CapClick
@@ -583,6 +651,9 @@ func r4(v float64) float64 { return math.Round(v*1e4) / 1e4 }
 
 // text is one face's value as the transcript says it.
 func (k stateKind) text(r *reading) string {
+	if k.isGLTF() {
+		return k.gltfText(r)
+	}
 	switch k {
 	case kButton:
 		return r.label
@@ -642,6 +713,28 @@ func (k stateKind) text(r *reading) string {
 	return fmt.Sprintf("%d", r.click)
 }
 
+// gltfText is a GLTF reading as the transcript says it: none for a field
+// the override does not set, a colour as its three numbers.
+func (k stateKind) gltfText(r *reading) string {
+	if r.unset {
+		return "none"
+	}
+	switch k {
+	case kGLTFOverride, kGLTFDoubleSided:
+		if r.on {
+			return "on"
+		}
+		return "off"
+	case kGLTFColour, kGLTFEmissive:
+		return fmt.Sprintf("%g %g %g", float32(r.col[0]), float32(r.col[1]), float32(r.col[2]))
+	case kGLTFAlphaMode:
+		return r.gmode.String()
+	case kGLTFAlpha, kGLTFMetallic, kGLTFRoughness, kGLTFCutoff:
+		return fmt.Sprintf("%g", float32(r.num))
+	}
+	return r.tex.String()
+}
+
 // mapText is a map's id as the transcript says it: none for the null key,
 // which is a face with no such map.
 func mapText(id msg.UUID) string {
@@ -668,6 +761,9 @@ func (k stateKind) show(key readKey, r *reading) string {
 	}
 	if k.isLight() {
 		return fmt.Sprintf("%s %s %s", k.word(), key.name, k.text(r))
+	}
+	if k.isGLTF() {
+		return fmt.Sprintf("%s %s face %d %s", k.word(), key.name, key.face, k.text(r))
 	}
 	word := [...]string{kTexture: "texture", kOffset: "offset", kRepeats: "repeats", kRotation: "rotation",
 		kFullbright: "fullbright", kGlow: "glow", kColour: "colour", kAlpha: "alpha", kAlphaMode: "alphamode",
@@ -696,6 +792,16 @@ func (k stateKind) value(r *reading) capValue {
 		return capValue{typ: CapText, text: r.str}
 	}
 	switch k {
+	case kGLTFOverride, kGLTFDoubleSided:
+		return capValue{typ: CapOnOff, on: r.on}
+	case kGLTFMaterial, kGLTFBaseTexture, kGLTFNormalTexture, kGLTFORMTexture, kGLTFEmissiveTexture:
+		return capValue{typ: CapUUID, id: r.tex}
+	case kGLTFColour, kGLTFEmissive:
+		return capValue{typ: CapTriple, triple: [3]float64{float64(float32(r.col[0])), float64(float32(r.col[1])), float64(float32(r.col[2]))}}
+	case kGLTFAlpha, kGLTFMetallic, kGLTFRoughness, kGLTFCutoff:
+		return capValue{typ: CapNumber, num: float64(float32(r.num))}
+	case kGLTFAlphaMode:
+		return capValue{typ: CapText, text: r.gmode.String()}
 	case kLight:
 		return capValue{typ: CapOnOff, on: r.on}
 	case kProjector:
@@ -770,8 +876,20 @@ func (k stateKind) want(v capValue) *reading {
 		r.gloss = v.num
 	case kEnvironment:
 		r.env = v.num
-	case kLight:
+	case kLight, kGLTFOverride, kGLTFDoubleSided:
 		r.on = v.on
+	case kGLTFMaterial, kGLTFBaseTexture, kGLTFNormalTexture, kGLTFORMTexture, kGLTFEmissiveTexture:
+		r.tex = v.id
+	case kGLTFColour, kGLTFEmissive:
+		r.col = v.triple
+	case kGLTFAlpha, kGLTFMetallic, kGLTFRoughness, kGLTFCutoff:
+		r.num = v.num
+	case kGLTFAlphaMode:
+		for m := msg.GLTFAlphaOpaque; m <= msg.GLTFAlphaMask; m++ {
+			if m.String() == v.text {
+				r.gmode = m
+			}
+		}
 	case kLightColour:
 		r.col = v.triple
 	case kLightIntensity, kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
@@ -928,6 +1046,10 @@ func stateKeyOf(e *Expect) (readKey, stateKind, bool) {
 		x := e.Light
 		k := lightKind(x)
 		return readKey{keyName(x.Name, x.Link), primFace, k}, k, true
+	case e.GLTF != nil:
+		x := e.GLTF
+		k := gltfKind(x.Prop)
+		return readKey{keyName(x.Name, x.Link), int(x.Face.Value), k}, k, true
 	case e.FloatText != nil:
 		return readKey{keyName(e.FloatText.Name, e.FloatText.Link), primFace, kText}, kText, true
 	}
@@ -982,6 +1104,87 @@ func lightReading(k stateKind, o *sl.Seen, at time.Time) (*reading, bool) {
 		r.num = float64(p.Ambiance)
 	}
 	return r, true
+}
+
+// gltfReading is what a poll reads of one face's GLTF material for a kind:
+// the face's material id, and the field of its override the kind names,
+// unset when the override does not set it or the face has none.  A face
+// with no GLTF material takes no override, so it reads as having none.
+// Why: doc/slate-runner.md#gltf-materials
+func gltfReading(k stateKind, o *sl.Seen, face int, at time.Time) *reading {
+	f := o.FaceGLTF(face)
+	r := &reading{at: at}
+	ov := f.Override
+	switch k {
+	case kGLTFOverride:
+		r.on = ov != nil
+		return r
+	case kGLTFMaterial:
+		r.tex, r.unset = f.Material, f.Material.IsZero()
+		return r
+	}
+	r.unset = true
+	if ov == nil {
+		return r
+	}
+	set := func(ok bool) { r.unset = !ok }
+	tex := func(slot int) {
+		if t := ov.Textures[slot]; t != nil {
+			r.tex = *t
+			set(true)
+		}
+	}
+	switch k {
+	case kGLTFColour:
+		if c := ov.BaseColour; c != nil {
+			r.col = [3]float64{float64(c[0]), float64(c[1]), float64(c[2])}
+			set(true)
+		}
+	case kGLTFAlpha:
+		if c := ov.BaseColour; c != nil {
+			r.num = float64(c[3])
+			set(true)
+		}
+	case kGLTFEmissive:
+		if c := ov.Emissive; c != nil {
+			r.col = [3]float64{float64(c[0]), float64(c[1]), float64(c[2])}
+			set(true)
+		}
+	case kGLTFMetallic:
+		if v := ov.Metallic; v != nil {
+			r.num = float64(*v)
+			set(true)
+		}
+	case kGLTFRoughness:
+		if v := ov.Roughness; v != nil {
+			r.num = float64(*v)
+			set(true)
+		}
+	case kGLTFCutoff:
+		if v := ov.AlphaCutoff; v != nil {
+			r.num = float64(*v)
+			set(true)
+		}
+	case kGLTFAlphaMode:
+		if v := ov.AlphaMode; v != nil {
+			r.gmode = *v
+			set(true)
+		}
+	case kGLTFDoubleSided:
+		if v := ov.DoubleSided; v != nil {
+			r.on = *v
+			set(true)
+		}
+	case kGLTFBaseTexture:
+		tex(msg.GLTFSlotBase)
+	case kGLTFNormalTexture:
+		tex(msg.GLTFSlotNormal)
+	case kGLTFORMTexture:
+		tex(msg.GLTFSlotMetallicRoughness)
+	case kGLTFEmissiveTexture:
+		tex(msg.GLTFSlotEmissive)
+	}
+	return r
 }
 
 // watcher is what a test reads: the prims and faces its state
@@ -1185,6 +1388,8 @@ func (w *watcher) poll(ctx context.Context, force bool) error {
 			if rd, ok = lightReading(k.kind, o, at); !ok {
 				continue
 			}
+		case k.kind.isGLTF():
+			rd = gltfReading(k.kind, o, k.face, at)
 		case k.kind == kText:
 			rd = &reading{at: at, str: o.Text}
 		case k.kind == kAlphaMode:
@@ -1479,6 +1684,8 @@ func (s *stepRun) stateExpect(x *expState) error {
 		base, link, st = e.Turn.Name, e.Turn.Link, e.Turn.State
 	case e.Light != nil:
 		base, link, st = e.Light.Name, e.Light.Link, e.Light.State
+	case e.GLTF != nil:
+		base, link, st = e.GLTF.Name, e.GLTF.Link, e.GLTF.State
 	case e.FloatText != nil:
 		base, link, st = e.FloatText.Name, e.FloatText.Link, e.FloatText.State
 	}
@@ -1488,6 +1695,15 @@ func (s *stepRun) stateExpect(x *expState) error {
 	if link != nil && !s.r.probed(s.r.lookup(base.Text)) {
 		se.why = s.linkWhy(k.name)
 		x.noteFn = se.why
+	}
+	if kind.isGLTF() {
+		// An override is said only to a session that asked for
+		// ModifyMaterialParams; without it none came, whatever the face
+		// has, and a face would read as having none.
+		// Why: doc/gltf.md#the-capability
+		if !s.r.sess.Backend().HasCap(sl.OverridesCap) {
+			return &envError{fmt.Sprintf("this session holds no %s capability, which gltf reads a face's GLTF material overrides from; slgod is likely older than this slate, or the session logged in before it was upgraded: restart it from the same release", sl.OverridesCap)}
+		}
 	}
 	if kind.readsMaterial() {
 		// A face's mode is its material's, which only RenderMaterials
@@ -1583,13 +1799,15 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		use = e.Turn.Use
 	case e.Light != nil:
 		use = e.Light.Use
+	case e.GLTF != nil:
+		use = e.GLTF.Use
 	case e.FloatText != nil:
 		use = e.FloatText.Value.Capture
 	}
 	switch {
 	case e.Texture != nil && e.Texture.Any, e.Offset != nil && e.Offset.Any, e.Repeats != nil && e.Repeats.Any,
 		e.Rot != nil && e.Rot.Any, e.Click != nil && e.Click.Any, e.Fullbright != nil && e.Fullbright.Any,
-		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any, e.Material != nil && e.Material.Any, e.Light != nil && e.Light.Any,
+		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any, e.Material != nil && e.Material.Any, e.Light != nil && e.Light.Any, e.GLTF != nil && e.GLTF.Any,
 		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any, e.Turn != nil && e.Turn.Any, e.FloatText != nil && e.FloatText.Any:
 		se.any = true
 	case use != nil:
@@ -1649,6 +1867,8 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 			// As float32, which is what the region sent.
 			se.want.num = float64(float32(x.Num.Value))
 		}
+	case e.GLTF != nil:
+		return s.gltfWant(e.GLTF, se)
 	case e.FloatText != nil:
 		tm, err := s.textMatch(e.FloatText.Value)
 		if err != nil {
@@ -1679,6 +1899,37 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		se.want.col = [3]float64{e.Colour.R.Value, e.Colour.G.Value, e.Colour.B.Value}
 	case e.Alpha != nil:
 		se.want.alpha = e.Alpha.Value.Value
+	}
+	return nil
+}
+
+// gltfWant makes the reading a gltf expectation with a literal compares
+// with: unset for none, else what the literal says, as float32 for the
+// numbers since that is what the session holds.
+func (s *stepRun) gltfWant(x *GLTFExp, se *stateExp) error {
+	if x.None {
+		se.want.unset = true
+		return nil
+	}
+	switch se.kind {
+	case kGLTFOverride, kGLTFDoubleSided:
+		se.want.on = x.On
+	case kGLTFMaterial, kGLTFBaseTexture, kGLTFNormalTexture, kGLTFORMTexture, kGLTFEmissiveTexture:
+		id, err := msg.ParseUUID(x.ID)
+		if err != nil {
+			return fmt.Errorf("%q is not an id", x.ID)
+		}
+		se.want.tex = id
+	case kGLTFColour, kGLTFEmissive:
+		se.want.col = [3]float64{float64(float32(x.R.Value)), float64(float32(x.G.Value)), float64(float32(x.B.Value))}
+	case kGLTFAlphaMode:
+		for m := msg.GLTFAlphaOpaque; m <= msg.GLTFAlphaMask; m++ {
+			if m.String() == x.Mode {
+				se.want.gmode = m
+			}
+		}
+	default:
+		se.want.num = float64(float32(x.Num.Value))
 	}
 	return nil
 }
@@ -1731,6 +1982,9 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 				what = se.kind.word()
 			}
 		}
+		if se.kind.isGLTF() {
+			what = fmt.Sprintf("%s face %d", se.kind.word(), se.key.face)
+		}
 		if se.kind == kButton {
 			what = "button"
 		}
@@ -1778,7 +2032,9 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 			}
 		}
 	case se.any:
-		if len(seq) > 0 {
+		// A GLTF field the override does not set has no value to be any
+		// of.
+		if len(seq) > 0 && !seq[0].unset {
 			hit = seq[0]
 		}
 	case want == nil:

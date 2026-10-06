@@ -1394,6 +1394,8 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.lightExp(e, false)
 	case p.kw("projector"):
 		return p.lightExp(e, true)
+	case p.kw("gltf"):
+		return p.gltfExp(e)
 	case p.kw("click"):
 		return p.clickExp(e)
 	case p.kw("text"):
@@ -1992,6 +1994,87 @@ func (p *parser) lightValue(x *LightExp) error {
 			}
 		}
 		return nil
+	}
+	x.Num, err = p.number()
+	return err
+}
+
+// gltfExp reads gltf PROP OBJ link? face N, the state, and for an is or
+// becomes the value the prop takes: the word none, or a literal of its kind.
+// Why: doc/slate-language.md#gltf-materials
+func (p *parser) gltfExp(e *Expect) error {
+	if err := p.want("gltf"); err != nil {
+		return err
+	}
+	x := &GLTFExp{}
+	for _, w := range GLTFProps {
+		if p.kw(w) {
+			x.Prop, x.PropSpan = w, p.tok.span
+			break
+		}
+	}
+	if x.Prop == "" {
+		return p.unexpected("expected " + strings.Join(GLTFProps, ", ") + " after gltf")
+	}
+	if err := p.next(); err != nil {
+		return err
+	}
+	var err error
+	if x.Name, x.Link, x.Face, x.FaceAll, err = p.faceTarget(); err != nil {
+		return err
+	}
+	if x.State, err = p.state(); err != nil {
+		return err
+	}
+	e.GLTF = x
+	if !hasValue(x.State) {
+		return nil
+	}
+	if x.Any, x.Use, err = p.reading(); err != nil || x.Any || x.Use != nil {
+		return err
+	}
+	return p.gltfValue(x)
+}
+
+// gltfValue reads the literal of a gltf expectation.  Every prop but
+// override takes the word none.
+func (p *parser) gltfValue(x *GLTFExp) error {
+	if x.Prop != "override" && p.kw("none") {
+		x.None = true
+		return p.next()
+	}
+	var err error
+	switch x.Prop {
+	case "override", "doublesided":
+		switch {
+		case p.kw("on"):
+			x.On = true
+		case p.kw("off"):
+		default:
+			return p.unexpected(map[bool]string{
+				true:  "expected on, off, original, or a capture",
+				false: "expected on, off, none, original, or a capture"}[x.Prop == "override"])
+		}
+		return p.next()
+	case "material", "basetexture", "normaltexture", "ormtexture", "emissivetexture":
+		if p.tok.kind != kUUID {
+			return p.unexpected("expected a UUID, none, original, or a capture")
+		}
+		x.ID, x.IDAt = p.tok.text, p.tok.span
+		return p.next()
+	case "colour", "emissive":
+		for _, n := range []*Number{&x.R, &x.G, &x.B} {
+			if *n, err = p.number(); err != nil {
+				return err
+			}
+		}
+		return nil
+	case "alphamode":
+		if p.tok.kind != kWord || !slices.Contains(GLTFAlphaModes, p.tok.text) {
+			return p.unexpected("expected opaque, blend, mask, none, original, or a capture")
+		}
+		x.Mode, x.ModeAt = p.tok.text, p.tok.span
+		return p.next()
 	}
 	x.Num, err = p.number()
 	return err

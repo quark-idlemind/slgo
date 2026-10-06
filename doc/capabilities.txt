@@ -26,14 +26,15 @@
 # guessing.  The ones marked are either visible at the call site or have
 # been exercised from this tree.
 #
-# slgo asks for twenty-six of them at login, in agent.DefaultCaps
+# slgo asks for twenty-seven of them at login, in agent.DefaultCaps
 # (agent/capsdoc_test.go holds this list to it):
 #
 #   AvatarPickerSearch  ChatSessionRequest  EventQueueGet
 #   FetchInventory2  FetchInventoryDescendents2  GetDisplayNames
 #   GetMesh2  GetTexture  InventoryAPIv3  LibraryAPIv3  LSLSyntax
-#   NewFileAgentInventory  ObjectMedia  ParcelPropertiesUpdate
-#   RemoteParcelRequest  RenderMaterials  SimulatorFeatures
+#   ModifyMaterialParams  NewFileAgentInventory  ObjectMedia
+#   ParcelPropertiesUpdate  RemoteParcelRequest  RenderMaterials
+#   SimulatorFeatures
 #   UpdateAgentInformation  UpdateAvatarAppearance
 #   UpdateNotecardAgentInventory  UpdateNotecardTaskInventory
 #   UpdateScriptAgent  UpdateScriptTask  UserInfo  ViewerAsset

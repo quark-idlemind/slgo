@@ -170,3 +170,28 @@ func TestTheAccountCapabilityIsAskedFor(t *testing.T) {
 	}
 	t.Error("UserInfo is not in DefaultCaps")
 }
+
+// TestTheMaterialOverrideCapabilityIsAskedFor: the region sends a session
+// a face's GLTF material overrides only if the session asked the seed for
+// ModifyMaterialParams (measured), so the request an empty list means
+// must name it.
+// Why: doc/gltf.md#the-capability
+func TestTheMaterialOverrideCapabilityIsAskedFor(t *testing.T) {
+	t.Parallel()
+
+	var asked string
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b := make([]byte, 1<<16)
+		n, _ := r.Body.Read(b)
+		asked = string(b[:n])
+		fmt.Fprint(w, `<llsd><map></map></llsd>`)
+	}))
+	defer hs.Close()
+
+	if _, err := RequestCaps(context.Background(), hs.URL, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(asked, "<string>ModifyMaterialParams</string>") {
+		t.Errorf("the default request did not ask for ModifyMaterialParams: %s", asked)
+	}
+}

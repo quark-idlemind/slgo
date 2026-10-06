@@ -104,3 +104,7 @@ __pycache__/
 # Claude Code's settings and notes for this checkout.  They belong to
 # the machine they were written on, not to the tree.
 /.claude/
+
+# tools/identities_test.go makes its probes in a _probe-* directory of
+# its own and removes it; one left behind by a killed run stays out.
+/_probe-*/

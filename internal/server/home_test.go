@@ -135,10 +135,12 @@ func TestAnythingButHomeIsLeftAlone(t *testing.T) {
 // then silence.
 func TestAlreadyHomeAsksOnceAndStops(t *testing.T) {
 	quickHoming(t)
-	_, sim, _ := homeRig(t, "home")
+	h, sim, _ := homeRig(t, "home")
 	refuse(t, sim, agent.KeyCouldntTPCloser)
 
 	waitFor(t, 5*time.Second, "the one request", func() bool { return asked(sim) >= 1 })
+	// The silence is timed from the loop having ended, not from the request.
+	waitFor(t, 5*time.Second, "the loop to end", func() bool { return !homing(h) })
 	time.Sleep(10 * HomeRetry)
 	if n := asked(sim); n != 1 {
 		t.Errorf("asked %d times, and being told it is already there is an answer", n)
@@ -171,7 +173,7 @@ func TestSilenceKeepsAsking(t *testing.T) {
 // than in another region, and TeleportLocal is how the grid says so.
 func TestArrivingStopsIt(t *testing.T) {
 	quickHoming(t)
-	_, sim, _ := homeRig(t, "home")
+	h, sim, _ := homeRig(t, "home")
 
 	go func() {
 		for range time.Tick(5 * time.Millisecond) {
@@ -182,6 +184,8 @@ func TestArrivingStopsIt(t *testing.T) {
 	}()
 
 	waitFor(t, 5*time.Second, "the first request", func() bool { return asked(sim) >= 1 })
+	// The silence is timed from the arrival having been taken, not from the request.
+	waitFor(t, 5*time.Second, "the loop to end", func() bool { return !homing(h) })
 	time.Sleep(10 * HomeRetry)
 	if n := asked(sim); n != 1 {
 		t.Errorf("asked %d times after arriving", n)
@@ -212,6 +216,9 @@ func TestAClientTeleportStopsIt(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	waitFor(t, 5*time.Second, "the client's teleport to be logged", func() bool {
+		return len(log.said("no longer trying to get home: a client teleported this avatar")) >= 1
+	})
 
 	// Whatever was in flight may still land, so the count is taken
 	// after a pause and compared with itself rather than with the
@@ -244,6 +251,9 @@ func TestAViewerTeleportStopsIt(t *testing.T) {
 
 			waitFor(t, 5*time.Second, "the loop to be running", func() bool { return asked(sim) >= 2 })
 			h.ViewerSent(msg.IDOf(m))
+			waitFor(t, 5*time.Second, "the viewer's teleport to be logged", func() bool {
+				return len(log.said("no longer trying to get home: a viewer teleported this avatar")) >= 1
+			})
 
 			time.Sleep(3 * HomeRetry)
 			settled := asked(sim)
@@ -285,6 +295,9 @@ func TestAViewerTeleportIsNotTakenForArrivingHome(t *testing.T) {
 	sim.send(&msg.TeleportLocal{}, 0)
 
 	waitFor(t, 5*time.Second, "the loop to stop", func() bool { return !homing(h) })
+	waitFor(t, 5*time.Second, "the viewer's teleport to be logged", func() bool {
+		return len(log.said("no longer trying to get home: a viewer teleported this avatar")) >= 1
+	})
 	time.Sleep(3 * HomeRetry)
 	if got := log.said("home, after"); len(got) != 0 {
 		t.Errorf("the answer to a viewer's teleport was taken for getting home: %q", got)
@@ -308,6 +321,9 @@ func TestAViewerBeingHandedTheSessionStopsIt(t *testing.T) {
 	h.ViewerAttached()
 
 	waitFor(t, 5*time.Second, "the loop to stop", func() bool { return !homing(h) })
+	waitFor(t, 5*time.Second, "the viewer being handed the session to be logged", func() bool {
+		return len(log.said("no longer trying to get home: a viewer was handed this session")) >= 1
+	})
 	time.Sleep(3 * HomeRetry)
 	settled := asked(sim)
 	time.Sleep(10 * HomeRetry)
@@ -717,12 +733,18 @@ func TestAfterGivingUpAReconnectAsksOnce(t *testing.T) {
 func TestAnAccessRefusalIsRememberedAcrossAReconnect(t *testing.T) {
 	quickHoming(t)
 	h, sim, _ := homeRig(t, "home")
+	log := listen(h)
 	refuse(t, sim, agent.KeyRegionTPAccessBlocked)
 
 	waitFor(t, 5*time.Second, "the loop to stop", func() bool {
 		return asked(sim) >= 1 && !homing(h)
 	})
 	reconnectNow(t, h)
+	// The new session's loop has read the refusal and said so; only
+	// then does the silence start.
+	waitFor(t, 5*time.Second, "the new session to remember the refusal", func() bool {
+		return len(log.said("not asking to go home: refused earlier for access")) >= 1
+	})
 	time.Sleep(10 * HomeRetry)
 	if n := asked(sim); n != 1 {
 		t.Errorf("asked %d times; a reconnect asked again to be refused for access again", n)

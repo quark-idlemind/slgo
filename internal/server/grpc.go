@@ -891,6 +891,9 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			LinkKnown:    o.LinkKnown,
 			Light:        lightPB(o.Light),
 			Projector:    projectorPB(o.Projector),
+
+			RenderMaterials: renderMaterialsPB(o.RenderMaterials),
+			GltfOverrides:   gltfPB(o.GLTF),
 		})
 	}
 	return out, nil

@@ -49,6 +49,12 @@ var DefaultCaps = []string{
 	// mode -- which the texture entry names only by id.  See
 	// sl.Session.Materials.
 	"RenderMaterials",
+	// Asking for it is what makes the region send this session a face's
+	// GLTF material overrides (GenericStreamingMessage, method 0x4175):
+	// without it none come, whatever the scripts set.  Measured; the
+	// capability is never posted to.  See agent.Object.GLTFOverrides.
+	// Why: doc/gltf.md#the-capability
+	"ModifyMaterialParams",
 	"ParcelPropertiesUpdate",
 	"RemoteParcelRequest",
 	"ViewerStats",

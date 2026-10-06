@@ -259,3 +259,5 @@ ab858f9a-1f44-4d39-9b33-351543d03ccb	SND_WHISTLE	indra/llmessage/sound_ids.cpp
 00000000-0000-0000-0000-000000000121	SND_OOOH_SCARE_ME	indra/llmessage/sound_ids.cpp
 00000000-0000-0000-0000-000000000122	SND_PAYBACK_TIME	indra/llmessage/sound_ids.cpp
 00000000-0000-0000-0000-000000000123	SND_READY_FOR_BATTLE	indra/llmessage/sound_ids.cpp
+968cbad0-4dad-d64e-71b5-72bf13ad051a	BLANK_MATERIAL_ASSET_ID	indra/llcommon/indra_constants.cpp
+ffffffff-ffff-ffff-ffff-ffffffffffff	GLTF_OVERRIDE_NULL_UUID	indra/llprimitive/llgltfmaterial.cpp

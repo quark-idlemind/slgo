@@ -390,12 +390,15 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			Sculpt:       o.Sculpt,
 			Light:        o.Light,
 			Projector:    o.Projector,
-			Shape:        o.Shape,
-			LinkNumber:   o.LinkNumber,
-			LinkKnown:    o.LinkKnown,
-			Text:         o.Text,
-			AttachPoint:  o.AttachPoint,
-			AttachItem:   o.AttachItem,
+
+			RenderMaterials: o.RenderMaterials,
+			GLTF:            o.GLTF,
+			Shape:           o.Shape,
+			LinkNumber:      o.LinkNumber,
+			LinkKnown:       o.LinkKnown,
+			Text:            o.Text,
+			AttachPoint:     o.AttachPoint,
+			AttachItem:      o.AttachItem,
 		}
 		out = append(out, s)
 	}

@@ -4797,10 +4797,19 @@ type ObjectInfo struct {
 	// The point light and the projector of the prim, each present only
 	// while the prim has the block: a light switched off has none.
 	// Why: doc/lights.md
-	Light         *PrimLight     `protobuf:"bytes,22,opt,name=light,proto3" json:"light,omitempty"`
-	Projector     *PrimProjector `protobuf:"bytes,23,opt,name=projector,proto3" json:"projector,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Light     *PrimLight     `protobuf:"bytes,22,opt,name=light,proto3" json:"light,omitempty"`
+	Projector *PrimProjector `protobuf:"bytes,23,opt,name=projector,proto3" json:"projector,omitempty"`
+	// The GLTF material each face has, by face, and the overrides of its
+	// fields a script or a build tool has set on it.  Both are empty for
+	// an object with none, which is also all an older daemon says: a
+	// client that must tell the two apart checks that the session holds
+	// the ModifyMaterialParams capability, which a daemon asks for at
+	// login only once it keeps overrides.
+	// Why: doc/gltf.md
+	RenderMaterials []*PrimFaceMaterial `protobuf:"bytes,24,rep,name=render_materials,json=renderMaterials,proto3" json:"render_materials,omitempty"`
+	GltfOverrides   []*PrimGLTFOverride `protobuf:"bytes,25,rep,name=gltf_overrides,json=gltfOverrides,proto3" json:"gltf_overrides,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ObjectInfo) Reset() {
@@ -4994,6 +5003,266 @@ func (x *ObjectInfo) GetProjector() *PrimProjector {
 	return nil
 }
 
+func (x *ObjectInfo) GetRenderMaterials() []*PrimFaceMaterial {
+	if x != nil {
+		return x.RenderMaterials
+	}
+	return nil
+}
+
+func (x *ObjectInfo) GetGltfOverrides() []*PrimGLTFOverride {
+	if x != nil {
+		return x.GltfOverrides
+	}
+	return nil
+}
+
+// PrimFaceMaterial is the GLTF material id of one face, from the render
+// material extra parameter.
+type PrimFaceMaterial struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Face          uint32                 `protobuf:"varint,1,opt,name=face,proto3" json:"face,omitempty"`
+	Material      string                 `protobuf:"bytes,2,opt,name=material,proto3" json:"material,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrimFaceMaterial) Reset() {
+	*x = PrimFaceMaterial{}
+	mi := &file_slgo_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrimFaceMaterial) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrimFaceMaterial) ProtoMessage() {}
+
+func (x *PrimFaceMaterial) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrimFaceMaterial.ProtoReflect.Descriptor instead.
+func (*PrimFaceMaterial) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *PrimFaceMaterial) GetFace() uint32 {
+	if x != nil {
+		return x.Face
+	}
+	return 0
+}
+
+func (x *PrimFaceMaterial) GetMaterial() string {
+	if x != nil {
+		return x.Material
+	}
+	return ""
+}
+
+// PrimGLTFOverride is what the region last said is overridden on one
+// face's GLTF material: only the fields it set.  A field it did not set
+// is absent, which is not zero: a repeated field is empty and an optional
+// one is unset.
+type PrimGLTFOverride struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Face  uint32                 `protobuf:"varint,1,opt,name=face,proto3" json:"face,omitempty"`
+	// Texture ids by slot, 0 base colour, 1 normal, 2 metallic and
+	// roughness, 3 emissive: empty, or one string for each slot with the
+	// empty string for a slot that is not overridden.  A slot overridden to
+	// no texture is ffffffff-ffff-ffff-ffff-ffffffffffff, as it is on the
+	// wire.
+	Textures []string `protobuf:"bytes,2,rep,name=textures,proto3" json:"textures,omitempty"`
+	// Base colour as red, green, blue, alpha, and emissive colour as red,
+	// green, blue; empty when not overridden.
+	BaseColour []float32 `protobuf:"fixed32,3,rep,packed,name=base_colour,json=baseColour,proto3" json:"base_colour,omitempty"`
+	Emissive   []float32 `protobuf:"fixed32,4,rep,packed,name=emissive,proto3" json:"emissive,omitempty"`
+	Metallic   *float32  `protobuf:"fixed32,5,opt,name=metallic,proto3,oneof" json:"metallic,omitempty"`
+	Roughness  *float32  `protobuf:"fixed32,6,opt,name=roughness,proto3,oneof" json:"roughness,omitempty"`
+	// 0 opaque, 1 blend, 2 mask.
+	AlphaMode   *int32   `protobuf:"varint,7,opt,name=alpha_mode,json=alphaMode,proto3,oneof" json:"alpha_mode,omitempty"`
+	AlphaCutoff *float32 `protobuf:"fixed32,8,opt,name=alpha_cutoff,json=alphaCutoff,proto3,oneof" json:"alpha_cutoff,omitempty"`
+	DoubleSided *bool    `protobuf:"varint,9,opt,name=double_sided,json=doubleSided,proto3,oneof" json:"double_sided,omitempty"`
+	// One entry for each texture slot, empty when no slot has a transform.
+	Transforms    []*PrimGLTFTransform `protobuf:"bytes,10,rep,name=transforms,proto3" json:"transforms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrimGLTFOverride) Reset() {
+	*x = PrimGLTFOverride{}
+	mi := &file_slgo_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrimGLTFOverride) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrimGLTFOverride) ProtoMessage() {}
+
+func (x *PrimGLTFOverride) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrimGLTFOverride.ProtoReflect.Descriptor instead.
+func (*PrimGLTFOverride) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *PrimGLTFOverride) GetFace() uint32 {
+	if x != nil {
+		return x.Face
+	}
+	return 0
+}
+
+func (x *PrimGLTFOverride) GetTextures() []string {
+	if x != nil {
+		return x.Textures
+	}
+	return nil
+}
+
+func (x *PrimGLTFOverride) GetBaseColour() []float32 {
+	if x != nil {
+		return x.BaseColour
+	}
+	return nil
+}
+
+func (x *PrimGLTFOverride) GetEmissive() []float32 {
+	if x != nil {
+		return x.Emissive
+	}
+	return nil
+}
+
+func (x *PrimGLTFOverride) GetMetallic() float32 {
+	if x != nil && x.Metallic != nil {
+		return *x.Metallic
+	}
+	return 0
+}
+
+func (x *PrimGLTFOverride) GetRoughness() float32 {
+	if x != nil && x.Roughness != nil {
+		return *x.Roughness
+	}
+	return 0
+}
+
+func (x *PrimGLTFOverride) GetAlphaMode() int32 {
+	if x != nil && x.AlphaMode != nil {
+		return *x.AlphaMode
+	}
+	return 0
+}
+
+func (x *PrimGLTFOverride) GetAlphaCutoff() float32 {
+	if x != nil && x.AlphaCutoff != nil {
+		return *x.AlphaCutoff
+	}
+	return 0
+}
+
+func (x *PrimGLTFOverride) GetDoubleSided() bool {
+	if x != nil && x.DoubleSided != nil {
+		return *x.DoubleSided
+	}
+	return false
+}
+
+func (x *PrimGLTFOverride) GetTransforms() []*PrimGLTFTransform {
+	if x != nil {
+		return x.Transforms
+	}
+	return nil
+}
+
+// PrimGLTFTransform is what an override sets of one texture slot's
+// transform: offset and scale are empty or two numbers, the rotation is
+// in radians.
+type PrimGLTFTransform struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Offset        []float32              `protobuf:"fixed32,1,rep,packed,name=offset,proto3" json:"offset,omitempty"`
+	Scale         []float32              `protobuf:"fixed32,2,rep,packed,name=scale,proto3" json:"scale,omitempty"`
+	Rotation      *float32               `protobuf:"fixed32,3,opt,name=rotation,proto3,oneof" json:"rotation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrimGLTFTransform) Reset() {
+	*x = PrimGLTFTransform{}
+	mi := &file_slgo_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrimGLTFTransform) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrimGLTFTransform) ProtoMessage() {}
+
+func (x *PrimGLTFTransform) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrimGLTFTransform.ProtoReflect.Descriptor instead.
+func (*PrimGLTFTransform) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *PrimGLTFTransform) GetOffset() []float32 {
+	if x != nil {
+		return x.Offset
+	}
+	return nil
+}
+
+func (x *PrimGLTFTransform) GetScale() []float32 {
+	if x != nil {
+		return x.Scale
+	}
+	return nil
+}
+
+func (x *PrimGLTFTransform) GetRotation() float32 {
+	if x != nil && x.Rotation != nil {
+		return *x.Rotation
+	}
+	return 0
+}
+
 // PrimLight is the light block of a prim's extra parameters. The colour
 // is the three bytes of the wire, which are linear, and the intensity is
 // the fourth byte over 255.
@@ -5012,7 +5281,7 @@ type PrimLight struct {
 
 func (x *PrimLight) Reset() {
 	*x = PrimLight{}
-	mi := &file_slgo_proto_msgTypes[58]
+	mi := &file_slgo_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5024,7 +5293,7 @@ func (x *PrimLight) String() string {
 func (*PrimLight) ProtoMessage() {}
 
 func (x *PrimLight) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[58]
+	mi := &file_slgo_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5037,7 +5306,7 @@ func (x *PrimLight) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrimLight.ProtoReflect.Descriptor instead.
 func (*PrimLight) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{58}
+	return file_slgo_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *PrimLight) GetRed() uint32 {
@@ -5103,7 +5372,7 @@ type PrimProjector struct {
 
 func (x *PrimProjector) Reset() {
 	*x = PrimProjector{}
-	mi := &file_slgo_proto_msgTypes[59]
+	mi := &file_slgo_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5115,7 +5384,7 @@ func (x *PrimProjector) String() string {
 func (*PrimProjector) ProtoMessage() {}
 
 func (x *PrimProjector) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[59]
+	mi := &file_slgo_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5128,7 +5397,7 @@ func (x *PrimProjector) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrimProjector.ProtoReflect.Descriptor instead.
 func (*PrimProjector) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{59}
+	return file_slgo_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *PrimProjector) GetTexture() string {
@@ -5173,7 +5442,7 @@ type Quaternion struct {
 
 func (x *Quaternion) Reset() {
 	*x = Quaternion{}
-	mi := &file_slgo_proto_msgTypes[60]
+	mi := &file_slgo_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5185,7 +5454,7 @@ func (x *Quaternion) String() string {
 func (*Quaternion) ProtoMessage() {}
 
 func (x *Quaternion) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[60]
+	mi := &file_slgo_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5198,7 +5467,7 @@ func (x *Quaternion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Quaternion.ProtoReflect.Descriptor instead.
 func (*Quaternion) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{60}
+	return file_slgo_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *Quaternion) GetX() float32 {
@@ -5259,7 +5528,7 @@ type PrimShape struct {
 
 func (x *PrimShape) Reset() {
 	*x = PrimShape{}
-	mi := &file_slgo_proto_msgTypes[61]
+	mi := &file_slgo_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5271,7 +5540,7 @@ func (x *PrimShape) String() string {
 func (*PrimShape) ProtoMessage() {}
 
 func (x *PrimShape) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[61]
+	mi := &file_slgo_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5284,7 +5553,7 @@ func (x *PrimShape) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrimShape.ProtoReflect.Descriptor instead.
 func (*PrimShape) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{61}
+	return file_slgo_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *PrimShape) GetPathCurve() uint32 {
@@ -5425,7 +5694,7 @@ type ObjectsResponse struct {
 
 func (x *ObjectsResponse) Reset() {
 	*x = ObjectsResponse{}
-	mi := &file_slgo_proto_msgTypes[62]
+	mi := &file_slgo_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5437,7 +5706,7 @@ func (x *ObjectsResponse) String() string {
 func (*ObjectsResponse) ProtoMessage() {}
 
 func (x *ObjectsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[62]
+	mi := &file_slgo_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5450,7 +5719,7 @@ func (x *ObjectsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectsResponse.ProtoReflect.Descriptor instead.
 func (*ObjectsResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{62}
+	return file_slgo_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *ObjectsResponse) GetObjects() []*ObjectInfo {
@@ -5476,7 +5745,7 @@ type RegionRequest struct {
 
 func (x *RegionRequest) Reset() {
 	*x = RegionRequest{}
-	mi := &file_slgo_proto_msgTypes[63]
+	mi := &file_slgo_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5488,7 +5757,7 @@ func (x *RegionRequest) String() string {
 func (*RegionRequest) ProtoMessage() {}
 
 func (x *RegionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[63]
+	mi := &file_slgo_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5501,7 +5770,7 @@ func (x *RegionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegionRequest.ProtoReflect.Descriptor instead.
 func (*RegionRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{63}
+	return file_slgo_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *RegionRequest) GetAgent() string {
@@ -5540,7 +5809,7 @@ type RegionInfo struct {
 
 func (x *RegionInfo) Reset() {
 	*x = RegionInfo{}
-	mi := &file_slgo_proto_msgTypes[64]
+	mi := &file_slgo_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5552,7 +5821,7 @@ func (x *RegionInfo) String() string {
 func (*RegionInfo) ProtoMessage() {}
 
 func (x *RegionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[64]
+	mi := &file_slgo_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5565,7 +5834,7 @@ func (x *RegionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegionInfo.ProtoReflect.Descriptor instead.
 func (*RegionInfo) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{64}
+	return file_slgo_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *RegionInfo) GetId() string {
@@ -5696,7 +5965,7 @@ type SimStatsRequest struct {
 
 func (x *SimStatsRequest) Reset() {
 	*x = SimStatsRequest{}
-	mi := &file_slgo_proto_msgTypes[65]
+	mi := &file_slgo_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5708,7 +5977,7 @@ func (x *SimStatsRequest) String() string {
 func (*SimStatsRequest) ProtoMessage() {}
 
 func (x *SimStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[65]
+	mi := &file_slgo_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5721,7 +5990,7 @@ func (x *SimStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimStatsRequest.ProtoReflect.Descriptor instead.
 func (*SimStatsRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{65}
+	return file_slgo_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *SimStatsRequest) GetAgent() string {
@@ -5743,7 +6012,7 @@ type SimStatsResponse struct {
 
 func (x *SimStatsResponse) Reset() {
 	*x = SimStatsResponse{}
-	mi := &file_slgo_proto_msgTypes[66]
+	mi := &file_slgo_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5755,7 +6024,7 @@ func (x *SimStatsResponse) String() string {
 func (*SimStatsResponse) ProtoMessage() {}
 
 func (x *SimStatsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[66]
+	mi := &file_slgo_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5768,7 +6037,7 @@ func (x *SimStatsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimStatsResponse.ProtoReflect.Descriptor instead.
 func (*SimStatsResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{66}
+	return file_slgo_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *SimStatsResponse) GetHandle() uint64 {
@@ -5798,7 +6067,7 @@ type SimStatsSample struct {
 
 func (x *SimStatsSample) Reset() {
 	*x = SimStatsSample{}
-	mi := &file_slgo_proto_msgTypes[67]
+	mi := &file_slgo_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5810,7 +6079,7 @@ func (x *SimStatsSample) String() string {
 func (*SimStatsSample) ProtoMessage() {}
 
 func (x *SimStatsSample) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[67]
+	mi := &file_slgo_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5823,7 +6092,7 @@ func (x *SimStatsSample) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimStatsSample.ProtoReflect.Descriptor instead.
 func (*SimStatsSample) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{67}
+	return file_slgo_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *SimStatsSample) GetAgeMs() int64 {
@@ -5852,7 +6121,7 @@ type SimStat struct {
 
 func (x *SimStat) Reset() {
 	*x = SimStat{}
-	mi := &file_slgo_proto_msgTypes[68]
+	mi := &file_slgo_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5864,7 +6133,7 @@ func (x *SimStat) String() string {
 func (*SimStat) ProtoMessage() {}
 
 func (x *SimStat) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[68]
+	mi := &file_slgo_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5877,7 +6146,7 @@ func (x *SimStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SimStat.ProtoReflect.Descriptor instead.
 func (*SimStat) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{68}
+	return file_slgo_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *SimStat) GetId() uint32 {
@@ -5903,7 +6172,7 @@ type RegionDetailsRequest struct {
 
 func (x *RegionDetailsRequest) Reset() {
 	*x = RegionDetailsRequest{}
-	mi := &file_slgo_proto_msgTypes[69]
+	mi := &file_slgo_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5915,7 +6184,7 @@ func (x *RegionDetailsRequest) String() string {
 func (*RegionDetailsRequest) ProtoMessage() {}
 
 func (x *RegionDetailsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[69]
+	mi := &file_slgo_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5928,7 +6197,7 @@ func (x *RegionDetailsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegionDetailsRequest.ProtoReflect.Descriptor instead.
 func (*RegionDetailsRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{69}
+	return file_slgo_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *RegionDetailsRequest) GetAgent() string {
@@ -5974,7 +6243,7 @@ type RegionDetailsResponse struct {
 
 func (x *RegionDetailsResponse) Reset() {
 	*x = RegionDetailsResponse{}
-	mi := &file_slgo_proto_msgTypes[70]
+	mi := &file_slgo_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5986,7 +6255,7 @@ func (x *RegionDetailsResponse) String() string {
 func (*RegionDetailsResponse) ProtoMessage() {}
 
 func (x *RegionDetailsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[70]
+	mi := &file_slgo_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5999,7 +6268,7 @@ func (x *RegionDetailsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegionDetailsResponse.ProtoReflect.Descriptor instead.
 func (*RegionDetailsResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{70}
+	return file_slgo_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *RegionDetailsResponse) GetKnown() bool {
@@ -6178,7 +6447,7 @@ type RegionChat struct {
 
 func (x *RegionChat) Reset() {
 	*x = RegionChat{}
-	mi := &file_slgo_proto_msgTypes[71]
+	mi := &file_slgo_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6190,7 +6459,7 @@ func (x *RegionChat) String() string {
 func (*RegionChat) ProtoMessage() {}
 
 func (x *RegionChat) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[71]
+	mi := &file_slgo_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6203,7 +6472,7 @@ func (x *RegionChat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegionChat.ProtoReflect.Descriptor instead.
 func (*RegionChat) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{71}
+	return file_slgo_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *RegionChat) GetWhisper() float32 {
@@ -6264,7 +6533,7 @@ type LandRequest struct {
 
 func (x *LandRequest) Reset() {
 	*x = LandRequest{}
-	mi := &file_slgo_proto_msgTypes[72]
+	mi := &file_slgo_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6276,7 +6545,7 @@ func (x *LandRequest) String() string {
 func (*LandRequest) ProtoMessage() {}
 
 func (x *LandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[72]
+	mi := &file_slgo_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6289,7 +6558,7 @@ func (x *LandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LandRequest.ProtoReflect.Descriptor instead.
 func (*LandRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{72}
+	return file_slgo_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *LandRequest) GetAgent() string {
@@ -6322,7 +6591,7 @@ type LandInfo struct {
 
 func (x *LandInfo) Reset() {
 	*x = LandInfo{}
-	mi := &file_slgo_proto_msgTypes[73]
+	mi := &file_slgo_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6334,7 +6603,7 @@ func (x *LandInfo) String() string {
 func (*LandInfo) ProtoMessage() {}
 
 func (x *LandInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[73]
+	mi := &file_slgo_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6347,7 +6616,7 @@ func (x *LandInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LandInfo.ProtoReflect.Descriptor instead.
 func (*LandInfo) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{73}
+	return file_slgo_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *LandInfo) GetParcelKnown() bool {
@@ -6401,7 +6670,7 @@ type GroundRequest struct {
 
 func (x *GroundRequest) Reset() {
 	*x = GroundRequest{}
-	mi := &file_slgo_proto_msgTypes[74]
+	mi := &file_slgo_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6413,7 +6682,7 @@ func (x *GroundRequest) String() string {
 func (*GroundRequest) ProtoMessage() {}
 
 func (x *GroundRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[74]
+	mi := &file_slgo_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6426,7 +6695,7 @@ func (x *GroundRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroundRequest.ProtoReflect.Descriptor instead.
 func (*GroundRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{74}
+	return file_slgo_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *GroundRequest) GetAgent() string {
@@ -6479,7 +6748,7 @@ type GroundResponse struct {
 
 func (x *GroundResponse) Reset() {
 	*x = GroundResponse{}
-	mi := &file_slgo_proto_msgTypes[75]
+	mi := &file_slgo_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6491,7 +6760,7 @@ func (x *GroundResponse) String() string {
 func (*GroundResponse) ProtoMessage() {}
 
 func (x *GroundResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[75]
+	mi := &file_slgo_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6504,7 +6773,7 @@ func (x *GroundResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroundResponse.ProtoReflect.Descriptor instead.
 func (*GroundResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{75}
+	return file_slgo_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *GroundResponse) GetKnown() bool {
@@ -6539,7 +6808,7 @@ type NeighboursRequest struct {
 
 func (x *NeighboursRequest) Reset() {
 	*x = NeighboursRequest{}
-	mi := &file_slgo_proto_msgTypes[76]
+	mi := &file_slgo_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6551,7 +6820,7 @@ func (x *NeighboursRequest) String() string {
 func (*NeighboursRequest) ProtoMessage() {}
 
 func (x *NeighboursRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[76]
+	mi := &file_slgo_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6564,7 +6833,7 @@ func (x *NeighboursRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NeighboursRequest.ProtoReflect.Descriptor instead.
 func (*NeighboursRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{76}
+	return file_slgo_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *NeighboursRequest) GetAgent() string {
@@ -6595,7 +6864,7 @@ type NeighboursResponse struct {
 
 func (x *NeighboursResponse) Reset() {
 	*x = NeighboursResponse{}
-	mi := &file_slgo_proto_msgTypes[77]
+	mi := &file_slgo_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6607,7 +6876,7 @@ func (x *NeighboursResponse) String() string {
 func (*NeighboursResponse) ProtoMessage() {}
 
 func (x *NeighboursResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[77]
+	mi := &file_slgo_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6620,7 +6889,7 @@ func (x *NeighboursResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NeighboursResponse.ProtoReflect.Descriptor instead.
 func (*NeighboursResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{77}
+	return file_slgo_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *NeighboursResponse) GetOn() bool {
@@ -6665,7 +6934,7 @@ type NeighbourInfo struct {
 
 func (x *NeighbourInfo) Reset() {
 	*x = NeighbourInfo{}
-	mi := &file_slgo_proto_msgTypes[78]
+	mi := &file_slgo_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6677,7 +6946,7 @@ func (x *NeighbourInfo) String() string {
 func (*NeighbourInfo) ProtoMessage() {}
 
 func (x *NeighbourInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[78]
+	mi := &file_slgo_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6690,7 +6959,7 @@ func (x *NeighbourInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NeighbourInfo.ProtoReflect.Descriptor instead.
 func (*NeighbourInfo) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{78}
+	return file_slgo_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *NeighbourInfo) GetHandle() uint64 {
@@ -6737,7 +7006,7 @@ type FriendsRequest struct {
 
 func (x *FriendsRequest) Reset() {
 	*x = FriendsRequest{}
-	mi := &file_slgo_proto_msgTypes[79]
+	mi := &file_slgo_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6749,7 +7018,7 @@ func (x *FriendsRequest) String() string {
 func (*FriendsRequest) ProtoMessage() {}
 
 func (x *FriendsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[79]
+	mi := &file_slgo_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6762,7 +7031,7 @@ func (x *FriendsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FriendsRequest.ProtoReflect.Descriptor instead.
 func (*FriendsRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{79}
+	return file_slgo_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *FriendsRequest) GetAgent() string {
@@ -6793,7 +7062,7 @@ type Friend struct {
 
 func (x *Friend) Reset() {
 	*x = Friend{}
-	mi := &file_slgo_proto_msgTypes[80]
+	mi := &file_slgo_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6805,7 +7074,7 @@ func (x *Friend) String() string {
 func (*Friend) ProtoMessage() {}
 
 func (x *Friend) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[80]
+	mi := &file_slgo_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6818,7 +7087,7 @@ func (x *Friend) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Friend.ProtoReflect.Descriptor instead.
 func (*Friend) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{80}
+	return file_slgo_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *Friend) GetId() string {
@@ -6858,7 +7127,7 @@ type FriendsResponse struct {
 
 func (x *FriendsResponse) Reset() {
 	*x = FriendsResponse{}
-	mi := &file_slgo_proto_msgTypes[81]
+	mi := &file_slgo_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6870,7 +7139,7 @@ func (x *FriendsResponse) String() string {
 func (*FriendsResponse) ProtoMessage() {}
 
 func (x *FriendsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[81]
+	mi := &file_slgo_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6883,7 +7152,7 @@ func (x *FriendsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FriendsResponse.ProtoReflect.Descriptor instead.
 func (*FriendsResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{81}
+	return file_slgo_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *FriendsResponse) GetFriends() []*Friend {
@@ -6907,7 +7176,7 @@ type NoteFriendRequest struct {
 
 func (x *NoteFriendRequest) Reset() {
 	*x = NoteFriendRequest{}
-	mi := &file_slgo_proto_msgTypes[82]
+	mi := &file_slgo_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6919,7 +7188,7 @@ func (x *NoteFriendRequest) String() string {
 func (*NoteFriendRequest) ProtoMessage() {}
 
 func (x *NoteFriendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[82]
+	mi := &file_slgo_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6932,7 +7201,7 @@ func (x *NoteFriendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NoteFriendRequest.ProtoReflect.Descriptor instead.
 func (*NoteFriendRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{82}
+	return file_slgo_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *NoteFriendRequest) GetAgent() string {
@@ -6964,7 +7233,7 @@ type NoteFriendResponse struct {
 
 func (x *NoteFriendResponse) Reset() {
 	*x = NoteFriendResponse{}
-	mi := &file_slgo_proto_msgTypes[83]
+	mi := &file_slgo_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6976,7 +7245,7 @@ func (x *NoteFriendResponse) String() string {
 func (*NoteFriendResponse) ProtoMessage() {}
 
 func (x *NoteFriendResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[83]
+	mi := &file_slgo_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6989,7 +7258,7 @@ func (x *NoteFriendResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NoteFriendResponse.ProtoReflect.Descriptor instead.
 func (*NoteFriendResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{83}
+	return file_slgo_proto_rawDescGZIP(), []int{86}
 }
 
 type FlushRequest struct {
@@ -7001,7 +7270,7 @@ type FlushRequest struct {
 
 func (x *FlushRequest) Reset() {
 	*x = FlushRequest{}
-	mi := &file_slgo_proto_msgTypes[84]
+	mi := &file_slgo_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7013,7 +7282,7 @@ func (x *FlushRequest) String() string {
 func (*FlushRequest) ProtoMessage() {}
 
 func (x *FlushRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[84]
+	mi := &file_slgo_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7026,7 +7295,7 @@ func (x *FlushRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlushRequest.ProtoReflect.Descriptor instead.
 func (*FlushRequest) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{84}
+	return file_slgo_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *FlushRequest) GetAgent() string {
@@ -7046,7 +7315,7 @@ type FlushResponse struct {
 
 func (x *FlushResponse) Reset() {
 	*x = FlushResponse{}
-	mi := &file_slgo_proto_msgTypes[85]
+	mi := &file_slgo_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7058,7 +7327,7 @@ func (x *FlushResponse) String() string {
 func (*FlushResponse) ProtoMessage() {}
 
 func (x *FlushResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[85]
+	mi := &file_slgo_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7071,7 +7340,7 @@ func (x *FlushResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlushResponse.ProtoReflect.Descriptor instead.
 func (*FlushResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{85}
+	return file_slgo_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *FlushResponse) GetForgotten() int32 {
@@ -7414,7 +7683,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x0eObjectsRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
 	"\x05named\x18\x02 \x01(\tR\x05named\x12\x0e\n" +
-	"\x02id\x18\x03 \x01(\tR\x02id\"\xf0\x05\n" +
+	"\x02id\x18\x03 \x01(\tR\x02id\"\xf8\x06\n" +
 	"\n" +
 	"ObjectInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
@@ -7445,7 +7714,39 @@ const file_slgo_proto_rawDesc = "" +
 	"\n" +
 	"link_known\x18\x15 \x01(\bR\tlinkKnown\x12(\n" +
 	"\x05light\x18\x16 \x01(\v2\x12.slgo.v1.PrimLightR\x05light\x124\n" +
-	"\tprojector\x18\x17 \x01(\v2\x16.slgo.v1.PrimProjectorR\tprojector\"\xaf\x01\n" +
+	"\tprojector\x18\x17 \x01(\v2\x16.slgo.v1.PrimProjectorR\tprojector\x12D\n" +
+	"\x10render_materials\x18\x18 \x03(\v2\x19.slgo.v1.PrimFaceMaterialR\x0frenderMaterials\x12@\n" +
+	"\x0egltf_overrides\x18\x19 \x03(\v2\x19.slgo.v1.PrimGLTFOverrideR\rgltfOverrides\"B\n" +
+	"\x10PrimFaceMaterial\x12\x12\n" +
+	"\x04face\x18\x01 \x01(\rR\x04face\x12\x1a\n" +
+	"\bmaterial\x18\x02 \x01(\tR\bmaterial\"\xbf\x03\n" +
+	"\x10PrimGLTFOverride\x12\x12\n" +
+	"\x04face\x18\x01 \x01(\rR\x04face\x12\x1a\n" +
+	"\btextures\x18\x02 \x03(\tR\btextures\x12\x1f\n" +
+	"\vbase_colour\x18\x03 \x03(\x02R\n" +
+	"baseColour\x12\x1a\n" +
+	"\bemissive\x18\x04 \x03(\x02R\bemissive\x12\x1f\n" +
+	"\bmetallic\x18\x05 \x01(\x02H\x00R\bmetallic\x88\x01\x01\x12!\n" +
+	"\troughness\x18\x06 \x01(\x02H\x01R\troughness\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"alpha_mode\x18\a \x01(\x05H\x02R\talphaMode\x88\x01\x01\x12&\n" +
+	"\falpha_cutoff\x18\b \x01(\x02H\x03R\valphaCutoff\x88\x01\x01\x12&\n" +
+	"\fdouble_sided\x18\t \x01(\bH\x04R\vdoubleSided\x88\x01\x01\x12:\n" +
+	"\n" +
+	"transforms\x18\n" +
+	" \x03(\v2\x1a.slgo.v1.PrimGLTFTransformR\n" +
+	"transformsB\v\n" +
+	"\t_metallicB\f\n" +
+	"\n" +
+	"_roughnessB\r\n" +
+	"\v_alpha_modeB\x0f\n" +
+	"\r_alpha_cutoffB\x0f\n" +
+	"\r_double_sided\"o\n" +
+	"\x11PrimGLTFTransform\x12\x16\n" +
+	"\x06offset\x18\x01 \x03(\x02R\x06offset\x12\x14\n" +
+	"\x05scale\x18\x02 \x03(\x02R\x05scale\x12\x1f\n" +
+	"\brotation\x18\x03 \x01(\x02H\x00R\brotation\x88\x01\x01B\v\n" +
+	"\t_rotation\"\xaf\x01\n" +
 	"\tPrimLight\x12\x10\n" +
 	"\x03red\x18\x01 \x01(\rR\x03red\x12\x14\n" +
 	"\x05green\x18\x02 \x01(\rR\x05green\x12\x12\n" +
@@ -7667,7 +7968,7 @@ func file_slgo_proto_rawDescGZIP() []byte {
 }
 
 var file_slgo_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 88)
+var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 91)
 var file_slgo_proto_goTypes = []any{
 	(AgentEvent_Kind)(0),             // 0: slgo.v1.AgentEvent.Kind
 	(AgentInfo_State)(0),             // 1: slgo.v1.AgentInfo.State
@@ -7731,36 +8032,39 @@ var file_slgo_proto_goTypes = []any{
 	(*SimAttachment)(nil),            // 59: slgo.v1.SimAttachment
 	(*ObjectsRequest)(nil),           // 60: slgo.v1.ObjectsRequest
 	(*ObjectInfo)(nil),               // 61: slgo.v1.ObjectInfo
-	(*PrimLight)(nil),                // 62: slgo.v1.PrimLight
-	(*PrimProjector)(nil),            // 63: slgo.v1.PrimProjector
-	(*Quaternion)(nil),               // 64: slgo.v1.Quaternion
-	(*PrimShape)(nil),                // 65: slgo.v1.PrimShape
-	(*ObjectsResponse)(nil),          // 66: slgo.v1.ObjectsResponse
-	(*RegionRequest)(nil),            // 67: slgo.v1.RegionRequest
-	(*RegionInfo)(nil),               // 68: slgo.v1.RegionInfo
-	(*SimStatsRequest)(nil),          // 69: slgo.v1.SimStatsRequest
-	(*SimStatsResponse)(nil),         // 70: slgo.v1.SimStatsResponse
-	(*SimStatsSample)(nil),           // 71: slgo.v1.SimStatsSample
-	(*SimStat)(nil),                  // 72: slgo.v1.SimStat
-	(*RegionDetailsRequest)(nil),     // 73: slgo.v1.RegionDetailsRequest
-	(*RegionDetailsResponse)(nil),    // 74: slgo.v1.RegionDetailsResponse
-	(*RegionChat)(nil),               // 75: slgo.v1.RegionChat
-	(*LandRequest)(nil),              // 76: slgo.v1.LandRequest
-	(*LandInfo)(nil),                 // 77: slgo.v1.LandInfo
-	(*GroundRequest)(nil),            // 78: slgo.v1.GroundRequest
-	(*GroundResponse)(nil),           // 79: slgo.v1.GroundResponse
-	(*NeighboursRequest)(nil),        // 80: slgo.v1.NeighboursRequest
-	(*NeighboursResponse)(nil),       // 81: slgo.v1.NeighboursResponse
-	(*NeighbourInfo)(nil),            // 82: slgo.v1.NeighbourInfo
-	(*FriendsRequest)(nil),           // 83: slgo.v1.FriendsRequest
-	(*Friend)(nil),                   // 84: slgo.v1.Friend
-	(*FriendsResponse)(nil),          // 85: slgo.v1.FriendsResponse
-	(*NoteFriendRequest)(nil),        // 86: slgo.v1.NoteFriendRequest
-	(*NoteFriendResponse)(nil),       // 87: slgo.v1.NoteFriendResponse
-	(*FlushRequest)(nil),             // 88: slgo.v1.FlushRequest
-	(*FlushResponse)(nil),            // 89: slgo.v1.FlushResponse
-	nil,                              // 90: slgo.v1.StatusResponse.UnhandledEntry
-	nil,                              // 91: slgo.v1.StatusResponse.PlacementWidthsEntry
+	(*PrimFaceMaterial)(nil),         // 62: slgo.v1.PrimFaceMaterial
+	(*PrimGLTFOverride)(nil),         // 63: slgo.v1.PrimGLTFOverride
+	(*PrimGLTFTransform)(nil),        // 64: slgo.v1.PrimGLTFTransform
+	(*PrimLight)(nil),                // 65: slgo.v1.PrimLight
+	(*PrimProjector)(nil),            // 66: slgo.v1.PrimProjector
+	(*Quaternion)(nil),               // 67: slgo.v1.Quaternion
+	(*PrimShape)(nil),                // 68: slgo.v1.PrimShape
+	(*ObjectsResponse)(nil),          // 69: slgo.v1.ObjectsResponse
+	(*RegionRequest)(nil),            // 70: slgo.v1.RegionRequest
+	(*RegionInfo)(nil),               // 71: slgo.v1.RegionInfo
+	(*SimStatsRequest)(nil),          // 72: slgo.v1.SimStatsRequest
+	(*SimStatsResponse)(nil),         // 73: slgo.v1.SimStatsResponse
+	(*SimStatsSample)(nil),           // 74: slgo.v1.SimStatsSample
+	(*SimStat)(nil),                  // 75: slgo.v1.SimStat
+	(*RegionDetailsRequest)(nil),     // 76: slgo.v1.RegionDetailsRequest
+	(*RegionDetailsResponse)(nil),    // 77: slgo.v1.RegionDetailsResponse
+	(*RegionChat)(nil),               // 78: slgo.v1.RegionChat
+	(*LandRequest)(nil),              // 79: slgo.v1.LandRequest
+	(*LandInfo)(nil),                 // 80: slgo.v1.LandInfo
+	(*GroundRequest)(nil),            // 81: slgo.v1.GroundRequest
+	(*GroundResponse)(nil),           // 82: slgo.v1.GroundResponse
+	(*NeighboursRequest)(nil),        // 83: slgo.v1.NeighboursRequest
+	(*NeighboursResponse)(nil),       // 84: slgo.v1.NeighboursResponse
+	(*NeighbourInfo)(nil),            // 85: slgo.v1.NeighbourInfo
+	(*FriendsRequest)(nil),           // 86: slgo.v1.FriendsRequest
+	(*Friend)(nil),                   // 87: slgo.v1.Friend
+	(*FriendsResponse)(nil),          // 88: slgo.v1.FriendsResponse
+	(*NoteFriendRequest)(nil),        // 89: slgo.v1.NoteFriendRequest
+	(*NoteFriendResponse)(nil),       // 90: slgo.v1.NoteFriendResponse
+	(*FlushRequest)(nil),             // 91: slgo.v1.FlushRequest
+	(*FlushResponse)(nil),            // 92: slgo.v1.FlushResponse
+	nil,                              // 93: slgo.v1.StatusResponse.UnhandledEntry
+	nil,                              // 94: slgo.v1.StatusResponse.PlacementWidthsEntry
 }
 var file_slgo_proto_depIdxs = []int32{
 	14, // 0: slgo.v1.ClientPacket.attach:type_name -> slgo.v1.Attach
@@ -7788,9 +8092,9 @@ var file_slgo_proto_depIdxs = []int32{
 	27, // 22: slgo.v1.HostResponse.agent:type_name -> slgo.v1.AgentInfo
 	27, // 23: slgo.v1.ListAgentsResponse.agents:type_name -> slgo.v1.AgentInfo
 	27, // 24: slgo.v1.StatusResponse.agent:type_name -> slgo.v1.AgentInfo
-	90, // 25: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
+	93, // 25: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
 	36, // 26: slgo.v1.StatusResponse.viewer:type_name -> slgo.v1.ViewerEndpoint
-	91, // 27: slgo.v1.StatusResponse.placement_widths:type_name -> slgo.v1.StatusResponse.PlacementWidthsEntry
+	94, // 27: slgo.v1.StatusResponse.placement_widths:type_name -> slgo.v1.StatusResponse.PlacementWidthsEntry
 	15, // 28: slgo.v1.SendRequest.message:type_name -> slgo.v1.OutboundMessage
 	53, // 29: slgo.v1.MoveRequest.target:type_name -> slgo.v1.Vector3
 	2,  // 30: slgo.v1.MoveEvent.state:type_name -> slgo.v1.MoveEvent.State
@@ -7805,75 +8109,78 @@ var file_slgo_proto_depIdxs = []int32{
 	59, // 39: slgo.v1.AttachmentsResponse.attachments:type_name -> slgo.v1.SimAttachment
 	53, // 40: slgo.v1.ObjectInfo.scale:type_name -> slgo.v1.Vector3
 	53, // 41: slgo.v1.ObjectInfo.position:type_name -> slgo.v1.Vector3
-	64, // 42: slgo.v1.ObjectInfo.rotation:type_name -> slgo.v1.Quaternion
-	65, // 43: slgo.v1.ObjectInfo.shape:type_name -> slgo.v1.PrimShape
-	62, // 44: slgo.v1.ObjectInfo.light:type_name -> slgo.v1.PrimLight
-	63, // 45: slgo.v1.ObjectInfo.projector:type_name -> slgo.v1.PrimProjector
-	61, // 46: slgo.v1.ObjectsResponse.objects:type_name -> slgo.v1.ObjectInfo
-	71, // 47: slgo.v1.SimStatsResponse.samples:type_name -> slgo.v1.SimStatsSample
-	72, // 48: slgo.v1.SimStatsSample.stats:type_name -> slgo.v1.SimStat
-	75, // 49: slgo.v1.RegionDetailsResponse.chat:type_name -> slgo.v1.RegionChat
-	82, // 50: slgo.v1.NeighboursResponse.neighbours:type_name -> slgo.v1.NeighbourInfo
-	84, // 51: slgo.v1.FriendsResponse.friends:type_name -> slgo.v1.Friend
-	4,  // 52: slgo.v1.Grid.Login:input_type -> slgo.v1.LoginRequest
-	6,  // 53: slgo.v1.Grid.Stream:input_type -> slgo.v1.ClientPacket
-	32, // 54: slgo.v1.Grid.ListAgents:input_type -> slgo.v1.ListAgentsRequest
-	34, // 55: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
-	28, // 56: slgo.v1.Grid.Host:input_type -> slgo.v1.HostRequest
-	30, // 57: slgo.v1.Grid.Logout:input_type -> slgo.v1.LogoutRequest
-	54, // 58: slgo.v1.Grid.Presence:input_type -> slgo.v1.PresenceRequest
-	60, // 59: slgo.v1.Grid.Objects:input_type -> slgo.v1.ObjectsRequest
-	57, // 60: slgo.v1.Grid.Attachments:input_type -> slgo.v1.AttachmentsRequest
-	67, // 61: slgo.v1.Grid.Region:input_type -> slgo.v1.RegionRequest
-	69, // 62: slgo.v1.Grid.SimStats:input_type -> slgo.v1.SimStatsRequest
-	73, // 63: slgo.v1.Grid.RegionDetails:input_type -> slgo.v1.RegionDetailsRequest
-	76, // 64: slgo.v1.Grid.Land:input_type -> slgo.v1.LandRequest
-	78, // 65: slgo.v1.Grid.Ground:input_type -> slgo.v1.GroundRequest
-	80, // 66: slgo.v1.Grid.Neighbours:input_type -> slgo.v1.NeighboursRequest
-	88, // 67: slgo.v1.Grid.Flush:input_type -> slgo.v1.FlushRequest
-	39, // 68: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
-	41, // 69: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
-	43, // 70: slgo.v1.Grid.Control:input_type -> slgo.v1.ControlRequest
-	45, // 71: slgo.v1.Grid.Move:input_type -> slgo.v1.MoveRequest
-	47, // 72: slgo.v1.Grid.Face:input_type -> slgo.v1.FaceRequest
-	49, // 73: slgo.v1.Grid.Halt:input_type -> slgo.v1.HaltRequest
-	50, // 74: slgo.v1.Grid.Posture:input_type -> slgo.v1.PostureRequest
-	83, // 75: slgo.v1.Grid.Friends:input_type -> slgo.v1.FriendsRequest
-	86, // 76: slgo.v1.Grid.NoteFriend:input_type -> slgo.v1.NoteFriendRequest
-	19, // 77: slgo.v1.Grid.Handled:input_type -> slgo.v1.HandledRequest
-	37, // 78: slgo.v1.Grid.ViewerCredential:input_type -> slgo.v1.ViewerCredentialRequest
-	5,  // 79: slgo.v1.Grid.Login:output_type -> slgo.v1.LoginResponse
-	16, // 80: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
-	33, // 81: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
-	35, // 82: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
-	29, // 83: slgo.v1.Grid.Host:output_type -> slgo.v1.HostResponse
-	31, // 84: slgo.v1.Grid.Logout:output_type -> slgo.v1.LogoutResponse
-	55, // 85: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
-	66, // 86: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
-	58, // 87: slgo.v1.Grid.Attachments:output_type -> slgo.v1.AttachmentsResponse
-	68, // 88: slgo.v1.Grid.Region:output_type -> slgo.v1.RegionInfo
-	70, // 89: slgo.v1.Grid.SimStats:output_type -> slgo.v1.SimStatsResponse
-	74, // 90: slgo.v1.Grid.RegionDetails:output_type -> slgo.v1.RegionDetailsResponse
-	77, // 91: slgo.v1.Grid.Land:output_type -> slgo.v1.LandInfo
-	79, // 92: slgo.v1.Grid.Ground:output_type -> slgo.v1.GroundResponse
-	81, // 93: slgo.v1.Grid.Neighbours:output_type -> slgo.v1.NeighboursResponse
-	89, // 94: slgo.v1.Grid.Flush:output_type -> slgo.v1.FlushResponse
-	40, // 95: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
-	42, // 96: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
-	44, // 97: slgo.v1.Grid.Control:output_type -> slgo.v1.ControlResponse
-	46, // 98: slgo.v1.Grid.Move:output_type -> slgo.v1.MoveEvent
-	48, // 99: slgo.v1.Grid.Face:output_type -> slgo.v1.FaceResponse
-	52, // 100: slgo.v1.Grid.Halt:output_type -> slgo.v1.HaltResponse
-	51, // 101: slgo.v1.Grid.Posture:output_type -> slgo.v1.PostureResponse
-	85, // 102: slgo.v1.Grid.Friends:output_type -> slgo.v1.FriendsResponse
-	87, // 103: slgo.v1.Grid.NoteFriend:output_type -> slgo.v1.NoteFriendResponse
-	20, // 104: slgo.v1.Grid.Handled:output_type -> slgo.v1.HandledResponse
-	38, // 105: slgo.v1.Grid.ViewerCredential:output_type -> slgo.v1.ViewerCredentialResponse
-	79, // [79:106] is the sub-list for method output_type
-	52, // [52:79] is the sub-list for method input_type
-	52, // [52:52] is the sub-list for extension type_name
-	52, // [52:52] is the sub-list for extension extendee
-	0,  // [0:52] is the sub-list for field type_name
+	67, // 42: slgo.v1.ObjectInfo.rotation:type_name -> slgo.v1.Quaternion
+	68, // 43: slgo.v1.ObjectInfo.shape:type_name -> slgo.v1.PrimShape
+	65, // 44: slgo.v1.ObjectInfo.light:type_name -> slgo.v1.PrimLight
+	66, // 45: slgo.v1.ObjectInfo.projector:type_name -> slgo.v1.PrimProjector
+	62, // 46: slgo.v1.ObjectInfo.render_materials:type_name -> slgo.v1.PrimFaceMaterial
+	63, // 47: slgo.v1.ObjectInfo.gltf_overrides:type_name -> slgo.v1.PrimGLTFOverride
+	64, // 48: slgo.v1.PrimGLTFOverride.transforms:type_name -> slgo.v1.PrimGLTFTransform
+	61, // 49: slgo.v1.ObjectsResponse.objects:type_name -> slgo.v1.ObjectInfo
+	74, // 50: slgo.v1.SimStatsResponse.samples:type_name -> slgo.v1.SimStatsSample
+	75, // 51: slgo.v1.SimStatsSample.stats:type_name -> slgo.v1.SimStat
+	78, // 52: slgo.v1.RegionDetailsResponse.chat:type_name -> slgo.v1.RegionChat
+	85, // 53: slgo.v1.NeighboursResponse.neighbours:type_name -> slgo.v1.NeighbourInfo
+	87, // 54: slgo.v1.FriendsResponse.friends:type_name -> slgo.v1.Friend
+	4,  // 55: slgo.v1.Grid.Login:input_type -> slgo.v1.LoginRequest
+	6,  // 56: slgo.v1.Grid.Stream:input_type -> slgo.v1.ClientPacket
+	32, // 57: slgo.v1.Grid.ListAgents:input_type -> slgo.v1.ListAgentsRequest
+	34, // 58: slgo.v1.Grid.Status:input_type -> slgo.v1.StatusRequest
+	28, // 59: slgo.v1.Grid.Host:input_type -> slgo.v1.HostRequest
+	30, // 60: slgo.v1.Grid.Logout:input_type -> slgo.v1.LogoutRequest
+	54, // 61: slgo.v1.Grid.Presence:input_type -> slgo.v1.PresenceRequest
+	60, // 62: slgo.v1.Grid.Objects:input_type -> slgo.v1.ObjectsRequest
+	57, // 63: slgo.v1.Grid.Attachments:input_type -> slgo.v1.AttachmentsRequest
+	70, // 64: slgo.v1.Grid.Region:input_type -> slgo.v1.RegionRequest
+	72, // 65: slgo.v1.Grid.SimStats:input_type -> slgo.v1.SimStatsRequest
+	76, // 66: slgo.v1.Grid.RegionDetails:input_type -> slgo.v1.RegionDetailsRequest
+	79, // 67: slgo.v1.Grid.Land:input_type -> slgo.v1.LandRequest
+	81, // 68: slgo.v1.Grid.Ground:input_type -> slgo.v1.GroundRequest
+	83, // 69: slgo.v1.Grid.Neighbours:input_type -> slgo.v1.NeighboursRequest
+	91, // 70: slgo.v1.Grid.Flush:input_type -> slgo.v1.FlushRequest
+	39, // 71: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
+	41, // 72: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
+	43, // 73: slgo.v1.Grid.Control:input_type -> slgo.v1.ControlRequest
+	45, // 74: slgo.v1.Grid.Move:input_type -> slgo.v1.MoveRequest
+	47, // 75: slgo.v1.Grid.Face:input_type -> slgo.v1.FaceRequest
+	49, // 76: slgo.v1.Grid.Halt:input_type -> slgo.v1.HaltRequest
+	50, // 77: slgo.v1.Grid.Posture:input_type -> slgo.v1.PostureRequest
+	86, // 78: slgo.v1.Grid.Friends:input_type -> slgo.v1.FriendsRequest
+	89, // 79: slgo.v1.Grid.NoteFriend:input_type -> slgo.v1.NoteFriendRequest
+	19, // 80: slgo.v1.Grid.Handled:input_type -> slgo.v1.HandledRequest
+	37, // 81: slgo.v1.Grid.ViewerCredential:input_type -> slgo.v1.ViewerCredentialRequest
+	5,  // 82: slgo.v1.Grid.Login:output_type -> slgo.v1.LoginResponse
+	16, // 83: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
+	33, // 84: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
+	35, // 85: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
+	29, // 86: slgo.v1.Grid.Host:output_type -> slgo.v1.HostResponse
+	31, // 87: slgo.v1.Grid.Logout:output_type -> slgo.v1.LogoutResponse
+	55, // 88: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
+	69, // 89: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
+	58, // 90: slgo.v1.Grid.Attachments:output_type -> slgo.v1.AttachmentsResponse
+	71, // 91: slgo.v1.Grid.Region:output_type -> slgo.v1.RegionInfo
+	73, // 92: slgo.v1.Grid.SimStats:output_type -> slgo.v1.SimStatsResponse
+	77, // 93: slgo.v1.Grid.RegionDetails:output_type -> slgo.v1.RegionDetailsResponse
+	80, // 94: slgo.v1.Grid.Land:output_type -> slgo.v1.LandInfo
+	82, // 95: slgo.v1.Grid.Ground:output_type -> slgo.v1.GroundResponse
+	84, // 96: slgo.v1.Grid.Neighbours:output_type -> slgo.v1.NeighboursResponse
+	92, // 97: slgo.v1.Grid.Flush:output_type -> slgo.v1.FlushResponse
+	40, // 98: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
+	42, // 99: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
+	44, // 100: slgo.v1.Grid.Control:output_type -> slgo.v1.ControlResponse
+	46, // 101: slgo.v1.Grid.Move:output_type -> slgo.v1.MoveEvent
+	48, // 102: slgo.v1.Grid.Face:output_type -> slgo.v1.FaceResponse
+	52, // 103: slgo.v1.Grid.Halt:output_type -> slgo.v1.HaltResponse
+	51, // 104: slgo.v1.Grid.Posture:output_type -> slgo.v1.PostureResponse
+	88, // 105: slgo.v1.Grid.Friends:output_type -> slgo.v1.FriendsResponse
+	90, // 106: slgo.v1.Grid.NoteFriend:output_type -> slgo.v1.NoteFriendResponse
+	20, // 107: slgo.v1.Grid.Handled:output_type -> slgo.v1.HandledResponse
+	38, // 108: slgo.v1.Grid.ViewerCredential:output_type -> slgo.v1.ViewerCredentialResponse
+	82, // [82:109] is the sub-list for method output_type
+	55, // [55:82] is the sub-list for method input_type
+	55, // [55:55] is the sub-list for extension type_name
+	55, // [55:55] is the sub-list for extension extendee
+	0,  // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_slgo_proto_init() }
@@ -7904,14 +8211,16 @@ func file_slgo_proto_init() {
 		(*FaceRequest_Target)(nil),
 		(*FaceRequest_Yaw)(nil),
 	}
-	file_slgo_proto_msgTypes[76].OneofWrappers = []any{}
+	file_slgo_proto_msgTypes[59].OneofWrappers = []any{}
+	file_slgo_proto_msgTypes[60].OneofWrappers = []any{}
+	file_slgo_proto_msgTypes[79].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_slgo_proto_rawDesc), len(file_slgo_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   88,
+			NumMessages:   91,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

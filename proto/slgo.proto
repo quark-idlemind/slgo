@@ -1457,6 +1457,63 @@ message ObjectInfo {
   // Why: doc/lights.md
   PrimLight light = 22;
   PrimProjector projector = 23;
+
+  // The GLTF material each face has, by face, and the overrides of its
+  // fields a script or a build tool has set on it.  Both are empty for
+  // an object with none, which is also all an older daemon says: a
+  // client that must tell the two apart checks that the session holds
+  // the ModifyMaterialParams capability, which a daemon asks for at
+  // login only once it keeps overrides.
+  // Why: doc/gltf.md
+  repeated PrimFaceMaterial render_materials = 24;
+  repeated PrimGLTFOverride gltf_overrides = 25;
+}
+
+// PrimFaceMaterial is the GLTF material id of one face, from the render
+// material extra parameter.
+message PrimFaceMaterial {
+  uint32 face = 1;
+  string material = 2;
+}
+
+// PrimGLTFOverride is what the region last said is overridden on one
+// face's GLTF material: only the fields it set.  A field it did not set
+// is absent, which is not zero: a repeated field is empty and an optional
+// one is unset.
+message PrimGLTFOverride {
+  uint32 face = 1;
+
+  // Texture ids by slot, 0 base colour, 1 normal, 2 metallic and
+  // roughness, 3 emissive: empty, or one string for each slot with the
+  // empty string for a slot that is not overridden.  A slot overridden to
+  // no texture is ffffffff-ffff-ffff-ffff-ffffffffffff, as it is on the
+  // wire.
+  repeated string textures = 2;
+
+  // Base colour as red, green, blue, alpha, and emissive colour as red,
+  // green, blue; empty when not overridden.
+  repeated float base_colour = 3;
+  repeated float emissive = 4;
+
+  optional float metallic = 5;
+  optional float roughness = 6;
+
+  // 0 opaque, 1 blend, 2 mask.
+  optional int32 alpha_mode = 7;
+  optional float alpha_cutoff = 8;
+  optional bool double_sided = 9;
+
+  // One entry for each texture slot, empty when no slot has a transform.
+  repeated PrimGLTFTransform transforms = 10;
+}
+
+// PrimGLTFTransform is what an override sets of one texture slot's
+// transform: offset and scale are empty or two numbers, the rotation is
+// in radians.
+message PrimGLTFTransform {
+  repeated float offset = 1;
+  repeated float scale = 2;
+  optional float rotation = 3;
 }
 
 // PrimLight is the light block of a prim's extra parameters. The colour
