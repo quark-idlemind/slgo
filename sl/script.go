@@ -227,7 +227,7 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 	if task == nil {
 		it, _, err := w.NewScript(ctx, s.Name, s.Source)
 		if err == nil {
-			err = w.PutInObject(ctx, s.In, it)
+			err = w.copyIntoObject(ctx, s.In, it)
 		}
 		if err != nil {
 			// The copy in inventory was only the way in, and is not
@@ -563,14 +563,21 @@ func (w *Session) onScriptRunning(fn func(object, item msg.UUID, running bool)) 
 // InstallScript puts a script into an object and starts it, returning
 // what the compiler said.
 //
-// Use this rather than NewScript and PutInObject for anything that has
-// to RUN. Copying an inventory script into an object over the protocol
-// leaves it there and does not start it -- and SetScriptRunning does not
-// start it either, because there is nothing compiled to start. Dropping
-// a script in by hand looks like one action and is really two: the copy,
-// and the save that compiles it into the object.
+// Use this rather than NewScript and a copy through UpdateTaskInventory
+// for anything that has to RUN. That copy -- what PutInObject sends for
+// anything but a script -- leaves the script there and does not start it,
+// and SetScriptRunning does not start it either, because there is
+// nothing compiled to start. The viewer's drop of a script is a different
+// message, RezScript, which the viewer sends for a script dropped on an
+// object, with Enabled set to run it (PutInObject sends that for a script; it is
+// the only way in for a script the avatar may not modify, whose source
+// cannot be read to upload). Here the script is new and its source is
+// in hand, so the copy is kept and the source is saved into the object:
+// the compile is the one this call reads the verdict of, and a script
+// that is not to run is not started.
+// Why: doc/scripts.md#dropping-a-script-into-an-object
 //
-// This is the second half. The source is uploaded through
+// The source is uploaded through
 // UpdateScriptTask, which compiles it inside the object and starts it,
 // and is the same call Run makes -- which is why running a script always
 // worked while installing a listener never did.  It goes up as Run's
@@ -602,7 +609,7 @@ func (w *Session) InstallScript(ctx context.Context, o *Object, name, source str
 	if task == nil {
 		it, _, err := w.NewScript(ctx, name, source)
 		if err == nil {
-			err = w.PutInObject(ctx, o, it)
+			err = w.copyIntoObject(ctx, o, it)
 		}
 		if err != nil {
 			if it != nil {

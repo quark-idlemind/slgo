@@ -3,6 +3,7 @@ package slate
 import (
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -260,6 +261,45 @@ func TestDropIntoALinkIsSentToThatPrim(t *testing.T) {
 		t.Errorf("sent %+v", u)
 	}
 	mustHave(t, res, `slate: removed "Example Red Swatch" from vendor link 2`)
+	if len(g.contents(201)) != 0 {
+		t.Errorf("the child still holds %v", g.contents(201))
+	}
+}
+
+// TestDropIntoALinkPutsAScriptInThatPrim: a script goes in with
+// RezScript, and into the prim the file names, as the viewer's Contents
+// tab does with the prim selected.  Sent to the root instead, the copy
+// would never show in the child the step reads, and would be left in the
+// product's root for good.
+func TestDropIntoALinkPutsAScriptInThatPrim(t *testing.T) {
+	f, vendor, lid, _ := storeWorld(t)
+	g := f.withDropping(t)
+	// The session learns a prim's parent from an update, as from a
+	// region; without one it would not know link 2 is a child, and a
+	// drop sent to the root would pass unseen.
+	var once sync.Once
+	f.mu.Lock()
+	contents := f.onSend
+	f.mu.Unlock()
+	f.replyTo(func(m msg.Message) {
+		contents(m)
+		if _, ok := m.(*msg.RequestTaskInventory); ok {
+			once.Do(func() {
+				f.relay(&msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{FullID: lid.ID, ID: lid.Local, ParentID: vendor.Local}}})
+			})
+		}
+	})
+	res := play(t, f, hdr+"item greeter is \"greeter\" in \"Objects\"\ndrop greeter into vendor link 2\n")
+	wantExit(t, res, 0)
+	r := sentOf[*msg.RezScript](f)
+	if len(r) != 1 || r[0].UpdateBlock.ObjectLocalID != 201 || !r[0].UpdateBlock.Enabled ||
+		r[0].InventoryBlock.ItemID != idGreeterItem {
+		t.Errorf("sent %+v", r)
+	}
+	if u := sentOf[*msg.UpdateTaskInventory](f); len(u) != 0 {
+		t.Errorf("a script went with UpdateTaskInventory too: %+v", u)
+	}
+	mustHave(t, res, `slate: removed "greeter" from vendor link 2`, `slate: pass test "t"`)
 	if len(g.contents(201)) != 0 {
 		t.Errorf("the child still holds %v", g.contents(201))
 	}

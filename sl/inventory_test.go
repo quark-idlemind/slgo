@@ -650,6 +650,107 @@ func TestPutInObjectSendsTheWholeItem(t *testing.T) {
 	}
 }
 
+// aScriptItem is a script in inventory with every field set that the
+// message carries, so that what goes out can be checked field by field.
+func aScriptItem() *Item {
+	it := anItem(theTaskItem, "a script")
+	it.Type, it.InvType = int(AssetLSLText), int(AssetLSLText)
+	it.Desc = "does something"
+	it.AssetID = theOther
+	it.Flags, it.SaleType, it.SalePrice = 7, 2, 11
+	it.Created = 1700000000
+	it.CreatorID, it.OwnerID, it.GroupID = testAgentID, testAgentID, theLastOwner
+	it.LastOwnerID = theLastOwner
+	it.BaseMask, it.OwnerMask = PermAll, PermAll&^PermCopy
+	it.GroupMask, it.EveryoneMask, it.NextOwnerMask = PermCopy, PermMove, PermTransfer
+	return it
+}
+
+// TestAScriptIsPutInObjectWithRezScript: the viewer drops a script with
+// RezScript, Enabled set, the root's local id and the agent's active
+// group (lltooldraganddrop.cpp:2644-2679, llviewerobject.cpp:2886-2922),
+// and UpdateTaskInventory leaves it not running.  The item is packed as
+// for UpdateTaskInventory, with a null transaction id.
+// Why: doc/scripts.md#dropping-a-script-into-an-object
+func TestAScriptIsPutInObjectWithRezScript(t *testing.T) {
+	w, f := newFakeSession(t)
+	f.mu.Lock()
+	f.presence.ActiveGroup = theLastOwner
+	f.mu.Unlock()
+	it := aScriptItem()
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
+	if err := w.PutInObject(context.Background(), o, it); err != nil {
+		t.Fatalf("PutInObject: %v", err)
+	}
+	if n := len(sentOf[*msg.UpdateTaskInventory](f)); n != 0 {
+		t.Errorf("%d UpdateTaskInventory went out for a script", n)
+	}
+	m := onlySent[*msg.RezScript](t, f)
+	if m.UpdateBlock.ObjectLocalID != 77 || !m.UpdateBlock.Enabled {
+		t.Errorf("update block %+v, want local 77, enabled", m.UpdateBlock)
+	}
+	if m.AgentData.GroupID != theLastOwner {
+		t.Errorf("group %s, want the active group", m.AgentData.GroupID)
+	}
+	d := m.InventoryBlock
+	if d.ItemID != it.ID || d.FolderID != thePrim || !d.TransactionID.IsZero() {
+		t.Errorf("item %s folder %s transaction %s", d.ItemID, d.FolderID, d.TransactionID)
+	}
+	if d.CreatorID != testAgentID || d.OwnerID != testAgentID || d.GroupID != theLastOwner {
+		t.Errorf("creator, owner and group went out as %+v", d)
+	}
+	if d.BaseMask != PermAll || d.OwnerMask != PermAll&^PermCopy || d.GroupMask != PermCopy ||
+		d.EveryoneMask != PermMove || d.NextOwnerMask != PermTransfer {
+		t.Errorf("permissions went out as %+v", d)
+	}
+	if d.Type != 10 || d.InvType != 10 || d.Flags != 7 || d.SaleType != 2 || d.SalePrice != 11 || d.CreationDate != 1700000000 {
+		t.Errorf("type, sale and date went out as %+v", d)
+	}
+	if trimNul(d.Name) != "a script" || trimNul(d.Description) != "does something" {
+		t.Errorf("named %q, described %q", trimNul(d.Name), trimNul(d.Description))
+	}
+	// The same sum the other message carries: over the asset and last
+	// owner the message lacks.
+	u := taskItemData(o, it)
+	if want := taskItemCRC(&u, theOther, theLastOwner); d.CRC != want || d.CRC != u.CRC {
+		t.Errorf("checksum %#x, want %#x", d.CRC, want)
+	}
+}
+
+// TestAScriptCanBePutInStopped: the viewer's Control-drag.
+func TestAScriptCanBePutInStopped(t *testing.T) {
+	w, f := newFakeSession(t)
+	o := foundHere(w, &Object{ID: thePrim, Local: 77})
+	if err := w.PutScriptInObject(context.Background(), o, aScriptItem(), false); err != nil {
+		t.Fatalf("PutScriptInObject: %v", err)
+	}
+	if m := onlySent[*msg.RezScript](t, f); m.UpdateBlock.Enabled {
+		t.Error("a script put in stopped was sent Enabled")
+	}
+}
+
+// TestAScriptDroppedOnAChildGoesIntoThatChild: a caller that names a
+// prim has chosen it, as the viewer's Contents tab drops into the prim
+// selected (llpanelobjectinventory.cpp:837-856), so the message and the
+// item's folder name the child and not its root.  Moving a child to its
+// root is the world drag's rule, where the mouse chose.
+func TestAScriptDroppedOnAChildGoesIntoThatChild(t *testing.T) {
+	w, f := newFakeSession(t)
+	f.objects = []*Seen{named(thePrim, 77), named(theChild, 78)}
+	child := findHere(t, w, theChild)
+	f.Relay(t, anUpdate(msg.ObjectUpdate_ObjectData{FullID: theChild, ID: 78, ParentID: 77}))
+	if err := w.PutInObject(context.Background(), child, aScriptItem()); err != nil {
+		t.Fatalf("PutInObject: %v", err)
+	}
+	m := onlySent[*msg.RezScript](t, f)
+	if m.UpdateBlock.ObjectLocalID != 78 {
+		t.Errorf("sent local %d, want 78, the child named", m.UpdateBlock.ObjectLocalID)
+	}
+	if m.InventoryBlock.FolderID != theChild {
+		t.Errorf("folder %s, want %s, the child named", m.InventoryBlock.FolderID, theChild)
+	}
+}
+
 // TestRemoveFromObjectNamesTheObjectsOwnId: the copy inside an object
 // has an id of its own, and the agent inventory id it was copied from
 // means nothing to the object.

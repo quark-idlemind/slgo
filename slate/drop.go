@@ -79,6 +79,11 @@ func (s *stepRun) dropInto(ctx context.Context, budget time.Duration, it *sl.Ite
 	if err := s.t.watch.poll(ctx, true); err != nil {
 		return "", err
 	}
+	if sl.IsScript(it) {
+		// PutInObject sends a script as the viewer drops one, asking it to run.
+		// Why: doc/scripts.md#dropping-a-script-into-an-object
+		return fmt.Sprintf("dropped %q into %s, asked to run", it.Name, b.name), nil
+	}
 	return fmt.Sprintf("dropped %q into %s", it.Name, b.name), nil
 }
 
@@ -178,7 +183,7 @@ func holdsTexture(held []sl.TaskItem, asset msg.UUID) bool {
 	return false
 }
 
-// putIn sends PutInObject and reads the prim's contents until the copy
+// putIn sends PutInObject (RezScript for a script, UpdateTaskInventory for the rest) and reads the prim's contents until the copy
 // shows: the message has no reply. The copy is the item with the name the
 // prim gave it (a duplicate is renamed "NAME 1") that was not there
 // before. u keeps it from the moment it is seen.

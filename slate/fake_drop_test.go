@@ -27,6 +27,8 @@ var (
 	idGroupOne    = msg.MustParseUUID("7a217e57-7e57-c0de-bab9-72f8102ea318")
 	idGroupTwo    = msg.MustParseUUID("7f9c7e57-7e57-c0de-f523-707b6f5b075f")
 	idGroupThree  = msg.MustParseUUID("b2a07e57-7e57-c0de-ff78-d17d266870b4")
+	idGreeterItem = msg.MustParseUUID("ee447e57-7e57-c0de-f681-68f6abc4afec")
+	idGreeterText = msg.MustParseUUID("70897e57-7e57-c0de-c2f5-caa9fb8fe35c")
 )
 
 // Permissions of an item, as the viewer reads them.
@@ -34,7 +36,8 @@ const (
 	permAll       = sl.PermCopy | sl.PermTransfer | sl.PermModify | sl.PermMove
 	permNoTrans   = sl.PermCopy | sl.PermModify | sl.PermMove
 	permNoCopy    = sl.PermTransfer | sl.PermModify | sl.PermMove
-	swatchTexture = 0 // the inventory type of a texture
+	swatchTexture = 0  // the inventory type of a texture
+	greeterScript = 10 // the asset and inventory type of a script
 )
 
 // heldItem is one thing in a prim's contents.
@@ -64,11 +67,13 @@ type dropGrid struct {
 
 // withDropping makes the grid answer reads of a prim's contents, and the
 // messages that change them. The inventory holds Example Red Swatch, a
-// texture the tester owns with every permission, in Objects.
+// texture the tester owns with every permission, and greeter, a script
+// with every permission, in Objects.
 func (f *fakeGrid) withDropping(t *testing.T) *dropGrid {
 	t.Helper()
 	inv := f.withInventory(t)
 	inv.addAsset(idObjectsFolder, idSwatchItem, "Example Red Swatch", swatchTexture, idSwatchAsset, permAll)
+	inv.addAsset(idObjectsFolder, idGreeterItem, "greeter", greeterScript, idGreeterText, permAll)
 	g := &dropGrid{f: f, inv: inv, held: map[uint32][]heldItem{}}
 	f.replyTo(func(m msg.Message) {
 		switch x := m.(type) {
@@ -80,6 +85,8 @@ func (f *fakeGrid) withDropping(t *testing.T) *dropGrid {
 			time.AfterFunc(0, func() { g.f.relay(xferPacket(id, 0, true, g.file())) })
 		case *msg.UpdateTaskInventory:
 			g.update(x)
+		case *msg.RezScript:
+			g.rezScript(x)
 		case *msg.RemoveTaskInventory:
 			g.remove(x.InventoryData.LocalID, x.InventoryData.ItemID)
 		case *msg.ObjectImage:
@@ -152,19 +159,33 @@ func (g *dropGrid) file() []byte {
 // update adds the copy: the asset of the item the message names comes
 // from the tester's inventory, which the message does not carry.
 func (g *dropGrid) update(x *msg.UpdateTaskInventory) {
+	g.addCopy(x.UpdateData.LocalID, x.InventoryData.ItemID, x.InventoryData.Name)
+}
+
+// rezScript adds a script's copy to the prim the message names, which is
+// where the region puts it: the message's own local id, child or root.
+// It is kept apart from update so that a drop sent the wrong way for a
+// script, or to the wrong prim, shows as a copy that never comes.
+func (g *dropGrid) rezScript(x *msg.RezScript) {
+	g.addCopy(x.UpdateBlock.ObjectLocalID, x.InventoryBlock.ItemID, x.InventoryBlock.Name)
+}
+
+func (g *dropGrid) addCopy(local uint32, item msg.UUID, rawName []byte) {
 	if g.refuse {
 		return
 	}
-	name := strings.TrimRight(string(x.InventoryData.Name), "\x00")
-	local := x.UpdateData.LocalID
+	name := strings.TrimRight(string(rawName), "\x00")
 	var asset msg.UUID
 	typ := "object"
 	g.inv.mu.Lock()
 	for _, it := range g.inv.items {
-		if it.id == x.InventoryData.ItemID {
+		if it.id == item {
 			asset, typ = it.asset, "object"
-			if it.typ == swatchTexture {
+			switch it.typ {
+			case swatchTexture:
 				typ = "texture"
+			case greeterScript:
+				typ = "lsltext"
 			}
 		}
 	}

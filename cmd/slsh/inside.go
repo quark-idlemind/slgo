@@ -56,8 +56,8 @@ import (
 var insideCommands = map[string]*command{
 	"drop": {
 		params:   "OBJECT PATH",
-		flags:    func() any { return new(helpOnly) },
-		brief:    "put an inventory item inside a rezzed object",
+		flags:    func() any { return new(dropFlags) },
+		brief:    "put an inventory item inside a rezzed object; a script runs there",
 		keywords: "put add insert copy item script notecard into inside object prim contents load",
 		man:      "drop",
 		run:      cmdDrop,
@@ -224,8 +224,13 @@ func (sh *Shell) renameInside(ctx context.Context, out io.Writer, what string, f
 	return nil
 }
 
+type dropFlags struct {
+	Stopped bool `getopt:"--stopped     put a script in without running it, as the viewer does with Control held"`
+	Help    bool `getopt:"--help -h     show what this command takes"`
+}
+
 func cmdDrop(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
-	var o helpOnly
+	var o dropFlags
 	args, done, err := subOptions("drop", &o, out, args)
 	if err != nil || done {
 		return err
@@ -255,6 +260,25 @@ func cmdDrop(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	// anything left out is set to zero -- which for a permission mask
 	// means taking the rights away.
 	it := e.Item()
+	// A script goes in as the viewer drops one, and runs; --stopped is
+	// the viewer's Control-drag.  Nothing answers, so what is said is
+	// what was asked for.
+	// Why: doc/scripts.md#dropping-a-script-into-an-object
+	if sl.IsScript(it) {
+		running := !o.Stopped
+		if err := sh.s.PutScriptInObject(ctx, obj, it, running); err != nil {
+			return err
+		}
+		how := "to run"
+		if !running {
+			how = "stopped"
+		}
+		fmt.Fprintf(out, "put %q in %s, asked %s%s\n", it.Name, obj.Name, how, movedNote(it))
+		return nil
+	}
+	if o.Stopped {
+		return fmt.Errorf("--stopped is for a script, and %q is not one", it.Name)
+	}
 	if err := sh.s.PutInObject(ctx, obj, it); err != nil {
 		return err
 	}
@@ -722,4 +746,13 @@ func (sh *Shell) confirmRunning(ctx context.Context, o *sl.Object, item msg.UUID
 			return false, ctx.Err()
 		}
 	}
+}
+
+// movedNote is what a drop of an item the avatar may not copy adds to
+// its line: the simulator moves it, and inventory no longer has it.
+func movedNote(it *sl.Item) string {
+	if it.OwnerMask&sl.PermCopy == 0 {
+		return " (it may not be copied, so it was moved out of inventory)"
+	}
+	return ""
 }
