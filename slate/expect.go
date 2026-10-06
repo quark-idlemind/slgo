@@ -87,7 +87,26 @@ const (
 	kSize
 	kText      // a prim's floating text
 	kAlphaMode // a face's alpha mode, read from its material (sl.Session.AlphaModeOf)
+	kTurn      // a prim's own rotation, said as Euler degrees
+
+	// The four fields of a face's material that Slate reads, each from
+	// the material the face names (sl.Session.MaterialOf).
+	kNormalMap
+	kSpecularMap
+	kGlossiness
+	kEnvironment
 )
+
+// readsMaterial is whether a kind is read from a face's material, which
+// only the RenderMaterials capability serves.
+func (k stateKind) readsMaterial() bool {
+	return k == kAlphaMode || k >= kNormalMap && k <= kEnvironment
+}
+
+// materialKind is the kind a material expectation's word reads.
+func materialKind(prop string) stateKind {
+	return kNormalMap + stateKind(slices.Index(MaterialProps, prop))
+}
 
 // clickFace is the face of the key that reads a prim's click byte, and
 // allFace the face of a key that reads every face of the prim at once.
@@ -122,14 +141,16 @@ type readKey struct {
 // face reading carries every property of the face; the expectation takes
 // the one it is about.
 type reading struct {
-	at    time.Time
-	tex   msg.UUID
-	off   [2]float64
-	rep   [2]float64
-	turns float64
-	click uint8
-	vec   [3]float64 // a position or a size, each a float32 held whole
-	str   string     // a prim's floating text
+	at      time.Time
+	tex     msg.UUID
+	off     [2]float64
+	rep     [2]float64
+	turns   float64
+	click   uint8
+	vec     [3]float64 // a position or a size, each a float32 held whole; for a turn, Euler degrees
+	quat    quat4      // a turn as read; hasQuat is false for a wanted value, which is vec
+	hasQuat bool
+	str     string // a prim's floating text
 
 	bright bool
 	glow   float64    // Glow / 255
@@ -142,6 +163,12 @@ type reading struct {
 	// every mode but a mask.
 	mode   sl.AlphaMode
 	cutoff int
+
+	// The fields of a face's material: the ids of its normal and
+	// specular maps, null when it has none, and its glossiness and
+	// environment, 0 to 255, which are 0 for a face with no material.
+	norm, spec msg.UUID
+	gloss, env float64
 
 	// A button reading: the tuples found, and the line it prints. A wanted
 	// value with atLeast is any count from count up.
@@ -180,22 +207,24 @@ func faceReading(f sl.Face, at time.Time) *reading {
 // default itself. A prim whose faces are all alike reads as one element.
 // Why: doc/slate-runner.md#face-all
 func tupleOf(faces []sl.Face, at time.Time, exact bool) *reading {
-	n := 1
-	if exact {
-		n = len(faces)
-	} else {
-		for i := len(faces) - 2; i >= 0; i-- {
-			if faces[i] != faces[len(faces)-1] {
-				n = i + 2
-				break
-			}
-		}
-	}
 	r := &reading{at: at}
-	for _, f := range faces[:n] {
+	for _, f := range faces[:tupleLen(faces, exact)] {
 		r.all = append(r.all, faceReading(f, at))
 	}
 	return r
+}
+
+// tupleLen is how many of the faces tupleOf takes.
+func tupleLen(faces []sl.Face, exact bool) int {
+	if exact {
+		return len(faces)
+	}
+	for i := len(faces) - 2; i >= 0; i-- {
+		if faces[i] != faces[len(faces)-1] {
+			return i + 2
+		}
+	}
+	return 1
 }
 
 // faceCount is how many faces a prim of the binding has, from its shape
@@ -275,6 +304,8 @@ func (k stateKind) floor() (float64, bool) {
 	switch k {
 	case kPosition, kSize:
 		return vecTol, true
+	case kTurn:
+		return turnTol, true
 	case kOffset:
 		return offsetTol, true
 	case kRepeats:
@@ -283,6 +314,8 @@ func (k stateKind) floor() (float64, bool) {
 		return rotTol, true
 	case kGlow, kColour, kAlpha:
 		return levelTol, true
+	case kGlossiness, kEnvironment:
+		return 0, true // whole numbers: exact unless the file widens it
 	}
 	return 0, false
 }
@@ -308,7 +341,8 @@ func r6(v float64) float64 { return math.Round(v*1e6) / 1e6 }
 // word is the word a numeric kind is written with.
 func (k stateKind) word() string {
 	return [...]string{kOffset: "offset", kRepeats: "repeats", kRotation: "rotation", kGlow: "glow", kColour: "colour",
-		kAlpha: "alpha", kPosition: "position", kSize: "size"}[k]
+		kAlpha: "alpha", kPosition: "position", kSize: "size", kTurn: "turn",
+		kGlossiness: "glossiness", kEnvironment: "environment"}[k]
 }
 
 // wrapTurn is a difference of two rotations in turns taken modulo one
@@ -320,6 +354,11 @@ func wrapTurn(d float64) float64 { return d - math.Floor(d+0.5) }
 // gapOf is the worst component of a reading against ref, for the kinds
 // that are numbers, and false for the rest.
 func (k stateKind) gapOf(a, ref *reading, t *tolerance, byDiff bool) (gap, bool) {
+	if k == kTurn {
+		// One angle: the rotation between the two, not a triple a component
+		// at a time, since two Euler triples can be one rotation.
+		return gap{turnAngle(a.rot(), ref.rot()), t.allowed(turnTol, 0)}, true
+	}
 	var xs, ys []float64
 	var floor float64
 	switch k {
@@ -337,6 +376,10 @@ func (k stateKind) gapOf(a, ref *reading, t *tolerance, byDiff bool) (gap, bool)
 		xs, ys, floor = a.col[:], ref.col[:], levelTol
 	case kAlpha:
 		xs, ys, floor = []float64{a.alpha}, []float64{ref.alpha}, levelTol
+	case kGlossiness:
+		xs, ys = []float64{a.gloss}, []float64{ref.gloss}
+	case kEnvironment:
+		xs, ys = []float64{a.env}, []float64{ref.env}
 	default:
 		return gap{}, false
 	}
@@ -411,6 +454,10 @@ func (k stateKind) equalTol(a, ref *reading, t *tolerance) bool {
 		return a.count == b.count
 	case kTexture:
 		return a.tex == b.tex
+	case kNormalMap:
+		return a.norm == b.norm
+	case kSpecularMap:
+		return a.spec == b.spec
 	case kFullbright:
 		return a.bright == b.bright
 	case kAlphaMode:
@@ -447,8 +494,10 @@ func (k stateKind) matchesTol(r, want *reading, t *tolerance) bool {
 // capType is the type of the capture of a kind.
 func (k stateKind) capType() CaptureType {
 	switch k {
-	case kTexture:
+	case kTexture, kNormalMap, kSpecularMap:
 		return CapUUID
+	case kGlossiness, kEnvironment:
+		return CapNumber
 	case kOffset, kRepeats:
 		return CapPair
 	case kRotation, kGlow, kAlpha, kButton:
@@ -457,7 +506,7 @@ func (k stateKind) capType() CaptureType {
 		return CapOnOff
 	case kColour:
 		return CapTriple
-	case kPosition, kSize:
+	case kPosition, kSize, kTurn:
 		return CapVector
 	case kText, kAlphaMode:
 		return CapText
@@ -487,10 +536,18 @@ func (k stateKind) text(r *reading) string {
 		return r.label
 	case kText:
 		return fmt.Sprintf("%q", r.str)
-	case kPosition, kSize:
+	case kPosition, kSize, kTurn:
 		return g3(r.vec)
 	case kTexture:
 		return r.tex.String()
+	case kNormalMap:
+		return mapText(r.norm)
+	case kSpecularMap:
+		return mapText(r.spec)
+	case kGlossiness:
+		return fmt.Sprintf("%g", r.gloss)
+	case kEnvironment:
+		return fmt.Sprintf("%g", r.env)
 	case kOffset:
 		return fmt.Sprintf("%g %g", r.off[0], r.off[1])
 	case kRepeats:
@@ -517,6 +574,15 @@ func (k stateKind) text(r *reading) string {
 	return fmt.Sprintf("%d", r.click)
 }
 
+// mapText is a map's id as the transcript says it: none for the null key,
+// which is a face with no such map.
+func mapText(id msg.UUID) string {
+	if id.IsZero() {
+		return "none"
+	}
+	return id.String()
+}
+
 // show is a reading as the transcript says it. A face all reading says
 // the value of each face from the first, separated by commas.
 func (k stateKind) show(key readKey, r *reading) string {
@@ -529,11 +595,12 @@ func (k stateKind) show(key readKey, r *reading) string {
 	if k == kText {
 		return fmt.Sprintf("text %s %q", key.name, r.str)
 	}
-	if k == kPosition || k == kSize {
-		return fmt.Sprintf("%s %s %s", map[stateKind]string{kPosition: "position", kSize: "size"}[k], key.name, g3(r.vec))
+	if k == kPosition || k == kSize || k == kTurn {
+		return fmt.Sprintf("%s %s %s", k.word(), key.name, g3(r.vec))
 	}
 	word := [...]string{kTexture: "texture", kOffset: "offset", kRepeats: "repeats", kRotation: "rotation",
-		kFullbright: "fullbright", kGlow: "glow", kColour: "colour", kAlpha: "alpha", kAlphaMode: "alphamode"}[k]
+		kFullbright: "fullbright", kGlow: "glow", kColour: "colour", kAlpha: "alpha", kAlphaMode: "alphamode",
+		kNormalMap: "normalmap", kSpecularMap: "specularmap", kGlossiness: "glossiness", kEnvironment: "environment"}[k]
 	face := fmt.Sprintf("%d", key.face)
 	if key.face == allFace {
 		face = "all"
@@ -551,7 +618,7 @@ func (k stateKind) value(r *reading) capValue {
 	if k == kButton {
 		return capValue{typ: CapNumber, num: float64(r.count)}
 	}
-	if k == kPosition || k == kSize {
+	if k == kPosition || k == kSize || k == kTurn {
 		return capValue{typ: CapVector, vec: r.vec}
 	}
 	if k == kText {
@@ -583,6 +650,14 @@ func (k stateKind) value(r *reading) capValue {
 		return capValue{typ: CapNumber, num: r4(r.alpha)}
 	case kAlphaMode:
 		return capValue{typ: CapText, text: k.text(r)}
+	case kNormalMap:
+		return capValue{typ: CapUUID, id: r.norm}
+	case kSpecularMap:
+		return capValue{typ: CapUUID, id: r.spec}
+	case kGlossiness:
+		return capValue{typ: CapNumber, num: r.gloss}
+	case kEnvironment:
+		return capValue{typ: CapNumber, num: r.env}
 	}
 	return capValue{typ: CapClick, click: r.click}
 }
@@ -598,12 +673,20 @@ func (k stateKind) want(v capValue) *reading {
 	}
 	r := &reading{}
 	switch k {
-	case kPosition, kSize:
+	case kPosition, kSize, kTurn:
 		r.vec = v.vec
 	case kText:
 		r.str = v.text
 	case kTexture:
 		r.tex = v.id
+	case kNormalMap:
+		r.norm = v.id
+	case kSpecularMap:
+		r.spec = v.id
+	case kGlossiness:
+		r.gloss = v.num
+	case kEnvironment:
+		r.env = v.num
 	case kOffset:
 		r.off = v.pair
 	case kRepeats:
@@ -731,6 +814,10 @@ func stateKeyOf(e *Expect) (readKey, stateKind, bool) {
 	case e.AlphaMode != nil:
 		x := e.AlphaMode
 		return readKey{keyName(x.Name, x.Link), face(x.FaceAll, x.Face), kAlphaMode}, kAlphaMode, true
+	case e.Material != nil:
+		x := e.Material
+		k := materialKind(x.Prop)
+		return readKey{keyName(x.Name, x.Link), face(x.FaceAll, x.Face), k}, k, true
 	case e.Glow != nil:
 		x := e.Glow
 		return readKey{keyName(x.Name, x.Link), face(x.FaceAll, x.Face), kGlow}, kGlow, true
@@ -746,6 +833,8 @@ func stateKeyOf(e *Expect) (readKey, stateKind, bool) {
 		return readKey{keyName(e.Position.Name, e.Position.Link), primFace, kPosition}, kPosition, true
 	case e.Size != nil:
 		return readKey{keyName(e.Size.Name, e.Size.Link), primFace, kSize}, kSize, true
+	case e.Turn != nil:
+		return readKey{keyName(e.Turn.Name, e.Turn.Link), primFace, kTurn}, kTurn, true
 	case e.FloatText != nil:
 		return readKey{keyName(e.FloatText.Name, e.FloatText.Link), primFace, kText}, kText, true
 	}
@@ -766,7 +855,7 @@ type watcher struct {
 	allStep map[string]int
 	btn     btnState           // button readings (buttonexp.go)
 	linkWhy map[string]string  // a link name -> why its last poll found no prim
-	modeWhy map[readKey]string // an alphamode key -> why its last poll could not read the material
+	modeWhy map[readKey]string // a key read from a material -> why its last poll could not read it
 
 	initial  bool
 	lastPoll time.Time
@@ -939,10 +1028,21 @@ func (w *watcher) poll(ctx context.Context, force bool) error {
 			rd = &reading{at: at, vec: vec3(o.Position)}
 		case k.kind == kSize:
 			rd = &reading{at: at, vec: vec3(o.Scale)}
+		case k.kind == kTurn:
+			q := quatOfWire(o.Rotation)
+			rd = &reading{at: at, vec: eulerOf(q), quat: q, hasQuat: true}
 		case k.kind == kText:
 			rd = &reading{at: at, str: o.Text}
 		case k.kind == kAlphaMode:
 			rd = w.readMode(ctx, k, o, at)
+			if rd == nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				continue
+			}
+		case k.kind.readsMaterial():
+			rd = w.readMaterial(ctx, k, o, at)
 			if rd == nil {
 				if ctx.Err() != nil {
 					return ctx.Err()
@@ -1019,6 +1119,64 @@ func (w *watcher) readMode(ctx context.Context, k readKey, o *sl.Seen, at time.T
 	}
 	delete(w.modeWhy, k)
 	return &reading{at: at, mode: mode, cutoff: int(cutoff)}
+}
+
+// materialReading is the reading of one face's material fields: a face
+// with no material has no maps and levels of 0.
+func materialReading(m *sl.Material, at time.Time) *reading {
+	r := &reading{at: at}
+	if m != nil {
+		r.norm, r.spec, r.gloss, r.env = m.NormMap, m.SpecMap, float64(m.SpecExp), float64(m.EnvIntensity)
+	}
+	return r
+}
+
+// readMaterial is the reading of a material field of a face, or of every
+// face for face all, from the materials the faces name, each asked of the
+// region once. When a material cannot be read the reason is kept for the
+// step's note and there is no reading; the next poll tries again.
+// Why: doc/slate-runner.md#material-maps
+func (w *watcher) readMaterial(ctx context.Context, k readKey, o *sl.Seen, at time.Time) *reading {
+	sess := w.t.r.sess
+	read := func(f sl.Face) (*reading, bool) {
+		m, err := sess.MaterialOf(ctx, f)
+		if err != nil {
+			if ctx.Err() == nil {
+				w.modeWhy[k] = err.Error()
+			}
+			return nil, false
+		}
+		return materialReading(m, at), true
+	}
+	if k.face != allFace {
+		faces, err := o.Faces(w.nfac[k.name])
+		if err != nil || k.face >= len(faces) {
+			return nil
+		}
+		rd, ok := read(faces[k.face])
+		if ok {
+			delete(w.modeWhy, k)
+		}
+		return rd
+	}
+	n, exact := w.t.faceCount(k.name, w.allStep[k.name], o)
+	faces, err := o.Faces(n)
+	if !exact {
+		faces, err = o.Faces(allMax)
+	}
+	if err != nil {
+		return nil
+	}
+	rd := &reading{at: at}
+	for _, f := range faces[:tupleLen(faces, exact)] {
+		fr, ok := read(f)
+		if !ok {
+			return nil
+		}
+		rd.all = append(rd.all, fr)
+	}
+	delete(w.modeWhy, k)
+	return rd
 }
 
 // linkFailed keeps why a link has no prim, for the step that waits on it:
@@ -1149,6 +1307,8 @@ func (s *stepRun) stateExpect(x *expState) error {
 		base, link, st = e.Fullbright.Name, e.Fullbright.Link, e.Fullbright.State
 	case e.AlphaMode != nil:
 		base, link, st = e.AlphaMode.Name, e.AlphaMode.Link, e.AlphaMode.State
+	case e.Material != nil:
+		base, link, st = e.Material.Name, e.Material.Link, e.Material.State
 	case e.Glow != nil:
 		base, link, st = e.Glow.Name, e.Glow.Link, e.Glow.State
 	case e.Colour != nil:
@@ -1161,6 +1321,8 @@ func (s *stepRun) stateExpect(x *expState) error {
 		base, link, st = e.Position.Name, e.Position.Link, e.Position.State
 	case e.Size != nil:
 		base, link, st = e.Size.Name, e.Size.Link, e.Size.State
+	case e.Turn != nil:
+		base, link, st = e.Turn.Name, e.Turn.Link, e.Turn.State
 	case e.FloatText != nil:
 		base, link, st = e.FloatText.Name, e.FloatText.Link, e.FloatText.State
 	}
@@ -1171,7 +1333,7 @@ func (s *stepRun) stateExpect(x *expState) error {
 		se.why = s.linkWhy(k.name)
 		x.noteFn = se.why
 	}
-	if kind == kAlphaMode {
+	if kind.readsMaterial() {
 		// A face's mode is its material's, which only RenderMaterials
 		// serves, so a session without it cannot say, however the face is.
 		// Why: doc/slate-runner.md#alpha-mode
@@ -1179,7 +1341,7 @@ func (s *stepRun) stateExpect(x *expState) error {
 			// The environment, not the product: slgod asks for the
 			// capability at login, so an slgod older than this slate,
 			// or a session that logged in before the upgrade, has none.
-			return &envError{fmt.Sprintf("this session holds no %s capability, which alphamode reads a face's material from; slgod is likely older than this slate, or the session logged in before it was upgraded: restart it from the same release", sl.MaterialsCap)}
+			return &envError{fmt.Sprintf("this session holds no %s capability, which %s reads a face's material from; slgod is likely older than this slate, or the session logged in before it was upgraded: restart it from the same release", sl.MaterialsCap, stateWord(e))}
 		}
 		prev, w := se.why, s.t.watch
 		se.why = func() string {
@@ -1218,6 +1380,15 @@ func (s *stepRun) stateExpect(x *expState) error {
 	return nil
 }
 
+// stateWord is the word a state expectation is written with, for the
+// two that are read from a material.
+func stateWord(e *Expect) string {
+	if e.Material != nil {
+		return e.Material.Prop
+	}
+	return "alphamode"
+}
+
 // lit3 is the literal of a position or size as float32, which is what the
 // store holds.
 func lit3(v *VecExp3) [3]float64 {
@@ -1238,6 +1409,8 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		use = e.Rot.Use
 	case e.Fullbright != nil:
 		use = e.Fullbright.Use
+	case e.Material != nil:
+		use = e.Material.Use
 	case e.Glow != nil:
 		use = e.Glow.Use
 	case e.Colour != nil:
@@ -1250,14 +1423,16 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		use = e.Position.Use
 	case e.Size != nil:
 		use = e.Size.Use
+	case e.Turn != nil:
+		use = e.Turn.Use
 	case e.FloatText != nil:
 		use = e.FloatText.Value.Capture
 	}
 	switch {
 	case e.Texture != nil && e.Texture.Any, e.Offset != nil && e.Offset.Any, e.Repeats != nil && e.Repeats.Any,
 		e.Rot != nil && e.Rot.Any, e.Click != nil && e.Click.Any, e.Fullbright != nil && e.Fullbright.Any,
-		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any,
-		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any, e.FloatText != nil && e.FloatText.Any:
+		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any, e.Material != nil && e.Material.Any,
+		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any, e.Turn != nil && e.Turn.Any, e.FloatText != nil && e.FloatText.Any:
 		se.any = true
 	case use != nil:
 		v, err := s.captureOrTuple(use, se.kind.capType())
@@ -1290,12 +1465,30 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		se.want.vec = lit3(e.Position)
 	case e.Size != nil:
 		se.want.vec = lit3(e.Size)
+	case e.Turn != nil:
+		// Degrees as written: the wanted rotation is made from them whole.
+		t := e.Turn
+		se.want.vec = [3]float64{t.X.Value, t.Y.Value, t.Z.Value}
 	case e.FloatText != nil:
 		tm, err := s.textMatch(e.FloatText.Value)
 		if err != nil {
 			return err
 		}
 		se.text = &tm
+	case e.Material != nil && e.Material.IsMap():
+		id, err := msg.ParseUUID(e.Material.ID)
+		if err != nil {
+			return fmt.Errorf("%q is not a texture id", e.Material.ID)
+		}
+		if se.kind == kNormalMap {
+			se.want.norm = id
+		} else {
+			se.want.spec = id
+		}
+	case e.Material != nil && se.kind == kGlossiness:
+		se.want.gloss = e.Material.Value.Value
+	case e.Material != nil:
+		se.want.env = e.Material.Value.Value
 	case e.Fullbright != nil:
 		se.want.bright = e.Fullbright.On
 	case e.AlphaMode != nil:
@@ -1353,7 +1546,7 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 		case allFace:
 			what = "face all"
 		case primFace:
-			what = map[stateKind]string{kPosition: "position", kSize: "size", kText: "text"}[se.kind]
+			what = map[stateKind]string{kPosition: "position", kSize: "size", kTurn: "turn", kText: "text"}[se.kind]
 		}
 		if se.kind == kButton {
 			what = "button"

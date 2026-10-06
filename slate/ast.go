@@ -685,8 +685,10 @@ type Expect struct {
 	Colour     *ColourExp
 	Alpha      *AlphaExp
 	AlphaMode  *AlphaModeExp
+	Material   *MaterialExp // normalmap, specularmap, glossiness or environment
 	Position   *VecExp3
 	Size       *VecExp3
+	Turn       *VecExp3 // a prim's own rotation, as Euler degrees X Y Z
 	Give       *GiveExp
 	Rez        *RezExp
 	Link       *LinkExp
@@ -931,6 +933,36 @@ type AlphaModeExp struct {
 // AlphaModes are the words an alphamode expectation takes, as sl.AlphaMode
 // names them.
 var AlphaModes = []string{"default", "none", "blend", "mask", "emissive"}
+
+// MaterialProps are the words of the expectations that read one field of a
+// face's material: the two maps, by texture id, and the two levels, 0 to
+// 255 as PRIM_SPECULAR gives them.
+var MaterialProps = []string{"normalmap", "specularmap", "glossiness", "environment"}
+
+// MaterialExp is expect normalmap, specularmap, glossiness or environment
+// OBJ link? face N or face all: one field of the face's material, which a
+// face with no material reads as the null key or 0. Prop is the word. ID
+// is the literal of a map, canonical lowercase, and the null key for the
+// word none; Value is the literal of a level. Both are empty for changes
+// and original. Any and Use are as for TextureExp, Use a uuid capture for
+// a map and a number capture for a level.
+// Why: doc/slate-runner.md#material-maps
+type MaterialExp struct {
+	Prop    string
+	Name    Ident
+	Link    *Int
+	Face    Int
+	FaceAll bool
+	State   State
+	ID      string
+	IDAt    Span
+	Value   Number
+	Any     bool
+	Use     *Capture
+}
+
+// IsMap is whether the expectation reads a texture id and not a level.
+func (x *MaterialExp) IsMap() bool { return x.Prop == "normalmap" || x.Prop == "specularmap" }
 
 // GiveExp is an inventory offer of Item from Name. Folder is the form
 // `give folder`: Item then names a folder, and Holding the items it must

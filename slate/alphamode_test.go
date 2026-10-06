@@ -62,7 +62,9 @@ func (f *fakeGrid) serveMaterials(t *testing.T) *materialsServer {
 			m.mu.Lock()
 			m.asks = append(m.asks, id)
 			m.mu.Unlock()
-			if def, ok := theMaterials[id]; ok {
+			if mat, ok := theMaps[id]; ok {
+				answer = append(answer, map[string]any{"ID": []byte(id[:]), "Material": mat.llsd()})
+			} else if def, ok := theMaterials[id]; ok {
 				answer = append(answer, map[string]any{"ID": []byte(id[:]), "Material": map[string]any{
 					"DiffuseAlphaMode": def[0], "AlphaMaskCutoff": def[1], "EnvIntensity": int64(0),
 				}})
