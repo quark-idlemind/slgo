@@ -233,8 +233,9 @@ quoted.
 
 `-addr` is where slgod is, and `$SLGO_ADDR` is the same answer when the
 flag is empty. With neither, `sl-host` is asked about the avatar
-(`-agent`, or `$SLGO_AGENT`) the way `slsh` asks, and a machine without
-`sl-host` uses `localhost:7807`.
+(`-agent`, or `$SLGO_AGENT`), as every command does ([the
+order](guide.md#saying-where-slgod-is)), and a machine without `sl-host`
+uses `localhost:7807`.
 
 ## Tried and not used
 

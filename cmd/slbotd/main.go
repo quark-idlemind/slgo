@@ -118,7 +118,8 @@ func run() error {
 
 	// Where slgod is.  An address given here or in the file is the
 	// operator saying where to go and is not second-guessed; only the
-	// empty string is worth asking sl-host about.
+	// empty string is worth a question, put to $SLGO_ADDR and then
+	// sl-host as for every command (slhost.ResolveFor).
 	//
 	// One slbotd talks to one slgod.  Holding a single avatar, it asks
 	// sl-host about that profile, whose rules may send it to a slgod

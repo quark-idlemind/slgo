@@ -44,7 +44,7 @@ import (
 
 type opts struct {
 	Direct  bool   `getopt:"--direct -d        log in to Second Life directly, without slgod"`
-	Addr    string `getopt:"--addr=HOSTPORT    the slgod to attach to; default sl-host, or this machine"`
+	Addr    string `getopt:"--addr=HOSTPORT    the slgod to attach to; else $SLGO_ADDR, else sl-host, else this machine"`
 	Agent   string `getopt:"--agent=NAME -a    the profile to use; $SLGO_AGENT, or the daemon's default"`
 	Login   string `getopt:"--login=NAME       log NAME in through slgod unless it is up, and use it"`
 	Logout  string `getopt:"--logout=NAME      log NAME out through slgod, and exit"`

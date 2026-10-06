@@ -5,7 +5,8 @@ avatar's own name beside it.
     agents
 
 From outside the shell, `slsh --agents` prints the same list without
-attaching to anybody, so it answers when the daemon has nobody up --
+attaching to anybody (it asks the slgod that `--addr`, `addr` in the
+file, `$SLGO_ADDR` and then sl-host name, in that order), so it answers when the daemon has nobody up --
 which is when `slsh -c agents` cannot, since it attaches to the
 default avatar first.
 
