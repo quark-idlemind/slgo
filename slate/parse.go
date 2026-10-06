@@ -1404,6 +1404,8 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.alphaExp(e)
 	case p.kw("alphamode"):
 		return p.alphaModeExp(e)
+	case p.kw("normalmap"), p.kw("specularmap"), p.kw("glossiness"), p.kw("environment"):
+		return p.materialExp(e)
 	case p.kw("give"):
 		return p.giveExp(e)
 	case p.kw("rez"):
@@ -2083,6 +2085,41 @@ func (p *parser) alphaModeExp(e *Expect) error {
 	}
 	e.AlphaMode = x
 	return nil
+}
+
+// materialExp reads normalmap, specularmap, glossiness or environment
+// OBJ link? faceall and the state. A map takes a uuid or the word none,
+// which is the null key a face without that map reads; a level takes a
+// number.
+// Why: doc/slate-language.md#material-maps
+func (p *parser) materialExp(e *Expect) error {
+	prop := p.tok.text
+	name, link, face, all, st, err := p.faceProp(prop)
+	if err != nil {
+		return err
+	}
+	x := &MaterialExp{Prop: prop, Name: name, Link: link, Face: face, FaceAll: all, State: st}
+	e.Material = x
+	if !x.IsMap() {
+		x.Value, x.Any, x.Use, err = p.numval(st)
+		return err
+	}
+	if !hasValue(st) {
+		return nil
+	}
+	if x.Any, x.Use, err = p.reading(); err != nil || x.Any || x.Use != nil {
+		return err
+	}
+	switch {
+	case p.tok.kind == kUUID:
+		x.ID = p.tok.text
+	case p.kw("none"):
+		x.ID = nullKey
+	default:
+		return p.unexpected("expected a UUID, none or original")
+	}
+	x.IDAt = p.tok.span
+	return p.next()
 }
 
 func (p *parser) colourExp(e *Expect) error {

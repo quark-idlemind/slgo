@@ -78,6 +78,6 @@ waits for it as it waits for a texture (`expect alphamode ... becomes`).
 
 ## Slate
 
-`expect alphamode OBJ face N is mask` reads this; the language is in
+`expect alphamode OBJ face N is mask` reads this, and `normalmap`, `specularmap`, `glossiness` and `environment` read the maps and levels of the same material (`sl.Session.MaterialOf`); the language is in
 [slate-language.md](slate-language.md#expectations) and the runner's
-side in [slate-runner.md](slate-runner.md#alpha-mode).
+side in [slate-runner.md](slate-runner.md#alpha-mode) and [slate-runner.md](slate-runner.md#material-maps).

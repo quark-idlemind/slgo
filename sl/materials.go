@@ -80,7 +80,8 @@ type Material struct {
 	AlphaMaskCutoff uint8
 
 	// EnvIntensity is how much of the environment the face reflects, 0
-	// to 255.
+	// to 255: the "environment" of LSL's PRIM_SPECULAR and of the build
+	// tool.
 	EnvIntensity uint8
 
 	// The normal map and the specular map, by texture id, with how each
@@ -97,7 +98,7 @@ type Material struct {
 	SpecRepeatX, SpecRepeatY float32
 	SpecRotation             float32
 	SpecColor                [4]uint8 // red, green, blue, alpha
-	SpecExp                  uint8    // the specular exponent
+	SpecExp                  uint8    // the specular exponent, 0 to 255: the glossiness of PRIM_SPECULAR and of the build tool
 }
 
 // materialCache is what the session has read, by id.  An id is
@@ -270,25 +271,39 @@ func materialOf(v any) (*Material, error) {
 	return mat, nil
 }
 
-// AlphaModeOf is the alpha mode of a face already read, and for a mask
-// its cutoff (zero for the others).  A face with no material is
-// AlphaModeDefault, with no request; one with a material is read by
+// MaterialOf is the material of a face already read, or nil for a face
+// with no material, which asks nothing.  One with a material is read by
 // Materials, and so is cached.
 //
 // A material the region does not answer for is an error rather than a
 // guess: the face names one the region has not yet stored.
 // Why: doc/materials.md#a-face-with-no-material
-func (w *Session) AlphaModeOf(ctx context.Context, f Face) (AlphaMode, uint8, error) {
+func (w *Session) MaterialOf(ctx context.Context, f Face) (*Material, error) {
 	if f.Material.IsZero() {
-		return AlphaModeDefault, 0, nil
+		return nil, nil
 	}
 	got, err := w.Materials(ctx, []msg.UUID{f.Material})
 	if err != nil {
-		return 0, 0, err
+		return nil, err
 	}
 	m := got[f.Material]
 	if m == nil {
-		return 0, 0, fmt.Errorf("sl: the region has no material %s, which the face names", f.Material)
+		return nil, fmt.Errorf("sl: the region has no material %s, which the face names", f.Material)
+	}
+	return m, nil
+}
+
+// AlphaModeOf is the alpha mode of a face already read, and for a mask
+// its cutoff (zero for the others).  A face with no material is
+// AlphaModeDefault, with no request; see MaterialOf for the rest.
+// Why: doc/materials.md#a-face-with-no-material
+func (w *Session) AlphaModeOf(ctx context.Context, f Face) (AlphaMode, uint8, error) {
+	m, err := w.MaterialOf(ctx, f)
+	if err != nil {
+		return 0, 0, err
+	}
+	if m == nil {
+		return AlphaModeDefault, 0, nil
 	}
 	if m.AlphaMode != AlphaModeMask {
 		return m.AlphaMode, 0, nil

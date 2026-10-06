@@ -1146,6 +1146,8 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 			return c.err(x.Face.Span, "alphamode reads one face's material at a time; there is no face all")
 		}
 		return c.faceRef(x.Name, x.Link, x.Face, false, same)
+	case e.Material != nil:
+		return c.material(e, e.Material, same)
 	case e.Glow != nil:
 		x := e.Glow
 		return c.level(e, "glow", x.Name, x.Link, x.Face, x.FaceAll, x.State, x.Any, x.Use, same, x.Value)
@@ -1227,6 +1229,8 @@ func nearWord(e Expect) string {
 		return "fullbright"
 	case e.AlphaMode != nil:
 		return "alphamode"
+	case e.Material != nil && e.Material.IsMap():
+		return e.Material.Prop
 	case e.Button != nil:
 		return "button"
 	}
@@ -1243,7 +1247,7 @@ func (c *checker) near(e Expect) error {
 	}
 	n := e.Near
 	if w := nearWord(e); w != "" {
-		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour and alpha are numbers a reading can be off by", w)
+		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness and environment are numbers a reading can be off by", w)
 	}
 	if e.Turn != nil && n.Percent {
 		return c.err(n.Span, "a turn takes near in degrees, not percent: an angle has no size to be a share of")
@@ -1271,6 +1275,8 @@ func (c *checker) near(e Expect) error {
 		any = e.Colour.Any
 	case e.Alpha != nil:
 		any = e.Alpha.Any
+	case e.Material != nil:
+		any = e.Material.Any
 	}
 	if any {
 		return c.err(n.Span, "is any takes no near: it matches whatever the reading is")
@@ -1332,6 +1338,39 @@ func (c *checker) level(e Expect, what string, name Ident, link *Int, face Int, 
 		if n.Value < 0 || n.Value > 1 {
 			return c.err(n.Span, "%s %g is outside 0 to 1", what, n.Value)
 		}
+	}
+	return nil
+}
+
+// materialCapType is the type of the capture of a material field: a
+// texture id for a map, a number for a level.
+func materialCapType(prop string) CaptureType {
+	if prop == "normalmap" || prop == "specularmap" {
+		return CapUUID
+	}
+	return CapNumber
+}
+
+// material checks a material expectation: the face, the reading, and
+// that a literal map is a uuid and a literal level a whole number from 0
+// to 255, the range of PRIM_SPECULAR's glossiness and environment.
+// Why: doc/slate-language.md#material-maps
+func (c *checker) material(e Expect, x *MaterialExp, same map[string]bool) error {
+	if err := c.faceRef(x.Name, x.Link, x.Face, x.FaceAll, same); err != nil {
+		return err
+	}
+	lit, err := c.reading(e, x.State, x.Any, x.Use, materialCapType(x.Prop), same)
+	if err != nil || !lit || x.IsMap() {
+		return err
+	}
+	if err := c.exact(x.Value); err != nil {
+		return err
+	}
+	if x.Value.Value != math.Trunc(x.Value.Value) {
+		return c.err(x.Value.Span, "%s %g is not a whole number: it is a level from 0 to 255", x.Prop, x.Value.Value)
+	}
+	if x.Value.Value < 0 || x.Value.Value > 255 {
+		return c.err(x.Value.Span, "%s %g is outside 0 to 255", x.Prop, x.Value.Value)
 	}
 	return nil
 }
@@ -1431,6 +1470,8 @@ func faceAll(e Expect) bool {
 		return e.Colour.FaceAll
 	case e.Alpha != nil:
 		return e.Alpha.FaceAll
+	case e.Material != nil:
+		return e.Material.FaceAll
 	}
 	return false
 }
@@ -1523,6 +1564,8 @@ func asType(e Expect) (CaptureType, bool) {
 		return CapText, true
 	case e.AlphaMode != nil:
 		return CapText, true
+	case e.Material != nil:
+		return materialCapType(e.Material.Prop), true
 	case e.Button != nil:
 		return CapNumber, true
 	}

@@ -17,9 +17,10 @@ const turnTol = 8.0/65535*180/math.Pi + 1e-9
 
 // A turn is read as a quaternion and said as Euler degrees X Y Z, which is
 // what the build tool shows and what llRot2Euler gives times RAD_TO_DEG:
-// the formulas are LLQuaternion::getEulerAngles and LLQuaternion::setQuat
-// (indra/llmath/llquaternion.cpp), so that the numbers written beside a
-// script's llEuler2Rot are the ones the grid means.
+// the formulas are LLQuaternion::getEulerAngles and LLQuaternion::setQuat,
+// Firestorm 885631b93a, indra/llmath/llquaternion.cpp:295-311
+// (setQuat(roll, pitch, yaw)) and 888-916 (getEulerAngles), so that the
+// numbers written beside a script's llEuler2Rot are the ones the grid means.
 type quat4 struct{ x, y, z, w float64 }
 
 // quatOfWire is a rotation as the store holds it: three floats and a W that
