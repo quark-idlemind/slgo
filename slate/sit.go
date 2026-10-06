@@ -40,19 +40,28 @@ func (s *stepRun) sitStimulus(st *Sit) (*stimulus, error) {
 	}, nil
 }
 
-// waitStimulus does nothing for d, as a blocking stimulus: the step's
-// expectations start when it returns.
-func waitStimulus(d time.Duration) *stimulus {
+// waitStimulus sends nothing for d, as a blocking stimulus: the step's
+// expectations start when it returns. It hears meanwhile as every other
+// wait of the runner does: each line, dialog and permission request that
+// comes is taken in and printed when it comes, not when the wait ends, so
+// a long wait neither shows a burst late nor overflows the chat
+// subscription.
+// Why: doc/slate-language.md#wait
+func (s *stepRun) waitStimulus(d time.Duration) *stimulus {
 	return &stimulus{
 		blocking: true,
 		send: func(ctx context.Context, budget time.Duration) (string, error) {
-			t := time.NewTimer(d)
-			defer t.Stop()
-			select {
-			case <-ctx.Done():
-				return "", ctx.Err()
-			case <-t.C:
-				return "waited " + d.String(), nil
+			until := time.Now().Add(d)
+			for {
+				if err := s.r.drain(); err != nil {
+					return "", err
+				}
+				if !time.Now().Before(until) {
+					return "waited " + d.String(), nil
+				}
+				if err := s.r.wait(ctx, until); err != nil {
+					return "", err
+				}
 			}
 		},
 	}

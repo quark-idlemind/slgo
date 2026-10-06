@@ -240,7 +240,11 @@ func TestAlphaModeStaticChecks(t *testing.T) {
 	mustCheck(t, hdr+"expect alphamode sign link 1 face 0 becomes default\nexpect alphamode sign face 0 changes\nexpect alphamode sign face 0 becomes original\n")
 	checkErr(t, hdr+"expect alphamode sign face all is mask\n", "there is no face all")
 	checkErr(t, hdr+"expect alphamode ghost face 0 is mask\n", "ghost")
-	checkErr(t, hdr+"expect alphamode sign face 0 is mask as $m\n", "alphamode has no capture")
+	mustCheck(t, hdr+"expect alphamode sign face 0 is mask as $m\n")
+	mustCheck(t, hdr+"expect alphamode sign face 0 changes within 2s as $m\nwait 100ms\nexpect say $m on public from object sign\n")
+	checkErr(t, hdr+"expect no alphamode sign face 0 is mask as $m\n", "a negative expectation matches nothing to bind")
+	// A mode is text: a texture's uuid is not what it can be.
+	checkErr(t, hdr+"expect alphamode sign face 0 is mask as $m\ntouch sign showing $m\n", "$m")
 	checkErr(t, hdr+"expect alphamode sign face 99999999999 is mask\n", "face")
 	parseErr(t, hdr+"expect alphamode sign face 0 is translucent\n", "expected default, none, blend, mask, emissive or original")
 	parseErr(t, hdr+"expect alphamode sign face 0 is any as $m\n", "expected default, none, blend, mask, emissive or original")
@@ -254,4 +258,38 @@ func TestAlphaModeStaticChecks(t *testing.T) {
 	if x == nil || x.Mode != "mask" || x.Face.Value != 1 || x.State.Kind != StateIs {
 		t.Errorf("parsed as %+v", x)
 	}
+}
+
+func TestAlphaModeBindsTheModeAsText(t *testing.T) {
+	f := newGrid(t)
+	f.serveMaterials(t)
+	f.replyTo(func(m msg.Message) {
+		switch text, _, _ := says(m); text {
+		case "go":
+			f.changeAfter(t, 40*time.Millisecond, signLocal, withMaterial(1, matMask128))
+		case "again":
+			f.relay(signSays("mask 128"))
+		}
+	})
+	res := play(t, f, hdr+`say "go" on 0
+expect alphamode sign face 1 changes within 1s as $m
+say "again" on 0
+expect say $m on public from object sign within 500ms
+`)
+	wantExit(t, res, 0)
+	mustHave(t, res, `capture $m = "mask 128" (step 1)`, `chat public from sign: "mask 128"`)
+
+	// A mode with no cutoff is the bare word.
+	f = newGrid(t)
+	f.serveMaterials(t)
+	f.whenSaid("go", func() { f.changeAfter(t, 40*time.Millisecond, signLocal, withMaterial(2, matEmitter)) })
+	res = play(t, f, hdr+"say \"go\" on 0\nexpect alphamode sign face 2 becomes emissive within 1s as $e\n")
+	wantExit(t, res, 0)
+	mustHave(t, res, `capture $e = "emissive" (step 1)`)
+
+	f = newGrid(t)
+	f.serveMaterials(t)
+	res = play(t, f, hdr+"expect alphamode sign face 0 is default as $d\n")
+	wantExit(t, res, 0)
+	mustHave(t, res, `capture $d = "default" (step 1)`)
 }

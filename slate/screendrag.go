@@ -77,6 +77,16 @@ func (s *stepRun) screenDragStimulus(d *Drag) (*stimulus, error) {
 			if sd.By {
 				to = sl.ScreenPoint{X: from.X + to.X, Y: from.Y + to.Y}
 			}
+			// A mouse held down stays in the window, so a start or an end
+			// off the view is no drag; the line between two points on it is
+			// on it too.
+			// Why: doc/hud-screen.md#a-drag
+			if !view.Contains(from) {
+				return s.sentence("the drag would start at %.0f,%.0f, off the %dx%d view; nothing was sent", from.X, from.Y, view.Width, view.Height)
+			}
+			if !view.Contains(to) {
+				return s.sentence("the drag would end at %.0f,%.0f, off the %dx%d view; nothing was sent", to.X, to.Y, view.Width, view.Height)
+			}
 			return nil
 		},
 		send: func(ctx context.Context, budget time.Duration) (string, error) {

@@ -1359,8 +1359,6 @@ func (c *checker) captureBinds(st Step) ([]capBind, error) {
 			switch {
 			case e.Neg:
 				return nil, c.err(e.As.Span, "a negative expectation matches nothing to bind; as %s needs a positive one", e.As)
-			case !ok && e.AlphaMode != nil:
-				return nil, c.err(e.As.Span, "alphamode has no capture to bind; as %s is not allowed on it", e.As)
 			case !ok && e.Rez != nil:
 				return nil, c.err(e.As.Span, "a rez names the new object with as NAME before within; %s binds nothing here", e.As)
 			case !ok:
@@ -1412,6 +1410,8 @@ func asType(e Expect) (CaptureType, bool) {
 	case e.Position != nil, e.Size != nil:
 		return CapVector, true
 	case e.FloatText != nil:
+		return CapText, true
+	case e.AlphaMode != nil:
 		return CapText, true
 	case e.Button != nil:
 		return CapNumber, true

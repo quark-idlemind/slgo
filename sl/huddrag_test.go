@@ -3,6 +3,7 @@ package sl
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,21 @@ func wornHUD(t *testing.T, f *fakeBackend) *Seen {
 	f.mu.Unlock()
 	return box
 }
+
+// rescale gives the box a new description with the scale, as the store
+// does, after a pause.
+func rescale(f *fakeBackend, after time.Duration, scale msg.Vector3) {
+	go func() {
+		time.Sleep(after)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		next := *f.objects[1]
+		next.Scale = scale
+		f.objects[1] = &next
+	}()
+}
+
+var grownGlass = msg.Vector3{X: 0.01, Y: 4, Z: 2}
 
 // The middle of the world view, where the box is, and a corner of it,
 // where it is not.
@@ -81,6 +97,9 @@ func TestADragOnTheScreenFollowsAHUDThatGrows(t *testing.T) {
 	box := wornHUD(t, f)
 	f.mu.Lock()
 	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.ObjectDeGrab); ok {
+			rescale(f, 100*time.Millisecond, box.Scale)
+		}
 		if _, ok := m.(*msg.ObjectGrab); ok {
 			go func() {
 				time.Sleep(100 * time.Millisecond)
@@ -156,6 +175,9 @@ func TestADragOnTheScreenSeesAHUDThatGrowsOnceItMoves(t *testing.T) {
 	var once bool
 	f.mu.Lock()
 	f.onSend = func(m msg.Message) {
+		if _, ok := m.(*msg.ObjectDeGrab); ok {
+			rescale(f, 100*time.Millisecond, box.Scale)
+		}
 		if _, ok := m.(*msg.ObjectGrabUpdate); ok && !once {
 			once = true
 			go func() {
@@ -195,5 +217,172 @@ func TestADragOnTheScreenSeesAHUDThatGrowsOnceItMoves(t *testing.T) {
 	}
 	if off > 0 {
 		t.Errorf("%d points in the second half of the drag were off the grown box", off)
+	}
+}
+
+// TestADragOnTheScreenIsRefusedOffTheView: a point of the drag off the
+// world view, the start, the end or one between, is refused before
+// anything is sent.
+func TestADragOnTheScreenIsRefusedOffTheView(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		pts  []ScreenPoint
+	}{
+		{"start below", []ScreenPoint{{390, 3745}, onTheBox}},
+		{"start left", []ScreenPoint{{-4776, 1000}, onTheBox}},
+		{"start at the width", []ScreenPoint{{3840, 1000}, onTheBox}},
+		{"end", []ScreenPoint{onTheBox, {1920, 2050}}},
+		{"between", []ScreenPoint{onTheBox, {-1, 10}, onTheBox}},
+	} {
+		w, f := newFakeSession(t)
+		box := wornHUD(t, f)
+		err := w.DragOnScreen(context.Background(), &box.Object, ScreenDrag{View: measured, Points: c.pts, Move: 50 * time.Millisecond})
+		if !errors.Is(err, ErrOffView) {
+			t.Errorf("%s: %v, want ErrOffView", c.name, err)
+		}
+		if n := len(sentOf[*msg.ObjectGrab](f)) + len(sentOf[*msg.ObjectDeGrab](f)); n != 0 {
+			t.Errorf("%s: %d messages were sent", c.name, n)
+		}
+	}
+	// The last pixel of the view is on it.
+	w, f := newFakeSession(t)
+	box := wornHUD(t, f)
+	err := w.DragOnScreen(context.Background(), &box.Object, ScreenDrag{
+		View: measured, Points: []ScreenPoint{onTheBox, {3839, 2049}},
+	})
+	if err != nil {
+		t.Errorf("the last pixel: %v", err)
+	}
+}
+
+// TestADragOnTheScreenWaitsForAGlassToShrinkAfterTheRelease: a prim that
+// grows once the drag moves and goes back 400 ms after the release is
+// back at its size when the drag returns, and a HUD whose prim never
+// changed returns at once.
+func TestADragOnTheScreenWaitsForAGlassToShrinkAfterTheRelease(t *testing.T) {
+	w, f := newFakeSession(t)
+	box := wornHUD(t, f)
+	pressed := box.Scale
+	var once bool
+	f.mu.Lock()
+	f.onSend = func(m msg.Message) {
+		switch m.(type) {
+		case *msg.ObjectGrabUpdate:
+			if !once {
+				once = true
+				rescale(f, 50*time.Millisecond, grownGlass)
+			}
+		case *msg.ObjectDeGrab:
+			rescale(f, 400*time.Millisecond, pressed)
+		}
+	}
+	f.mu.Unlock()
+
+	t0 := time.Now()
+	err := w.DragOnScreen(context.Background(), &box.Object, ScreenDrag{
+		View: measured, Points: []ScreenPoint{onTheBox, offTheBox},
+		Move: 400 * time.Millisecond, Rate: 50,
+	})
+	if err != nil {
+		t.Fatalf("DragOnScreen: %v", err)
+	}
+	if took := time.Since(t0); took < 800*time.Millisecond {
+		t.Errorf("returned %s after the press, before the glass was back", took)
+	}
+	f.mu.Lock()
+	got := f.objects[1].Scale
+	f.mu.Unlock()
+	if got != pressed {
+		t.Errorf("the prim is %v on return, want %v", got, pressed)
+	}
+
+	// A prim that never changed: no wait.
+	w, f = newFakeSession(t)
+	box = wornHUD(t, f)
+	t0 = time.Now()
+	err = w.DragOnScreen(context.Background(), &box.Object, ScreenDrag{
+		View: measured, Points: []ScreenPoint{onTheBox, offTheBox}, Move: 50 * time.Millisecond,
+	})
+	if err != nil || time.Since(t0) > 300*time.Millisecond {
+		t.Errorf("an unchanged prim: %v after %s", err, time.Since(t0))
+	}
+}
+
+// TestADragOnTheScreenAcceptsAGlassThatSettlesAtANewSize: a resize
+// leaves the prim at a new size 400 ms after the release; the drag
+// returns after that without an error.
+func TestADragOnTheScreenAcceptsAGlassThatSettlesAtANewSize(t *testing.T) {
+	w, f := newFakeSession(t)
+	box := wornHUD(t, f)
+	resized := msg.Vector3{X: box.Scale.X, Y: box.Scale.Y * 1.16, Z: box.Scale.Z * 1.16}
+	var once bool
+	f.mu.Lock()
+	f.onSend = func(m msg.Message) {
+		switch m.(type) {
+		case *msg.ObjectGrabUpdate:
+			if !once {
+				once = true
+				rescale(f, 50*time.Millisecond, grownGlass)
+			}
+		case *msg.ObjectDeGrab:
+			rescale(f, 400*time.Millisecond, resized)
+		}
+	}
+	f.mu.Unlock()
+	t0 := time.Now()
+	err := w.DragOnScreen(context.Background(), &box.Object, ScreenDrag{
+		View: measured, Points: []ScreenPoint{onTheBox, offTheBox}, Move: 400 * time.Millisecond, Rate: 50,
+	})
+	if err != nil {
+		t.Fatalf("DragOnScreen: %v", err)
+	}
+	if took := time.Since(t0); took < 1500*time.Millisecond {
+		t.Errorf("returned %s after the press, before the prim had kept its new size for a second", took)
+	}
+	f.mu.Lock()
+	got := f.objects[1].Scale
+	f.mu.Unlock()
+	if got != resized {
+		t.Errorf("the prim is %v on return, want %v", got, resized)
+	}
+}
+
+// TestADragOnTheScreenSaysWhenTheGlassKeepsChanging: a prim still
+// changing when the timeout runs out is reported.
+func TestADragOnTheScreenSaysWhenTheGlassKeepsChanging(t *testing.T) {
+	w, f := newFakeSession(t)
+	box := wornHUD(t, f)
+	w.SetOptions(Options{HUDChangeTimeout: 1500 * time.Millisecond})
+	var once bool
+	f.mu.Lock()
+	f.onSend = func(m msg.Message) {
+		switch m.(type) {
+		case *msg.ObjectGrabUpdate:
+			if !once {
+				once = true
+				rescale(f, 20*time.Millisecond, grownGlass)
+			}
+		case *msg.ObjectDeGrab:
+			go func() {
+				for i := 1; i < 40; i++ {
+					time.Sleep(100 * time.Millisecond)
+					rescale(f, 0, msg.Vector3{X: 0.01, Y: 4 + float32(i)*0.01, Z: 2})
+				}
+			}()
+		}
+	}
+	f.mu.Unlock()
+	t0 := time.Now()
+	err := w.DragOnScreen(context.Background(), &box.Object, ScreenDrag{
+		View: measured, Points: []ScreenPoint{onTheBox, offTheBox}, Move: 200 * time.Millisecond, Rate: 50,
+	})
+	if !errors.Is(err, ErrTimeout) || !strings.Contains(err.Error(), "still changing") {
+		t.Fatalf("DragOnScreen: %v, want a timeout saying the HUD was still changing", err)
+	}
+	if time.Since(t0) < 1500*time.Millisecond {
+		t.Errorf("gave up after %s", time.Since(t0))
+	}
+	if n := len(sentOf[*msg.ObjectDeGrab](f)); n != 1 {
+		t.Errorf("let go %d times", n)
 	}
 }

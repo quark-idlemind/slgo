@@ -273,13 +273,13 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Tests | A `test` name is a non-empty string, unique in the file, and there is at least one test in a suite. At most one `before each` and at most one `after each`. Top-level items may come in any order. |
 | Sequences | Sequence names are unique. A `do` names a defined sequence (it may be defined after its use). A sequence may `do` another but not cyclically; a cycle or an undefined name is an error. The other checks run on each test's expanded steps, so a sequence no test calls is checked only for its `do` calls. |
 | Matching | A `matching` pattern is a regular expression in Go's RE2 syntax and must compile. `matching` is legal only where the grammar writes `text`: `say`, `dialog` and `textbox` message, a `dialog` button clause, `give`, `rez` name and description, link text, a floating text expectation, and an object's `description`; and in `choose matching` and `sorted matching`, which take a string. |
-| State words | `becomes`, `changes`, `original` and `any` are legal only on the state expectations (texture, offset, repeats, rotation, position, size, click, text, fullbright, glow, colour, alpha, alphamode, and the button reading, which has no `any`; alphamode has no `any` either, and no capture). `changes` takes no value; `is` and `becomes` require one. |
+| State words | `becomes`, `changes`, `original` and `any` are legal only on the state expectations (texture, offset, repeats, rotation, position, size, click, text, fullbright, glow, colour, alpha, alphamode, and the button reading, which has no `any`; alphamode has no `any` either). `changes` takes no value; `is` and `becomes` require one. |
 | Length | A `say` on a negative channel is at most 254 bytes (it travels as a dialog reply). A `say` on any other channel is at most 1023 bytes, so the chat field does not cut it. An `answer` body is at most 254 bytes. A `send` text, once quoted, must leave the whole relayed control line within 1023 bytes, because the tester sends the command to the worn bridge as one chat line on a positive channel (measured: a 1000-byte line arrived whole). `choose` has no length check; a label the dialog did not offer fails at the step. A capture used in `send` text is checked at the step, before anything is sent. |
 | Link text | A `send` text, and a link expectation's literal text, is printable ASCII (0x20 to 0x7E) plus tab and newline, written `\t` and `\n`. The probe's length check is then a character count, and any other character is a static error rather than a mangled report. A capture used as link text is checked at the step. A `matching` pattern on a link expectation is not limited to that character set, because only a literal is put on the wire. |
 | Floats | An offset or rotation literal lies in [−1, 1]. Repeats are unrestricted. `original`, `any` and a capture are not literals and are not range-checked. |
 | Position and size | A `position` or `size` literal is three numbers. A position may be any number, negative or zero. Each of the three numbers of a size is above 0: `size 0 is not above 0`. `link N` is checked as on every expectation, and neither has a `face`. |
 | Floating text | A `text` expectation takes a string, `matching "RE"`, `original`, `any` (after `is`, with `as`) or a capture. A pattern must compile, and its named groups bind text as in any other `matching` clause. A capture must be text: one bound by `say`, `dialog`, `textbox`, `give` or another `text`, and a text capture is usable here and wherever text is. `link N` is checked as on every expectation, and there is no `face`. |
-| Alpha mode | An `alphamode` expectation names one face: `face all` is refused (`alphamode reads one face's material at a time; there is no face all`). Its value is `default`, `none`, `blend`, `mask`, `emissive` or `original`; `any` and a capture are parse errors, and `as $x` on it is refused (`alphamode has no capture to bind`), since a mode is not one of the capture types. `link N` is checked as on every expectation. |
+| Alpha mode | An `alphamode` expectation names one face: `face all` is refused (`alphamode reads one face's material at a time; there is no face all`). Its value is `default`, `none`, `blend`, `mask`, `emissive` or `original`; `any` and a capture are parse errors as its value, since a mode is a word; `as $x` after it binds the mode as text ([Captures](#expectations)), and a text capture is usable wherever text is, a `say` expectation's text for one, and is refused where a uuid, a number or any other type is wanted. `link N` is checked as on every expectation. |
 | Levels | A glow, alpha or colour literal lies in [0, 1]; each of the three numbers of a colour is checked alone. The error names the property and the number: `glow 1.5 is outside 0 to 1`. |
 | Origin | `at 0 0` is an error (on `face` and on `showing` alike), and so is a drag whose `from` or `to` is `0 0`, whether written `0` or `0.0`. The error is `at 0 0 is the middle of the face; placeTouches treats a zero ST as not given (sl/touch.go)`. The touch at 0 0 is treated as the middle of the face, so it is rejected. `at 0 0.5` is legal. |
 | Drag | A `drag … over D` must fit its step's budget: `D` is at most the longest `within` in the step, or the `timeout` when it has none, because the drag blocks for `D` and the step gives a blocking stimulus no more than that. With `press` or `dwell` the three together must fit (`over` counting 500 ms when omitted): `drag a face 0 from 0.1 0.5 to 0.9 0.5 over 4s press 4s dwell 4s` in a step that allows 10 s is refused with `drag over 4s, press 4s, dwell 4s can take 12s, which is longer than the step's budget of 10s, ...`. |
@@ -425,7 +425,7 @@ A face the search refuses (planar, animated, a finder error, `image` or `oval`) 
 - `X Y`, a point in the world view, in pixels from its top left corner, X to the right and Y down; decimals are allowed; or
 - `[link N] face F at S T`, the point on face `F` of the binding's linkset (of its root unless `link N` names a prim) that `S T` is, turned into pixels when the step is prepared. It spares the author from knowing pixels: `drag hud on screen from face 0 at 0.5 0.9 by 300 200` grabs the HUD by the lower middle of its background wherever the HUD is.
 
-The end is `to X Y`, a point in the same pixels, or `by DX DY`, a distance from the start, so that "move it 300 pixels right" needs no pixels at all. A negative number is a move left or up. `settle` waits after the press, up to `Options.HUDChangeTimeout` (5 s), for the region to say the prim pressed has changed, before the cursor moves: a HUD that grows a transparent prim over the screen when pressed to keep the cursor on it needs it, and without it the cursor leaves the prim at once. A HUD that does not change fails the step after that wait. The release is always sent.
+The end is `to X Y`, a point in the same pixels, or `by DX DY`, a distance from the start, so that "move it 300 pixels right" needs no pixels at all. A negative number is a move left or up. `settle` waits after the press, up to `Options.HUDChangeTimeout` (5 s), for the region to say the prim pressed has changed, before the cursor moves: a HUD that grows a transparent prim over the screen when pressed to keep the cursor on it needs it, and without it the cursor leaves the prim at once. A HUD that does not change fails the step after that wait. The release is always sent. A start or an end off the world view fails the step, before anything is sent, with `the drag would start at 390,3745, off the 1920x1025 view; nothing was sent` (or `end`): a mouse held down cannot leave the window, and the end is refused rather than clamped ([A drag](hud-screen.md#a-drag)). After the release, with or without `settle`, the step does not finish until the prim pressed has kept one size for a second (at once if it is at its size from the press), which is what a HUD that grows a transparent prim for the drag does a moment after the release, so that a drag right after it, placed from a face, starts where it says; a prim that never changed costs no wait, and one still changing after `Options.HUDChangeTimeout` fails the step with `the HUD was still changing`. That wait is inside the step's time budget.
 
 The pixels are those of a virtual world view, which the run states and not the file: `--screen WxH` (1920x1025 unless said, a 1920x1080 window less Firestorm's menu bar) and `--hud-zoom Z` (1 unless said) ([Package and command](slate-runner.md#package-and-command)). Pixels, and not fractions of the screen, because where a HUD sits depends on the world view's shape ([The world view](hud-screen.md#the-world-view)), so a fraction would not make a test independent of the screen; a stated size of screen is honest, and it is what a screenshot and the measurements are in. The face form is for a test that wants none of it. `OBJ` must be worn on a HUD point; one that is not fails the step with `slate: step N: "<name>" is worn on chest; a drag on the screen needs an object worn on a HUD point, and nothing was sent`, or `is not worn`. A face the prim cannot show, or a shape the runner cannot place (only a plain box or cylinder can be), fails it with a sentence too, and nothing is sent.
 
@@ -435,7 +435,24 @@ Both `allow pay` in the file and the `--pay` flag on the process are required. T
 
 **Permissions.** `allow permission NAME [NAME...] from OBJ` lets a permission request from `OBJ` be granted, and only what is named. `OBJ` is an `object` header, and then a request from any prim of its linkset counts, or an `item` header, and then one from any object the run wore or rezzed from that item, with `wear ITEM ... as X` or `rez ITEM ... as X`, counts (an object a product's script rezzed is not the run's, and is not matched). The object is matched by its id and never by its name, which can be anybody's. Any number of headers may name the same `OBJ`; they add up. The words are exactly `take-controls`, `trigger-animation`, `attach`, `change-links`, `track-camera`, `control-camera`, `teleport` and `override-animations`; `attach` and `take-controls` are granted only when named and are not implied by anything. A request is answered once: the bits asked for and named are granted, the rest are refused in that same answer, and a request with nothing named is denied as before. `debit` cannot be named, because it spends L$ and paying stays behind `allow pay`, `--pay` and the profile's rules; a request that asks for it alongside named bits is granted the named bits without it. Not nameable, and always refused: silent estate management, return objects and privileged land access, which act on land and estates and not on what a product test needs; experience permissions, which reach beyond one script; and the bits the grid does not implement.
 
-**Wait.** `wait D` does nothing for `D` and sends nothing: it is for a product that ignores a touch coming too soon after the last one, or a script that has to finish something first. It is a blocking stimulus, so `D` must fit the step's budget, and expectations in its step start when it returns. A wait says what it is for where `expect no ... within D` would read as a check.
+**Wait.** `wait D` sends nothing for `D`, and listens: it is for a product that ignores a touch coming too soon after the last one, a script that has to finish something first, or a run that is only to see what a product says. It is a blocking stimulus, so `D` must fit the step's budget, and expectations in its step start when it returns. A wait says what it is for where `expect no ... within D` would read as a check.
+
+*What a wait shows.* Every line the run hears is printed with the time it arrived, as it arrives, whether or not anything expects it, and so it is in a wait as in any other step. A wait needs no expectation, no speaker and no channel for that, and there is no `listen D` to write: `wait D` is the one word. What is printed:
+
+| Heard | Printed as |
+|---|---|
+| Chat the simulator delivers: whisper, say and shout (all three are `public`), the debug channel, region chat, owner chat and direct chat, each as `chat <type> from <who>: "<text>"` | `chat public from hud: "..."`, `chat owner from hud: "..."`, `chat debug from hud: "..."`, `chat region from ...` |
+| A line on a channel a `listen` header gave the bridge, which the viewer does not deliver | `chat channel N from <who>: "<raw tail>"` |
+| A script dialog or text box, to the tester or to a second avatar | `dialog from hud: "..." buttons ...`, `textbox from ...` |
+| A give offer | the line the `give` expectation prints for it |
+| A permission request, which the runner answers as it does in any step | `permission denied from hud: ...`, or the grant |
+| A link message a probe heard | `probe link ...` |
+
+*Who* is the script's name for an object the file binds, a second avatar's binding name, the tester's name for the tester, and for anybody else the displayed name, with an object's marked `[Object]` so that no object's name can pass for a binding. A line of the bridge's own protocol (its ready, the hellos, the probes' reports) is not chat and is never printed as one. Instant messages that are not give offers are logged and not printed, in a wait and in any other step.
+
+A wait shows at least what `expect no say matching "^$" on owner from object X within D` has heard, which was the way to see a product talk before: that expectation matches one speaker on one channel, and prints only the lines it matches, where a wait prints every line of every speaker on every channel, region chat, which no `say` expectation matches, included.
+
+*Printed as it is heard.* A wait takes in what arrives while it lasts and prints it then, not when it ends, and a line arriving after the wait is printed by the step that follows. (Before this was so, the lines of a wait were stamped with their arrival and printed when it ended, and a product that said more than the chat subscription's 256 lines in a long wait stopped the run with `the chat subscription dropped N lines`.) Lines of one kind are printed in the order they arrived; chat comes before the dialogs and permission requests that arrived in the same moment.
 
 **Sit and stand.** `sit OBJ` succeeds when the avatar has been seated on the object, and leaves it seated until a `stand`. A refusal fails with the simulator's text; a timeout fails with a message that the sit may have taken. `stand` succeeds when the request returns without error, including when the avatar was already standing.
 
@@ -635,7 +652,7 @@ Glow, each colour channel and alpha travel as one byte, `round(value × 255)`. T
 | `emissive` | The material says the texture's alpha is how much the face glows. |
 | `default` | The face has no material at all, so there is nothing to read and the viewer decides from the texture: blended if it has an alpha channel, opaque if not. It is its own value, and is not `blend`: the two are not the same fact. |
 
-A face a script has given the mode blend and nothing else has no material (measured, [Materials](materials.md#a-face-with-no-material)), so it reads `default` and never `blend`; setting none, mask or emissive does make a material. A test of a script that sets blend therefore expects `default`, or `blend` only where something else on the face makes the material. `changes` compares the mode and, for a mask, the cutoff, so a mask at a new cutoff is a change; `is mask` does not compare the cutoff. `original` is the mode and cutoff the test began with. A negative, `link N` and `within` are those of every state expectation. It takes no `any`, no capture and no `face all`. The reading needs the `RenderMaterials` capability: a run against a session that does not hold it stops at that step, exit 3, `slate: setup: this session holds no RenderMaterials capability, which alphamode reads a face's material from; slgod is likely older than this slate, or the session logged in before it was upgraded: restart it from the same release`, whatever the face is.
+A face a script has given the mode blend and nothing else has no material (measured, [Materials](materials.md#a-face-with-no-material)), so it reads `default` and never `blend`; setting none, mask or emissive does make a material. A test of a script that sets blend therefore expects `default`, or `blend` only where something else on the face makes the material. `changes` compares the mode and, for a mask, the cutoff, so a mask at a new cutoff is a change; `is mask` does not compare the cutoff. `original` is the mode and cutoff the test began with. A negative, `link N` and `within` are those of every state expectation. It takes no `any` and no `face all`; `as $x` binds the mode as text, `"mask 128"` for a mask and the bare word for the rest, in the form of the transcript line. The reading needs the `RenderMaterials` capability: a run against a session that does not hold it stops at that step, exit 3, `slate: setup: this session holds no RenderMaterials capability, which alphamode reads a face's material from; slgod is likely older than this slate, or the session logged in before it was upgraded: restart it from the same release`, whatever the face is.
 
 **Face all.** `face all` in place of a face number makes the reading the tuple of every face's value:
 
@@ -680,6 +697,7 @@ expect button hud text "Open" box becomes shown within 8s
 | `as $x` after `dialog` or `textbox` | The message | text |
 | `as $x` after `give` | The item's name | text |
 | `as $x` after a state expectation | The reading that matched; with `face all`, the tuple | its own type |
+| `as $x` after `alphamode` | The mode as the transcript writes it: `default`, `none`, `blend`, `emissive`, or `mask 128` with the cutoff for a mask. It has no `face all`, so there is no tuple | text |
 | `as $x` after a button reading | The count | number |
 
 The types, the scope and the rule that a capture is bound once per test are in [Static checks](#static-checks). In short, a capture is usable from the next step on, never in the step that binds it, and only a positive expectation binds one. A group that took part in the match binds its text, which may be empty. A group that did not take part (inside an alternative that was not taken, or a `?`) fails the step with `$name did not take part in the match`, and nothing from that match is bound.
@@ -1351,7 +1369,7 @@ expect fullbright sign face all becomes original within 8s
 
 ### A face's alpha mode
 
-A script on the sign gives face 1 a masked alpha mode when it is touched, and a second touch takes the material away again. The face starts with no material, which the runner reads as `default`; a mask is a material, so it reads `mask`, and `changes` is true again when the cutoff moves. `original` is what the face was when the test began.
+A script on the sign gives face 1 a masked alpha mode when it is touched, and a second touch takes the material away again. The face starts with no material, which the runner reads as `default`; a mask is a material, so it reads `mask`, and `changes` is true again when the cutoff moves. `original` is what the face was when the test began. `as $x` binds the mode, as text and as the transcript line writes it, `"mask 128"` here if the cutoff is 128, for a later step to say or compare.
 
 ```slate
 slate 1
@@ -1585,6 +1603,35 @@ expect no say "error" on public from object vendor within 2s
 ```
 
 The `then` step waits the full two seconds. The word `error` from another speaker does not fail it; from the vendor it fails at once and quotes the line.
+
+### Listening to what a product says
+
+To see what a product says when it is touched, touch it and wait. There is nothing to expect and nobody to name: a wait prints every line the run hears while it lasts ([Wait](#stimuli)).
+
+```slate
+slate 1
+
+object hud is "Test HUD"
+
+touch hud button text "Scan"
+wait 6s
+```
+
+The HUD, the script and this transcript are invented: the HUD answers its owner, complains on the debug channel, and a lamp nearby says something in public. Each line is stamped with when it came, and the step's own `pass` line is printed when the wait is over.
+
+```text
+slate: test "listen"
+slate: pass step 1
+10:20:31.402 chat owner from hud: "scanning"
+10:20:33.118 chat debug from hud: "Test HUD: script run-time warning, cache is cold"
+10:20:34.950 chat public from [Object] Example Lamp: "flicker"
+10:20:35.427 chat owner from hud: "done, 3 found"
+slate: pass step 2
+slate: pass test "listen"
+slate: passed 1 tests
+```
+
+The first `pass` is the touch's. A test that then wants to hold the product to what it said turns the lines it read into expectations, `expect say "done, 3 found" on owner from object hud within 8s` after the touch, and leaves the wait out.
 
 ### A channel the viewer does not deliver
 
