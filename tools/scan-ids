@@ -29,6 +29,32 @@ my $SIG = qr/^[0-9a-f]{4}7e577e57c0de[0-9a-f]{16}$/;
 # A record is [form, start, end, hex, units].  hex is the 32 digits, lower
 # case, or the 8 digits of a first group; units are the pieces of the text
 # that hold the digits, each [offset from start, length, kind, digits].
+# A run of groups that is a list of source line ranges, "1569-1572,
+# 1603-1610": an even number of groups, all decimal, each pair joined by
+# a single hyphen with the first below the second, pairs joined by a comma.
+# An id fragment is hex, or one hyphenated or spaced run, and a run of
+# four-digit decimals joined by hyphens alone (a card number) has no
+# commas and is still refused.
+sub line_ranges {
+	my ($run, $size, $g) = @_;
+	return 0 if @$g % 2 || @$g < 2;
+	for my $i (0 .. $#$g) {
+		my $tok = substr($run, $g->[$i][0], $size);
+		return 0 unless $tok =~ /^[0-9]+$/;
+		next if $i == $#$g;
+		my $from = $g->[$i][0] + $size;
+		my $gap = substr($run, $from, $g->[$i + 1][0] - $from);
+		if ($i % 2 == 0) {
+			return 0 unless $gap eq '-'
+				&& substr($run, $g->[$i + 1][0], $size) =~ /^[0-9]+$/
+				&& substr($run, $g->[$i][0], $size) < substr($run, $g->[$i + 1][0], $size);
+		} else {
+			return 0 unless $gap =~ /^,\s*(?:(?:\/\/|#|\*|;|>|\|)\s*)?$/;
+		}
+	}
+	return 1;
+}
+
 sub rec { my ($form, $s, $e, $hex, $units) = @_;
 	return { form => $form, start => $s, end => $e, hex => $hex, units => $units } }
 
@@ -109,6 +135,7 @@ sub find_ids {
 			my @g;
 			while ($run =~ /($tok)/g) { push @g, [$-[1], $size] }
 			next if @g < $n;
+			next if line_ranges($run, $size, \@g);
 			my @w = @g[0 .. $n - 1];
 			my $hex = lc join '', map { substr($run, $_->[0], $size) } @w;
 			my $end = $s + $w[-1][0] + $size;

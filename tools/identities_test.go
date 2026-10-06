@@ -131,6 +131,37 @@ func TestAnIdThatIsSignedIsLetThroughInEveryForm(t *testing.T) {
 	}
 }
 
+func TestSourceLineRangesAreNotIdFragments(t *testing.T) {
+	for _, text := range []string{
+		"(the in-use rule llviewerobject.cpp:1569-1572, 1603-1610, 1917-1922, 6734-6752)",
+		"see file.cpp:1569-1572\n",
+		"a.cpp:1001-1010,\n// 2001-2010, 3001-3010, 4001-4010, 5001-5010\n",
+	} {
+		if out, refused := scan(t, text+"\n"); refused {
+			t.Errorf("%q refused: %s", text, out)
+		}
+	}
+	// Built from pieces so that no refused fragment is written down here.
+	r := func(g ...string) string { return strings.Join(g, "-") }
+	for _, text := range []string{
+		// hex letters in the groups
+		r("1569", "15a2") + ", " + r("1603", "1610") + ", " + r("1917", "1922") + ", " + r("6734", "6752"),
+		r("c3a1", "5b0e", "d4f9", "2c68", "91ab", "e07d", "4f32", "8a5c"),
+		// pairs that do not rise
+		r("1572", "1569") + ", " + r("1603", "1610") + ", " + r("1917", "1922") + ", " + r("6734", "6752"),
+		// decimal groups joined by hyphens alone: a card, a phone number
+		r("1569", "1572", "1603", "1610", "1917", "1922", "6734", "6752"),
+		// pairs not joined by a comma
+		r("1569", "1572") + " " + r("1603", "1610") + " " + r("1917", "1922") + " " + r("6734", "6752"),
+		// an odd number of groups
+		r("1569", "1572") + ", " + r("1603", "1610") + ", " + r("1917", "1922") + ", " + r("6734", "6752") + ", 7001",
+	} {
+		if _, refused := scan(t, text+"\n"); !refused {
+			t.Errorf("%q passed", text)
+		}
+	}
+}
+
 func TestTheNullKeyAndLindensOwnIdsAreKnown(t *testing.T) {
 	null := "00000000-0000-0000-0000-000000000000"
 	// The built-in plywood texture, which known-uuids lists.
