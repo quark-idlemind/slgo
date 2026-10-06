@@ -9,8 +9,8 @@ package sl
 // sent and says nothing about whether the animation plays: a request
 // for an animation the avatar cannot play, or has not the right to, is
 // dropped without a word.  What the avatar is playing arrives in
-// AvatarAnimation, which this package keeps only for the length of a
-// sit or a stand (borrowAnimations), so it is not offered here.
+// AvatarAnimation, which a session is sent only when it asked
+// (ListenForAnimations) and which Animations then offers (playing.go).
 //
 // The id is an asset id.  For a built-in that is its constant; for one
 // in inventory it is the item's asset, not the item's own id -- the

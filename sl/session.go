@@ -123,12 +123,14 @@ type Session struct {
 	attach      map[msg.UUID]*Attached
 	killed      map[uint32]bool
 
-	// anims is what the simulator last said was playing on THIS
-	// avatar, and sitOn and sitOffset are the last AvatarSitResponse it
-	// sent us.  See sit.go: the animations are the whole of the
-	// evidence that a ground sit happened, and the offset is a detail
-	// of an object sit that the reparenting does not carry.
-	anims     []msg.UUID
+	// playing is what the simulator last said was playing on THIS
+	// avatar, and playingAt when it said it (zero until it has), and
+	// sitOn and sitOffset are the last AvatarSitResponse it sent us.
+	// See sit.go: the animations are the whole of the evidence that a
+	// ground sit happened, and the offset is a detail of an object sit
+	// that the reparenting does not carry.  See playing.go.
+	playing   []PlayingAnimation
+	playingAt time.Time
 	sitOn     msg.UUID
 	sitOffset msg.Vector3
 
@@ -881,12 +883,9 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 	// a ground sit is ever heard about.
 	case *msg.AvatarAnimation:
 		if t.Sender.ID == w.me {
-			ids := make([]msg.UUID, 0, len(t.AnimationList))
-			for _, an := range t.AnimationList {
-				ids = append(ids, an.AnimID)
-			}
+			list := playingOf(t)
 			w.mu.Lock()
-			w.anims = ids
+			w.playing, w.playingAt = list, time.Now()
 			w.mu.Unlock()
 		}
 

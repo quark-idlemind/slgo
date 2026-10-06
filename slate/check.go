@@ -1198,6 +1198,19 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 			return nil
 		}
 		return c.attachPoint(e.Attached.Point, e.Attached.PointSpan)
+	case e.Animation != nil:
+		x := e.Animation
+		id, err := msg.ParseUUID(x.ID)
+		if err != nil {
+			return c.err(x.IDSpan, "%q is not an animation's asset id", x.ID)
+		}
+		if id.IsZero() {
+			return c.err(x.IDSpan, "the null key names no animation")
+		}
+		if x.From != nil {
+			return c.ref(*x.From, same)
+		}
+		return nil
 	default:
 		return c.err(e.Span, "expectation has no body")
 	}
@@ -1221,6 +1234,8 @@ func nearWord(e Expect) string {
 		return "link"
 	case e.Attached != nil:
 		return "attached"
+	case e.Animation != nil:
+		return "animation"
 	case e.Texture != nil:
 		return "texture"
 	case e.Click != nil:

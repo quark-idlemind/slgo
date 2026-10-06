@@ -250,7 +250,7 @@ func (w *Session) SitOnGround(ctx context.Context, timeout time.Duration) error 
 
 	return w.controlUntil(ctx, agent.ControlSitOnGround, timeout,
 		"the ground sit animation to start", func() bool {
-			return groundSitting(w.anims)
+			return groundSitting(w.playing)
 		})
 }
 
@@ -282,7 +282,7 @@ func (w *Session) Stand(ctx context.Context, timeout time.Duration) error {
 
 	w.mu.Lock()
 	parent := w.seatLocal()
-	ground := groundSitting(w.anims)
+	ground := groundSitting(w.playing)
 	w.mu.Unlock()
 
 	switch {
@@ -293,7 +293,7 @@ func (w *Session) Stand(ctx context.Context, timeout time.Duration) error {
 	case ground:
 		return w.controlUntil(ctx, agent.ControlStandUp, timeout,
 			"the ground sit animation to stop",
-			func() bool { return !groundSitting(w.anims) })
+			func() bool { return !groundSitting(w.playing) })
 	}
 	// Nothing to wait for, so nothing to resend either: one flag, in
 	// case what this session believes is out of date.
@@ -323,7 +323,7 @@ func (w *Session) Stand(ctx context.Context, timeout time.Duration) error {
 func (w *Session) Seat(ctx context.Context) (*Seat, error) {
 	w.mu.Lock()
 	local := w.seatLocal()
-	ground := groundSitting(w.anims)
+	ground := groundSitting(w.playing)
 	on, offset := w.sitOn, w.sitOffset
 	w.mu.Unlock()
 
@@ -469,9 +469,9 @@ func (w *Session) seatLocal() uint32 {
 // had reached the region.  The constants are agent's, which took them
 // from the viewer's own llanimationstates.cpp; the constrained one is
 // what a measured ground sit played.
-func groundSitting(anims []msg.UUID) bool {
-	for _, id := range anims {
-		if id == agent.AnimSitGround || id == agent.AnimSitGroundConstrained {
+func groundSitting(playing []PlayingAnimation) bool {
+	for _, a := range playing {
+		if a.ID == agent.AnimSitGround || a.ID == agent.AnimSitGroundConstrained {
 			return true
 		}
 	}

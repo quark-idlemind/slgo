@@ -648,6 +648,17 @@ type Send struct {
 	Key         *Key
 }
 
+// AnimationExp is animation UUID, a state, and from OBJ. With State
+// changes there is no value; otherwise On is the value, on or off. From
+// is nil when the animation may have been started by anything.
+type AnimationExp struct {
+	ID     string
+	IDSpan Span
+	State  State
+	On     bool
+	From   *Ident
+}
+
 // LinkTarget is an integer or one of LinkWords.
 type LinkTarget struct {
 	Span Span
@@ -695,6 +706,7 @@ type Expect struct {
 	Link       *LinkExp
 	Button     *ButtonExp
 	Attached   *AttachExp
+	Animation  *AnimationExp
 }
 
 // Near is the tolerance of a state expectation: near N, an amount in

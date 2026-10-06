@@ -500,6 +500,8 @@ func (s *stepRun) expectFor(ctx context.Context, x *expState) error {
 		return s.linkExpect(x)
 	case e.Attached != nil:
 		return s.attachedExpect(x)
+	case e.Animation != nil:
+		return s.animationExpect(x)
 	}
 	return notYet("this expectation")
 }

@@ -1420,6 +1420,8 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.buttonExp(e)
 	case p.kw("attached"):
 		return p.attachExp(e)
+	case p.kw("animation"):
+		return p.animationExp(e)
 	default:
 		return p.unexpected("expected an expectation")
 	}
@@ -2621,6 +2623,54 @@ func (p *parser) attachExp(e *Expect) error {
 		return p.unexpected("expected on or off")
 	}
 	e.Attached = x
+	return nil
+}
+
+// animationExp reads animation uuid ( changes / state on-or-off ) ( from
+// binding )?.  There is no original and no any and no capture: an
+// animation is on or it is off, and the id is written.
+func (p *parser) animationExp(e *Expect) error {
+	if err := p.want("animation"); err != nil {
+		return err
+	}
+	if p.tok.kind != kUUID {
+		return p.unexpected("expected an animation's asset UUID")
+	}
+	x := &AnimationExp{ID: p.tok.text, IDSpan: p.tok.span}
+	if err := p.next(); err != nil {
+		return err
+	}
+	st, err := p.state()
+	if err != nil {
+		return err
+	}
+	if st.Original {
+		return p.errorf("an animation is on or off and has no original; write on or off")
+	}
+	x.State = st
+	if st.Kind != StateChanges {
+		switch {
+		case p.kw("on"):
+			x.On = true
+		case p.kw("off"):
+		default:
+			return p.unexpected("expected on or off")
+		}
+		if err := p.next(); err != nil {
+			return err
+		}
+	}
+	if p.kw("from") {
+		if err := p.next(); err != nil {
+			return err
+		}
+		from, err := p.ident()
+		if err != nil {
+			return err
+		}
+		x.From = &from
+	}
+	e.Animation = x
 	return nil
 }
 
