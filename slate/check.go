@@ -1226,6 +1226,9 @@ func (c *checker) near(e Expect) error {
 	if w := nearWord(e); w != "" {
 		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, offset, repeats, rotation, glow, colour and alpha are numbers a reading can be off by", w)
 	}
+	if e.Rot != nil && n.Percent {
+		return c.err(n.Span, "a rotation takes near in turns, not percent: an angle has no size to be a share of")
+	}
 	var any bool
 	switch {
 	case e.Position != nil:

@@ -311,6 +311,12 @@ func (k stateKind) word() string {
 		kAlpha: "alpha", kPosition: "position", kSize: "size"}[k]
 }
 
+// wrapTurn is a difference of two rotations in turns taken modulo one
+// turn into [-0.5, 0.5): the region keeps a rotation in whatever sign and
+// size it was set, so one angle has readings a whole turn apart.
+// Why: doc/slate-language.md#rotation
+func wrapTurn(d float64) float64 { return d - math.Floor(d+0.5) }
+
 // gapOf is the worst component of a reading against ref, for the kinds
 // that are numbers, and false for the rest.
 func (k stateKind) gapOf(a, ref *reading, t *tolerance, byDiff bool) (gap, bool) {
@@ -336,7 +342,11 @@ func (k stateKind) gapOf(a, ref *reading, t *tolerance, byDiff bool) (gap, bool)
 	}
 	var worst gap
 	for i := range xs {
-		g := gap{math.Abs(xs[i] - ys[i]), t.allowed(floor, ys[i])}
+		d := xs[i] - ys[i]
+		if k == kRotation {
+			d = wrapTurn(d)
+		}
+		g := gap{math.Abs(d), t.allowed(floor, ys[i])}
 		if i == 0 {
 			worst = g
 		} else {

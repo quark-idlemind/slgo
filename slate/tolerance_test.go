@@ -100,6 +100,15 @@ func TestNearTheEdgeOfEachKind(t *testing.T) {
 		{"repeats past", kRepeats, &reading{rep: [2]float64{2, 1.02}}, &reading{rep: [2]float64{2, 1}}, abs, false},
 		{"rotation", kRotation, &reading{turns: 0.259}, &reading{turns: 0.25}, abs, true},
 		{"rotation past", kRotation, &reading{turns: 0.261}, &reading{turns: 0.25}, abs, false},
+		// One angle read a whole turn apart: set 359, -1, 1 and 0 degrees.
+		{"rotation 359 against -1", kRotation, &reading{turns: 0.997222900390625}, &reading{turns: -0.002777099609375}, abs, true},
+		{"rotation -1 against 359", kRotation, &reading{turns: -0.002777099609375}, &reading{turns: 0.997222900390625}, abs, true},
+		{"rotation 1 against -1 is two degrees", kRotation, &reading{turns: 0.002777099609375}, &reading{turns: -0.002777099609375}, nil, false},
+		{"rotation 1 against -1 near", kRotation, &reading{turns: 0.002777099609375}, &reading{turns: -0.002777099609375}, &tolerance{amount: 0.006}, true},
+		{"rotation 359 against 0", kRotation, &reading{turns: 0.997222900390625}, &reading{turns: 0}, nil, false},
+		{"rotation 1 against 359 and 0", kRotation, &reading{turns: 0.002777099609375}, &reading{turns: 0.997222900390625}, &tolerance{amount: 0.006}, true},
+		{"rotation half a turn either way", kRotation, &reading{turns: -0.5}, &reading{turns: 0.5}, abs, true},
+		{"rotation face all", kRotation, &reading{all: []*reading{{turns: 0.9972}, {turns: -0.0028}}}, &reading{turns: 0}, &tolerance{amount: 0.01}, true},
 		{"glow", kGlow, &reading{glow: 0.509}, &reading{glow: 0.5}, abs, true},
 		{"glow past", kGlow, &reading{glow: 0.511}, &reading{glow: 0.5}, abs, false},
 		{"colour", kColour, &reading{col: [3]float64{1, 0.009, 0}}, &reading{col: [3]float64{1, 0, 0}}, abs, true},
@@ -267,4 +276,36 @@ func TestNearOnATextureFaceAllOffsetRepeatsAndRotation(t *testing.T) {
 	wantExit(t, play(t, f, hdr+"say \"go\" on 0\nexpect repeats sign face 0 is 2 1 near 2 percent within 300ms\n"), 0)
 	wantExit(t, play(t, f, hdr+"say \"go\" on 0\nexpect repeats sign face 0 is 2 1 near 1 percent within 150ms\n"), 1)
 	wantExit(t, play(t, f, hdr+"say \"go\" on 0\nexpect repeats sign face all is 2 1 near 2 percent within 300ms\n"), 0)
+}
+
+func TestRotationGapIsTheShortWayRound(t *testing.T) {
+	// Read 0.9972 and -0.0028 are 0.0056 apart round the wrap, not 0.9999.
+	g, ok := kRotation.worst(&reading{turns: 0.9972}, &reading{turns: -0.0028}, nil, true)
+	if !ok || g.diff > 1e-9 {
+		t.Errorf("0.9972 against -0.0028 is %v off, want none", g.diff)
+	}
+	g, _ = kRotation.worst(&reading{turns: 0.0028}, &reading{turns: -0.0028}, nil, true)
+	if d := g.diff - 0.0056; d > 1e-9 || d < -1e-9 {
+		t.Errorf("0.0028 against -0.0028 is %v off, want 0.0056", g.diff)
+	}
+	// A change from one spelling of an angle to another is no change; one
+	// across the wrap that is a real step still is.
+	if !kRotation.equalTol(&reading{turns: -0.0028}, &reading{turns: 0.9972}, nil) {
+		t.Error("0.9972 to -0.0028 was called a change")
+	}
+	if kRotation.equalTol(&reading{turns: 0.01}, &reading{turns: 0.99}, nil) {
+		t.Error("a fiftieth of a turn across the wrap was called no change")
+	}
+}
+
+func TestRotationTakesNoPercent(t *testing.T) {
+	const h = "slate 1\nobject a is \"A\"\n"
+	for _, body := range []string{
+		"rotation a face 0 is 0.25 near 1 percent",
+		"rotation a face 0 changes near 1 percent",
+		"rotation a face all becomes original near 5 percent",
+	} {
+		checkErr(t, h+"expect "+body+"\n", "a rotation takes near in turns, not percent: an angle has no size to be a share of")
+	}
+	mustCheck(t, h+"expect rotation a face 0 is 0.25 near 0.01\n")
 }
