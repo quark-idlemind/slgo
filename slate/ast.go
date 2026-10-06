@@ -398,6 +398,7 @@ type Stimulus struct {
 	Wear    *Wear
 	Rez     *RezItem
 	TakeOff *TakeOff
+	Delete  *Delete
 	Drop    *Drop
 	Group   *SetGroup
 
@@ -428,6 +429,11 @@ type RezItem struct {
 
 // TakeOff is take off NAME: the binding stops being usable.
 type TakeOff struct{ Name Ident }
+
+// Delete is delete NAME: the object a rez expectation or a rez step bound,
+// sent to the tester's Trash when the tester owns it.
+// Why: doc/slate-language.md#stimuli
+type Delete struct{ Name Ident }
 
 // Drop is drop ITEM into OBJ (link N)? or drop ITEM onto OBJ (link N)? face N:
 // an inventory item put into a prim's contents, or a texture put on one

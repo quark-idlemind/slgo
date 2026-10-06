@@ -57,12 +57,33 @@ func Check(s *Script) error {
 	if err != nil {
 		return err
 	}
+	c.rezAny = rezBound(tests)
 	for _, et := range tests {
 		if err := c.test(et); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// rezBound is every name a rez expectation or a rez step binds in some
+// test, which is what `delete` in after each may name when the test that
+// has just run did not bind it.
+func rezBound(tests []ExpandedTest) map[string]bool {
+	out := map[string]bool{}
+	for _, et := range tests {
+		for _, x := range et.Steps {
+			if st := x.Step.Stimulus; st != nil && st.Rez != nil {
+				out[st.Rez.As.Text] = true
+			}
+			for _, e := range x.Step.Expect {
+				if e.Rez != nil && !e.Neg && e.Rez.As.Text != "" {
+					out[e.Rez.As.Text] = true
+				}
+			}
+		}
+	}
+	return out
 }
 
 type checker struct {
@@ -81,6 +102,8 @@ type checker struct {
 	world    map[string][]worldUse // in-world names of the object headers, with their descriptions
 	items    map[string]Span       // item headers: not bindings of the grid, only wear, rez and drop use them
 	gone     map[string]Span       // names taken off in this test, and where
+	rezHere  map[string]bool       // names a rez expectation or a rez step bound in this test
+	rezAny   map[string]bool       // names one of those bound in some test: delete in after each may name them
 	phase    Phase                 // the part of the test the step being checked came from
 	probes   map[string]Probe
 	listens  map[int32]struct{}
@@ -170,6 +193,7 @@ func (c *checker) test(et ExpandedTest) error {
 	}
 	c.hidden = map[string]Span{}
 	c.gone = map[string]Span{}
+	c.rezHere = map[string]bool{}
 	c.capType = map[string]CaptureType{}
 	c.capAll = map[string]bool{}
 	c.wornAt = map[string]int{}
@@ -491,6 +515,7 @@ func (c *checker) step(st Step) error {
 		if strings.HasPrefix(name, "$") {
 			continue
 		}
+		c.rezHere[name] = true
 		c.bound[name] = seenAs[name]
 		c.names[name] = seenAs[name]
 		c.wornAt[name] = notWorn
@@ -500,6 +525,9 @@ func (c *checker) step(st Step) error {
 		c.names["$"+b.name] = b.span
 		c.capType[b.name] = b.typ
 		c.capAll[b.name] = b.all
+	}
+	if st.Stimulus != nil && st.Stimulus.Rez != nil {
+		c.rezHere[st.Stimulus.Rez.As.Text] = true
 	}
 	// A take off ends the name's use from the next step on: this step's own
 	// expectations, such as attached NAME off, are what it is for.
@@ -560,6 +588,8 @@ func (c *checker) stimulus(s *Stimulus, same map[string]bool) error {
 		return c.rezItem(s.Rez)
 	case s.TakeOff != nil:
 		return c.ref(s.TakeOff.Name, same)
+	case s.Delete != nil:
+		return c.deleteObj(s.Delete, same)
 	case s.Drop != nil:
 		return c.drop(s.Drop, same)
 	case s.Group != nil:
@@ -588,6 +618,8 @@ func stimulusWord(s *Stimulus) string {
 		return "rez"
 	case s.TakeOff != nil:
 		return "take off"
+	case s.Delete != nil:
+		return "delete"
 	case s.Drop != nil:
 		return "drop"
 	case s.Drag != nil && s.Drag.Screen != nil:
@@ -657,6 +689,45 @@ func (c *checker) rezItem(r *RezItem) error {
 	c.bound[as] = r.As.Span
 	c.names[as] = r.As.Span
 	c.wornAt[as] = notWorn
+	return nil
+}
+
+// deleteObj checks delete NAME: NAME is an object a rez expectation or a
+// rez step bound in this test. In after each it may also be one that
+// another test bound, or that this test bound in its body: the test may
+// have failed before binding it, which the run says and goes on.
+// Why: doc/slate-language.md#stimuli
+func (c *checker) deleteObj(d *Delete, same map[string]bool) error {
+	n := d.Name.Text
+	notRez := func(what string) error {
+		return c.err(d.Name.Span, "%s is %s; delete takes a name a rez expectation (expect rez ... as NAME) or a rez step bound", n, what)
+	}
+	if _, ok := c.avatars[n]; ok {
+		return c.err(d.Name.Span, "%s is an avatar, not an object; only as and to take an avatar", n)
+	}
+	if _, ok := c.items[n]; ok {
+		return c.err(d.Name.Span, "%s is an item; delete takes a name a rez expectation or a rez step bound", n)
+	}
+	if _, ok := c.hdr[n]; ok {
+		return notRez("an object header")
+	}
+	if c.phase == PhaseAfter && !c.rezHere[n] && c.rezAny[n] {
+		if _, here := c.names[n]; !here {
+			return nil // bound by a rez in another test's body, or in this one's, not seen here
+		}
+	}
+	if err := c.ref(d.Name, same); err != nil {
+		if c.phase == PhaseAfter && c.rezHere[n] {
+			return nil // bound in this test's body, which after each may name for delete alone
+		}
+		return err
+	}
+	if !c.rezHere[n] {
+		if strings.HasPrefix(n, "$") {
+			return notRez("a capture")
+		}
+		return notRez("not bound by a rez in this test")
+	}
 	return nil
 }
 

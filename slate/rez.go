@@ -401,6 +401,11 @@ func (s *stepRun) assign(ctx context.Context, c *rezClaim, root *rezRoot) error 
 		return nil
 	}
 	seen := *root.seen
+	// The region's updates carry no name; Properties said the one the
+	// claim matched, and the transcript names the object by it.
+	if seen.Name == "" {
+		seen.Name = root.name()
+	}
 	b := &binding{name: c.c.As.Text, seen: &seen, owner: root.owner()}
 	if members, err := linksetOf(s.t.watch.all, &seen); err == nil {
 		b.members = members
