@@ -1078,6 +1078,9 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 	if err := c.duration(e.Within); err != nil {
 		return err
 	}
+	if err := c.near(e); err != nil {
+		return err
+	}
 	switch {
 	case e.Say != nil:
 		return c.sayExp(e.Say, same)
@@ -1175,6 +1178,89 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 	default:
 		return c.err(e.Span, "expectation has no body")
 	}
+}
+
+// nearWord is what an expectation that takes no tolerance is called in
+// the sentence that refuses near.
+func nearWord(e Expect) string {
+	switch {
+	case e.Say != nil:
+		return "say"
+	case e.Dialog != nil:
+		return "dialog"
+	case e.TextBox != nil:
+		return "textbox"
+	case e.Give != nil:
+		return "give"
+	case e.Rez != nil:
+		return "rez"
+	case e.Link != nil:
+		return "link"
+	case e.Attached != nil:
+		return "attached"
+	case e.Texture != nil:
+		return "texture"
+	case e.Click != nil:
+		return "click"
+	case e.FloatText != nil:
+		return "text"
+	case e.Fullbright != nil:
+		return "fullbright"
+	case e.AlphaMode != nil:
+		return "alphamode"
+	case e.Button != nil:
+		return "button"
+	}
+	return ""
+}
+
+// near checks the tolerance of an expectation: only the numeric state
+// readings take one, it is above 0 (a percentage up to 100), and it is
+// not written beside `is any`, which asserts nothing to be near.
+// Why: doc/slate-language.md#tolerances
+func (c *checker) near(e Expect) error {
+	if e.Near == nil {
+		return nil
+	}
+	n := e.Near
+	if w := nearWord(e); w != "" {
+		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, offset, repeats, rotation, glow, colour and alpha are numbers a reading can be off by", w)
+	}
+	if e.Rot != nil && n.Percent {
+		return c.err(n.Span, "a rotation takes near in turns, not percent: an angle has no size to be a share of")
+	}
+	var any bool
+	switch {
+	case e.Position != nil:
+		any = e.Position.Any
+	case e.Size != nil:
+		any = e.Size.Any
+	case e.Offset != nil:
+		any = e.Offset.Any
+	case e.Repeats != nil:
+		any = e.Repeats.Any
+	case e.Rot != nil:
+		any = e.Rot.Any
+	case e.Glow != nil:
+		any = e.Glow.Any
+	case e.Colour != nil:
+		any = e.Colour.Any
+	case e.Alpha != nil:
+		any = e.Alpha.Any
+	}
+	if any {
+		return c.err(n.Span, "is any takes no near: it matches whatever the reading is")
+	}
+	if err := c.exact(n.Amount); err != nil {
+		return err
+	}
+	if n.Amount.Value <= 0 {
+		return c.err(n.Amount.Span, "near %g is not above 0; leave near out to compare as the reading is quantised", n.Amount.Value)
+	}
+	if n.Percent && n.Amount.Value > 100 {
+		return c.err(n.Amount.Span, "near %g percent is above 100", n.Amount.Value)
+	}
+	return nil
 }
 
 // buttonExp checks expect button: the search is a touch's, except that a

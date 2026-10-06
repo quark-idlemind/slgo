@@ -234,9 +234,11 @@ func withUV(s *Seen, t Touch) Touch {
 		return t
 	}
 	faces, err := s.Faces(n)
-	if err != nil || t.Face >= len(faces) || faces[t.Face].Planar() || animated(s.TextureAnim, t.Face, n) {
+	if err != nil {
 		return t
 	}
-	t.UV = faces[t.Face].SurfaceToTexture(t.ST)
+	if mapping, ok := mappingOf(faces, s.TextureAnim, n, t.Face); ok {
+		t.UV = mapping.SurfaceToTexture(t.ST)
+	}
 	return t
 }
