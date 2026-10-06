@@ -687,6 +687,7 @@ type Expect struct {
 	AlphaMode  *AlphaModeExp
 	Position   *VecExp3
 	Size       *VecExp3
+	Turn       *VecExp3 // a prim's own rotation, as Euler degrees X Y Z
 	Give       *GiveExp
 	Rez        *RezExp
 	Link       *LinkExp

@@ -87,6 +87,7 @@ const (
 	kSize
 	kText      // a prim's floating text
 	kAlphaMode // a face's alpha mode, read from its material (sl.Session.AlphaModeOf)
+	kTurn      // a prim's own rotation, said as Euler degrees
 )
 
 // clickFace is the face of the key that reads a prim's click byte, and
@@ -122,14 +123,16 @@ type readKey struct {
 // face reading carries every property of the face; the expectation takes
 // the one it is about.
 type reading struct {
-	at    time.Time
-	tex   msg.UUID
-	off   [2]float64
-	rep   [2]float64
-	turns float64
-	click uint8
-	vec   [3]float64 // a position or a size, each a float32 held whole
-	str   string     // a prim's floating text
+	at      time.Time
+	tex     msg.UUID
+	off     [2]float64
+	rep     [2]float64
+	turns   float64
+	click   uint8
+	vec     [3]float64 // a position or a size, each a float32 held whole; for a turn, Euler degrees
+	quat    quat4      // a turn as read; hasQuat is false for a wanted value, which is vec
+	hasQuat bool
+	str     string // a prim's floating text
 
 	bright bool
 	glow   float64    // Glow / 255
@@ -275,6 +278,8 @@ func (k stateKind) floor() (float64, bool) {
 	switch k {
 	case kPosition, kSize:
 		return vecTol, true
+	case kTurn:
+		return turnTol, true
 	case kOffset:
 		return offsetTol, true
 	case kRepeats:
@@ -308,7 +313,7 @@ func r6(v float64) float64 { return math.Round(v*1e6) / 1e6 }
 // word is the word a numeric kind is written with.
 func (k stateKind) word() string {
 	return [...]string{kOffset: "offset", kRepeats: "repeats", kRotation: "rotation", kGlow: "glow", kColour: "colour",
-		kAlpha: "alpha", kPosition: "position", kSize: "size"}[k]
+		kAlpha: "alpha", kPosition: "position", kSize: "size", kTurn: "turn"}[k]
 }
 
 // wrapTurn is a difference of two rotations in turns taken modulo one
@@ -320,6 +325,11 @@ func wrapTurn(d float64) float64 { return d - math.Floor(d+0.5) }
 // gapOf is the worst component of a reading against ref, for the kinds
 // that are numbers, and false for the rest.
 func (k stateKind) gapOf(a, ref *reading, t *tolerance, byDiff bool) (gap, bool) {
+	if k == kTurn {
+		// One angle: the rotation between the two, not a triple a component
+		// at a time, since two Euler triples can be one rotation.
+		return gap{turnAngle(a.rot(), ref.rot()), t.allowed(turnTol, 0)}, true
+	}
 	var xs, ys []float64
 	var floor float64
 	switch k {
@@ -457,7 +467,7 @@ func (k stateKind) capType() CaptureType {
 		return CapOnOff
 	case kColour:
 		return CapTriple
-	case kPosition, kSize:
+	case kPosition, kSize, kTurn:
 		return CapVector
 	case kText, kAlphaMode:
 		return CapText
@@ -487,7 +497,7 @@ func (k stateKind) text(r *reading) string {
 		return r.label
 	case kText:
 		return fmt.Sprintf("%q", r.str)
-	case kPosition, kSize:
+	case kPosition, kSize, kTurn:
 		return g3(r.vec)
 	case kTexture:
 		return r.tex.String()
@@ -529,8 +539,8 @@ func (k stateKind) show(key readKey, r *reading) string {
 	if k == kText {
 		return fmt.Sprintf("text %s %q", key.name, r.str)
 	}
-	if k == kPosition || k == kSize {
-		return fmt.Sprintf("%s %s %s", map[stateKind]string{kPosition: "position", kSize: "size"}[k], key.name, g3(r.vec))
+	if k == kPosition || k == kSize || k == kTurn {
+		return fmt.Sprintf("%s %s %s", k.word(), key.name, g3(r.vec))
 	}
 	word := [...]string{kTexture: "texture", kOffset: "offset", kRepeats: "repeats", kRotation: "rotation",
 		kFullbright: "fullbright", kGlow: "glow", kColour: "colour", kAlpha: "alpha", kAlphaMode: "alphamode"}[k]
@@ -551,7 +561,7 @@ func (k stateKind) value(r *reading) capValue {
 	if k == kButton {
 		return capValue{typ: CapNumber, num: float64(r.count)}
 	}
-	if k == kPosition || k == kSize {
+	if k == kPosition || k == kSize || k == kTurn {
 		return capValue{typ: CapVector, vec: r.vec}
 	}
 	if k == kText {
@@ -598,7 +608,7 @@ func (k stateKind) want(v capValue) *reading {
 	}
 	r := &reading{}
 	switch k {
-	case kPosition, kSize:
+	case kPosition, kSize, kTurn:
 		r.vec = v.vec
 	case kText:
 		r.str = v.text
@@ -746,6 +756,8 @@ func stateKeyOf(e *Expect) (readKey, stateKind, bool) {
 		return readKey{keyName(e.Position.Name, e.Position.Link), primFace, kPosition}, kPosition, true
 	case e.Size != nil:
 		return readKey{keyName(e.Size.Name, e.Size.Link), primFace, kSize}, kSize, true
+	case e.Turn != nil:
+		return readKey{keyName(e.Turn.Name, e.Turn.Link), primFace, kTurn}, kTurn, true
 	case e.FloatText != nil:
 		return readKey{keyName(e.FloatText.Name, e.FloatText.Link), primFace, kText}, kText, true
 	}
@@ -939,6 +951,9 @@ func (w *watcher) poll(ctx context.Context, force bool) error {
 			rd = &reading{at: at, vec: vec3(o.Position)}
 		case k.kind == kSize:
 			rd = &reading{at: at, vec: vec3(o.Scale)}
+		case k.kind == kTurn:
+			q := quatOfWire(o.Rotation)
+			rd = &reading{at: at, vec: eulerOf(q), quat: q, hasQuat: true}
 		case k.kind == kText:
 			rd = &reading{at: at, str: o.Text}
 		case k.kind == kAlphaMode:
@@ -1161,6 +1176,8 @@ func (s *stepRun) stateExpect(x *expState) error {
 		base, link, st = e.Position.Name, e.Position.Link, e.Position.State
 	case e.Size != nil:
 		base, link, st = e.Size.Name, e.Size.Link, e.Size.State
+	case e.Turn != nil:
+		base, link, st = e.Turn.Name, e.Turn.Link, e.Turn.State
 	case e.FloatText != nil:
 		base, link, st = e.FloatText.Name, e.FloatText.Link, e.FloatText.State
 	}
@@ -1250,6 +1267,8 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		use = e.Position.Use
 	case e.Size != nil:
 		use = e.Size.Use
+	case e.Turn != nil:
+		use = e.Turn.Use
 	case e.FloatText != nil:
 		use = e.FloatText.Value.Capture
 	}
@@ -1257,7 +1276,7 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 	case e.Texture != nil && e.Texture.Any, e.Offset != nil && e.Offset.Any, e.Repeats != nil && e.Repeats.Any,
 		e.Rot != nil && e.Rot.Any, e.Click != nil && e.Click.Any, e.Fullbright != nil && e.Fullbright.Any,
 		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any,
-		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any, e.FloatText != nil && e.FloatText.Any:
+		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any, e.Turn != nil && e.Turn.Any, e.FloatText != nil && e.FloatText.Any:
 		se.any = true
 	case use != nil:
 		v, err := s.captureOrTuple(use, se.kind.capType())
@@ -1290,6 +1309,10 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		se.want.vec = lit3(e.Position)
 	case e.Size != nil:
 		se.want.vec = lit3(e.Size)
+	case e.Turn != nil:
+		// Degrees as written: the wanted rotation is made from them whole.
+		t := e.Turn
+		se.want.vec = [3]float64{t.X.Value, t.Y.Value, t.Z.Value}
 	case e.FloatText != nil:
 		tm, err := s.textMatch(e.FloatText.Value)
 		if err != nil {
@@ -1353,7 +1376,7 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 		case allFace:
 			what = "face all"
 		case primFace:
-			what = map[stateKind]string{kPosition: "position", kSize: "size", kText: "text"}[se.kind]
+			what = map[stateKind]string{kPosition: "position", kSize: "size", kTurn: "turn", kText: "text"}[se.kind]
 		}
 		if se.kind == kButton {
 			what = "button"

@@ -1131,6 +1131,8 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 		return c.vec3(e, e.Position, "position", same)
 	case e.Size != nil:
 		return c.vec3(e, e.Size, "size", same)
+	case e.Turn != nil:
+		return c.vec3(e, e.Turn, "turn", same)
 	case e.Fullbright != nil:
 		x := e.Fullbright
 		if err := c.faceRef(x.Name, x.Link, x.Face, x.FaceAll, same); err != nil {
@@ -1241,7 +1243,10 @@ func (c *checker) near(e Expect) error {
 	}
 	n := e.Near
 	if w := nearWord(e); w != "" {
-		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, offset, repeats, rotation, glow, colour and alpha are numbers a reading can be off by", w)
+		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour and alpha are numbers a reading can be off by", w)
+	}
+	if e.Turn != nil && n.Percent {
+		return c.err(n.Span, "a turn takes near in degrees, not percent: an angle has no size to be a share of")
 	}
 	if e.Rot != nil && n.Percent {
 		return c.err(n.Span, "a rotation takes near in turns, not percent: an angle has no size to be a share of")
@@ -1252,6 +1257,8 @@ func (c *checker) near(e Expect) error {
 		any = e.Position.Any
 	case e.Size != nil:
 		any = e.Size.Any
+	case e.Turn != nil:
+		any = e.Turn.Any
 	case e.Offset != nil:
 		any = e.Offset.Any
 	case e.Repeats != nil:
@@ -1510,7 +1517,7 @@ func asType(e Expect) (CaptureType, bool) {
 		return CapOnOff, true
 	case e.Colour != nil:
 		return CapTriple, true
-	case e.Position != nil, e.Size != nil:
+	case e.Position != nil, e.Size != nil, e.Turn != nil:
 		return CapVector, true
 	case e.FloatText != nil:
 		return CapText, true

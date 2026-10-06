@@ -1385,9 +1385,11 @@ func (p *parser) expectBody(e *Expect) error {
 	case p.kw("rotation"):
 		return p.rotExp(e)
 	case p.kw("position"):
-		return p.vec3Exp(e, false)
+		return p.vec3Exp(e, "position")
 	case p.kw("size"):
-		return p.vec3Exp(e, true)
+		return p.vec3Exp(e, "size")
+	case p.kw("turn"):
+		return p.vec3Exp(e, "turn")
 	case p.kw("click"):
 		return p.clickExp(e)
 	case p.kw("text"):
@@ -1860,11 +1862,7 @@ func (p *parser) vecExp(e *Expect, repeats bool) error {
 	return nil
 }
 
-func (p *parser) vec3Exp(e *Expect, size bool) error {
-	word := "position"
-	if size {
-		word = "size"
-	}
+func (p *parser) vec3Exp(e *Expect, word string) error {
 	if err := p.want(word); err != nil {
 		return err
 	}
@@ -1893,9 +1891,12 @@ func (p *parser) vec3Exp(e *Expect, size bool) error {
 			}
 		}
 	}
-	if size {
+	switch word {
+	case "size":
 		e.Size = v
-	} else {
+	case "turn":
+		e.Turn = v
+	default:
 		e.Position = v
 	}
 	return nil

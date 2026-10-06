@@ -44,7 +44,8 @@ A grab of a prim whose linkset this session last released less than
 90 ms ago waits out the rest first (`touchGap` in `sl/touch.go`). A
 miss was seen at 25 ms (1 of 15) and none from 30 ms up, so the edge is
 about 30 ms; 90 ms is three times that, and under the roughly 100 ms a
-person needs to click again, so nothing realistic is slowed.
+person needs to click again (by estimate, not measured), so nothing
+realistic is slowed.
 
 The gap is kept by the linkset's root local id: the prim's parent when it
 has one and that is not the avatar, otherwise the prim itself (a worn
