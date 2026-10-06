@@ -97,6 +97,19 @@ type Object struct {
 	// Why: doc/objects.md#how-many-faces-a-prim-has
 	Sculpt msg.SculptMark
 
+	// Light and Projector are the light and light image blocks of the
+	// extra parameters: nil while the prim has none, which is how a
+	// light switched off is told, since the region leaves the block out
+	// and does not send one with no intensity.  A full or compressed
+	// update says them afresh, as it does Sculpt, so one without the
+	// block says there is none; a terse update, and a full one whose
+	// parameters would not read, leave them alone.  They are replaced
+	// whole and never written through, so a copy of an Object may share
+	// them.
+	// Why: doc/lights.md
+	Light     *msg.Light
+	Projector *msg.LightImage
+
 	// AttachPoint is where a worn object is attached, and zero when it
 	// is not worn.  AttachItem is the inventory item it was worn from.
 	//
@@ -1122,6 +1135,7 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	// A block that does not read says nothing, so the last answer stays.
 	if params, err := msg.DecodeExtraParams(d.ExtraParams); err == nil {
 		v.Sculpt = msg.SculptMarkOf(params)
+		v.Light, v.Projector = lightsOf(params)
 	}
 	// A full update carries the appearance as well, and it is the only
 	// update most prims ever get: a region sends a compressed one for
@@ -1150,6 +1164,18 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	if item, ok := attachItem(d.NameValue); ok {
 		v.AttachItem, v.AttachPoint = item, attachPoint(d.State)
 	}
+}
+
+// lightsOf is the light and the projector an update's extra parameters
+// carry, each nil when the block is not there.
+func lightsOf(params []msg.ExtraParam) (light *msg.Light, projector *msg.LightImage) {
+	if l, ok := msg.LightOf(params); ok {
+		light = &l
+	}
+	if p, ok := msg.LightImageOf(params); ok {
+		projector = &p
+	}
+	return light, projector
 }
 
 // attachPoint pulls the point out of an ObjectUpdate's State byte,
@@ -1220,6 +1246,7 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
 	v.Click, v.ClickKnown = c.Click, true
 	v.Sculpt = msg.SculptMarkOf(c.ExtraParams)
+	v.Light, v.Projector = lightsOf(c.ExtraParams)
 	if !c.Shape.IsZero() {
 		v.Shape = c.Shape
 	}

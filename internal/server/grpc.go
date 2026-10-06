@@ -889,9 +889,30 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			SculptId:     uuidOrEmpty(o.Sculpt.ID),
 			LinkNumber:   uint32(o.LinkNumber),
 			LinkKnown:    o.LinkKnown,
+			Light:        lightPB(o.Light),
+			Projector:    projectorPB(o.Projector),
 		})
 	}
 	return out, nil
+}
+
+// lightPB and projectorPB say a prim's light and projector on the wire,
+// nil staying nil: a prim with none has none.
+func lightPB(l *msg.Light) *pb.PrimLight {
+	if l == nil {
+		return nil
+	}
+	return &pb.PrimLight{
+		Red: uint32(l.Colour[0]), Green: uint32(l.Colour[1]), Blue: uint32(l.Colour[2]),
+		Intensity: l.Intensity, Radius: l.Radius, Cutoff: l.Cutoff, Falloff: l.Falloff,
+	}
+}
+
+func projectorPB(p *msg.LightImage) *pb.PrimProjector {
+	if p == nil {
+		return nil
+	}
+	return &pb.PrimProjector{Texture: p.Texture.String(), Fov: p.FOV, Focus: p.Focus, Ambiance: p.Ambiance}
 }
 
 // Region answers what the simulator said about itself.

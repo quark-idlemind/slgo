@@ -70,6 +70,13 @@ const (
 // Why: doc/slate-runner.md#position-and-size
 const vecTol = 0.001 + 1e-9
 
+// lightTol is the tolerance of a light's radius and falloff and a
+// projector's field of view, focus and ambiance: each travels as a float32
+// and is read whole, so it is only the float arithmetic. A light's colour
+// and intensity travel as bytes and are compared within levelTol.
+// Why: doc/slate-runner.md#light-and-projector
+const lightTol = 1e-9
+
 type stateKind int
 
 const (
@@ -95,6 +102,21 @@ const (
 	kSpecularMap
 	kGlossiness
 	kEnvironment
+
+	// A prim's point light and projector, read from its light and light
+	// image extra parameters (sl.Seen.Light and Seen.Projector).  The
+	// numbers of each have no reading while the light or the projector
+	// is off.
+	// Why: doc/slate-runner.md#light-and-projector
+	kLight
+	kLightColour
+	kLightIntensity
+	kLightRadius
+	kLightFalloff
+	kProjector
+	kProjFOV
+	kProjFocus
+	kProjAmbiance
 )
 
 // readsMaterial is whether a kind is read from a face's material, which
@@ -106,6 +128,17 @@ func (k stateKind) readsMaterial() bool {
 // materialKind is the kind a material expectation's word reads.
 func materialKind(prop string) stateKind {
 	return kNormalMap + stateKind(slices.Index(MaterialProps, prop))
+}
+
+// isLight is whether a kind reads a prim's light or projector.
+func (k stateKind) isLight() bool { return k >= kLight }
+
+// lightWords is how each light kind is written, and as the transcript
+// says it.
+var lightWords = map[stateKind]string{
+	kLight: "light", kLightColour: "light colour", kLightIntensity: "light intensity",
+	kLightRadius: "light radius", kLightFalloff: "light falloff",
+	kProjector: "projector", kProjFOV: "projector fov", kProjFocus: "projector focus", kProjAmbiance: "projector ambiance",
 }
 
 // clickFace is the face of the key that reads a prim's click byte, and
@@ -150,7 +183,9 @@ type reading struct {
 	vec     [3]float64 // a position or a size, each a float32 held whole; for a turn, Euler degrees
 	quat    quat4      // a turn as read; hasQuat is false for a wanted value, which is vec
 	hasQuat bool
-	str     string // a prim's floating text
+	str     string  // a prim's floating text
+	num     float64 // a light's intensity, radius or falloff, a projector's fov, focus or ambiance
+	on      bool    // a light is on
 
 	bright bool
 	glow   float64    // Glow / 255
@@ -312,10 +347,12 @@ func (k stateKind) floor() (float64, bool) {
 		return repeatsTol, true
 	case kRotation:
 		return rotTol, true
-	case kGlow, kColour, kAlpha:
+	case kGlow, kColour, kAlpha, kLightColour, kLightIntensity:
 		return levelTol, true
 	case kGlossiness, kEnvironment:
 		return 0, true // whole numbers: exact unless the file widens it
+	case kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
+		return lightTol, true
 	}
 	return 0, false
 }
@@ -340,6 +377,9 @@ func r6(v float64) float64 { return math.Round(v*1e6) / 1e6 }
 
 // word is the word a numeric kind is written with.
 func (k stateKind) word() string {
+	if k.isLight() {
+		return lightWords[k]
+	}
 	return [...]string{kOffset: "offset", kRepeats: "repeats", kRotation: "rotation", kGlow: "glow", kColour: "colour",
 		kAlpha: "alpha", kPosition: "position", kSize: "size", kTurn: "turn",
 		kGlossiness: "glossiness", kEnvironment: "environment"}[k]
@@ -380,6 +420,12 @@ func (k stateKind) gapOf(a, ref *reading, t *tolerance, byDiff bool) (gap, bool)
 		xs, ys = []float64{a.gloss}, []float64{ref.gloss}
 	case kEnvironment:
 		xs, ys = []float64{a.env}, []float64{ref.env}
+	case kLightColour:
+		xs, ys, floor = a.col[:], ref.col[:], levelTol
+	case kLightIntensity:
+		xs, ys, floor = []float64{a.num}, []float64{ref.num}, levelTol
+	case kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
+		xs, ys, floor = []float64{a.num}, []float64{ref.num}, lightTol
 	default:
 		return gap{}, false
 	}
@@ -452,12 +498,14 @@ func (k stateKind) equalTol(a, ref *reading, t *tolerance) bool {
 			return a.count >= b.count
 		}
 		return a.count == b.count
-	case kTexture:
+	case kTexture, kProjector:
 		return a.tex == b.tex
 	case kNormalMap:
 		return a.norm == b.norm
 	case kSpecularMap:
 		return a.spec == b.spec
+	case kLight:
+		return a.on == b.on
 	case kFullbright:
 		return a.bright == b.bright
 	case kAlphaMode:
@@ -502,10 +550,14 @@ func (k stateKind) capType() CaptureType {
 		return CapPair
 	case kRotation, kGlow, kAlpha, kButton:
 		return CapNumber
-	case kFullbright:
+	case kFullbright, kLight:
 		return CapOnOff
-	case kColour:
+	case kColour, kLightColour:
 		return CapTriple
+	case kLightIntensity, kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
+		return CapNumber
+	case kProjector:
+		return CapUUID
 	case kPosition, kSize, kTurn:
 		return CapVector
 	case kText, kAlphaMode:
@@ -548,6 +600,22 @@ func (k stateKind) text(r *reading) string {
 		return fmt.Sprintf("%g", r.gloss)
 	case kEnvironment:
 		return fmt.Sprintf("%g", r.env)
+	case kProjector:
+		if r.tex.IsZero() {
+			return "off"
+		}
+		return r.tex.String()
+	case kLight:
+		if r.on {
+			return "on"
+		}
+		return "off"
+	case kLightColour:
+		return fmt.Sprintf("%g %g %g", r4(r.col[0]), r4(r.col[1]), r4(r.col[2]))
+	case kLightIntensity:
+		return fmt.Sprintf("%g", r4(r.num))
+	case kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
+		return fmt.Sprintf("%g", float32(r.num))
 	case kOffset:
 		return fmt.Sprintf("%g %g", r.off[0], r.off[1])
 	case kRepeats:
@@ -598,6 +666,9 @@ func (k stateKind) show(key readKey, r *reading) string {
 	if k == kPosition || k == kSize || k == kTurn {
 		return fmt.Sprintf("%s %s %s", k.word(), key.name, g3(r.vec))
 	}
+	if k.isLight() {
+		return fmt.Sprintf("%s %s %s", k.word(), key.name, k.text(r))
+	}
 	word := [...]string{kTexture: "texture", kOffset: "offset", kRepeats: "repeats", kRotation: "rotation",
 		kFullbright: "fullbright", kGlow: "glow", kColour: "colour", kAlpha: "alpha", kAlphaMode: "alphamode",
 		kNormalMap: "normalmap", kSpecularMap: "specularmap", kGlossiness: "glossiness", kEnvironment: "environment"}[k]
@@ -623,6 +694,18 @@ func (k stateKind) value(r *reading) capValue {
 	}
 	if k == kText {
 		return capValue{typ: CapText, text: r.str}
+	}
+	switch k {
+	case kLight:
+		return capValue{typ: CapOnOff, on: r.on}
+	case kProjector:
+		return capValue{typ: CapUUID, id: r.tex}
+	case kLightColour:
+		return capValue{typ: CapTriple, triple: [3]float64{r4(r.col[0]), r4(r.col[1]), r4(r.col[2])}}
+	case kLightIntensity:
+		return capValue{typ: CapNumber, num: r4(r.num)}
+	case kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
+		return capValue{typ: CapNumber, num: r.num}
 	}
 	if r.all != nil {
 		v := capValue{typ: k.capType(), all: true}
@@ -677,7 +760,7 @@ func (k stateKind) want(v capValue) *reading {
 		r.vec = v.vec
 	case kText:
 		r.str = v.text
-	case kTexture:
+	case kTexture, kProjector:
 		r.tex = v.id
 	case kNormalMap:
 		r.norm = v.id
@@ -687,6 +770,12 @@ func (k stateKind) want(v capValue) *reading {
 		r.gloss = v.num
 	case kEnvironment:
 		r.env = v.num
+	case kLight:
+		r.on = v.on
+	case kLightColour:
+		r.col = v.triple
+	case kLightIntensity, kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
+		r.num = v.num
 	case kOffset:
 		r.off = v.pair
 	case kRepeats:
@@ -835,10 +924,64 @@ func stateKeyOf(e *Expect) (readKey, stateKind, bool) {
 		return readKey{keyName(e.Size.Name, e.Size.Link), primFace, kSize}, kSize, true
 	case e.Turn != nil:
 		return readKey{keyName(e.Turn.Name, e.Turn.Link), primFace, kTurn}, kTurn, true
+	case e.Light != nil:
+		x := e.Light
+		k := lightKind(x)
+		return readKey{keyName(x.Name, x.Link), primFace, k}, k, true
 	case e.FloatText != nil:
 		return readKey{keyName(e.FloatText.Name, e.FloatText.Link), primFace, kText}, kText, true
 	}
 	return readKey{}, 0, false
+}
+
+// lightKind is the kind a light or projector expectation reads.
+func lightKind(x *LightExp) stateKind {
+	switch {
+	case x.Projector:
+		return map[string]stateKind{"": kProjector, "fov": kProjFOV, "focus": kProjFocus, "ambiance": kProjAmbiance}[x.Prop]
+	}
+	return map[string]stateKind{"": kLight, "colour": kLightColour, "intensity": kLightIntensity,
+		"radius": kLightRadius, "falloff": kLightFalloff}[x.Prop]
+}
+
+// lightReading is what a poll reads of a prim's light or projector for a
+// kind, and false when there is none to read: the numbers of a light that
+// is off or a prim that has no projector have no reading, since nothing
+// says what they are.
+// Why: doc/slate-runner.md#light-and-projector
+func lightReading(k stateKind, o *sl.Seen, at time.Time) (*reading, bool) {
+	l, p := o.Light, o.Projector
+	switch k {
+	case kLight:
+		return &reading{at: at, on: l != nil}, true
+	case kProjector:
+		r := &reading{at: at}
+		if p != nil {
+			r.tex = p.Texture
+		}
+		return r, true
+	}
+	if k <= kLightFalloff && l == nil || k >= kProjFOV && p == nil {
+		return nil, false
+	}
+	r := &reading{at: at}
+	switch k {
+	case kLightColour:
+		r.col = [3]float64{float64(l.Colour[0]) / 255, float64(l.Colour[1]) / 255, float64(l.Colour[2]) / 255}
+	case kLightIntensity:
+		r.num = float64(l.Intensity)
+	case kLightRadius:
+		r.num = float64(l.Radius)
+	case kLightFalloff:
+		r.num = float64(l.Falloff)
+	case kProjFOV:
+		r.num = float64(p.FOV)
+	case kProjFocus:
+		r.num = float64(p.Focus)
+	case kProjAmbiance:
+		r.num = float64(p.Ambiance)
+	}
+	return r, true
 }
 
 // watcher is what a test reads: the prims and faces its state
@@ -867,6 +1010,8 @@ type watcher struct {
 	roots    []*rezRoot
 	lastReq  map[msg.UUID]time.Time
 
+	an       *animWatch               // the tester's animations (animation.go)
+	snd      *soundReads              // the loops a test reads (sound.go)
 	att      []string                 // names an attached expectation reads (wear.go)
 	areads   map[string][]*attReading // their readings
 	aprinted map[string]string
@@ -882,6 +1027,8 @@ func newWatcher(t *testRun) *watcher {
 		lastReq: map[msg.UUID]time.Time{},
 		areads:  map[string][]*attReading{}, aprinted: map[string]string{},
 	}
+	w.an = newAnimWatch(t)
+	w.snd = newSoundReads(t)
 	seen := map[readKey]bool{}
 	for n, x := range t.et.Steps {
 		for i := range x.Step.Expect {
@@ -920,6 +1067,8 @@ func newWatcher(t *testRun) *watcher {
 // start takes the first reading, which is the baseline of the first step
 // and is stamped before the test's start. Everything it sees is old.
 func (w *watcher) start(ctx context.Context) error {
+	w.sample()
+	w.startSounds()
 	w.initial = true
 	err := w.poll(ctx, true)
 	w.initial = false
@@ -1031,6 +1180,11 @@ func (w *watcher) poll(ctx context.Context, force bool) error {
 		case k.kind == kTurn:
 			q := quatOfWire(o.Rotation)
 			rd = &reading{at: at, vec: eulerOf(q), quat: q, hasQuat: true}
+		case k.kind.isLight():
+			var ok bool
+			if rd, ok = lightReading(k.kind, o, at); !ok {
+				continue
+			}
 		case k.kind == kText:
 			rd = &reading{at: at, str: o.Text}
 		case k.kind == kAlphaMode:
@@ -1323,6 +1477,8 @@ func (s *stepRun) stateExpect(x *expState) error {
 		base, link, st = e.Size.Name, e.Size.Link, e.Size.State
 	case e.Turn != nil:
 		base, link, st = e.Turn.Name, e.Turn.Link, e.Turn.State
+	case e.Light != nil:
+		base, link, st = e.Light.Name, e.Light.Link, e.Light.State
 	case e.FloatText != nil:
 		base, link, st = e.FloatText.Name, e.FloatText.Link, e.FloatText.State
 	}
@@ -1425,13 +1581,15 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		use = e.Size.Use
 	case e.Turn != nil:
 		use = e.Turn.Use
+	case e.Light != nil:
+		use = e.Light.Use
 	case e.FloatText != nil:
 		use = e.FloatText.Value.Capture
 	}
 	switch {
 	case e.Texture != nil && e.Texture.Any, e.Offset != nil && e.Offset.Any, e.Repeats != nil && e.Repeats.Any,
 		e.Rot != nil && e.Rot.Any, e.Click != nil && e.Click.Any, e.Fullbright != nil && e.Fullbright.Any,
-		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any, e.Material != nil && e.Material.Any,
+		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any, e.Material != nil && e.Material.Any, e.Light != nil && e.Light.Any,
 		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any, e.Turn != nil && e.Turn.Any, e.FloatText != nil && e.FloatText.Any:
 		se.any = true
 	case use != nil:
@@ -1469,6 +1627,28 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		// Degrees as written: the wanted rotation is made from them whole.
 		t := e.Turn
 		se.want.vec = [3]float64{t.X.Value, t.Y.Value, t.Z.Value}
+	case e.Light != nil:
+		x := e.Light
+		switch se.kind {
+		case kLight:
+			se.want.on = x.On
+		case kProjector:
+			if !x.Off {
+				id, err := msg.ParseUUID(x.ID)
+				if err != nil {
+					return fmt.Errorf("%q is not a texture id", x.ID)
+				}
+				se.want.tex = id
+			}
+		case kLightColour:
+			// The bytes come back over 255, so a literal is judged by them.
+			se.want.col = [3]float64{x.R.Value, x.G.Value, x.B.Value}
+		case kLightIntensity:
+			se.want.num = x.Num.Value
+		default:
+			// As float32, which is what the region sent.
+			se.want.num = float64(float32(x.Num.Value))
+		}
 	case e.FloatText != nil:
 		tm, err := s.textMatch(e.FloatText.Value)
 		if err != nil {
@@ -1547,6 +1727,9 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 			what = "face all"
 		case primFace:
 			what = map[stateKind]string{kPosition: "position", kSize: "size", kTurn: "turn", kText: "text"}[se.kind]
+			if se.kind.isLight() {
+				what = se.kind.word()
+			}
 		}
 		if se.kind == kButton {
 			what = "button"
@@ -1679,6 +1862,8 @@ type stepObs struct {
 // Hold, and it may fail the step.
 func (s *stepRun) observe(ctx context.Context) error {
 	w := s.t.watch
+	w.sample()
+	w.sampleSounds()
 	if err := w.poll(ctx, false); err != nil {
 		return err
 	}

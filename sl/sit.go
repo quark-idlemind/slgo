@@ -250,7 +250,7 @@ func (w *Session) SitOnGround(ctx context.Context, timeout time.Duration) error 
 
 	return w.controlUntil(ctx, agent.ControlSitOnGround, timeout,
 		"the ground sit animation to start", func() bool {
-			return groundSitting(w.anims)
+			return groundSitting(w.playing)
 		})
 }
 
@@ -282,7 +282,7 @@ func (w *Session) Stand(ctx context.Context, timeout time.Duration) error {
 
 	w.mu.Lock()
 	parent := w.seatLocal()
-	ground := groundSitting(w.anims)
+	ground := groundSitting(w.playing)
 	w.mu.Unlock()
 
 	switch {
@@ -293,7 +293,7 @@ func (w *Session) Stand(ctx context.Context, timeout time.Duration) error {
 	case ground:
 		return w.controlUntil(ctx, agent.ControlStandUp, timeout,
 			"the ground sit animation to stop",
-			func() bool { return !groundSitting(w.anims) })
+			func() bool { return !groundSitting(w.playing) })
 	}
 	// Nothing to wait for, so nothing to resend either: one flag, in
 	// case what this session believes is out of date.
@@ -323,7 +323,7 @@ func (w *Session) Stand(ctx context.Context, timeout time.Duration) error {
 func (w *Session) Seat(ctx context.Context) (*Seat, error) {
 	w.mu.Lock()
 	local := w.seatLocal()
-	ground := groundSitting(w.anims)
+	ground := groundSitting(w.playing)
 	on, offset := w.sitOn, w.sitOffset
 	w.mu.Unlock()
 
@@ -469,9 +469,9 @@ func (w *Session) seatLocal() uint32 {
 // had reached the region.  The constants are agent's, which took them
 // from the viewer's own llanimationstates.cpp; the constrained one is
 // what a measured ground sit played.
-func groundSitting(anims []msg.UUID) bool {
-	for _, id := range anims {
-		if id == agent.AnimSitGround || id == agent.AnimSitGroundConstrained {
+func groundSitting(playing []PlayingAnimation) bool {
+	for _, a := range playing {
+		if a.ID == agent.AnimSitGround || a.ID == agent.AnimSitGroundConstrained {
 			return true
 		}
 	}
@@ -542,34 +542,43 @@ const animationRelay = "AvatarAnimation"
 // every three seconds, so losing that race costs a wait, not an answer.
 // Why: doc/history/sit.md#the-subscription-question
 func (w *Session) borrowAnimations() (give func(), err error) {
+	return w.borrow(&w.animWatch, []string{animationRelay},
+		"sl: cannot listen for animations, which is the only evidence a ground sit gives")
+}
+
+// borrow is the one counted subscription: it has the daemon relay names
+// until every caller that took it out has given it back, the count being
+// the session's own (animWatch, userInfoWatch, soundWatch), and failed
+// the start of the error when the daemon refuses.  A backend that is not
+// a Watcher relays everything already.
+func (w *Session) borrow(count *int, names []string, failed string) (give func(), err error) {
 	b, ok := w.b.(Watcher)
 	if !ok {
 		return func() {}, nil
 	}
 
 	w.mu.Lock()
-	w.animWatch++
-	first := w.animWatch == 1
+	*count++
+	first := *count == 1
 	w.mu.Unlock()
 
 	release := func() {
 		w.mu.Lock()
-		w.animWatch--
-		last := w.animWatch == 0
+		*count--
+		last := *count == 0
 		w.mu.Unlock()
 		if last {
 			// Nothing to do about a failure here.  It means the stream
 			// is gone, which is the session ending, and the
 			// subscription goes with it.
-			_ = b.Unwatch(animationRelay)
+			_ = b.Unwatch(names...)
 		}
 	}
 
 	if first {
-		if err := b.Watch(animationRelay); err != nil {
+		if err := b.Watch(names...); err != nil {
 			release()
-			return func() {}, fmt.Errorf("sl: cannot listen for animations, "+
-				"which is the only evidence a ground sit gives: %w", err)
+			return func() {}, fmt.Errorf("%s: %w", failed, err)
 		}
 	}
 	return release, nil

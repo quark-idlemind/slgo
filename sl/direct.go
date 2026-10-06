@@ -388,6 +388,8 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			Click:        o.Click,
 			ClickKnown:   o.ClickKnown,
 			Sculpt:       o.Sculpt,
+			Light:        o.Light,
+			Projector:    o.Projector,
 			Shape:        o.Shape,
 			LinkNumber:   o.LinkNumber,
 			LinkKnown:    o.LinkKnown,

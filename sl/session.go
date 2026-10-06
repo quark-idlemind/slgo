@@ -123,12 +123,14 @@ type Session struct {
 	attach      map[msg.UUID]*Attached
 	killed      map[uint32]bool
 
-	// anims is what the simulator last said was playing on THIS
-	// avatar, and sitOn and sitOffset are the last AvatarSitResponse it
-	// sent us.  See sit.go: the animations are the whole of the
-	// evidence that a ground sit happened, and the offset is a detail
-	// of an object sit that the reparenting does not carry.
-	anims     []msg.UUID
+	// playing is what the simulator last said was playing on THIS
+	// avatar, and playingAt when it said it (zero until it has), and
+	// sitOn and sitOffset are the last AvatarSitResponse it sent us.
+	// See sit.go: the animations are the whole of the evidence that a
+	// ground sit happened, and the offset is a detail of an object sit
+	// that the reparenting does not carry.  See playing.go.
+	playing   []PlayingAnimation
+	playingAt time.Time
 	sitOn     msg.UUID
 	sitOffset msg.Vector3
 
@@ -143,6 +145,15 @@ type Session struct {
 	// only while a UserInfo call waits: it carries the account's email,
 	// and a session that did not ask is not sent it.
 	userInfoWatch int
+
+	// soundWatch is the same for the four sound messages (sounds.go),
+	// and heard, heardSeq and loops are what they said: the log of
+	// every sound heard, the number of the last, and the loops in force
+	// by the prim that plays each.
+	soundWatch int
+	heard      []HeardSound
+	heardSeq   uint64
+	loops      map[msg.UUID]*LoopingSound
 
 	// Replies keyed by what was asked.  created holds an entry only
 	// while CreateItem is waiting on that callback id: nil until the
@@ -750,6 +761,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 			w.locals[o.FullID] = o.ID
 			w.parents[o.ID] = o.ParentID
 			delete(w.killed, o.ID)
+			w.updateSound(o)
 			if item, ok := attachItem(o.NameValue); ok {
 				w.attach[item] = &Attached{
 					Object: Object{ID: o.FullID, Local: o.ID, from: w.at},
@@ -764,6 +776,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.mu.Lock()
 		for _, d := range t.ObjectData {
 			w.killed[d.ID] = true
+			w.objectGone(d.ID)
 			// A worn attachment that the region kills is no longer
 			// worn: a script's llDetachFromAvatar, or our own take-off.
 			// A teleport sends no kill for it and describes it again
@@ -776,6 +789,15 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 			}
 		}
 		w.mu.Unlock()
+
+	case *msg.SoundTrigger:
+		w.soundTrigger(t)
+	case *msg.AttachedSound:
+		w.attachedSound(t)
+	case *msg.AttachedSoundGainChange:
+		w.attachedSoundGain(t)
+	case *msg.PreloadSound:
+		w.preloadSound(t)
 
 	case *msg.ParcelInfoReply:
 		w.parcelInfoReply(parcelInfoFrom(t))
@@ -881,12 +903,9 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 	// a ground sit is ever heard about.
 	case *msg.AvatarAnimation:
 		if t.Sender.ID == w.me {
-			ids := make([]msg.UUID, 0, len(t.AnimationList))
-			for _, an := range t.AnimationList {
-				ids = append(ids, an.AnimID)
-			}
+			list := playingOf(t)
 			w.mu.Lock()
-			w.anims = ids
+			w.playing, w.playingAt = list, time.Now()
 			w.mu.Unlock()
 		}
 

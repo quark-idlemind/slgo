@@ -362,6 +362,25 @@ func groupsFromPB(gs []*pb.GroupMembership) []Group {
 	return out
 }
 
+// lightFromPB and projectorFromPB are lightPB and projectorPB's inverses
+// in internal/server.
+func lightFromPB(l *pb.PrimLight) *msg.Light {
+	if l == nil {
+		return nil
+	}
+	return &msg.Light{
+		Colour:    [3]uint8{uint8(l.Red), uint8(l.Green), uint8(l.Blue)},
+		Intensity: l.Intensity, Radius: l.Radius, Cutoff: l.Cutoff, Falloff: l.Falloff,
+	}
+}
+
+func projectorFromPB(p *pb.PrimProjector) *msg.LightImage {
+	if p == nil {
+		return nil
+	}
+	return &msg.LightImage{Texture: parseUUIDOrZero(p.Texture), FOV: p.Fov, Focus: p.Focus, Ambiance: p.Ambiance}
+}
+
 func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error) {
 	r, err := h.conn.Objects(ctx, named, id)
 	if err != nil {
@@ -390,6 +409,8 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			LinkNumber:   int(o.LinkNumber),
 			LinkKnown:    o.LinkKnown,
 			Text:         o.Text,
+			Light:        lightFromPB(o.Light),
+			Projector:    projectorFromPB(o.Projector),
 		}
 		s.Object.Name = o.Name
 		s.AttachPoint = int(o.AttachPoint)

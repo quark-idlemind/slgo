@@ -150,6 +150,45 @@ func TestLightOf(t *testing.T) {
 	}
 }
 
+// lightImageData is the light image block: a texture and three floats,
+// the field of view, the focus and the ambiance.
+func lightImageData(tex UUID, fov, focus, ambiance float32) []byte {
+	out := append([]byte(nil), tex[:]...)
+	for _, f := range []float32{fov, focus, ambiance} {
+		out = binary.LittleEndian.AppendUint32(out, math.Float32bits(f))
+	}
+	return out
+}
+
+// TestLightImageOf reads the projector: the texture, then the field of
+// view, focus and ambiance in the viewer's order, and not from a block
+// too short to hold them.
+// Why: doc/lights.md#the-projector
+func TestLightImageOf(t *testing.T) {
+	tex := MustParseUUID("17ac7e57-7e57-c0de-1e5d-e125ee89dc71")
+	got, err := DecodeExtraParams(params(
+		param(ExtraLight, lightData(1, 2, 3, 4, 1, 1, 1)),
+		param(ExtraLightImage, lightImageData(tex, 1.5, -0.25, 0.125)),
+	))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, ok := LightImageOf(got)
+	if !ok {
+		t.Fatal("the light image block was not found")
+	}
+	if want := (LightImage{Texture: tex, FOV: 1.5, Focus: -0.25, Ambiance: 0.125}); l != want {
+		t.Errorf("light image = %+v, want %+v", l, want)
+	}
+	if _, ok := LightImageOf(got[:1]); ok {
+		t.Error("found a light image in a light block")
+	}
+	short := []ExtraParam{{Type: ExtraLightImage, Data: make([]byte, 27)}}
+	if _, ok := LightImageOf(short); ok {
+		t.Error("a 27 byte light image block is missing its last float")
+	}
+}
+
 // TestSculptAndLightAreAbsentWhenTheyAre: a prim with neither must
 // report so rather than handing back a zero value that reads like a
 // black light of radius nothing.

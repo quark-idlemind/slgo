@@ -648,6 +648,31 @@ type Send struct {
 	Key         *Key
 }
 
+// AnimationExp is animation UUID, a state, and from OBJ. With State
+// changes there is no value; otherwise On is the value, on or off. From
+// is nil when the animation may have been started by anything.
+type AnimationExp struct {
+	ID     string
+	IDSpan Span
+	State  State
+	On     bool
+	From   *Ident
+}
+
+// SoundExp is sound UUID, in one of two forms. With State nil, the sound
+// was heard to play: From is the object that played it, when written, and
+// Gain the volume it was played at, when written. With State set, it is a
+// loop's state: is, becomes or changes, and for the first two Loop says
+// looping (true) or stopped (false).
+type SoundExp struct {
+	ID     string
+	IDSpan Span
+	State  *State
+	Loop   bool
+	From   *Ident
+	Gain   *Number
+}
+
 // LinkTarget is an integer or one of LinkWords.
 type LinkTarget struct {
 	Span Span
@@ -688,12 +713,15 @@ type Expect struct {
 	Material   *MaterialExp // normalmap, specularmap, glossiness or environment
 	Position   *VecExp3
 	Size       *VecExp3
-	Turn       *VecExp3 // a prim's own rotation, as Euler degrees X Y Z
+	Turn       *VecExp3  // a prim's own rotation, as Euler degrees X Y Z
+	Light      *LightExp // a prim's point light or projector
 	Give       *GiveExp
 	Rez        *RezExp
 	Link       *LinkExp
 	Button     *ButtonExp
 	Attached   *AttachExp
+	Animation  *AnimationExp
+	Sound      *SoundExp
 }
 
 // Near is the tolerance of a state expectation: near N, an amount in
@@ -836,6 +864,39 @@ type VecExp3 struct {
 	Any     bool
 	Use     *Capture
 }
+
+// LightExp is expect light or projector OBJ link? with an optional
+// property word, then the state: whether a prim's point light is on, one
+// of its numbers, or the texture its projector throws and one of its
+// numbers.  The properties are the words of LightProps and
+// ProjectorProps; Prop is empty for the light's on and off and the
+// projector's texture.  Which value is set depends on what is read:
+// On for the light's on or off, ID or Off for the projector's texture,
+// R G B for a light's colour and Num for every other number.  Any and
+// Use are as for TextureExp, and Use has the type of what is read.
+// Why: doc/slate-language.md#light-and-projector
+type LightExp struct {
+	Name      Ident
+	Link      *Int
+	Projector bool
+	Prop      string
+	PropSpan  Span
+	State     State
+	On        bool
+	ID        string
+	Off       bool
+	Num       Number
+	R, G, B   Number
+	Any       bool
+	Use       *Capture
+}
+
+// LightProps and ProjectorProps are the property words of a light and of
+// a projector.
+var (
+	LightProps     = []string{"colour", "intensity", "radius", "falloff"}
+	ProjectorProps = []string{"fov", "focus", "ambiance"}
+)
 
 // ClickExp names a PRIM_CLICK_ACTION. The byte is ClickBytes[Action];
 // Action is empty for changes and original.

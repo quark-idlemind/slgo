@@ -81,7 +81,10 @@ not in `tools/known-uuids`. The examples are one invented id.
   or sixteen, separated by a space, colon, comma, dot or underscore, and
   wrapped across lines with or without a comment marker between. A run
   longer than an id is read from its start, so a trailing byte after the
-  four groups does not hide them.
+  four groups does not hide them. A list of source line ranges, `file.cpp:1569-1572,
+  1603-1610`, is not one: eight decimal groups in hyphen-joined pairs,
+  each pair rising, the pairs joined by commas. A run of decimal groups
+  joined by hyphens alone, a card number, is still refused.
 - **A Go byte literal**, over as many lines as it likes, with comments
   among the bytes: `msg.UUID{0xab, 0x3f, 0x7e, 0x57, 0x7e, 0x57, 0xc0,
   0xde, 0x9d, 0x41, 0x6c, 0x2e, 0x08, 0xf1, 0xb7, 0xa5}`, a

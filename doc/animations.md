@@ -40,14 +40,58 @@ the viewer: no asset request and no permission message.  What the
 simulator does when the avatar has never fetched the asset, or the
 animation is one the avatar may not use, has not been looked at.
 
-`AvatarAnimation` -- what the simulator says is playing -- was already
-read for posture (`agent/posture.go`, `doc/history/sit.md`), and `sl`
-keeps the last list of this avatar's own, but only for the length of a
-sit or a stand: the subscription is borrowed for one call
-(`borrowAnimations`) because the message arrives for every avatar in
-range.  So `StartAnimation` does not confirm that anything played and
-there is no call for "what is playing".  Adding one means deciding how
-old a list may be before it is stale, which is not small.
+`AvatarAnimation` -- what the simulator says is playing -- is what
+[What is playing](#what-is-playing) reads.  `StartAnimation` itself does
+not confirm that anything played; that is a later read of it.
+
+## What is playing
+
+`Session.Animations()` (`sl/playing.go`) returns what the simulator last
+said this avatar is playing, each as a `PlayingAnimation` (asset id,
+sequence number, source object) with the time the list was heard.
+`Session.ListenForAnimations()` asks for the message until the returned
+func is called.
+
+The state is kept in `sl` only.  `slgod` already relays `AvatarAnimation`
+to a client that subscribes to it and keeps nothing of it for the client,
+as it keeps nothing of chat; the session does the keeping, and there is
+nothing for the proto to carry.  A session behind a daemon is sent the
+message only while it has asked for it, because it arrives for every
+avatar in range, in full, about every three seconds (see
+`borrowAnimations`); `ListenForAnimations` is that same borrowed
+subscription, so a sit that overlaps it does not take it away.
+
+What the viewer does with the message is read from Firestorm
+885631b93a, `newview/llviewermessage.cpp`, `process_avatar_animation`:
+
+- `:5235` starts the function, which finds the avatar from the sender's
+  id (`:5243-5257`);
+- `:5265` clears the avatar's `mSignaledAnimations`, so each message is
+  the whole list and an animation that has stopped is only missing from
+  the next one.  `sl` replaces its list the same way;
+- `:5267` is the branch for the viewer's own avatar.  It reads `AnimID`
+  and `AnimSequenceID` of each block (`:5273-5274`) and keeps them
+  (`:5286`), and then, only `if (i < num_source_blocks)` (`:5299`), the
+  `ObjectID` of the source block of the same index (`:5301`), to mark
+  the object as an animation source;
+- the branch for another avatar (`:5347`) reads the animations and no
+  sources (`:5349-5354`).
+
+So a source belongs to an animation by position, and the source list may
+be shorter than the animation list: `sl` gives an animation past the end
+of it, or with a null id in its place, a zero `Source`.  A session keeps
+the list of its own avatar only (`Sender.ID` is this avatar), for the
+reason the posture code gives: keeping everyone's would be a list that
+grows with the region.
+
+Measured (6 October 2026, a worn object's script playing an animation
+on its owner): the list named that object as the source of the
+animation, and a list came at each start and stop, about 0.25 s after
+it was asked for.  Not measured: that the simulator names no object, or
+the null id, for an animation the avatar plays by itself (a stand, a
+walk), which is what the viewer's code expects.  A first list can take several seconds to come when the
+avatar has not changed what it plays, because that is the resend period,
+so `Animations` says when it was heard and has no list before that.
 
 ## The built-in animations
 

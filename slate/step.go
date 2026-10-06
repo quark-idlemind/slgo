@@ -488,7 +488,7 @@ func (s *stepRun) expectFor(ctx context.Context, x *expState) error {
 		return s.dialogExpect(x, e.TextBox.Name, e.TextBox.To, e.TextBox.Link, e.TextBox.Text, nil)
 	case e.Texture != nil, e.Offset != nil, e.Repeats != nil, e.Rot != nil, e.Click != nil,
 		e.Fullbright != nil, e.Glow != nil, e.Colour != nil, e.Alpha != nil, e.AlphaMode != nil, e.Material != nil,
-		e.Position != nil, e.Size != nil, e.Turn != nil, e.FloatText != nil:
+		e.Position != nil, e.Size != nil, e.Turn != nil, e.Light != nil, e.FloatText != nil:
 		return s.stateExpect(x)
 	case e.Button != nil:
 		return s.buttonExpect(x)
@@ -500,6 +500,10 @@ func (s *stepRun) expectFor(ctx context.Context, x *expState) error {
 		return s.linkExpect(x)
 	case e.Attached != nil:
 		return s.attachedExpect(x)
+	case e.Animation != nil:
+		return s.animationExpect(x)
+	case e.Sound != nil:
+		return s.soundExpect(x)
 	}
 	return notYet("this expectation")
 }

@@ -376,6 +376,11 @@ here when another is shared the same way.
   then `$SLGO_ADDR`, then sl-host, then localhost:7807.
   `TestNoCommandFindsSlgodItsOwnWay` refuses a command in `cmd` that
   reads `$SLGO_ADDR` or calls `slhost.AddrFor` and the like itself.
+- `Session.borrow`, in `sl`: the one counted subscription for a call
+  that borrows a message for a while (animations, user info, sounds), so
+  that overlapping callers do not cancel each other.
+  `TestEveryBorrowedSubscriptionIsTakenOutByBorrow` refuses `Watch` or
+  `Unwatch` anywhere else in `sl`.
 - `tools/new-id` and `tools/scan-ids`: the one way to make an invented
   id (signed, with a first group nothing else uses, sorted when you ask
   for several) and the one place that knows every shape an id is written

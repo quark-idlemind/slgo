@@ -1390,6 +1390,10 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.vec3Exp(e, "size")
 	case p.kw("turn"):
 		return p.vec3Exp(e, "turn")
+	case p.kw("light"):
+		return p.lightExp(e, false)
+	case p.kw("projector"):
+		return p.lightExp(e, true)
 	case p.kw("click"):
 		return p.clickExp(e)
 	case p.kw("text"):
@@ -1416,6 +1420,10 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.buttonExp(e)
 	case p.kw("attached"):
 		return p.attachExp(e)
+	case p.kw("animation"):
+		return p.animationExp(e)
+	case p.kw("sound"):
+		return p.soundExp(e)
 	default:
 		return p.unexpected("expected an expectation")
 	}
@@ -1902,6 +1910,91 @@ func (p *parser) vec3Exp(e *Expect, word string) error {
 		e.Position = v
 	}
 	return nil
+}
+
+// lightExp reads light or projector, the object, an optional property
+// word and the state, and its value.  The property word is read where the
+// state word would be, so the position holds one of two fixed words and
+// never a name.
+// Why: doc/slate-language.md#light-and-projector
+func (p *parser) lightExp(e *Expect, projector bool) error {
+	word := "light"
+	props := LightProps
+	if projector {
+		word, props = "projector", ProjectorProps
+	}
+	if err := p.want(word); err != nil {
+		return err
+	}
+	name, err := p.ident()
+	if err != nil {
+		return err
+	}
+	link, err := p.optLink()
+	if err != nil {
+		return err
+	}
+	x := &LightExp{Name: name, Link: link, Projector: projector}
+	for _, w := range props {
+		if p.kw(w) {
+			x.Prop, x.PropSpan = w, p.tok.span
+			if err := p.next(); err != nil {
+				return err
+			}
+			break
+		}
+	}
+	if x.State, err = p.state(); err != nil {
+		return err
+	}
+	if hasValue(x.State) {
+		if x.Any, x.Use, err = p.reading(); err != nil {
+			return err
+		}
+		if !x.Any && x.Use == nil {
+			if err := p.lightValue(x); err != nil {
+				return err
+			}
+		}
+	}
+	e.Light = x
+	return nil
+}
+
+// lightValue reads the literal a light or projector expectation compares
+// with, which is of the kind its property says.
+func (p *parser) lightValue(x *LightExp) error {
+	var err error
+	switch {
+	case x.Prop == "" && !x.Projector:
+		switch {
+		case p.kw("on"):
+			x.On = true
+		case p.kw("off"):
+		default:
+			return p.unexpected("expected on, off, original, or a capture")
+		}
+		return p.next()
+	case x.Prop == "" && x.Projector:
+		switch {
+		case p.kw("off"):
+			x.Off = true
+		case p.tok.kind == kUUID:
+			x.ID = p.tok.text
+		default:
+			return p.unexpected("expected a UUID, off, original, or a capture")
+		}
+		return p.next()
+	case x.Prop == "colour":
+		for _, n := range []*Number{&x.R, &x.G, &x.B} {
+			if *n, err = p.number(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	x.Num, err = p.number()
+	return err
 }
 
 func (p *parser) rotExp(e *Expect) error {
@@ -2532,6 +2625,116 @@ func (p *parser) attachExp(e *Expect) error {
 		return p.unexpected("expected on or off")
 	}
 	e.Attached = x
+	return nil
+}
+
+// animationExp reads animation uuid ( changes / state on-or-off ) ( from
+// binding )?.  There is no original and no any and no capture: an
+// animation is on or it is off, and the id is written.
+func (p *parser) animationExp(e *Expect) error {
+	if err := p.want("animation"); err != nil {
+		return err
+	}
+	if p.tok.kind != kUUID {
+		return p.unexpected("expected an animation's asset UUID")
+	}
+	x := &AnimationExp{ID: p.tok.text, IDSpan: p.tok.span}
+	if err := p.next(); err != nil {
+		return err
+	}
+	st, err := p.state()
+	if err != nil {
+		return err
+	}
+	if st.Original {
+		return p.errorf("an animation is on or off and has no original; write on or off")
+	}
+	x.State = st
+	if st.Kind != StateChanges {
+		switch {
+		case p.kw("on"):
+			x.On = true
+		case p.kw("off"):
+		default:
+			return p.unexpected("expected on or off")
+		}
+		if err := p.next(); err != nil {
+			return err
+		}
+	}
+	if p.kw("from") {
+		if err := p.next(); err != nil {
+			return err
+		}
+		from, err := p.ident()
+		if err != nil {
+			return err
+		}
+		x.From = &from
+	}
+	e.Animation = x
+	return nil
+}
+
+// soundExp reads sound uuid, and then either ( from binding )? ( gain
+// number )? for a sound heard, or ( is / becomes ) ( looping / stopped ) or
+// changes, ( from binding )? for a loop's state.  A sound is not a state
+// the tester is in, so there is no original, any or capture; and a gain
+// belongs to a play, which a loop's state has none of.
+func (p *parser) soundExp(e *Expect) error {
+	if err := p.want("sound"); err != nil {
+		return err
+	}
+	if p.tok.kind != kUUID {
+		return p.unexpected("expected a sound's asset UUID")
+	}
+	x := &SoundExp{ID: p.tok.text, IDSpan: p.tok.span}
+	if err := p.next(); err != nil {
+		return err
+	}
+	if p.kw("is") || p.kw("becomes") || p.kw("changes") {
+		st, err := p.state()
+		if err != nil {
+			return err
+		}
+		if st.Original {
+			return p.errorf("a loop is looping or stopped and has no original; write looping or stopped")
+		}
+		x.State = &st
+		if st.Kind != StateChanges {
+			switch {
+			case p.kw("looping"):
+				x.Loop = true
+			case p.kw("stopped"):
+			default:
+				return p.unexpected("expected looping or stopped")
+			}
+			if err := p.next(); err != nil {
+				return err
+			}
+		}
+	}
+	if p.kw("from") {
+		if err := p.next(); err != nil {
+			return err
+		}
+		from, err := p.ident()
+		if err != nil {
+			return err
+		}
+		x.From = &from
+	}
+	if x.State == nil && p.kw("gain") {
+		if err := p.next(); err != nil {
+			return err
+		}
+		n, err := p.number()
+		if err != nil {
+			return err
+		}
+		x.Gain = &n
+	}
+	e.Sound = x
 	return nil
 }
 

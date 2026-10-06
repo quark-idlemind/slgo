@@ -183,28 +183,6 @@ func (w *Session) userInfoReply(who msg.UUID, u *UserInfo) {
 // everything.
 // Why: doc/account.md#nothing-logs-it
 func (w *Session) borrowUserInfo() (give func(), err error) {
-	b, ok := w.b.(Watcher)
-	if !ok {
-		return func() {}, nil
-	}
-	w.mu.Lock()
-	w.userInfoWatch++
-	first := w.userInfoWatch == 1
-	w.mu.Unlock()
-	release := func() {
-		w.mu.Lock()
-		w.userInfoWatch--
-		last := w.userInfoWatch == 0
-		w.mu.Unlock()
-		if last {
-			_ = b.Unwatch("UserInfoReply")
-		}
-	}
-	if first {
-		if err := b.Watch("UserInfoReply"); err != nil {
-			release()
-			return func() {}, fmt.Errorf("sl: UserInfo: cannot listen for the reply: %w", err)
-		}
-	}
-	return release, nil
+	return w.borrow(&w.userInfoWatch, []string{"UserInfoReply"},
+		"sl: UserInfo: cannot listen for the reply")
 }

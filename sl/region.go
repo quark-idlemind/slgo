@@ -166,6 +166,10 @@ func (w *Session) regionChanged(c *RegionChange) {
 //     what is thrown away is about to be replaced by the truth, and
 //     what would be kept is a claim that reads right and points at
 //     nothing.
+//   - loops: the sounds that prims of the region left behind are
+//     looping, which end with the prims (sounds.go).  Each is logged as
+//     ended, so a reader of the log sees them stop.  Worn prims send
+//     their sound again in the arrival's updates.
 //   - taskInv, taskSeen: the filename in a ReplyTaskInventory is a
 //     handle the SIMULATOR issued for a transfer, and the object it is
 //     about is in the region left.  Asking the new region for it would
@@ -232,6 +236,7 @@ func (w *Session) dropRegionState() {
 	clear(w.taskInv)
 	clear(w.taskSeen)
 	clear(w.asking)
+	w.loopsGone()
 }
 
 // A visit is one stay in one run of a region, which is what a local id

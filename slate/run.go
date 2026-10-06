@@ -143,6 +143,7 @@ type runCfg struct {
 	click      time.Duration // a click describe, 30 s
 	settle     time.Duration // the rez settle, 250 ms
 	inv        time.Duration // between inventory fetches for a give, 1 s
+	animations time.Duration // the first AvatarAnimation after the run asks for it, 10 s
 	find       finder        // the button finder; nil is imgfind.Find
 
 	// The bring-up (bridge.go); zero is the production value there.
@@ -235,6 +236,11 @@ type runner struct {
 	cur     *testRun            // the test being run, for its as bindings
 	seconds []*second           // the second avatars, in the order the file declares them
 
+	stopAnims func() // gives back the subscription to AvatarAnimation (animation.go)
+
+	snd        *soundRun // what the run keeps for sounds; nil when no test names one (sound.go)
+	stopSounds func()    // gives back the subscription to the sound messages
+
 	ops gridOps   // what the bring-up and cleanup ask of the grid
 	pr  *probeRun // the bridge and probes; nil when the file has none
 }
@@ -300,6 +306,12 @@ func run(ctx context.Context, sess *sl.Session, s *Script, opt Options, cfg runC
 		r.tick.Stop()
 		sess.StopChat(r.chat)
 		sess.StopIMs(r.ims)
+		if r.stopAnims != nil {
+			r.stopAnims()
+		}
+		if r.stopSounds != nil {
+			r.stopSounds()
+		}
 		for _, sc := range r.seconds {
 			sc.sess.StopIMs(sc.ims)
 		}
@@ -378,6 +390,8 @@ func (r *runner) setupSteps() []setupStep {
 		{"linksets", r.setupLinksets},
 		{"probe", r.setupProbe},
 		{"click", r.setupClick},
+		{"animations", r.setupAnimations},
+		{"sounds", r.setupSounds},
 	}
 }
 

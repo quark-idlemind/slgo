@@ -102,15 +102,32 @@ func SculptMarkOf(params []ExtraParam) SculptMark {
 	return SculptMark{Kind: k, ID: s.Texture}
 }
 
-// Light is a prim that gives off light.
+// Light is a prim that gives off light: the light block of its extra
+// parameters, which is there while the light is on and absent while it
+// is off.
+// Why: doc/lights.md#the-light
 type Light struct {
 	// Colour is the first three of four colour bytes on the wire; the
-	// fourth carries Intensity, which is split out.
+	// fourth carries Intensity, which is split out.  The bytes are the
+	// linear colour the viewer feeds its shaders, not the sRGB one its
+	// swatch shows (LLLightParams::unpack, llprimitive.cpp:1747).
 	Colour    [3]uint8
 	Intensity float32
 	Radius    float32
 	Cutoff    float32
 	Falloff   float32
+}
+
+// LightImage is a prim's projector: the light image block, a texture to
+// project and three floats.  A block with the null key projects nothing,
+// and the viewer counts it as no projector (isLightSpotlight,
+// llprimitive.h:353).
+// Why: doc/lights.md#the-projector
+type LightImage struct {
+	Texture  UUID
+	FOV      float32 // the field of view, in radians
+	Focus    float32
+	Ambiance float32
 }
 
 // DecodeExtraParams reads the optional blocks from a standalone
@@ -154,4 +171,22 @@ func LightOf(params []ExtraParam) (Light, bool) {
 		}
 	}
 	return Light{}, false
+}
+
+// LightImageOf returns the light image block if there is one: a texture
+// and a vector of field of view, focus and ambiance, in that order
+// (LLLightImageParams::unpack, llprimitive.cpp:2213; the order is the
+// viewer panel's, llpanelvolume.cpp:349-352).
+func LightImageOf(params []ExtraParam) (LightImage, bool) {
+	for _, p := range params {
+		if p.Type == ExtraLightImage && len(p.Data) >= 28 {
+			var l LightImage
+			copy(l.Texture[:], p.Data[:16])
+			l.FOV = f32at(p.Data, 16)
+			l.Focus = f32at(p.Data, 20)
+			l.Ambiance = f32at(p.Data, 24)
+			return l, true
+		}
+	}
+	return LightImage{}, false
 }

@@ -191,6 +191,14 @@ type Seen struct {
 	// is what Seen.FaceCount asks before counting a shape's faces.
 	Sculpt msg.SculptMark
 
+	// Light is the prim's point light, nil while it has none, and
+	// Projector its projector, nil while it has none.  A light that is
+	// switched off has no block, so nil is off.  The colour is the
+	// wire's bytes, which are linear.
+	// Why: doc/lights.md
+	Light     *msg.Light
+	Projector *msg.LightImage
+
 	// Shape is the prim's profile and path, still packed.  Form
 	// unpacks it into something with names.
 	Shape msg.PrimShape
