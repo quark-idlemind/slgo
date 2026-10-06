@@ -331,11 +331,11 @@ func TestASeatTheRegionDoesNotHoldIsForgotten(t *testing.T) {
 				on, _ := seats.Seat("example")
 				return on.IsZero()
 			})
+			waitFor(t, 3*time.Second, "forgetting the seat to be logged", func() bool {
+				return logs.has("forgot the seat")
+			})
 			if n := satOn(sim); n != SeatTries {
 				t.Errorf("it asked %d times, want %d", n, SeatTries)
-			}
-			if !logs.has("forgot the seat") {
-				t.Error("forgetting the seat was not logged")
 			}
 		})
 	}
