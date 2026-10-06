@@ -1472,6 +1472,7 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 // stepObs is what a step keeps beside its expectations.
 type stepObs struct {
 	snap    map[msg.UUID]string // the inventory's item ids and names at the arm point
+	folders map[msg.UUID]string // and its folders' ids and names
 	desc    []*clickDescribe    // click describes started by a rez, open
 	rez     *rezStep
 	gives   map[*expState]*giveRun

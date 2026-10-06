@@ -1160,7 +1160,24 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 		if err := c.ref(e.Give.From, same); err != nil {
 			return err
 		}
-		return c.textVal(e.Give.Item, same)
+		if err := c.textVal(e.Give.Item, same); err != nil {
+			return err
+		}
+		for _, h := range e.Give.Holding {
+			if err := c.textVal(h, same); err != nil {
+				return err
+			}
+			if h.Pattern {
+				gs, err := c.groups(h)
+				if err != nil {
+					return err
+				}
+				if len(gs) > 0 {
+					return c.err(h.ValueSpan, "a holding pattern binds nothing: a named group in it has no capture to go to")
+				}
+			}
+		}
+		return nil
 	case e.Rez != nil:
 		return c.rez(e, seenAs, same)
 	case e.Link != nil:

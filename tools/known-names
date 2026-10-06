@@ -231,6 +231,10 @@ Example Balloon	Slate example (object)
 Example "East	Slate example (object): a quote in the name, to test escaping
 Example Thank You	Slate example (inventory item)
 Example Red Swatch	Slate example (inventory item)
+Example Blue Swatch	Slate example (inventory item)
+Example Starter Folder	Slate example (inventory folder)
+Example Other Folder	Slate test (inventory folder)
+Example Welcome Note	Slate test (inventory item)
 Example Red Swatch backup	Slate test (inventory item): a product's own item named like a dropped one
 Example Red Swatch 2	Slate test (inventory item): a numbered name a product's item could have
 Example Menu	Slate example (text on a sign)

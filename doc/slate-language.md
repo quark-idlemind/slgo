@@ -84,6 +84,7 @@ test before after each sequence do
 showing count any fullbright glow colour alpha on off
 alphamode default blend mask emissive
 item wear rez take attached ordered sorted shown gone if in near percent
+folder holding
 ```
 
 A capture is a `$` and a name: `$first`, `$tile_2`. It is its own token and not a word, so `$button` and an object called `button` never meet. `$` is a capture only before a letter. `L$5` and `L$ 5` keep their meaning because `L$` is tried first, and a `$` inside a string is an ordinary character, so `"L$5"` and the pattern `"L\\$[0-9]+"` are unchanged. A bare `$` is an illegal byte.
@@ -226,6 +227,7 @@ vecval      = number number number / named
 clickname   = "touch" / "none" / "sit" / "buy" / "pay" / "open"
             / "play" / "media" / "zoom" / "disabled"
 giveexp     = "give" text "from" binding toavatar?
+            / "give" "folder" text "from" binding ("holding" text+)?
 rezexp      = "rez" "name" text ("description" text)? "from" binding ("as" ident)?
 linkexp     = "link" "on" binding "from" "link" integer "num" integer
               "text" text ("key" key)? ("heard" "by" integer)?
@@ -574,10 +576,12 @@ slate: setup: the profile given for visitor is not held by the daemon (dial: ...
 | dialog button | `expect dialog from v button "Red"` | `expect dialog from v button matching "^Re"` |
 | text box message | `expect textbox from b text "Name?"` | `expect textbox from b text matching "name"` |
 | give item name | `expect give "Example Red Swatch" from v` | `expect give matching "Swatch$" from v` |
+| give folder name | `expect give folder "Example Starter Folder" from v` | `expect give folder matching "^Example Starter" from v` |
+| give folder, an item it holds | `expect give folder "F" from v holding "Example Red Swatch"` | `expect give folder "F" from v holding matching "Swatch$"` |
 | rez name, description | `rez name "B" description "left" ...` | `rez name matching "^B" description matching "left" ...` |
 | link text | `... text "go"` | `... text matching "^go"` |
 
-A pattern is Go RE2 syntax and is unanchored, as a button `pattern` is; write `^` and `$` to anchor it, and `(?i)` to ignore case. It is compiled at static check, and one that does not compile is exit 2. In a Slate string a backslash is doubled, so the pattern `L\$[0-9]+` is written `"L\\$[0-9]+"`. Wherever the Exact column takes a string, a capture that holds text takes its place and is compared as that string would be ([Captures](#expectations)); a capture is never a pattern. The `choose` forms are under [Stimuli](#stimuli). `answer` and the text of the stimulus `say` take strings only, and the text of `send` takes a string or a capture. With `give matching`, two new items whose names match are ambiguous, as two new items of one name are.
+A pattern is Go RE2 syntax and is unanchored, as a button `pattern` is; write `^` and `$` to anchor it, and `(?i)` to ignore case. It is compiled at static check, and one that does not compile is exit 2. In a Slate string a backslash is doubled, so the pattern `L\$[0-9]+` is written `"L\\$[0-9]+"`. Wherever the Exact column takes a string, a capture that holds text takes its place and is compared as that string would be ([Captures](#expectations)); a capture is never a pattern. The `choose` forms are under [Stimuli](#stimuli). `answer` and the text of the stimulus `say` take strings only, and the text of `send` takes a string or a capture. With `give matching`, two new items whose names match are ambiguous, as two new items of one name are, and so are two new folders with `give folder matching`. A pattern after `holding` binds nothing: a named group in it is refused at static check.
 
 An expectation passes when its match has been seen after the arm point. When the deadline passes it fails with the line that was written, the duration and a transcript of what was heard instead ([Reading the result](#reading-the-result)).
 
@@ -738,7 +742,7 @@ expect button hud text "Open" box becomes shown within 8s
 | A named group `(?P<name>...)` in any `matching` pattern of a positive expectation, including a button clause | `$name`, the group's text in the event that matched | text |
 | `as $x` after `say` | The line's text (the raw tail, for a channel the bridge forwards) | text |
 | `as $x` after `dialog` or `textbox` | The message | text |
-| `as $x` after `give` | The item's name | text |
+| `as $x` after `give` | The item's name; after `give folder`, the folder's | text |
 | `as $x` after a state expectation | The reading that matched; with `face all`, the tuple | its own type |
 | `as $x` after `alphamode` | The mode as the transcript writes it: `default`, `none`, `blend`, `emissive`, or `mask 128` with the cutoff for a mask. It has no `face all`, so there is no tuple | text |
 | `as $x` after a button reading | The count | number |
@@ -758,6 +762,10 @@ A capture is data. It is never parsed as Slate, never compiled as a pattern and 
 ```text
 unmatched give "Example Thank You" from vendor within 10s; accept was sent and inventory still has 1 item of that name
 ```
+
+**A folder given.** An object's script can give a folder (`llGiveInventoryList` to its owner), which arrives as an offer of a category. `expect give` refuses that offer, and `expect give folder` takes it: `expect give folder "Example Starter Folder" from vendor holding "Example Red Swatch" "Example Blue Swatch" within 10s`. The name is a string or a `matching` pattern, as for an item, and the offer is the one whose object is a prim of the binding's linkset, as for an item. The runner accepts it into the root of the inventory, as the viewer accepts one ([A folder given](slate-runner.md#a-folder-given)), and says so with the same `give accept sent` line, `into My Inventory`. The expectation passes when the inventory holds a folder of that name whose id was not there at the arm point; an older folder of the name does not count and does not block. With `holding`, each text, a string or a `matching` pattern, must also match the name of an item directly in that new folder (a link is not an item, and a folder inside it is not looked into). The items are listed after the folder, so a folder that is there and does not yet hold them is looked at again until the deadline. `as $x` binds the folder's name, and a named group in the folder's own pattern binds as for an item. Two new folders of the name are ambiguous. `folder` and `holding` are words only where the grammar expects them. `to NAME` is not allowed with `folder`: a second avatar's offer is declined as it is heard, so there is no folder to hold.
+
+The two forms refuse each other's offer. An `expect give` meeting an offer of a folder, and an `expect give folder` meeting an offer of an item, does not accept it, and says so on the unmatched line: `; the offer of that name is a folder, and expect give folder takes it`, and `; the offer of that name is an item, and expect give without folder takes it`. What neither takes is declined at the end of the test with any other offer. When the accept was sent and a new folder of the name is there that does not hold what was asked, the line says what it held, `; the new folder holds "Example Blue Swatch", "Example Red Swatch"` (names in sorted order), or `; the new folder holds nothing`; when no new folder came, `; accept was sent and inventory still has 1 folder of that name`. The runner does not delete the folder afterwards, as it does not delete an item. Not measured: no folder given by a script has been accepted on the grid yet, so the offer text of a folder, taken to be the item's form (the viewer's own comment on it says so), and where it lands are read from the viewer's source.
 
 The runner does not decline an offer, and does not delete the item afterwards. A later run passes on a newer id.
 
@@ -886,6 +894,7 @@ HH:MM:SS.mmm chat <how> from <who>: "<text>"
 HH:MM:SS.mmm dialog from <who>: "<message>" buttons <labels>
 HH:MM:SS.mmm textbox from <who>: "<message>"
 HH:MM:SS.mmm give from <who>: "<item>"
+HH:MM:SS.mmm give from <who>: folder "<name>"
 HH:MM:SS.mmm give accept sent to <uuid> transaction <uuid> into <folder>
 HH:MM:SS.mmm dialog to <avatar> from <who>: "<message>" buttons <labels>
 HH:MM:SS.mmm textbox to <avatar> from <who>: "<message>"
@@ -1181,6 +1190,21 @@ expect give "Example Red Swatch" from vendor
 ```
 
 If the tester does not own the tip jar, step 1 fails with `as owner of vendor but the tester does not own "Example Tip Jar"` and nothing is said.
+
+### A folder given
+
+A vendor that gives a folder when the tester asks for the kit. The folder is expected by name and by two of the items it holds; the folder and the items are invented. The offer is accepted into the root of the inventory, and `$kit` holds the folder's name for a later step.
+
+```slate
+slate 1
+
+object vendor is "Example Tip Jar"
+
+say "kit" on 0
+expect give folder "Example Starter Folder" from vendor holding "Example Red Swatch" matching "Blue Swatch$" within 15s as $kit
+```
+
+If the vendor gives the folder as a plain item offer, or the folder is short of the blue swatch, the step fails and the unmatched line says which, and what the folder held.
 
 ### Pay, a give, two new objects, then touch one
 

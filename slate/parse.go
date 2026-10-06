@@ -2127,6 +2127,12 @@ func (p *parser) giveExp(e *Expect) error {
 	if err := p.want("give"); err != nil {
 		return err
 	}
+	folder := p.kw("folder")
+	if folder {
+		if err := p.next(); err != nil {
+			return err
+		}
+	}
 	item, err := p.text()
 	if err != nil {
 		return err
@@ -2138,11 +2144,30 @@ func (p *parser) giveExp(e *Expect) error {
 	if err != nil {
 		return err
 	}
+	var holding []Text
+	if folder && p.kw("holding") {
+		if err := p.next(); err != nil {
+			return err
+		}
+		for {
+			t, err := p.text()
+			if err != nil {
+				return err
+			}
+			holding = append(holding, t)
+			if p.tok.kind != kString && p.tok.kind != kCapture && !p.kw("matching") {
+				break
+			}
+		}
+	}
+	if folder && p.kw("to") {
+		return p.errorf("expect give folder takes no to: a folder offered to a second avatar is declined as it is heard, so there is no folder to hold")
+	}
 	to, err := p.toAvatar()
 	if err != nil {
 		return err
 	}
-	e.Give = &GiveExp{Item: item, From: from, To: to}
+	e.Give = &GiveExp{Folder: folder, Item: item, From: from, Holding: holding, To: to}
 	return nil
 }
 
