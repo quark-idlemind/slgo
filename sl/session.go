@@ -64,6 +64,13 @@ var Subscriptions = []string{
 type Session struct {
 	b Backend
 
+	// degrabbed is when this session last sent an ObjectDeGrab for each
+	// linkset (its root's local id), under touchMu, so that the next grab
+	// of any prim of it can keep
+	// touchGap (touch.go).
+	touchMu   sync.Mutex
+	degrabbed map[uint32]time.Time
+
 	// ident is who this session is NOW: the avatar, the session id,
 	// the capability URLs.  It is a pointer that gets replaced rather
 	// than a struct that gets edited, and it is atomic rather than

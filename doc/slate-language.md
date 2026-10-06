@@ -319,6 +319,8 @@ This section states the timing rules once. [Step lifecycle](slate-runner.md#step
 
 **`then` and ordering.** `then` means "after what the previous set matched". It can order only events whose order the grid preserves. Reports from two different prims have no guaranteed relative order. A texture update and a chat line from a script are not ordered by any promise the region makes either. Write `then` only for a real sequence; otherwise put the expectations in one set.
 
+**Touches close together.** Slate keeps 90 ms between a release of a linkset and the next press of any prim of it, so two touches of one object in a row are both delivered and a test needs no `wait` for it ([a second touch waits for the first to be over](touch-spacing.md)).
+
 **Timeouts.** The default is 10 seconds, from the `timeout` header or the built-in value. `within D` replaces it for that expectation only. A step's deadline is its start time, plus the time any blocking stimulus actually blocked on the way to success, plus the longest expectation duration in the step. A positive expectation still unmatched when its own duration has elapsed fails the step at that moment, even if another has time left. A negative expectation fails the step the moment the forbidden event is seen.
 
 **Stimulus budget.** A blocking stimulus (`drag`, `sit`, `stand`, `wait`, `pay`, `wear`, `rez`, `take off`, `drop`, `group`) may take the longest `within` in its step, or the default if there is none; a step with no expectations passes when the stimulus returns inside that budget. If the stimulus fails, the step fails at once. Setup, the tester-position read and the 30 s click wait are not on the step's deadline; setup budgets are under [Reading the result](#reading-the-result).

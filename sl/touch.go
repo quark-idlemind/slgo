@@ -285,6 +285,9 @@ func (w *Session) touchStart(ctx context.Context, o *Object, t Touch) error {
 	if err != nil {
 		return err
 	}
+	if err := w.awaitTouchGap(ctx, local); err != nil {
+		return err
+	}
 	t = t.fill()
 	m := &msg.ObjectGrab{}
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
@@ -344,7 +347,60 @@ func (w *Session) touchEnd(ctx context.Context, o *Object, t Touch) error {
 	m.AgentData.AgentID, m.AgentData.SessionID = w.agentBlock()
 	m.ObjectData.LocalID = local
 	m.SurfaceInfo = []msg.ObjectDeGrab_SurfaceInfo{t.degrabSurface()}
-	return w.Send(ctx, m)
+	if err := w.Send(ctx, m); err != nil {
+		return err
+	}
+	key := w.linksetKey(local)
+	w.touchMu.Lock()
+	if w.degrabbed == nil {
+		w.degrabbed = map[uint32]time.Time{}
+	}
+	w.degrabbed[key] = time.Now()
+	w.touchMu.Unlock()
+	return nil
+}
+
+// touchGap is the shortest time between a release of a linkset and the
+// next press of any prim of it.  The region runs at 45 frames a second
+// (22 ms) and takes a release and a press within a few frames for one
+// touch, so the second touch_start is lost; misses were seen up to 25 ms
+// and none from 30 ms, so 90 ms is three times that, and still under the
+// time a person needs to click again.  A person does not click that
+// fast; Slate does.
+// Why: doc/touch-spacing.md
+const touchGap = 90 * time.Millisecond
+
+// linksetKey is the local id that names the linkset a prim is in: its
+// parent, or itself when it has none.  The avatar a worn HUD hangs from
+// is not a linkset, so a HUD's root is its own key.  Touches merge within
+// a linkset whichever prims are touched, and not across objects.
+func (w *Session) linksetKey(local uint32) uint32 {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	p := w.parents[local]
+	if p == 0 || p == w.locals[w.me] {
+		return local
+	}
+	return p
+}
+
+// awaitTouchGap waits out what is left of touchGap since this session
+// last sent a degrab naming a prim of the same linkset.  Every grab goes
+// through touchStart and every degrab through touchEnd, so every way of
+// touching is covered (Touch, TouchStart, Drag, DragOnScreen and
+// TouchHold).  A touch of another linkset is not delayed.
+func (w *Session) awaitTouchGap(ctx context.Context, local uint32) error {
+	key := w.linksetKey(local)
+	w.touchMu.Lock()
+	last, ok := w.degrabbed[key]
+	w.touchMu.Unlock()
+	if !ok {
+		return nil
+	}
+	if left := touchGap - time.Since(last); left > 0 {
+		return w.Settle(ctx, left)
+	}
+	return nil
 }
 
 // Touch is a click: a start and an end, with nothing in between.
