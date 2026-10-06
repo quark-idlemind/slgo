@@ -219,6 +219,8 @@ Eligible events are those observed at or after the arm point and not yet consume
 
 `then` can only order events whose order the grid preserves. Reports from two different prims have no guaranteed relative order, so a `then` between a report from one prim and a report from another can fail a product that works when the product replies at once. The author-side advice, and the worked link example, are in [Worked examples](slate-language.md#worked-examples); the unordered form is the one to recommend when the reply is immediate.
 
+A `wait` is the one stimulus that arms again when it returns (`armOnReturn`): its effect is time, so the readings are taken afresh (a forced poll, and for a give the inventory), the log is drained, and the arm point is that instant. The baseline, what `is` counts as already so, `is any as $x` and the events and new roots the step may see are then those of the wait's end, and its start time stays the wait's beginning, so the deadline is the same. Before this, the step armed before the wait and an `is` after it passed on a reading from before the wait (measured 2026-10-05: a colour read as it was at the arm point, while the transcript printed the one after the wait).
+
 Watchers are armed before the stimulus so that a script that answers in the same instant cannot win the race. `WaitDialog` already counts a dialog that arrived before the caller started waiting, for the same reason.
 
 ### Consumption

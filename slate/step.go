@@ -37,6 +37,11 @@ type stimulus struct {
 	prepare  func(ctx context.Context) error
 	send     func(ctx context.Context, budget time.Duration) (sent string, err error)
 	blocking bool
+	// armOnReturn is for a stimulus whose effect is time, which is `wait`:
+	// the step's expectations are armed again, readings and all, when it
+	// returns. Every other stimulus arms before it is sent.
+	// Why: doc/slate-language.md#steps-and-timing
+	armOnReturn bool
 }
 
 // expState is one expectation of the step.
@@ -267,7 +272,39 @@ func (s *stepRun) stimulate(ctx context.Context) error {
 	if s.stim.blocking {
 		s.blocked = s.stimReturned.Sub(t0)
 	}
+	if s.stim.armOnReturn {
+		if err := s.rearm(ctx); err != nil {
+			return err
+		}
+		if s.state == stFailed {
+			return nil
+		}
+	}
 	s.state = stMatching
+	return nil
+}
+
+// rearm takes the arm point again, as the stimulus returns: a fresh
+// reading of everything the step reads, then a drain, then the point, so
+// that the baseline of `becomes` and `changes`, what `is` may count as
+// already so, and what `is any` binds are the state at the end of the
+// wait, and an event heard during it is not the step's.
+// Why: doc/slate-language.md#steps-and-timing
+func (s *stepRun) rearm(ctx context.Context) error {
+	for _, g := range s.obs.gives {
+		g.armHeld = 0
+	}
+	if err := s.snapshot(ctx); err != nil {
+		return err
+	}
+	if s.state == stFailed {
+		return nil
+	}
+	if err := s.r.drain(); err != nil {
+		return err
+	}
+	s.arm = time.Now()
+	s.stimReturned = later(s.stimReturned, s.arm)
 	return nil
 }
 

@@ -243,9 +243,14 @@ from a face is placed from whatever the test last saw, and a HUD left
 grown is wrong for anything that follows. The wait is inside the drag's
 time budget, and a timeout shorter than the quiet period cannot see a
 prim settle. A grow that the region reports only after the release is
-not waited for, since nothing is read for it. Two drags straight after
-each other on the HUD above were **measured** to pass with the first
-rule; the quiet-period rule is tested over fakes and not yet measured.
+not waited for, since nothing is read for it. **Measured** with the
+quiet-period rule (slgo-dev #59's build, 5 October 2026), on the HUD
+above worn on Center 1 in the default 1920x1025 view: a move drag of 200
+by 100 pixels and the drag back, then a resize drag of the corner by
+-100 by 50 and the drag back, each straight after the one before with no
+wait between, all started on the view, and the HUD moved and resized as
+it does under a mouse; and a drag `by 2000 0` was refused as ending at
+3077,354, off the view, with nothing sent.
 
 **A point off the view.** A mouse held down cannot leave the window: the
 viewer clips it while a button is down, for any tool that does not say
