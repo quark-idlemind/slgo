@@ -110,6 +110,25 @@ type Object struct {
 	Light     *msg.Light
 	Projector *msg.LightImage
 
+	// RenderMaterials is the GLTF material id of each face that has one,
+	// by face, from the render material block of the extra parameters:
+	// nil while the object has none.  A full or compressed update says
+	// it afresh, as it does the light, so one without the block says
+	// there is none; a terse update, and a full one whose parameters
+	// would not read, leave it alone.  The map is replaced whole and
+	// never written through.
+	// Why: doc/gltf.md#the-faces-material
+	RenderMaterials map[int]msg.UUID
+
+	// GLTF is the overrides of the faces' GLTF materials, by face, as
+	// the region last said them: one message is the object's whole set,
+	// so it replaces the last, and nil is none.  It lives and dies with
+	// the object -- trimmed, killed or flushed with it -- and an override
+	// that came before its object waits in the store's pending set until
+	// the object is described.  Replaced whole, never written through.
+	// Why: doc/gltf.md#what-is-kept
+	GLTF map[int]*msg.GLTFOverride
+
 	// AttachPoint is where a worn object is attached, and zero when it
 	// is not worn.  AttachItem is the inventory item it was worn from.
 	//
@@ -257,6 +276,10 @@ type Objects struct {
 	// lastLive is when a prim last joined each parent live, by the
 	// parent's local id; see joinWindow.
 	lastLive map[uint32]time.Time
+
+	// pendingGLTF holds material overrides that arrived for a local id the
+	// store has no object for, until the object is described; see gltf.go.
+	pendingGLTF map[uint32]pendingOverride
 }
 
 // linkWindow is how long the order an ObjectLink named is kept for the
@@ -293,8 +316,8 @@ func newObjects() *Objects {
 		kids: map[uint32][]msg.UUID{}, unordered: map[uint32]bool{},
 		sitters: map[uint32][]msg.UUID{}, sitUnordered: map[uint32]bool{},
 		misordered: map[msg.UUID]bool{}, links: map[uint32]namedLink{},
-		lastLive: map[uint32]time.Time{},
-		now:      time.Now}
+		lastLive: map[uint32]time.Time{}, pendingGLTF: map[uint32]pendingOverride{},
+		now: time.Now}
 }
 
 // Watch registers where an agent is looking from.
@@ -885,9 +908,11 @@ func (o *Objects) absorb(from *Objects) int {
 		return 0
 	}
 	taken := from.All()
+	pending := from.pendingCopy()
 
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	o.absorbPendingLocked(pending)
 	n := 0
 	for _, v := range taken {
 		if _, have := o.byID[v.ID]; have {
@@ -923,6 +948,7 @@ func (o *Objects) Flush() int {
 	o.sitUnordered = map[uint32]bool{}
 	o.unordered = map[uint32]bool{}
 	o.lastLive = map[uint32]time.Time{}
+	o.pendingGLTF = map[uint32]pendingOverride{}
 	return n
 }
 
@@ -983,6 +1009,9 @@ const orphanGrace = time.Minute
 // avatars in three corners of a region holds what all three can see,
 // and none of them walking away throws out another's view.
 func (o *Objects) Trim(camera msg.Vector3, drawDistance float32) int {
+	// Overrides waiting for an object that never came are dropped
+	// whatever the draw distance is.
+	o.expirePendingGLTF()
 	if drawDistance <= 0 {
 		return 0
 	}
@@ -1129,6 +1158,7 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	v := o.seen(d.FullID)
 	o.judgedLocked(v, far)
 	v.Local, v.Parent, v.PCode, v.Scale = d.ID, d.ParentID, d.PCode, d.Scale
+	o.adoptGLTFLocked(v)
 	o.linkLocked(v)
 	v.Shape = msg.ShapeOfUpdate(d)
 	v.Click, v.ClickKnown = d.ClickAction, true
@@ -1136,6 +1166,7 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	if params, err := msg.DecodeExtraParams(d.ExtraParams); err == nil {
 		v.Sculpt = msg.SculptMarkOf(params)
 		v.Light, v.Projector = lightsOf(params)
+		v.RenderMaterials = msg.RenderMaterialsOf(params)
 	}
 	// A full update carries the appearance as well, and it is the only
 	// update most prims ever get: a region sends a compressed one for
@@ -1242,11 +1273,13 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	v := o.seen(c.FullID)
 	o.judgedLocked(v, far)
 	v.Local, v.Parent, v.PCode = c.LocalID, parent, c.PCode
+	o.adoptGLTFLocked(v)
 	o.linkLocked(v)
 	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
 	v.Click, v.ClickKnown = c.Click, true
 	v.Sculpt = msg.SculptMarkOf(c.ExtraParams)
 	v.Light, v.Projector = lightsOf(c.ExtraParams)
+	v.RenderMaterials = msg.RenderMaterialsOf(c.ExtraParams)
 	if !c.Shape.IsZero() {
 		v.Shape = c.Shape
 	}
@@ -1475,6 +1508,7 @@ func (o *Objects) priced(id msg.UUID, price int32) {
 func (o *Objects) kill(local uint32) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	delete(o.pendingGLTF, local)
 	for _, v := range o.byID {
 		if v.Local == local {
 			delete(o.misordered, v.ID)

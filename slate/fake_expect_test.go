@@ -58,9 +58,13 @@ type fakeExtra struct {
 	props  map[msg.UUID]fakeProps
 	invURL string
 	matURL string // the RenderMaterials server, when a test serves one (alphamode_test.go)
-	inv    *fakeInv
-	offers map[msg.UUID]fakeOffer // item delivered when the offer with this transaction is accepted
-	acks   []*msg.ImprovedInstantMessage
+
+	// overrides says the session holds the ModifyMaterialParams
+	// capability, which a test of the GLTF expectations grants (gltf_test.go).
+	overrides bool
+	inv       *fakeInv
+	offers    map[msg.UUID]fakeOffer // item delivered when the offer with this transaction is accepted
+	acks      []*msg.ImprovedInstantMessage
 }
 
 // objRequest is a RequestMultipleObjects the runner sent.
@@ -505,7 +509,8 @@ func folderType(name string) int {
 func (f *fakeGrid) hasCap(name string) bool {
 	f.ex.mu.Lock()
 	defer f.ex.mu.Unlock()
-	return name == agent.InventoryCap && f.ex.invURL != "" || name == sl.MaterialsCap && f.ex.matURL != ""
+	return name == agent.InventoryCap && f.ex.invURL != "" || name == sl.MaterialsCap && f.ex.matURL != "" ||
+		name == sl.OverridesCap && f.ex.overrides
 }
 
 func (f *fakeGrid) doCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {

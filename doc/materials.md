@@ -4,7 +4,9 @@ A texture entry says which material a face has and nothing about it.
 `Face.Material` is an id, and what the id names -- the face's normal and
 specular maps and, the part this tree reads, its alpha mode -- is kept by
 the region, which gives it out on the `RenderMaterials` capability. This
-page is what was measured of that, and why `sl` answers as it does.
+page is what was measured of that, and why `sl` answers as it does. It is
+the legacy material; a face's GLTF material and the overrides on it are
+[GLTF materials](gltf.md).
 
 ## The capability
 

@@ -199,6 +199,16 @@ type Seen struct {
 	Light     *msg.Light
 	Projector *msg.LightImage
 
+	// RenderMaterials is the id of the GLTF material each face has, by
+	// face, and GLTF what the region last said is overridden on each
+	// face's material, by face.  Both are nil for an object with none,
+	// and neither is to be written through.  GLTF is only said to a
+	// session holding the ModifyMaterialParams capability; see
+	// Session.HoldsOverrides.
+	// Why: doc/gltf.md
+	RenderMaterials map[int]msg.UUID
+	GLTF            map[int]*msg.GLTFOverride
+
 	// Shape is the prim's profile and path, still packed.  Form
 	// unpacks it into something with names.
 	Shape msg.PrimShape

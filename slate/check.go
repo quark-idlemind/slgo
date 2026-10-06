@@ -1135,6 +1135,8 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 		return c.vec3(e, e.Turn, "turn", same)
 	case e.Light != nil:
 		return c.lightExp(e, e.Light, same)
+	case e.GLTF != nil:
+		return c.gltfExp(e, e.GLTF, same)
 	case e.Fullbright != nil:
 		x := e.Fullbright
 		if err := c.faceRef(x.Name, x.Link, x.Face, x.FaceAll, same); err != nil {
@@ -1267,6 +1269,8 @@ func nearWord(e Expect) string {
 			return "projector"
 		}
 		return "light"
+	case e.GLTF != nil && !gltfIsNumber(e.GLTF.Prop):
+		return "gltf " + e.GLTF.Prop
 	case e.AlphaMode != nil:
 		return "alphamode"
 	case e.Material != nil && e.Material.IsMap():
@@ -1287,7 +1291,7 @@ func (c *checker) near(e Expect) error {
 	}
 	n := e.Near
 	if w := nearWord(e); w != "" {
-		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment, a sound's gain and the numbers of a light or a projector are numbers a reading can be off by", w)
+		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment, a sound's gain, the numbers of a light or a projector and the numbers of a GLTF override are numbers a reading can be off by", w)
 	}
 	if e.Turn != nil && n.Percent {
 		return c.err(n.Span, "a turn takes near in degrees, not percent: an angle has no size to be a share of")
@@ -1319,6 +1323,8 @@ func (c *checker) near(e Expect) error {
 		any = e.Material.Any
 	case e.Light != nil:
 		any = e.Light.Any
+	case e.GLTF != nil:
+		any = e.GLTF.Any
 	}
 	if any {
 		return c.err(n.Span, "is any takes no near: it matches whatever the reading is")
@@ -1406,6 +1412,75 @@ func (c *checker) lightExp(e Expect, x *LightExp, same map[string]bool) error {
 		return c.unitLevel(x.Num, "light intensity")
 	}
 	return c.exact(x.Num)
+}
+
+// gltfIsNumber is whether a gltf prop reads numbers a reading can be off
+// by: the colours and factors, and not an id, a mode or an on and off.
+func gltfIsNumber(prop string) bool {
+	switch prop {
+	case "colour", "alpha", "emissive", "metallic", "roughness", "cutoff":
+		return true
+	}
+	return false
+}
+
+// gltfType is the type of what a gltf prop reads, and so of its capture.
+func gltfType(prop string) CaptureType {
+	switch prop {
+	case "override", "doublesided":
+		return CapOnOff
+	case "colour", "emissive":
+		return CapTriple
+	case "alphamode":
+		return CapText
+	case "material", "basetexture", "normaltexture", "ormtexture", "emissivetexture":
+		return CapUUID
+	}
+	return CapNumber
+}
+
+// gltfExp checks gltf: the object, one face of it (a face has its own
+// override, so there is no face all, and a prim has at most 45 faces), the
+// reading, and that a literal is something the prop can hold.  The colours
+// and factors are 0 to 1, as the material holds them, and a texture and a
+// material are ids; none says the override does not set the field and
+// binds nothing.
+// Why: doc/slate-language.md#gltf-materials
+func (c *checker) gltfExp(e Expect, x *GLTFExp, same map[string]bool) error {
+	if x.FaceAll {
+		return c.err(x.Face.Span, "gltf reads one face's material at a time; there is no face all")
+	}
+	if err := c.faceRef(x.Name, x.Link, x.Face, false, same); err != nil {
+		return err
+	}
+	if x.Face.Value > 44 {
+		return c.err(x.Face.Span, "face %d is past the 45 faces a prim has", x.Face.Value)
+	}
+	lit, err := c.reading(e, x.State, x.Any, x.Use, gltfType(x.Prop), same)
+	if err != nil || !lit {
+		return err
+	}
+	if x.None {
+		if e.As != nil {
+			return c.err(e.As.Span, "none is no value to bind; as %s needs a reading that is set", e.As)
+		}
+		return nil
+	}
+	switch x.Prop {
+	case "colour", "emissive":
+		for _, n := range []Number{x.R, x.G, x.B} {
+			if err := c.unitLevel(n, "gltf "+x.Prop); err != nil {
+				return err
+			}
+		}
+	case "alpha", "metallic", "roughness", "cutoff":
+		return c.unitLevel(x.Num, "gltf "+x.Prop)
+	case "material", "basetexture", "normaltexture", "ormtexture", "emissivetexture":
+		if _, err := msg.ParseUUID(x.ID); err != nil {
+			return c.err(x.IDAt, "%q is not an id", x.ID)
+		}
+	}
+	return nil
 }
 
 // unitLevel checks an exact number in 0 to 1.
@@ -1660,6 +1735,8 @@ func asType(e Expect) (CaptureType, bool) {
 		return CapVector, true
 	case e.Light != nil:
 		return lightType(e.Light), true
+	case e.GLTF != nil:
+		return gltfType(e.GLTF.Prop), true
 	case e.FloatText != nil:
 		return CapText, true
 	case e.AlphaMode != nil:

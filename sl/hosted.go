@@ -411,6 +411,9 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			Text:         o.Text,
 			Light:        lightFromPB(o.Light),
 			Projector:    projectorFromPB(o.Projector),
+
+			RenderMaterials: renderMaterialsFromPB(o.RenderMaterials),
+			GLTF:            gltfFromPB(o.GltfOverrides),
 		}
 		s.Object.Name = o.Name
 		s.AttachPoint = int(o.AttachPoint)

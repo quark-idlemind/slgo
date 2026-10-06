@@ -715,6 +715,7 @@ type Expect struct {
 	Size       *VecExp3
 	Turn       *VecExp3  // a prim's own rotation, as Euler degrees X Y Z
 	Light      *LightExp // a prim's point light or projector
+	GLTF       *GLTFExp  // a face's GLTF material, or an override on it
 	Give       *GiveExp
 	Rez        *RezExp
 	Link       *LinkExp
@@ -897,6 +898,48 @@ var (
 	LightProps     = []string{"colour", "intensity", "radius", "falloff"}
 	ProjectorProps = []string{"fov", "focus", "ambiance"}
 )
+
+// GLTFProps are the words that follow `gltf`, each one thing about a face's
+// GLTF material: whether the face has an override at all, the id of its
+// material, and the fields an override sets.  The order is the order of the
+// stateKinds that read them.
+var GLTFProps = []string{"override", "material", "colour", "alpha", "emissive", "metallic", "roughness",
+	"alphamode", "cutoff", "doublesided", "basetexture", "normaltexture", "ormtexture", "emissivetexture"}
+
+// GLTFAlphaModes are the alpha modes an override sets, as the viewer names
+// them.
+var GLTFAlphaModes = []string{"opaque", "blend", "mask"}
+
+// GLTFExp is expect gltf PROP OBJ link? face N, a state and a value: one
+// thing about a face's GLTF material, in the words of GLTFProps.  Except
+// for override, which is on or off, and material, the value of a field is
+// `none` when the face's override does not set it, or what it sets: On for
+// doublesided and override, ID for material and the textures, R G B for
+// colour and emissive, Mode for alphamode and Num for the rest.  None is
+// the word none; the zero value of the others is only meaningful for the
+// prop.  Any and Use are as for TextureExp, and Use has the type of what
+// is read.  FaceAll is kept so that the check can refuse it with the place
+// it was written.
+// Why: doc/slate-language.md#gltf-materials
+type GLTFExp struct {
+	Prop     string
+	PropSpan Span
+	Name     Ident
+	Link     *Int
+	Face     Int
+	FaceAll  bool
+	State    State
+	Any      bool
+	Use      *Capture
+	None     bool
+	On       bool
+	ID       string
+	IDAt     Span
+	Mode     string
+	ModeAt   Span
+	Num      Number
+	R, G, B  Number
+}
 
 // ClickExp names a PRIM_CLICK_ACTION. The byte is ClickBytes[Action];
 // Action is empty for changes and original.

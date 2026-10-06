@@ -794,6 +794,7 @@ func (a *Agent) register() {
 	// this region's whatever it turns out to be called.
 	a.objects.Store(newObjects())
 	a.trackObjects()
+	a.trackGLTF()
 	a.trackPosture()
 	a.keepOffers()
 	a.keepMoney()
