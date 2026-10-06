@@ -80,7 +80,7 @@ import (
 )
 
 var flags = struct {
-	Addr    string          `getopt:"--addr=HOST:PORT  the slgod to attach to; default sl-host, or this machine"`
+	Addr    string          `getopt:"--addr=HOST:PORT  the slgod to attach to; else $SLGO_ADDR, else sl-host, else this machine"`
 	Agent   string          `getopt:"--agent=NAME -a   the profile to use; the only one, by default"`
 	Direct  bool            `getopt:"--direct -d       log in to Second Life directly, without slgod"`
 	First   string          `getopt:"--first=NAME      the avatar's first name, for --direct"`

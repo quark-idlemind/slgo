@@ -1,6 +1,9 @@
 package slhost
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,6 +24,7 @@ func fakeSLHost(t *testing.T, script string) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
+	t.Setenv(EnvAddr, "")
 }
 
 // emptyPath is a $PATH with nothing on it, which is how a machine
@@ -28,6 +32,7 @@ func fakeSLHost(t *testing.T, script string) {
 func emptyPath(t *testing.T) {
 	t.Helper()
 	t.Setenv("PATH", t.TempDir())
+	t.Setenv(EnvAddr, "")
 }
 
 // TestNotInstalledIsThisMachine: no sl-host means slgod is here, which
@@ -230,5 +235,95 @@ func TestSLHostIsToldWhichProfile(t *testing.T) {
 	// An address given is still the answer, whoever it is for.
 	if got, _ := ResolveFor("example.com:9999", "dev"); got != "example.com:9999" {
 		t.Errorf("a given address was not kept: %q", got)
+	}
+}
+
+// TestTheEnvironmentIsTheAnswerBeforeSLHostIsAsked: the order is the
+// flag, $SLGO_ADDR, sl-host, this machine.  The fake would answer
+// differently if it were run.
+func TestTheEnvironmentIsTheAnswerBeforeSLHostIsAsked(t *testing.T) {
+	fakeSLHost(t, "echo 192.0.2.42")
+	t.Setenv(EnvAddr, "127.0.0.1:7808")
+
+	if got, _ := ResolveFor("", "dev"); got != "127.0.0.1:7808" {
+		t.Errorf("no flag: %q, want the environment's", got)
+	}
+	if got, _ := ResolveFor("example.com:9999", "dev"); got != "example.com:9999" {
+		t.Errorf("a flag: %q, want the flag's", got)
+	}
+	t.Setenv(EnvAddr, "")
+	if got, _ := ResolveFor("", "dev"); got != "192.0.2.42:"+Port {
+		t.Errorf("empty: %q, want sl-host's", got)
+	}
+}
+
+// TestNoCommandFindsSlgodItsOwnWay: every command that dials slgod finds
+// it through ResolveFor, so the order -- flag, $SLGO_ADDR, sl-host, this
+// machine -- is one order.  A command that reads $SLGO_ADDR itself, or
+// asks sl-host for an address without going through ResolveFor,
+// answers differently from the rest, as slsh once did.
+// Why: doc/guide.md#saying-where-slgod-is
+func TestNoCommandFindsSlgodItsOwnWay(t *testing.T) {
+	files, err := filepath.Glob("../../cmd/*/*.go")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no commands found: %v", err)
+	}
+	fset := token.NewFileSet()
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, at := range ownWayIn(fset, f) {
+			t.Errorf("%s: find slgod through slhost.ResolveFor, not by hand", at)
+		}
+	}
+}
+
+// ownWayIn lists the places a file reads $SLGO_ADDR, or calls one of
+// slhost's lookups that skip it.
+func ownWayIn(fset *token.FileSet, f *ast.File) []string {
+	var out []string
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch n := n.(type) {
+		case *ast.BasicLit:
+			if n.Kind == token.STRING && strings.Contains(n.Value, EnvAddr) &&
+				!strings.Contains(n.Value, " ") {
+				out = append(out, fset.Position(n.Pos()).String())
+			}
+		case *ast.SelectorExpr:
+			if id, ok := n.X.(*ast.Ident); ok && id.Name == "slhost" {
+				switch n.Sel.Name {
+				case "Addr", "AddrOn", "AddrFor", "Host", "HostFor":
+					out = append(out, fset.Position(n.Pos()).String())
+				}
+			}
+		}
+		return true
+	})
+	return out
+}
+
+// TestTheOwnWayCheckFindsOne: a check that found nothing would pass on
+// a command that did it all by hand.
+func TestTheOwnWayCheckFindsOne(t *testing.T) {
+	const src = `package p
+
+func a() {
+	_ = os.Getenv("SLGO_ADDR")
+	_, _ = slhost.AddrFor("x")
+	_, _ = slhost.ResolveFor("", "x")
+}
+`
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "p.go", src, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ownWayIn(fset, f); len(got) != 2 {
+		t.Errorf("found %v, want two", got)
 	}
 }

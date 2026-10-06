@@ -25,7 +25,7 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "", "the slgod to attach to (sl-host's answer, or localhost:"+slhost.Port+")")
+	addr := flag.String("addr", "", "the slgod to attach to (else $SLGO_ADDR, else sl-host, else localhost:"+slhost.Port+")")
 	name := flag.String("agent", "", "hosted agent ($SLGO_AGENT, or the daemon's default)")
 	point := flag.Int("point", sl.HUDBottomLeft, "the attachment point to pile onto")
 	first := flag.String("first", "auto", "item already worn there")

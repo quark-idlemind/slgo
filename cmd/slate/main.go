@@ -32,8 +32,8 @@
 //
 // -addr is where slgod is, and $SLGO_ADDR is that same answer when the
 // flag is empty. With neither set, where slgod runs is a question for
-// sl-host, the same question slsh and slpic ask, and a machine without
-// sl-host means this one, localhost:7807. -agent chooses the avatar. An
+// sl-host, the same question every command asks (slhost.ResolveFor), and
+// a machine without sl-host means this one, localhost:7807. -agent chooses the avatar. An
 // empty one is left for sl.DialWeak, which reads $SLGO_AGENT, or takes the
 // avatar slgod has held longest.
 //
@@ -100,12 +100,9 @@ type dialer func(ctx context.Context, addr, agent string) (*sl.Session, error)
 // dial asks where slgod is when nothing says, and attaches. The dial
 // itself is limited to 30 seconds, the way slpic's is.
 func dial(ctx context.Context, addr, agent string) (*sl.Session, error) {
-	if addr == "" {
-		addr = os.Getenv("SLGO_ADDR")
-	}
-	// Nothing on the command line and nothing in the environment leaves
-	// the question to sl-host, which is how one binary works on a machine
-	// whose slgod is somewhere else. It is asked about the avatar this
+	// Nothing on the command line leaves the question to $SLGO_ADDR and
+	// then sl-host, which is how one binary works on a machine whose
+	// slgod is somewhere else. sl-host is asked about the avatar this
 	// command is about to attach to.
 	at, err := slhost.ResolveFor(addr, sl.AgentName(agent))
 	if err != nil {

@@ -60,12 +60,18 @@ before carrying on with the one it could read.
 
     slrun --addr HOST:PORT script.lsl
 
-If you do not say, the address is worked out for you:
+If you do not say, the address is worked out for you. This is the one
+order every command that dials `slgod` follows (`slsh`, `slrun`,
+`slbench`, `slate`, `slpic`, `slgo-multiattach`, and `slbotd` when its
+configuration says nothing), made in `slhost.ResolveFor`:
 
-1. `addr = ...` in `~/.config/slsh/config`, for `slsh`;
-2. whatever the `sl-host` command prints, if you have one installed --
+1. the flag, `--addr` (`-addr` for `slate` and `slpic`), or for `slsh`
+   and `slbotd` the `addr = ...` in their configuration file, which the
+   flag beats;
+2. `$SLGO_ADDR`, the same answer as the flag, set once for a shell;
+3. whatever the `sl-host` command prints, if you have one installed --
    the standard port is added to it unless it names a port of its own;
-3. this machine, if you have no `sl-host`.
+4. this machine, if you have no `sl-host`.
 
 That last case is the normal one when you run your own `slgod`, so
 usually you need not pass anything at all. Not being on `$PATH` is what

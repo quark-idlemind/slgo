@@ -146,6 +146,11 @@ type Term struct {
 	// decoded, because there is no raw mode to read keys in.  Each
 	// line still reaches the shell as keys, control characters and all.
 	plain bool
+
+	// screen is set when out is a terminal, which is a different
+	// question from plain: "slsh -c" reads /dev/null and is plain, and
+	// still writes to a screen when nothing is redirected.
+	screen bool
 }
 
 // NewTerm puts the terminal in raw mode and starts reading it.
@@ -163,6 +168,10 @@ func NewTerm(in *os.File, out io.Writer) (*Term, error) {
 		done:   make(chan struct{}),
 		width:  80,
 		height: 24,
+	}
+
+	if f, ok := out.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		t.screen = true
 	}
 
 	fd := int(in.Fd())

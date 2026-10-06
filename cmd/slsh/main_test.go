@@ -692,3 +692,35 @@ func TestAShellReadsUntilTheInputRunsOut(t *testing.T) {
 		t.Errorf("a shell should print the banner:\n%s", got)
 	}
 }
+
+// TestWhereSlgodIsFollowsFlagThenEnvironmentThenSLHost: slsh finds
+// slgod the way slate and slpic do.  --agents dials and names the
+// address in the failure, which is the seam; nothing listens on port 1.
+// Why: doc/guide.md#saying-where-slgod-is
+func TestWhereSlgodIsFollowsFlagThenEnvironmentThenSLHost(t *testing.T) {
+	fake := t.TempDir()
+	script := "#!/bin/sh\necho sl-host-says.example:1\n"
+	if err := os.WriteFile(filepath.Join(fake, "sl-host"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fake+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	for _, c := range []struct {
+		name string
+		env  string
+		args []string
+		want string
+	}{
+		{"the environment, no flag", "env.example:1", []string{"--agents"}, "env.example:1"},
+		{"the flag beats the environment", "env.example:1", []string{"--agents", "--addr", "flag.example:1"}, "flag.example:1"},
+		{"empty falls to sl-host", "", []string{"--agents"}, "sl-host-says.example:1"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("SLGO_ADDR", c.env)
+			err := runWith(t, t.TempDir(), c.args...)
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("got %v, want a failure naming %s", err, c.want)
+			}
+		})
+	}
+}

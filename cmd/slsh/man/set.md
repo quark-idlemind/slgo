@@ -70,6 +70,12 @@ the defaults.  So a shell started with `--escape ^G` is running with
 `^G` whatever the file says, which is the other half of why the
 three above are left for the next run.
 
+Where slgod is has two more answers behind those two.  With no
+`--addr` and no `addr` in the file, `$SLGO_ADDR` is the address, and
+with that empty too, sl-host is asked and a machine without it uses
+localhost:7807.  Every command that dials slgod takes that order; the
+user guide says it once, under "Saying where slgod is".
+
 The names are the names in the file, and the file has always taken
 another spelling of some of them -- `server` for `addr`, `profile`
 for `agent`, `prefix` or `prefix_key` for `escape`.  Those still

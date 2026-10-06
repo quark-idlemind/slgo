@@ -340,6 +340,47 @@ has not been measured.  The three senses are in
 cmd/slsh/testdata/ask-questions.tsv, and the model eval
 (askeval_model_test.go) logs a verdict for each.
 
+## Why cat gives the text as it is
+
+Measured 2026-10-05: a script held `string SEP = "<DEL>";`, a DEL byte
+(0x7f) inside the string, and a list was split on it.  `slsh -c 'cat
+PATH' > file.lsl` wrote the two characters `^?` there instead, and the
+asset's terminating NUL as a last line `^@`.  The file was edited and
+saved back with `new --in`, the script then split on `^?`, and the
+product it configured took its whole configuration as one string and did
+nothing, with no error to say why.
+
+Cause: every line a command wrote went through `Term.Print` and
+`visible`, which shows control characters in caret form so that
+somebody else's escape sequence cannot reach a terminal.  That is right
+for a terminal and stays.  It is wrong when the output is a file or a
+pipe, where the bytes are the text.
+
+What cat does now, and why only cat.  A script's or a notecard's text is
+a document, and its bytes are the point; chat, names and listings sent
+to a pipe are still somebody else's words and still go through
+`visible`, so the rule is cat's alone and not the output path's.  Cat
+tells a terminal from the rest by whether the shell's standard output is
+one (`Term.screen`), not by `Term.Plain`, which is about input: `slsh -c`
+reads /dev/null and is Plain, and still writes to a screen.
+
+- The one terminating NUL is dropped.  A viewer reads a script's bytes
+  into a buffer one longer and ends it with 0, reading the text up to
+  it, and writes the editor's text back with `fputs`, which adds none
+  (Firestorm 885631b93a, llpreviewscript.cpp 2638-2646, 2995-3011, 1122-1151;
+  llpreviewnotecard.cpp 524-542).  `save` and `new --from` send the
+  file's bytes as they are, and `sl.SaveScript` adds nothing, so a
+  script that goes down with `cat -o` and comes back with `save` is the
+  same bytes, DEL and tab and CRLF included.
+- To anything that is not a terminal -- a redirect, `slsh -c` with
+  output piped -- the text goes out exactly, nothing trimmed or added.
+- On a terminal it is shown in caret form, and one line after it says so
+  and names `cat -o FILE`, so that nobody copies the screen and takes
+  `^?` for source.
+- `cat -o FILE` writes the exact text to a file whatever the terminal is.
+- A notecard's text is cut out of its container by the length the
+  container declares, so what `-o` writes is the body as it was typed.
+
 ## Why save takes two plain arguments
 
 `save` writes a local file into a notecard or a script.  Reading an item

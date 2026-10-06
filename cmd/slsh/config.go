@@ -38,7 +38,8 @@ import (
 // Config is what slsh needs to know before it can start.
 type Config struct {
 	// Addr is the slgod to attach to.  Empty means nobody has said,
-	// which is what lets sl-host be asked -- see internal/slhost.
+	// which is what lets $SLGO_ADDR and then sl-host be asked -- see
+	// internal/slhost.
 	Addr   string
 	Agent  string // the profile: hosted by slgod, or on disk for --direct
 	Prefix rune   // the key that leaves chat mode for the command prompt
@@ -268,7 +269,7 @@ const startupNote = "this shell keeps the old value; the new one is for the next
 var settings = []setting{{
 	name:    "addr",
 	also:    []string{"server"},
-	about:   "the slgod to attach to; empty asks sl-host where it is",
+	about:   "the slgod to attach to; empty means $SLGO_ADDR, then sl-host",
 	startup: true,
 	show:    func(c *Config) string { return c.Addr },
 	parse:   func(c *Config, v string) error { c.Addr = v; return nil },

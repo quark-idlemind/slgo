@@ -35,7 +35,22 @@ A notecard and a script, and nothing else.  A texture, a sound, an
 animation and the rest are not text; `get` is the command for a
 texture.
 
-What is printed is the text.  A notecard's wrapper is not shown.
+What is printed is the text.  A notecard's wrapper is not shown, and
+neither is the NUL that ends a script's asset: a viewer does not show
+it either.
+
+The text is exact where it is data.  To a file or a pipe -- `cat x >
+file`, or `slsh -c 'cat x' > file` -- its bytes come out as they are, a
+DEL, a tab and a CRLF included, with nothing trimmed and nothing added.
+On a terminal control characters are shown in caret form (`^?` for DEL,
+`^M` for CR) so that nobody else's escape sequence can act on it, and a
+line after the text says so.  `-o` writes the exact text to a file
+whatever the terminal is.
+
+That is not a nicety.  A script held `string SEP = "<DEL>";` and was
+copied out with `cat > file`; the file had the two characters `^?`
+there, and a last line `^@`, and the script, saved back, split on the
+wrong thing and silently did nothing.
 
 ## Options
 
@@ -43,10 +58,17 @@ What is printed is the text.  A notecard's wrapper is not shown.
 
 Read it from inside a rezzed object, not from inventory.
 
+**--out**, **-o** *FILE*
+
+Write the exact text to FILE and print `FILE: N bytes`, as `get -o` and
+`dump -o` do.  A script is the asset's bytes without the terminating
+NUL, and `save FILE PATH` puts the same bytes back.
+
 ## Examples
 
     cat Notecards/README
     cat /Scripts/greeter > greeter.lsl
+    cat -o greeter.lsl /Scripts/greeter
     cat --in lantern greeter
     cat --in 88fa7e57-... "read me"
 

@@ -72,19 +72,31 @@ func withPort(host, port string) string {
 	return net.JoinHostPort(host, port)
 }
 
+// EnvAddr is the variable that says where slgod is when no flag does.
+const EnvAddr = "SLGO_ADDR"
+
 // Resolve fills in an address that was not given.
 //
 // An address from a command line or a configuration file is returned
 // untouched: that is the operator saying where to go, and asking
 // anything else would be second-guessing it.  Only the empty string --
-// nothing said anywhere -- is worth a question.
+// nothing said anywhere -- is worth a question, and the first answer
+// is $SLGO_ADDR, the same statement as the flag made once for a whole
+// shell.  The order every command that dials slgod follows is: the
+// flag (or the configuration file's setting), then $SLGO_ADDR, then
+// sl-host, then this machine's port 7807.
+// TestNoCommandFindsSlgodItsOwnWay refuses a command that reads the
+// variable by another road.
 func Resolve(addr string) (string, error) { return ResolveFor(addr, "") }
 
 // ResolveFor is Resolve for a named profile: with no address given,
-// sl-host is asked where that profile's slgod is.
+// $SLGO_ADDR, then sl-host, is asked where that profile's slgod is.
 func ResolveFor(addr, profile string) (string, error) {
 	if addr != "" {
 		return addr, nil
+	}
+	if env := os.Getenv(EnvAddr); env != "" {
+		return env, nil
 	}
 	return AddrFor(profile)
 }

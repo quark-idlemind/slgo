@@ -371,6 +371,11 @@ here when another is shared the same way.
   and is never assigned afterwards; a handler reads it from the first
   message. `TestASessionLogsFromTheFirstMessageItHears` fails for one
   assigned after.
+- `slhost.ResolveFor`, in `internal/slhost`: where slgod is, for every
+  command that dials it: the flag (or a configuration file's setting),
+  then `$SLGO_ADDR`, then sl-host, then localhost:7807.
+  `TestNoCommandFindsSlgodItsOwnWay` refuses a command in `cmd` that
+  reads `$SLGO_ADDR` or calls `slhost.AddrFor` and the like itself.
 - `tools/new-id` and `tools/scan-ids`: the one way to make an invented
   id (signed, with a first group nothing else uses, sorted when you ask
   for several) and the one place that knows every shape an id is written

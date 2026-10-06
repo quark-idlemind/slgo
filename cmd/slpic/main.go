@@ -118,7 +118,7 @@ sl-host is asked about that avatar.
 func runFaces(ctx context.Context, args []string, out, errw io.Writer, save faceSave) int {
 	fs := flag.NewFlagSet("slpic faces", flag.ContinueOnError)
 	fs.SetOutput(errw)
-	addr := fs.String("addr", "", "the slgod to attach to; default sl-host, or this machine ($SLGO_ADDR)")
+	addr := fs.String("addr", "", "the slgod to attach to; else $SLGO_ADDR, else sl-host, else this machine")
 	agent := fs.String("agent", "", "which avatar (default $SLGO_AGENT, or the one held longest)")
 	raw := fs.Bool("raw", false, "store the texture as uploaded, before the face turns, tiles and shifts it")
 	fs.Usage = func() {
@@ -135,15 +135,11 @@ func runFaces(ctx context.Context, args []string, out, errw io.Writer, save face
 		fs.Usage()
 		return 2
 	}
-	at := *addr
-	if at == "" {
-		at = os.Getenv("SLGO_ADDR")
-	}
-	// Nothing on the command line and nothing in the environment leaves
-	// the question to sl-host, which is how one binary works on a
-	// machine whose slgod is somewhere else.  It is asked about the
-	// avatar this command is about to attach to.
-	at, err := slhost.ResolveFor(at, sl.AgentName(*agent))
+	// Nothing on the command line leaves the question to $SLGO_ADDR and
+	// then sl-host, which is how one binary works on a machine whose
+	// slgod is somewhere else.  sl-host is asked about the avatar this
+	// command is about to attach to.
+	at, err := slhost.ResolveFor(*addr, sl.AgentName(*agent))
 	if err != nil {
 		complain(errw, err)
 		return 1
