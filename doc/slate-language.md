@@ -83,7 +83,7 @@ matching becomes changes original
 test before after each sequence do
 showing count any fullbright glow colour alpha on off
 alphamode default blend mask emissive
-item wear rez take attached ordered sorted shown gone if in
+item wear rez take attached ordered sorted shown gone if in near percent
 ```
 
 A capture is a `$` and a name: `$first`, `$tile_2`. It is its own token and not a word, so `$button` and an object called `button` never meet. `$` is a capture only before a letter. `L$5` and `L$ 5` keep their meaning because `L$` is tried first, and a `$` inside a string is an ordinary character, so `"L$5"` and the pattern `"L\\$[0-9]+"` are unchanged. A bare `$` is an illegal byte.
@@ -174,7 +174,8 @@ takeoff     = "take" "off" binding
 drop        = "drop" ident ( "into" binding link? / "onto" binding link? "face" integer )   (* item *)
 setgroup    = "group" avatar ( string / "none" )
 
-expectation = "expect" "no"? expectbody ("within" duration)? ("as" capture)?
+expectation = "expect" "no"? expectbody tolerance? ("within" duration)? ("as" capture)?
+tolerance   = "near" number "percent"?
 expectbody  = sayexp / dialogexp / boxexp / textureexp / offsetexp
             / repeatsexp / rotationexp / positionexp / sizeexp / clickexp
             / textexp / fullbrightexp / glowexp / colourexp / alphaexp / alphamodeexp
@@ -257,6 +258,7 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Avatars | An `avatar` binding is neither an object nor an item and shares their names: a name bound twice (`X is already bound`), by an `avatar`, an `object`, an `item`, or by the name `wear`, `rez` or a rez expectation binds, is refused. An avatar is used only after `as` on `touch`, a face `drag`, `say`, `choose` and `answer`, after `to` on `dialog`, `textbox` and `give` expectations, after `from avatar` on `say`, and as the first name of `group`. A name that is not an avatar there is `X is not an avatar; declare it with avatar X and give it with --avatar`, an object there is `X is an object, not an avatar`, and an avatar where an object is wanted is `X is an avatar, not an object`. `as NAME` on `pay`, `sit`, `stand`, `wait`, `send`, `take off`, `drop` and `drag ... on screen` is `<stimulus> stays the tester's: a second avatar only touches, drags a face, says, chooses and answers (a second avatar never pays)`; `wear` and `rez` take `as` for the new object, and an avatar's name there is `X is a second avatar, and a second avatar never wears` (`rezzes`). The check does not know whether the run is given the avatar: that is a setup error ([A second avatar](#a-second-avatar)). |
 | Items | An item binding is not an object: it is used only by `wear`, `rez` and `drop`, and any other use is `X is an item; only wear, rez and drop use an item`. The item name and the folder name are non-empty after trimming. |
 | Drop | `drop` takes an item and an object (`X is an object; drop takes an item`, or `X is not an item`; the object is checked as any reference is). `link N` is 0 or more and `face N` is 0 or more, and each fits an integer. A drop is the tester's alone: `drop ... as NAME` is `drop stays the tester's: a second avatar only touches, ...`. |
+| Near | `near` is read after any expectation, and only a state expectation of a number takes one: position, size, offset, repeats, rotation, glow, colour and alpha. On any other, `say`, `dialog`, `textbox`, `give`, `rez`, `link`, `attached`, `button`, `texture`, `click`, `text`, `fullbright` or `alphamode`, it is refused with `<word> takes no near: near gives a number a margin, and only position, size, offset, repeats, rotation, glow, colour and alpha are numbers a reading can be off by`, and beside `is any` with `is any takes no near: it matches whatever the reading is`. The number is exact and above 0 (`near 0 is not above 0; leave near out to compare as the reading is quantised`); with `percent` it is at most 100 (`near 100.5 percent is above 100`). |
 | Group | `group` names a second avatar, declared with an `avatar` header (`X is not an avatar; ...`, `X is an object, not an avatar`). `group tester ...` is refused: `group stays off the tester: its active group decides where it may build, and a test does not change it; group takes a second avatar`. The group is a non-empty string or the word `none`; a quoted `"none"` is a group of that name. An `as` after it is `group names the avatar whose group is set (group NAME "Group Name"); an as does not follow it`. Whether the avatar has joined the group is not known here: that fails the step. |
 | Probes | The identifier is an object binding, with at most one probe per object. A probe has no channels; the runner picks them. |
 | Listens | Each `listen` channel is a 32-bit integer, not 0 and not 2147483647. Duplicates are an error, and there are at most 63 of them. The bridge script opens one listen for its own control channel and one per `listen` channel; LSL allows 65 in one script (published, not measured here), and one is kept spare. |
@@ -601,6 +603,23 @@ A text box does not match `expect dialog`. The matching dialog is held for the b
 **Baseline.** A step's baseline for an expectation (taken again, afresh, when a `wait` in its step returns) is the latest reading of that face (or click byte) observed at or before the step's arm point, taken from the event log. The runner reads every prim and face that any state expectation in the test names, from the start of the test. If no reading exists at the arm point, the first reading after it is the baseline, and the transcript says so with a line `baseline for <object> face <n> taken after the arm point`.
 
 **Tolerances.** `changes` and `becomes` compare as `is` does: offset within 2/32767, repeats within 1e-4, rotation within 2/32768 of a turn, position and size within 0.001 m on each axis, glow, colour and alpha within 1/255, texture, click, fullbright and alphamode exactly. A reading that differs from the baseline by less than the tolerance is not a change.
+
+**Near.** A file can widen the tolerance of one expectation with `near`, written after the value and before `within`:
+
+```slate
+expect position hud becomes original near 0.005 within 10s
+expect size hud link 3 is 0.8 0.4 0.016 near 2 percent within 5s
+expect position hud changes near 0.005 within 5s
+expect no alpha hud face 0 changes near 0.1 within 2s
+```
+
+`near N` is an amount in the reading's own unit: metres for position and size, the same fraction of a face for offset and repeats, a fraction of a turn for rotation, and 0 to 1 for glow, colour and alpha. `near N percent` is a share of the wanted value, of each component by itself: `size ... is 0.8 0.4 0.016 near 2 percent` allows 0.016, 0.008 and 0.00032. A resize that comes back about 1 percent off in each side is that share at any size, where an amount in metres says it for one size only. The word is `near` because `within` is time; it is one word, and `percent` is a word beside the number because `%` is not a character a file has. A share is of the value the reading is compared with, so it is no help for a component at or near 0: a percentage of 0 is nothing, and the component is compared with its quantisation. Use an amount for a position.
+
+- **Where it applies.** `is`, `becomes`, `changes`, the negative forms of each, and `original` or a capture as the value. With `changes`, a reading is a change when it is further from the baseline than the tolerance, so `changes near 0.005` says that a HUD moved by more than 5 mm. With `becomes`, the value must be left and reached again as before, both judged by the tolerance, so `becomes original near 0.005` checks that a HUD dragged away and back is back. With `face all`, each face is compared by itself.
+- **The norm.** Each component is compared by itself: every one has to be within the tolerance, and they are not combined. A position 4 mm out on each of three axes is within `near 0.005`.
+- **Never tighter than the reading.** The tolerance of the kind, in the paragraph above, is the least there is, since it is the quantisation of what the grid reports. A `near` below it is not an error: the expectation is judged by the kind's own tolerance, and its transcript line says so, `(tolerance 0.001, raised from 0.0001: the least position is read to)`.
+- **Static refusal.** Only the numbers take `near`. A texture, a click, `fullbright`, a text and an alphamode are exact, so `near` on them, and on `say`, `dialog`, `textbox`, `give`, `rez`, `link`, `attached` and `button` (a count is whole), is refused ([Static checks](#static-checks)). So is a `near` of 0 or less, of more than 100 percent, and beside `is any`.
+- **In the transcript.** The line of an expectation that has `near` ends with the tolerance used, `(tolerance 0.005)` or `(tolerance 2 percent of each wanted component, and at least 0.001)`, in the failure block and in the line printed when it matches, which also says how far off the matching reading was: `matched position hud becomes original near 0.005 within 10s (tolerance 0.005): position hud 0.503 0.25 0 (0.003 off, at most 0.005 allowed)`. An unmatched one says how far the nearest reading was, `; the nearest reading was 0.006 off, and at most 0.005 is allowed: position hud 0.506 0.25 0`, and for `changes`, `; no reading was more than 0.004 from the baseline, and a change needs more than 0.005: the furthest was 0.004: position hud 1.004 1 1`.
 
 **Original.** `original` means the reading of that face or click byte when the test's own steps begin, after `before each` has run, so a reset in `before each` is what `original` refers to. It is meant for toggles: touch once and the value `changes`; touch again and it `becomes original`. If no reading exists at that point, `original` is the first reading after it. `original` is legal wherever a value is: a texture, the two numbers of offset or repeats, the one number of rotation, glow or alpha, the three of a colour, a position or a size, `on` or `off`, a click name. With `face all` it is the tuple the test began with.
 
@@ -1226,9 +1245,48 @@ test "moves and resizes" {
 
 The test passes when both drags are sent and released and the HUD has moved and then reached the size below.
 
-The move can only be `changes`. The HUD moves by the drag in metres, 300/1025 m to the right and 200/1025 m down, which is 0.2927 and 0.1951 m ([Where a worn HUD is on the screen](hud-screen.md#a-drag)), but where it ends is that plus where ExampleHUD stood when it was worn, and the example does not know that. Slate has no arithmetic to add the two, and an `is` or `becomes` with a made-up start would be a number nobody measured.
+The move can only be `changes` (or `changes near N`, to say by how much). The HUD moves by the drag in metres, 300/1025 m to the right and 200/1025 m down, which is 0.2927 and 0.1951 m ([Where a worn HUD is on the screen](hud-screen.md#a-drag)), but where it ends is that plus where ExampleHUD stood when it was worn, and the example does not know that. Slate has no arithmetic to add the two, and an `is` or `becomes` with a made-up start would be a number nobody measured.
 
 The resize is derived, and it is only as good as the derivation. ExampleHUD's script scales the root by `1 + 2*|delta|/|<0.5,0.25>|`, with delta the pointer's change in metres; that is the formula in ExampleHUD's own script, and a drag of 150 and 100 pixels in a 2050-pixel view was measured scaling it by 1.3146, what the formula gives for that distance ([A drag](hud-screen.md#a-drag)); its root is 0.5 x 0.25 x 0.1 m as built at commit f174c9e. A drag of 150 and 100 pixels in a 1025-pixel view is a delta of 0.14634 and 0.09756 m, whose length is 0.17588, so the factor is 1.62925 and the size is 0.81462 x 0.40731 x 0.16292, written to four places inside the millimetre the reading is compared within. The press at `1480 640` is invented: it holds only if that point is on the HUD's resize corner. A different build, view height or press changes the numbers; a script that cannot say them writes `changes`. The `within 10s` is there because a drag with `settle` can take its duration plus the 5 s settle, and the step's budget is its longest `within` ([Static checks](#static-checks)).
+
+### A HUD dragged and dragged back
+
+A drag on the screen puts a HUD back only to within a few millimetres of where it was. Measured on 2026-10-05 with a worn HUD that moves and resizes by the change in the touch position: dragged and dragged back by the same pixels, it came back exactly on one try and a few millimetres off on another; resized and resized back, it came to about 1 percent from its size on each side. The default tolerance is a millimetre, so `becomes original` fails on the second try, and `changes` alone does not check that it came back. `near` is the margin the test accepts. The HUD and the numbers in the file below are invented.
+
+```slate
+slate 1
+timeout 20s
+
+item hud_item is "Example Panel" in "Objects"
+
+before each {
+  wear hud_item on "HUD centre 2" as hud
+  expect attached hud on "HUD centre 2" within 10s
+}
+
+after each {
+  take off hud
+  expect attached hud off within 5s
+}
+
+test "dragged and dragged back" {
+  drag hud on screen from face 0 at 0.5 0.9 by 300 200 over 800ms settle
+  expect position hud changes near 0.005 within 10s
+
+  drag hud on screen from face 0 at 0.5 0.9 by -300 -200 over 800ms settle
+  expect position hud becomes original near 0.005 within 10s
+}
+
+test "resized and resized back" {
+  drag hud on screen from 1480 640 by -150 100 over 800ms settle
+  expect size hud changes near 2 percent within 10s
+
+  drag hud on screen from 1330 740 by 150 -100 over 800ms settle
+  expect size hud becomes original near 2 percent within 10s
+}
+```
+
+The first test passes when the HUD has moved by more than 5 mm on some axis and has then come back to within 5 mm of where the test began on each axis. The second compares each side of the size within 2 percent of its own original: for a HUD 0.8 by 0.4, 0.016 and 0.008, so 0.79 by 0.395 passes and 0.78 does not. The press points are invented, as in the example before. A HUD that came back 8 mm out would fail the first, saying `; the nearest reading was 0.008 off, and at most 0.005 is allowed: position hud ...`, so the test says how much slack it needed.
 
 ### Anywhere, a link and a face
 

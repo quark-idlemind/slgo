@@ -669,6 +669,7 @@ type Expect struct {
 	Span       Span
 	Neg        bool
 	Within     *Duration
+	Near       *Near    // near N or near N percent, after the body and before within; Check allows it on a numeric state expectation
 	As         *Capture // as $name after within; Check allows it on a positive state, say, dialog, textbox or give
 	Say        *SayExp
 	Dialog     *DialogExp
@@ -691,6 +692,17 @@ type Expect struct {
 	Link       *LinkExp
 	Button     *ButtonExp
 	Attached   *AttachExp
+}
+
+// Near is the tolerance of a state expectation: near N, an amount in
+// the reading's own unit, or near N percent, a share of the wanted
+// component. The parser reads it after any expectation body so that Check
+// can say which ones take none.
+// Why: doc/slate-language.md#tolerances
+type Near struct {
+	Span    Span
+	Amount  Number
+	Percent bool
 }
 
 // SayExp is expect say. The order in the file is text, channel, speaker.

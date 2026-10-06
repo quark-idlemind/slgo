@@ -234,8 +234,9 @@ period, one second, whatever size that is, and fails with `ErrTimeout`,
 "the HUD was still changing", only if the prim is still changing when
 `Options.HUDChangeTimeout` runs out. The quiet period is the measured
 400 ms plus margin. It does not ask for the size from the press: a
-resize leaves the glass at a new size for good (measured live, 0.5 x 0.25
-became 0.58 x 0.29), and waiting for the old one failed that drag. A
+resize leaves the glass at a new size for good (measured live: after a
+resize drag the glass kept the HUD's new size), and waiting for the old
+one failed that drag. A
 glass that stays grown is therefore taken as settled, and the next
 drag placed on it is refused if its point is off the view. This was
 chosen over waiting where a face point is placed, because a point placed

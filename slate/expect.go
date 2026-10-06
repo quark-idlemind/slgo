@@ -222,26 +222,178 @@ func vec3(v msg.Vector3) [3]float64 {
 	return [3]float64{float64(v.X), float64(v.Y), float64(v.Z)}
 }
 
-func near(a, b, tol float64) bool { return math.Abs(a-b) <= tol }
+// tolerance is a file's near: an amount in the reading's own unit, or a
+// percentage of the wanted component. It only widens a comparison: the
+// kind's own tolerance, the quantisation of what it reads, is the least
+// there is.
+// Why: doc/slate-language.md#tolerances
+type tolerance struct {
+	amount  float64
+	percent bool
+}
+
+func toleranceOf(n *Near) *tolerance {
+	if n == nil {
+		return nil
+	}
+	return &tolerance{amount: n.Amount.Value, percent: n.Percent}
+}
+
+// allowed is how far a component may be from ref: the file's tolerance,
+// where it is wider than floor, the kind's own. A percentage is of ref's
+// size, so a reference of 0 leaves the floor.
+func (t *tolerance) allowed(floor, ref float64) float64 {
+	if t == nil {
+		return floor
+	}
+	v := t.amount
+	if t.percent {
+		v = math.Abs(ref) * t.amount / 100
+	}
+	return max(floor, v+1e-9)
+}
+
+// gap is how far a component of a reading is from the reference, and how
+// far it may be.
+type gap struct{ diff, allowed float64 }
+
+// worse is the one of two gaps that is further past what it may be, or
+// with byDiff the one that is further off, which is what a match reports.
+func (g gap) worse(o gap, byDiff bool) gap {
+	if byDiff && o.diff > g.diff || !byDiff && o.diff-o.allowed > g.diff-g.allowed {
+		return o
+	}
+	return g
+}
+
+func (g gap) ok() bool { return g.diff <= g.allowed }
+
+// floor is the least a numeric kind is compared within, which is the
+// quantisation of what it reads, and false for the kinds that are not
+// numbers.
+func (k stateKind) floor() (float64, bool) {
+	switch k {
+	case kPosition, kSize:
+		return vecTol, true
+	case kOffset:
+		return offsetTol, true
+	case kRepeats:
+		return repeatsTol, true
+	case kRotation:
+		return rotTol, true
+	case kGlow, kColour, kAlpha:
+		return levelTol, true
+	}
+	return 0, false
+}
+
+// describe is the tolerance as a transcript line says it: the amount used
+// where it is one, and where the file asked for less than the kind can
+// read, that it was raised.
+func (t *tolerance) describe(k stateKind) string {
+	floor, _ := k.floor()
+	least := fmt.Sprintf("%g", r6(floor))
+	if t.percent {
+		return fmt.Sprintf("%g percent of each wanted component, and at least %s", t.amount, least)
+	}
+	if t.amount+1e-9 < floor {
+		return fmt.Sprintf("%s, raised from %g: the least %s is read to", least, t.amount, k.word())
+	}
+	return fmt.Sprintf("%g", t.amount)
+}
+
+// r6 rounds to six places, to say a floor without its 1e-9.
+func r6(v float64) float64 { return math.Round(v*1e6) / 1e6 }
+
+// word is the word a numeric kind is written with.
+func (k stateKind) word() string {
+	return [...]string{kOffset: "offset", kRepeats: "repeats", kRotation: "rotation", kGlow: "glow", kColour: "colour",
+		kAlpha: "alpha", kPosition: "position", kSize: "size"}[k]
+}
+
+// gapOf is the worst component of a reading against ref, for the kinds
+// that are numbers, and false for the rest.
+func (k stateKind) gapOf(a, ref *reading, t *tolerance, byDiff bool) (gap, bool) {
+	var xs, ys []float64
+	var floor float64
+	switch k {
+	case kPosition, kSize:
+		xs, ys, floor = a.vec[:], ref.vec[:], vecTol
+	case kOffset:
+		xs, ys, floor = a.off[:], ref.off[:], offsetTol
+	case kRepeats:
+		xs, ys, floor = a.rep[:], ref.rep[:], repeatsTol
+	case kRotation:
+		xs, ys, floor = []float64{a.turns}, []float64{ref.turns}, rotTol
+	case kGlow:
+		xs, ys, floor = []float64{a.glow}, []float64{ref.glow}, levelTol
+	case kColour:
+		xs, ys, floor = a.col[:], ref.col[:], levelTol
+	case kAlpha:
+		xs, ys, floor = []float64{a.alpha}, []float64{ref.alpha}, levelTol
+	default:
+		return gap{}, false
+	}
+	var worst gap
+	for i := range xs {
+		g := gap{math.Abs(xs[i] - ys[i]), t.allowed(floor, ys[i])}
+		if i == 0 {
+			worst = g
+		} else {
+			worst = worst.worse(g, byDiff)
+		}
+	}
+	return worst, true
+}
+
+// worst is the gap of the component furthest past what it may be (the
+// furthest off, with byDiff), over every face of a tuple compared as
+// equalTol compares them.
+func (k stateKind) worst(a, ref *reading, t *tolerance, byDiff bool) (gap, bool) {
+	if a.all != nil || ref.all != nil {
+		xs, ys := a.faces(), ref.faces()
+		var w gap
+		var ok bool
+		for i := range max(len(xs), len(ys)) {
+			g, isNum := k.worst(xs[min(i, len(xs)-1)], ys[min(i, len(ys)-1)], t, byDiff)
+			if !isNum {
+				return gap{}, false
+			}
+			if !ok {
+				w, ok = g, true
+			} else {
+				w = w.worse(g, byDiff)
+			}
+		}
+		return w, ok
+	}
+	return k.gapOf(a, ref, t, byDiff)
+}
 
 // equal is the comparison of a kind: exact for a texture, a click and
 // fullbright, within the tolerance for the rest. Two tuples are compared
 // face by face, the shorter continued by its last element.
-func (k stateKind) equal(a, b *reading) bool {
-	if a.all != nil || b.all != nil {
-		xs, ys := a.faces(), b.faces()
+func (k stateKind) equal(a, b *reading) bool { return k.equalTol(a, b, nil) }
+
+// equalTol is equal with a file's tolerance, which is of ref, the reading
+// compared against: the wanted value, or the baseline.
+func (k stateKind) equalTol(a, ref *reading, t *tolerance) bool {
+	if a.all != nil || ref.all != nil {
+		xs, ys := a.faces(), ref.faces()
 		for i := range max(len(xs), len(ys)) {
-			if !k.equal(xs[min(i, len(xs)-1)], ys[min(i, len(ys)-1)]) {
+			if !k.equalTol(xs[min(i, len(xs)-1)], ys[min(i, len(ys)-1)], t) {
 				return false
 			}
 		}
 		return true
 	}
+	if g, ok := k.gapOf(a, ref, t, false); ok {
+		return g.ok()
+	}
+	b := ref
 	switch k {
 	case kText:
 		return a.str == b.str
-	case kPosition, kSize:
-		return near(a.vec[0], b.vec[0], vecTol) && near(a.vec[1], b.vec[1], vecTol) && near(a.vec[2], b.vec[2], vecTol)
 	case kButton:
 		if b.atLeast {
 			return a.count >= b.count
@@ -249,20 +401,8 @@ func (k stateKind) equal(a, b *reading) bool {
 		return a.count == b.count
 	case kTexture:
 		return a.tex == b.tex
-	case kOffset:
-		return near(a.off[0], b.off[0], offsetTol) && near(a.off[1], b.off[1], offsetTol)
-	case kRepeats:
-		return near(a.rep[0], b.rep[0], repeatsTol) && near(a.rep[1], b.rep[1], repeatsTol)
-	case kRotation:
-		return near(a.turns, b.turns, rotTol)
 	case kFullbright:
 		return a.bright == b.bright
-	case kGlow:
-		return near(a.glow, b.glow, levelTol)
-	case kColour:
-		return near(a.col[0], b.col[0], levelTol) && near(a.col[1], b.col[1], levelTol) && near(a.col[2], b.col[2], levelTol)
-	case kAlpha:
-		return near(a.alpha, b.alpha, levelTol)
 	case kAlphaMode:
 		return a.mode == b.mode && (a.mode != sl.AlphaModeMask || a.cutoff < 0 || b.cutoff < 0 || a.cutoff == b.cutoff)
 	}
@@ -279,12 +419,15 @@ func (r *reading) faces() []*reading {
 
 // matches is whether a reading is the wanted value: a tuple is every face
 // equal to a single value, or equal to a tuple.
-func (k stateKind) matches(r, want *reading) bool {
+func (k stateKind) matches(r, want *reading) bool { return k.matchesTol(r, want, nil) }
+
+// matchesTol is matches with a file's tolerance of the wanted value.
+func (k stateKind) matchesTol(r, want *reading, t *tolerance) bool {
 	if r.all == nil || want.all != nil {
-		return k.equal(r, want)
+		return k.equalTol(r, want, t)
 	}
 	for _, f := range r.all {
-		if !k.equal(f, want) {
+		if !k.equalTol(f, want, t) {
 			return false
 		}
 	}
@@ -483,7 +626,63 @@ type stateExp struct {
 	why   func() string // a button's refusal, said after "unmatched"; nil for the rest
 	noted bool          // the baseline note was printed
 	final bool          // a negative's window was judged
+
+	// tol is the file's near, nil when it wrote none. near is the reading
+	// that came nearest to matching, and nearGap how far off it was: the
+	// furthest from the baseline for a changes.
+	tol     *tolerance
+	near    *reading
+	nearGap gap
 }
+
+// closer keeps r when it is nearer to matching than the reading kept: the
+// least past what it may be, or for a changes the most.
+func (se *stateExp) closer(r *reading, g gap) {
+	excess := g.diff - g.allowed
+	kept := se.nearGap.diff - se.nearGap.allowed
+	if se.near == nil || (se.word != StateChanges && excess < kept) || (se.word == StateChanges && excess > kept) {
+		se.near, se.nearGap = r, g
+	}
+}
+
+// hitNote is what a reading that matched adds to its line when the file
+// wrote a tolerance: how far off it was and how far it might be.
+func (se *stateExp) hitNote(hit, base, want *reading) string {
+	if se.tol == nil || se.any || se.text != nil {
+		return ""
+	}
+	ref, from := want, "off"
+	if se.word == StateChanges {
+		ref, from = base, "from the baseline"
+	}
+	if ref == nil {
+		return ""
+	}
+	g, ok := se.kind.worst(hit, ref, se.tol, true)
+	if !ok {
+		return ""
+	}
+	if se.word == StateChanges {
+		return fmt.Sprintf(" (%s %s, a change is more than %s)", gnum(g.diff), from, gnum(g.allowed))
+	}
+	return fmt.Sprintf(" (%s %s, at most %s allowed)", gnum(g.diff), from, gnum(g.allowed))
+}
+
+// nearNote is what an unmatched line says of how far the readings were.
+func (se *stateExp) nearNote(key readKey) string {
+	if se.near == nil {
+		return ""
+	}
+	g, shown := se.nearGap, se.kind.show(key, se.near)
+	if se.word == StateChanges {
+		return fmt.Sprintf("; no reading was more than %s from the baseline, and a change needs more than %s: the furthest was %s: %s", gnum(g.diff), gnum(g.allowed), gnum(g.diff), shown)
+	}
+	return fmt.Sprintf("; the nearest reading was %s off, and at most %s is allowed: %s", gnum(g.diff), gnum(g.allowed), shown)
+}
+
+// gnum says a distance to four significant figures, which is as many as
+// the float32 behind it holds without its noise.
+func gnum(v float64) string { return fmt.Sprintf("%.4g", v) }
 
 // keyName is the name a reading is keyed by: the binding's, or for a
 // link N the name that link is bound under (bridge.go).
@@ -991,6 +1190,19 @@ func (s *stepRun) stateExpect(x *expState) error {
 		}
 	}
 	se.word, se.orig = st.Kind, st.Original
+	if e.Near != nil {
+		se.tol = toleranceOf(e.Near)
+		x.text += " (tolerance " + se.tol.describe(kind) + ")"
+		prev := se.why
+		se.why = func() string {
+			note := ""
+			if prev != nil {
+				note = prev()
+			}
+			return note + se.nearNote(k)
+		}
+		x.noteFn = se.why
+	}
 	x.match = never
 	x.eval = func(ctx context.Context) error { return s.evalState(ctx, x, se) }
 	return nil
@@ -1152,13 +1364,29 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 		if se.text != nil {
 			return se.text.match(r.str)
 		}
-		return se.kind.matches(r, want)
+		return se.kind.matchesTol(r, want, se.tol)
+	}
+	if se.tol != nil && !se.any && se.text == nil {
+		if ref := map[bool]*reading{true: base, false: want}[se.word == StateChanges]; ref != nil {
+			for _, r := range seq[min(1, len(seq)):] {
+				if g, ok := se.kind.worst(r, ref, se.tol, false); ok {
+					se.closer(r, g)
+				}
+			}
+			if se.word != StateChanges {
+				if len(seq) > 0 {
+					if g, ok := se.kind.worst(seq[0], ref, se.tol, false); ok {
+						se.closer(seq[0], g)
+					}
+				}
+			}
+		}
 	}
 	var hit *reading
 	switch {
 	case se.word == StateChanges:
 		for _, r := range seq[min(1, len(seq)):] {
-			if !se.kind.equal(base, r) {
+			if !se.kind.equalTol(r, base, se.tol) {
 				hit = r
 				break
 			}
@@ -1190,11 +1418,18 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 	}
 	switch {
 	case hit != nil:
-		x.ev = &event{kind: evReading, at: hit.at, text: se.kind.show(se.key, hit)}
+		x.ev = &event{kind: evReading, at: hit.at, text: se.kind.show(se.key, hit) + se.hitNote(hit, base, want)}
 		if x.neg {
 			x.forbidden = true
 		} else {
 			x.matched = true
+			if se.tol != nil && !se.any && se.text == nil {
+				// A pass prints only the readings, so the tolerance a
+				// match was judged by is said here.
+				ev := &event{kind: evReading, at: hit.at, consumed: true, text: "matched " + x.text + ": " + x.ev.text}
+				s.r.log.add(ev)
+				s.r.printEvent(ev)
+			}
 			v := se.kind.value(hit)
 			if se.text != nil {
 				s.bindMatched(x, &v, groupSrc{*se.text, hit.str})

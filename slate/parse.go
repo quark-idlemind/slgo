@@ -1313,6 +1313,13 @@ func (p *parser) expectation() (Expect, error) {
 	if err := p.expectBody(&e); err != nil {
 		return Expect{}, err
 	}
+	if p.kw("near") {
+		n, err := p.near()
+		if err != nil {
+			return Expect{}, err
+		}
+		e.Near = &n
+	}
 	if p.kw("within") {
 		if err := p.next(); err != nil {
 			return Expect{}, err
@@ -1338,6 +1345,27 @@ func (p *parser) expectation() (Expect, error) {
 	}
 	e.Span = cover(start, p.prev.span)
 	return e, nil
+}
+
+// near reads near N, or near N percent, after an expectation's body.
+func (p *parser) near() (Near, error) {
+	start := p.tok.span
+	if err := p.want("near"); err != nil {
+		return Near{}, err
+	}
+	n, err := p.number()
+	if err != nil {
+		return Near{}, err
+	}
+	v := Near{Amount: n}
+	if p.kw("percent") {
+		v.Percent = true
+		if err := p.next(); err != nil {
+			return Near{}, err
+		}
+	}
+	v.Span = cover(start, p.prev.span)
+	return v, nil
 }
 
 func (p *parser) expectBody(e *Expect) error {
