@@ -1422,6 +1422,8 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.attachExp(e)
 	case p.kw("animation"):
 		return p.animationExp(e)
+	case p.kw("sound"):
+		return p.soundExp(e)
 	default:
 		return p.unexpected("expected an expectation")
 	}
@@ -2671,6 +2673,68 @@ func (p *parser) animationExp(e *Expect) error {
 		x.From = &from
 	}
 	e.Animation = x
+	return nil
+}
+
+// soundExp reads sound uuid, and then either ( from binding )? ( gain
+// number )? for a sound heard, or ( is / becomes ) ( looping / stopped ) or
+// changes, ( from binding )? for a loop's state.  A sound is not a state
+// the tester is in, so there is no original, any or capture; and a gain
+// belongs to a play, which a loop's state has none of.
+func (p *parser) soundExp(e *Expect) error {
+	if err := p.want("sound"); err != nil {
+		return err
+	}
+	if p.tok.kind != kUUID {
+		return p.unexpected("expected a sound's asset UUID")
+	}
+	x := &SoundExp{ID: p.tok.text, IDSpan: p.tok.span}
+	if err := p.next(); err != nil {
+		return err
+	}
+	if p.kw("is") || p.kw("becomes") || p.kw("changes") {
+		st, err := p.state()
+		if err != nil {
+			return err
+		}
+		if st.Original {
+			return p.errorf("a loop is looping or stopped and has no original; write looping or stopped")
+		}
+		x.State = &st
+		if st.Kind != StateChanges {
+			switch {
+			case p.kw("looping"):
+				x.Loop = true
+			case p.kw("stopped"):
+			default:
+				return p.unexpected("expected looping or stopped")
+			}
+			if err := p.next(); err != nil {
+				return err
+			}
+		}
+	}
+	if p.kw("from") {
+		if err := p.next(); err != nil {
+			return err
+		}
+		from, err := p.ident()
+		if err != nil {
+			return err
+		}
+		x.From = &from
+	}
+	if x.State == nil && p.kw("gain") {
+		if err := p.next(); err != nil {
+			return err
+		}
+		n, err := p.number()
+		if err != nil {
+			return err
+		}
+		x.Gain = &n
+	}
+	e.Sound = x
 	return nil
 }
 

@@ -238,6 +238,9 @@ type runner struct {
 
 	stopAnims func() // gives back the subscription to AvatarAnimation (animation.go)
 
+	snd        *soundRun // what the run keeps for sounds; nil when no test names one (sound.go)
+	stopSounds func()    // gives back the subscription to the sound messages
+
 	ops gridOps   // what the bring-up and cleanup ask of the grid
 	pr  *probeRun // the bridge and probes; nil when the file has none
 }
@@ -305,6 +308,9 @@ func run(ctx context.Context, sess *sl.Session, s *Script, opt Options, cfg runC
 		sess.StopIMs(r.ims)
 		if r.stopAnims != nil {
 			r.stopAnims()
+		}
+		if r.stopSounds != nil {
+			r.stopSounds()
 		}
 		for _, sc := range r.seconds {
 			sc.sess.StopIMs(sc.ims)
@@ -385,6 +391,7 @@ func (r *runner) setupSteps() []setupStep {
 		{"probe", r.setupProbe},
 		{"click", r.setupClick},
 		{"animations", r.setupAnimations},
+		{"sounds", r.setupSounds},
 	}
 }
 

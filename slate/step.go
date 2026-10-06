@@ -502,6 +502,8 @@ func (s *stepRun) expectFor(ctx context.Context, x *expState) error {
 		return s.attachedExpect(x)
 	case e.Animation != nil:
 		return s.animationExpect(x)
+	case e.Sound != nil:
+		return s.soundExpect(x)
 	}
 	return notYet("this expectation")
 }

@@ -1011,6 +1011,7 @@ type watcher struct {
 	lastReq  map[msg.UUID]time.Time
 
 	an       *animWatch               // the tester's animations (animation.go)
+	snd      *soundReads              // the loops a test reads (sound.go)
 	att      []string                 // names an attached expectation reads (wear.go)
 	areads   map[string][]*attReading // their readings
 	aprinted map[string]string
@@ -1027,6 +1028,7 @@ func newWatcher(t *testRun) *watcher {
 		areads:  map[string][]*attReading{}, aprinted: map[string]string{},
 	}
 	w.an = newAnimWatch(t)
+	w.snd = newSoundReads(t)
 	seen := map[readKey]bool{}
 	for n, x := range t.et.Steps {
 		for i := range x.Step.Expect {
@@ -1066,6 +1068,7 @@ func newWatcher(t *testRun) *watcher {
 // and is stamped before the test's start. Everything it sees is old.
 func (w *watcher) start(ctx context.Context) error {
 	w.sample()
+	w.startSounds()
 	w.initial = true
 	err := w.poll(ctx, true)
 	w.initial = false
@@ -1860,6 +1863,7 @@ type stepObs struct {
 func (s *stepRun) observe(ctx context.Context) error {
 	w := s.t.watch
 	w.sample()
+	w.sampleSounds()
 	if err := w.poll(ctx, false); err != nil {
 		return err
 	}

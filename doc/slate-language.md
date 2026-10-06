@@ -12,7 +12,7 @@ Link messages do not leave a linkset. A HUD that changes another object is obser
 
 A person can write a test after reading this page, with no Go and no pixel coordinates for an ordinary button. One stimulus can require several effects, on the prim touched or on another, and newly rezzed objects can be named for the rest of the file. A test can wear a HUD or another attachment from the tester's inventory, rez an item from it, watch a button appear and disappear, and take the attachment off again. Every wait has a deadline.
 
-Slate drives the tester, and a second avatar only when the run is given one explicitly ([A second avatar](#a-second-avatar)); it does not pick other avatars for itself, drive the camera, walk or teleport, check particles, sounds or the product's inventory, edit the product's scripts, or delete objects (except those its own `rez` steps made), refund payments or remove items a run produced (except the copies its own `drop` steps put into an object). A permission request is printed and refused with no bits granted, so the product script is not left waiting, unless the file names the permission and the object with `allow permission` ([Pay](#stimuli) has the paragraph); `debit` is never one of them. `allow permission` covers the tester's requests only: a request to a second avatar is always refused. It does read the animations the tester is playing, which a product that animates its wearer changes: `expect animation` says whether one is playing and which object started it ([Animation](#expectations)). It never plays or stops one, and it does not read an animation's contents, its priority or its joints. A file that does not start with `slate 1` is rejected.
+Slate drives the tester, and a second avatar only when the run is given one explicitly ([A second avatar](#a-second-avatar)); it does not pick other avatars for itself, drive the camera, walk or teleport, check particles or the product's inventory, edit the product's scripts, or delete objects (except those its own `rez` steps made), refund payments or remove items a run produced (except the copies its own `drop` steps put into an object). A permission request is printed and refused with no bits granted, so the product script is not left waiting, unless the file names the permission and the object with `allow permission` ([Pay](#stimuli) has the paragraph); `debit` is never one of them. `allow permission` covers the tester's requests only: a request to a second avatar is always refused. It does read the animations the tester is playing, which a product that animates its wearer changes: `expect animation` says whether one is playing and which object started it ([Animation](#expectations)). It never plays or stops one, and it does not read an animation's contents, its priority or its joints. It also reads the sounds objects play, which a product that rings, hums or clicks makes: `expect sound` says whether one was heard, from which object and how loud, and whether a loop is running ([Sound](#expectations)). Sounds are read, never played: it plays none, stops none, and it does not read a sound's contents, its length or what it is like to hear. A file that does not start with `slate 1` is rejected.
 
 ## A first script
 
@@ -85,7 +85,8 @@ test before after each sequence do
 showing count any fullbright glow colour alpha on off
 alphamode default blend mask emissive
 normalmap specularmap glossiness environment
-item wear rez take attached animation ordered sorted shown gone if in near percent
+item wear rez take attached animation sound looping stopped gain
+ordered sorted shown gone if in near percent
 folder holding
 ```
 
@@ -182,7 +183,7 @@ tolerance   = "near" number "percent"?
 expectbody  = sayexp / dialogexp / boxexp / textureexp / offsetexp
             / repeatsexp / rotationexp / positionexp / sizeexp / turnexp / clickexp
             / lightexp / projectorexp / textexp / fullbrightexp / glowexp / colourexp / alphaexp / alphamodeexp / materialexp
-            / buttonexp / attachexp / animationexp
+            / buttonexp / attachexp / animationexp / soundexp
             / giveexp / rezexp / linkexp
 
 text        = string / "matching" string / capture
@@ -228,6 +229,9 @@ buttonexp   = "button" binding link? part+ face? ( "changes" / state buttonval )
 buttonval   = "shown" / "gone" / "count" integer / "original"
 attachexp   = "attached" binding ( "on" string / "off" )
 animationexp = "animation" uuid ( "changes" / state ( "on" / "off" ) ) ( "from" binding )?
+soundexp    = "sound" uuid ( soundstate / soundheard )
+soundstate  = ( "changes" / state ( "looping" / "stopped" ) ) ( "from" binding )?
+soundheard  = ( "from" binding )? ( "gain" number )?
 state       = "is" / "becomes"
 named       = "original" / "any" / capture
 uuidval     = uuid / named
@@ -273,7 +277,7 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Avatars | An `avatar` binding is neither an object nor an item and shares their names: a name bound twice (`X is already bound`), by an `avatar`, an `object`, an `item`, or by the name `wear`, `rez` or a rez expectation binds, is refused. An avatar is used only after `as` on `touch`, a face `drag`, `say`, `choose` and `answer`, after `to` on `dialog`, `textbox` and `give` expectations, after `from avatar` on `say`, and as the first name of `group`. A name that is not an avatar there is `X is not an avatar; declare it with avatar X and give it with --avatar`, an object there is `X is an object, not an avatar`, and an avatar where an object is wanted is `X is an avatar, not an object`. `as NAME` on `pay`, `sit`, `stand`, `wait`, `send`, `take off`, `drop` and `drag ... on screen` is `<stimulus> stays the tester's: a second avatar only touches, drags a face, says, chooses and answers (a second avatar never pays)`; `wear` and `rez` take `as` for the new object, and an avatar's name there is `X is a second avatar, and a second avatar never wears` (`rezzes`). The check does not know whether the run is given the avatar: that is a setup error ([A second avatar](#a-second-avatar)). |
 | Items | An item binding is not an object: it is used only by `wear`, `rez` and `drop`, and any other use is `X is an item; only wear, rez and drop use an item`. The item name and the folder name are non-empty after trimming. |
 | Drop | `drop` takes an item and an object (`X is an object; drop takes an item`, or `X is not an item`; the object is checked as any reference is). `link N` is 0 or more and `face N` is 0 or more, and each fits an integer. A drop is the tester's alone: `drop ... as NAME` is `drop stays the tester's: a second avatar only touches, ...`. |
-| Near | `near` is read after any expectation, and only a state expectation of a number takes one: position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment, and the numbers of a light and a projector. On any other, `say`, `dialog`, `textbox`, `give`, `rez`, `link`, `attached`, `animation`, `button`, `texture`, `click`, `text`, `fullbright`, `alphamode`, `normalmap`, `specularmap`, a `light` with no property word or a `projector` with none, it is refused with `<word> takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment and the numbers of a light or a projector are numbers a reading can be off by`, and beside `is any` with `is any takes no near: it matches whatever the reading is`. The number is exact and above 0 (`near 0 is not above 0; leave near out to compare as the reading is quantised`); with `percent` it is at most 100 (`near 100.5 percent is above 100`). A rotation takes no `percent` (`a rotation takes near in turns, not percent: an angle has no size to be a share of`), and neither does a turn (`a turn takes near in degrees, not percent: an angle has no size to be a share of`). |
+| Near | `near` is read after any expectation, and only a state expectation of a number takes one: position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment, the `gain` of a sound heard, and the numbers of a light and a projector. On any other, `say`, `dialog`, `textbox`, `give`, `rez`, `link`, `attached`, `animation`, `sound` with no `gain`, `button`, `texture`, `click`, `text`, `fullbright`, `alphamode`, `normalmap`, `specularmap`, a `light` with no property word or a `projector` with none, it is refused with `<word> takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment, a sound's gain and the numbers of a light or a projector are numbers a reading can be off by`, and beside `is any` with `is any takes no near: it matches whatever the reading is`. The number is exact and above 0 (`near 0 is not above 0; leave near out to compare as the reading is quantised`); with `percent` it is at most 100 (`near 100.5 percent is above 100`). A rotation takes no `percent` (`a rotation takes near in turns, not percent: an angle has no size to be a share of`), and neither does a turn (`a turn takes near in degrees, not percent: an angle has no size to be a share of`). |
 | Group | `group` names a second avatar, declared with an `avatar` header (`X is not an avatar; ...`, `X is an object, not an avatar`). `group tester ...` is refused: `group stays off the tester: its active group decides where it may build, and a test does not change it; group takes a second avatar`. The group is a non-empty string or the word `none`; a quoted `"none"` is a group of that name. An `as` after it is `group names the avatar whose group is set (group NAME "Group Name"); an as does not follow it`. Whether the avatar has joined the group is not known here: that fails the step. |
 | Probes | The identifier is an object binding, with at most one probe per object. A probe has no channels; the runner picks them. |
 | Listens | Each `listen` channel is a 32-bit integer, not 0 and not 2147483647. Duplicates are an error, and there are at most 63 of them. The bridge script opens one listen for its own control channel and one per `listen` channel; LSL allows 65 in one script (published, not measured here), and one is kept spare. |
@@ -311,6 +315,7 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Ordered and sorted | `ordered` needs at least two button clauses. A `sorted matching` pattern compiles and has at most one capturing group, the text to compare. A named group of a `sorted` pattern binds nothing. |
 | Dialog shape | `choose` and `answer` are not checked against a preceding dialog. That depends on the region and fails at run time; only the range of `button N` and the pattern of `matching` are checked. |
 | Animation | The id is a UUID that is not the null key (`the null key names no animation`). The value is `on` or `off`: `original`, `any` and a capture are refused (`an animation is on or off and has no original; write on or off`, `expected on or off`), and `changes` takes none. `from` names an object binding. `near` is refused, and so is `as` (`this expectation has no reading to bind`). |
+| Sound | The id is a UUID that is not the null key (`the null key names no sound`). `gain` is from 0 to 1 (`a sound's gain is from 0 to 1`) and is written only on a sound heard, not beside `is`, `becomes` or `changes` (the parser stops at it). The value of a state is `looping` or `stopped`: `original`, `any` and a capture are refused (`a loop is looping or stopped and has no original; write looping or stopped`, `expected looping or stopped`), and `changes` takes none. `from` names an object binding. `near` is refused unless there is a `gain` for it to widen, and so is `as` (`this expectation has no reading to bind`). |
 | Wear | The first name of `wear` is an item (`X is an object; wear takes an item`, or `X is not an item`). The attach point, in `wear` and in `attached ... on`, is a name `sl` knows, in any case and with the viewer's spelling or `sl`'s; a name it does not know is refused, not guessed at. The name after `as` is new, and unique among objects, items and the other names `wear` and `rez` bind. A `take off` and an `attached` name an object binding, which is a header object or a name `wear` bound. |
 | Rez | The first name of `rez` is an item (`X is an object; rez takes an item`, or `X is not an item`). It has exactly one of `at` and `by`, then three numbers, each exact (a number that does not fit a float is `number is not an exact float`), and `as` with a new name, unique as `wear`'s is (`X is already bound`). The name is an object binding like a header's, and is rezzed in the world: `drag ... on screen` refuses it. A step's first word `rez` is this stimulus; after `expect` it is the rez expectation, and the parser tells them apart by that position alone. |
 | Capture types | A capture has the type of the place that binds it, and a use must be of the same type. The types are text (a line, a message, an item name, a group, a button label, a floating text), uuid (a texture), pair (offset, repeats), number (rotation, glow, alpha, the count of a button reading), click, colour triple, vector (position, size; a position capture can be used by a size and the other way round) and on or off (fullbright). Text is never accepted where a UUID is expected, even when it looks like one. `key` and `showing` take a uuid capture; `text`, `choose`, `send` text and a dialog button take a text capture. `choose matching $x` is refused, because a capture is data and never a pattern, and a capture is not usable inside a `matching` pattern. |
@@ -845,6 +850,16 @@ A negative `say matching` is the way to rule out a family of lines, as in `expec
 
 What the tester plays comes from the list the region sends about every three seconds and whenever it changes, so a reading is as old as the last list and a start is seen about when the region says it. A run that has an `expect animation` asks the daemon for `AvatarAnimation` for the length of the run and waits up to 10 s, at setup, for the first list; it is exit 3, `no AvatarAnimation was heard in 10s`, when none comes. The reading is kept when the list changes and is stamped when the list was heard, so a start that came before a step's arm point is not a start of that step. An animation that starts and stops between two lists is never seen. The run does not stop an animation it saw start, and it has no stimulus to: the permission was the object's, and what happens to an object's animation when the tester asks for it to stop is not measured here ([Animations](slate-runner.md#animations)). A test of a timed animation expects its stop (`becomes off`), and the next test's baseline is what the avatar is playing then.
 
+**Sound.** `expect sound UUID` is two expectations in one word, a sound heard and a loop's state, and the words after the id say which. The id is the sound's asset id: a Linden built-in, or the asset of a sound uploaded or held in an object, and never the id of an inventory item.
+
+`expect sound UUID [from OBJ] [gain N [near T]] within D` says the sound was heard to play after the step's arm point: a `SoundTrigger` (`llTriggerSound`, a one-shot at a place) or an `AttachedSound` with a sound (`llPlaySound`, `llLoopSound`, which a loop is, too). It is an event, as a line of chat is, and not a state: a sound has no value to be on or off, and a one-shot has no end the region reports. It is found by its id; `from OBJ` holds when the prim that played it is any prim of `OBJ`'s linkset, by id and never by name; `gain N` holds when the gain the region sent is within a margin of N (0.001, or `near`, in the unit of the gain, or `near T percent` of N). The gain is the one the viewer plays at, 0 to 1. The sound is matched once: a step's expectation takes the first sound that fits it, and the next step does not see it again, as with chat. `expect no sound UUID from OBJ within 5s` is the negative: nothing like it was heard for the window. An `AttachedSound` that asks for a loop that is already running is not heard to play again, as the viewer ignores it.
+
+`expect sound UUID is looping`, `is stopped`, `becomes looping`, `becomes stopped` and `changes`, with an optional `from OBJ`, are states of a loop, with the words of the other state expectations: `is looping` passes when a reading says one is running, including one that already was at the arm point; `becomes looping` is the start, `becomes stopped` the stop, and `changes` either. A loop is running from an `AttachedSound` with the loop flag until the region sends a null sound for the prim, a sound that is not a loop for it, a loop of another sound, or kills the prim. **A loop at gain 0 is still looping**: a gain change does not end one. `stopped` is no loop of that sound, so it is true of a sound that never played and of a one-shot, which is never `looping`. The words are `looping` and `stopped` and not `playing` because a one-shot has no end the region reports: it can be heard (`expect sound ...`) but is not a state to be in.
+
+A test author learns a sound's id from the transcript: every sound a bound object plays is printed with its id, expected or not, and so is a sound an expectation names whoever plays it, so a first run with a made up id shows the real one. The id of a Linden built-in is in the viewer's settings and `tools/known-uuids`; the id of a sound inside a product is not read from the product's contents, and the transcript is how it is learned. A sound heard from an object nothing in the file binds, and names no expectation, is not printed, since a region has many.
+
+A run with an `expect sound` in a selected test asks the daemon for the four sound messages for the length of the run, and keeps what it hears; there is no wait at setup, because the region sends a sound when it plays and not on a period. A loop that was already running when the test began is known from the prim's own update, which the session always hears, and is the first reading. What the region sends the avatar is what the viewer would play: a sound from an object out of range, or a loop that began and ended before the session listened, is not seen (inferred from the viewer's code, not measured; [Sounds](slate-runner.md#sounds)). The run plays no sound and stops none.
+
 ## Buttons
 
 A button touch is a picture match, then a click at the match's centre. The author does not write pixels. The runner reads the picture on every face of the prim, searches for the parts, and clicks once. Parts are written in the order they appear and each is one finder request:
@@ -970,6 +985,7 @@ HH:MM:SS.mmm environment <object> face <n> <level>
 HH:MM:SS.mmm button <object> <parts as written> <n> (faces <list>)
 HH:MM:SS.mmm attached <object> <point or off>
 HH:MM:SS.mmm animation <uuid> <started or stopped or playing>[ from <object>]
+HH:MM:SS.mmm sound <uuid> <triggered or played or looping or stopped>[ from <object>][ at gain <g>]
 HH:MM:SS.mmm capture $<name> = <value> (step <N>)
 HH:MM:SS.mmm position <object> <x> <y> <z>
 HH:MM:SS.mmm size <object> <x> <y> <z>
@@ -1607,6 +1623,29 @@ touch hat anywhere
 expect animation 9b29cd61-c45b-5689-ded2-91756b8d76a9 becomes on from hat within 5s
 
 then expect animation 9b29cd61-c45b-5689-ded2-91756b8d76a9 becomes off from hat within 8s
+```
+
+### A doorbell and a warning lamp
+
+Two invented objects play Linden's built-in sounds. The doorbell plays the viewer's click sound once at full volume when touched. The warning lamp loops the viewer's alert sound when touched, and stops it when touched again. Neither sound is the product's: a built-in is a constant every viewer carries, which is why the ids are written here and are found in `tools/known-uuids`. `from` is the prim that plays it or any prim of its linkset, so a sound of another object in the same region does not count. The loop is a state, and the click is an event: the click has no end to wait for, and the loop at gain 0 would still be `looping`.
+
+```slate
+slate 1
+
+object bell is "Example Doorbell"
+object lamp is "Example Warning Lamp"
+
+touch bell anywhere
+expect sound 4c8c3c77-de8d-bde2-b9b8-32635e0fd4a6 from bell gain 1 within 3s
+expect no sound ed124764-705d-d497-167a-182cd9fa2e6c within 1s
+
+expect sound ed124764-705d-d497-167a-182cd9fa2e6c is stopped from lamp within 1s
+
+touch lamp anywhere
+expect sound ed124764-705d-d497-167a-182cd9fa2e6c becomes looping from lamp within 3s
+
+touch lamp anywhere
+expect sound ed124764-705d-d497-167a-182cd9fa2e6c becomes stopped from lamp within 3s
 ```
 
 ### A lid that turns

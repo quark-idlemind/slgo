@@ -659,6 +659,20 @@ type AnimationExp struct {
 	From   *Ident
 }
 
+// SoundExp is sound UUID, in one of two forms. With State nil, the sound
+// was heard to play: From is the object that played it, when written, and
+// Gain the volume it was played at, when written. With State set, it is a
+// loop's state: is, becomes or changes, and for the first two Loop says
+// looping (true) or stopped (false).
+type SoundExp struct {
+	ID     string
+	IDSpan Span
+	State  *State
+	Loop   bool
+	From   *Ident
+	Gain   *Number
+}
+
 // LinkTarget is an integer or one of LinkWords.
 type LinkTarget struct {
 	Span Span
@@ -707,6 +721,7 @@ type Expect struct {
 	Button     *ButtonExp
 	Attached   *AttachExp
 	Animation  *AnimationExp
+	Sound      *SoundExp
 }
 
 // Near is the tolerance of a state expectation: near N, an amount in

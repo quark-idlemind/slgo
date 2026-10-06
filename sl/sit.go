@@ -542,34 +542,43 @@ const animationRelay = "AvatarAnimation"
 // every three seconds, so losing that race costs a wait, not an answer.
 // Why: doc/history/sit.md#the-subscription-question
 func (w *Session) borrowAnimations() (give func(), err error) {
+	return w.borrow(&w.animWatch, []string{animationRelay},
+		"sl: cannot listen for animations, which is the only evidence a ground sit gives")
+}
+
+// borrow is the one counted subscription: it has the daemon relay names
+// until every caller that took it out has given it back, the count being
+// the session's own (animWatch, userInfoWatch, soundWatch), and failed
+// the start of the error when the daemon refuses.  A backend that is not
+// a Watcher relays everything already.
+func (w *Session) borrow(count *int, names []string, failed string) (give func(), err error) {
 	b, ok := w.b.(Watcher)
 	if !ok {
 		return func() {}, nil
 	}
 
 	w.mu.Lock()
-	w.animWatch++
-	first := w.animWatch == 1
+	*count++
+	first := *count == 1
 	w.mu.Unlock()
 
 	release := func() {
 		w.mu.Lock()
-		w.animWatch--
-		last := w.animWatch == 0
+		*count--
+		last := *count == 0
 		w.mu.Unlock()
 		if last {
 			// Nothing to do about a failure here.  It means the stream
 			// is gone, which is the session ending, and the
 			// subscription goes with it.
-			_ = b.Unwatch(animationRelay)
+			_ = b.Unwatch(names...)
 		}
 	}
 
 	if first {
-		if err := b.Watch(animationRelay); err != nil {
+		if err := b.Watch(names...); err != nil {
 			release()
-			return func() {}, fmt.Errorf("sl: cannot listen for animations, "+
-				"which is the only evidence a ground sit gives: %w", err)
+			return func() {}, fmt.Errorf("%s: %w", failed, err)
 		}
 	}
 	return release, nil

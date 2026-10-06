@@ -146,6 +146,15 @@ type Session struct {
 	// and a session that did not ask is not sent it.
 	userInfoWatch int
 
+	// soundWatch is the same for the four sound messages (sounds.go),
+	// and heard, heardSeq and loops are what they said: the log of
+	// every sound heard, the number of the last, and the loops in force
+	// by the prim that plays each.
+	soundWatch int
+	heard      []HeardSound
+	heardSeq   uint64
+	loops      map[msg.UUID]*LoopingSound
+
 	// Replies keyed by what was asked.  created holds an entry only
 	// while CreateItem is waiting on that callback id: nil until the
 	// reply comes, and gone when the wait ends.
@@ -752,6 +761,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 			w.locals[o.FullID] = o.ID
 			w.parents[o.ID] = o.ParentID
 			delete(w.killed, o.ID)
+			w.updateSound(o)
 			if item, ok := attachItem(o.NameValue); ok {
 				w.attach[item] = &Attached{
 					Object: Object{ID: o.FullID, Local: o.ID, from: w.at},
@@ -766,6 +776,7 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.mu.Lock()
 		for _, d := range t.ObjectData {
 			w.killed[d.ID] = true
+			w.objectGone(d.ID)
 			// A worn attachment that the region kills is no longer
 			// worn: a script's llDetachFromAvatar, or our own take-off.
 			// A teleport sends no kill for it and describes it again
@@ -778,6 +789,15 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 			}
 		}
 		w.mu.Unlock()
+
+	case *msg.SoundTrigger:
+		w.soundTrigger(t)
+	case *msg.AttachedSound:
+		w.attachedSound(t)
+	case *msg.AttachedSoundGainChange:
+		w.attachedSoundGain(t)
+	case *msg.PreloadSound:
+		w.preloadSound(t)
 
 	case *msg.ParcelInfoReply:
 		w.parcelInfoReply(parcelInfoFrom(t))

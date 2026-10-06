@@ -1211,6 +1211,22 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 			return c.ref(*x.From, same)
 		}
 		return nil
+	case e.Sound != nil:
+		x := e.Sound
+		id, err := msg.ParseUUID(x.ID)
+		if err != nil {
+			return c.err(x.IDSpan, "%q is not a sound's asset id", x.ID)
+		}
+		if id.IsZero() {
+			return c.err(x.IDSpan, "the null key names no sound")
+		}
+		if x.Gain != nil && (x.Gain.Value < 0 || x.Gain.Value > 1) {
+			return c.err(x.Gain.Span, "a sound's gain is from 0 to 1")
+		}
+		if x.From != nil {
+			return c.ref(*x.From, same)
+		}
+		return nil
 	default:
 		return c.err(e.Span, "expectation has no body")
 	}
@@ -1236,6 +1252,8 @@ func nearWord(e Expect) string {
 		return "attached"
 	case e.Animation != nil:
 		return "animation"
+	case e.Sound != nil && e.Sound.Gain == nil:
+		return "sound"
 	case e.Texture != nil:
 		return "texture"
 	case e.Click != nil:
@@ -1269,7 +1287,7 @@ func (c *checker) near(e Expect) error {
 	}
 	n := e.Near
 	if w := nearWord(e); w != "" {
-		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment and the numbers of a light or a projector are numbers a reading can be off by", w)
+		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment, a sound's gain and the numbers of a light or a projector are numbers a reading can be off by", w)
 	}
 	if e.Turn != nil && n.Percent {
 		return c.err(n.Span, "a turn takes near in degrees, not percent: an angle has no size to be a share of")

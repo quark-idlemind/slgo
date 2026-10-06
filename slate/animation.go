@@ -26,9 +26,9 @@ type animKey struct {
 	from string
 }
 
-// animReading is the state of one key when the list that said it was
-// heard.
-type animReading struct {
+// onOffReading is the state of one key when what said it was heard.  It
+// serves animations and sounds, which are judged alike (evalOnOff).
+type onOffReading struct {
 	at time.Time
 	on bool
 }
@@ -44,7 +44,7 @@ func (k animKey) text() string {
 type animWatch struct {
 	keys  []animKey // what an expectation of the test reads
 	froms []string  // the bindings an expectation names with from
-	reads map[animKey][]*animReading
+	reads map[animKey][]*onOffReading
 
 	shown map[string]bool // what the transcript has said is playing, by line
 	said  bool            // the first list has been said
@@ -53,7 +53,7 @@ type animWatch struct {
 // newAnimWatch reads the test's expanded steps for the animations they
 // name.
 func newAnimWatch(t *testRun) *animWatch {
-	a := &animWatch{reads: map[animKey][]*animReading{}, shown: map[string]bool{}}
+	a := &animWatch{reads: map[animKey][]*onOffReading{}, shown: map[string]bool{}}
 	seen := map[animKey]bool{}
 	for _, x := range t.et.Steps {
 		for i := range x.Step.Expect {
@@ -180,7 +180,7 @@ func (w *watcher) sample() {
 			}
 		}
 		if rs := a.reads[k]; known && (len(rs) == 0 || rs[len(rs)-1].on != on) {
-			a.reads[k] = append(rs, &animReading{at: heard, on: on})
+			a.reads[k] = append(rs, &onOffReading{at: heard, on: on})
 		}
 	}
 	// Every animation a named binding started, whether or not an
@@ -237,7 +237,13 @@ func (w *watcher) sample() {
 
 // animationExp is an animation expectation: the key and the state asked.
 type animationExp struct {
-	key   animKey
+	key animKey
+	onOffState
+}
+
+// onOffState is what an on/off expectation judges by: the word, the value
+// asked for, and what the judging has said and settled.
+type onOffState struct {
 	word  StateKind
 	on    bool
 	noted bool
@@ -253,7 +259,7 @@ func (s *stepRun) animationExpect(x *expState) error {
 			return err
 		}
 	}
-	ax := &animationExp{key: animKeyOf(e), word: e.State.Kind, on: e.On}
+	ax := &animationExp{key: animKeyOf(e), onOffState: onOffState{word: e.State.Kind, on: e.On}}
 	x.match = never
 	x.eval = func(ctx context.Context) error { return s.evalAnimation(x, ax) }
 	if !x.neg {
@@ -277,23 +283,40 @@ func animText(k animKey, on bool) string {
 	return k.text() + " not playing"
 }
 
-// evalAnimation judges the readings as evalState does: the baseline is the
+// evalAnimation judges the readings of an animation.
+func (s *stepRun) evalAnimation(x *expState, ax *animationExp) error {
+	return s.evalOnOff(x, &ax.onOffState, s.t.watch.an.reads[ax.key], onOffWords{
+		noun:    "animation",
+		label:   ax.key.text(),
+		reading: func(on bool) string { return animText(ax.key, on) },
+		change:  func(on bool) string { return ax.key.text() + map[bool]string{true: " started", false: " stopped"}[on] },
+	})
+}
+
+// onOffWords is how an on/off expectation says what it read.
+type onOffWords struct {
+	noun    string               // what is judged, for a failure's sentence
+	label   string               // the key, as a transcript line says it
+	reading func(on bool) string // a reading
+	change  func(on bool) string // a change from the reading before
+}
+
+// evalOnOff judges the readings as evalState does: the baseline is the
 // latest reading at or before the arm point, else the first after it, and
 // `becomes` needs the other value to come first.
 // Why: doc/slate-runner.md#state-words
-func (s *stepRun) evalAnimation(x *expState, ax *animationExp) error {
+func (s *stepRun) evalOnOff(x *expState, ax *onOffState, rs []*onOffReading, w onOffWords) error {
 	if x.neg && ax.final {
 		return nil
 	}
-	rs := s.t.watch.an.reads[ax.key]
-	var base *animReading
+	var base *onOffReading
 	for i := len(rs) - 1; i >= 0; i-- {
 		if !rs[i].at.After(s.arm) {
 			base = rs[i]
 			break
 		}
 	}
-	var after []*animReading
+	var after []*onOffReading
 	for _, r := range rs {
 		if r.at.After(s.arm) && !r.at.After(x.limit) {
 			after = append(after, r)
@@ -303,20 +326,20 @@ func (s *stepRun) evalAnimation(x *expState, ax *animationExp) error {
 	if base == nil && len(after) > 0 {
 		base, after, late = after[0], after[1:], true
 	}
-	var seq []*animReading
+	var seq []*onOffReading
 	if base != nil {
-		seq = append([]*animReading{base}, after...)
+		seq = append([]*onOffReading{base}, after...)
 	}
 	now := time.Now()
 	if late && ax.word != StateIs && !ax.noted {
 		ax.noted = true
 		ev := &event{kind: evReading, at: now, consumed: true,
-			text: fmt.Sprintf("baseline for %s taken after the arm point", ax.key.text())}
+			text: fmt.Sprintf("baseline for %s taken after the arm point", w.label)}
 		s.r.log.add(ev)
 		s.r.printEvent(ev)
 	}
 
-	var hit *animReading
+	var hit *onOffReading
 	switch {
 	case ax.word == StateChanges:
 		for _, r := range seq[min(1, len(seq)):] {
@@ -347,9 +370,9 @@ func (s *stepRun) evalAnimation(x *expState, ax *animationExp) error {
 	}
 	switch {
 	case hit != nil:
-		text := animText(ax.key, hit.on)
+		text := w.reading(hit.on)
 		if hit != base {
-			text = ax.key.text() + map[bool]string{true: " started", false: " stopped"}[hit.on]
+			text = w.change(hit.on)
 		}
 		x.ev = &event{kind: evReading, at: hit.at, text: text}
 		if x.neg {
@@ -363,7 +386,7 @@ func (s *stepRun) evalAnimation(x *expState, ax *animationExp) error {
 		ax.final = true
 		if len(seq) == 0 {
 			x.note = "; no reading was taken, and a negative needs one"
-			s.why = "a negative animation needs a real reading, and none was taken"
+			s.why = "a negative " + w.noun + " needs a real reading, and none was taken"
 			s.fail(1, "no reading")
 		}
 	}

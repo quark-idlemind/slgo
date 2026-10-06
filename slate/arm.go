@@ -39,6 +39,8 @@ type event struct {
 	text     string
 	to       string // the second avatar a dialog or an instant message came to; "" is the tester
 
+	snd *sl.HeardSound // evSound: the sound heard (sound.go)
+
 	wire wireMessage // evWire: the protocol line (bridge.go)
 	prim *probePrim  // evWire: the probe that said it, when a probe did
 }
@@ -117,6 +119,7 @@ func (r *runner) drain() error {
 		}
 	}
 	r.pollDialogs()
+	r.drainSounds()
 	return r.denyPermissions()
 }
 
