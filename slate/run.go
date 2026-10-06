@@ -561,13 +561,16 @@ func (r *runner) dropped() string {
 	return ""
 }
 
-// finish ends a test: an unconsumed hold is forgotten and reported, the
+// finish ends a test: offers and dialogs nobody answered are declined and
+// ignored (leave.go), an unconsumed hold is forgotten and reported, the
 // failure blocks are printed with it, what its drop steps changed is put
 // back and what its rez steps made is deleted (either that fails fails
 // the test), and the as bindings go with t.
 // Why: doc/slate-runner.md#dialog-hold
 func (t *testRun) finish(ctx context.Context) {
 	t.r.denyPermissions()
+	// Before dropHolds, which forgets the held dialogs without telling slgod.
+	t.leaveAsFound(ctx)
 	left := t.dropHolds()
 	for _, b := range t.blocks {
 		b.unanswered = left

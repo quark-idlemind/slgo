@@ -20,6 +20,7 @@ package sl
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -226,6 +227,24 @@ func (w *Session) ForgetDialog(d Dialog) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.forgetDialogLocked(d)
+}
+
+// IgnoreDialog is the viewer's Ignore button: the dialog is dropped
+// and nothing is sent, because the viewer sends nothing for it
+// (callback_script_dialog, llviewermessage.cpp: "Button -1 = Ignore - no
+// processing needed").  Unlike ForgetDialog it also tells slgod, which
+// otherwise keeps the dialog for UnansweredFor and lists it to the next
+// program that attaches.  A dialog somebody else has already dealt with
+// is gone all the same, and is not an error.
+// Why: doc/slate-language.md#the-tester-is-left-as-found
+func (w *Session) IgnoreDialog(ctx context.Context, d Dialog) error {
+	_, err := w.answering(ctx, d.key, "ignored")
+	var gone *AnsweredError
+	if err != nil && !errors.As(err, &gone) {
+		return err
+	}
+	w.ForgetDialog(d)
+	return nil
 }
 
 // forgetDialogLocked drops a dialog, answered or not.  Called with mu
