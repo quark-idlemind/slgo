@@ -2115,8 +2115,10 @@ the next owner may now copy, modify, transfer</span>
           once the list is empty. <code>no</code> declines and tells whoever asked
           — a lure, an offered item, friendship, a permission request, a
           group invitation. A dialog is the exception: there is no message
-          for its close box, so <code>no</code> drops it here and says
-          <code>a dialog cannot be declined, only left to expire</code>.
+          for its close box, so <code>no</code> is the viewer's Ignore. It
+          sends nothing to the grid, tells slgod so that every program stops
+          listing the dialog, and says so.
+          <code>ignore</code> only stops this shell counting it.
         </p>
 
         <h3>A text box wants several lines</h3>

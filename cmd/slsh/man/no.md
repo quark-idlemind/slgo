@@ -10,8 +10,12 @@ waiting.  `ignore` says nothing to anybody.
 
 A dialog is the exception, and it says so when it happens.  There is
 no way to refuse a blue menu -- it can be answered or left -- so `no`
-on a dialog or a text box drops it here and lets it expire where it
-was raised.
+on a dialog or a text box is the viewer's Ignore: nothing is sent to
+the grid, as the viewer sends nothing for Ignore, and the object's own
+listen is left to expire where it was raised.  slgod is told, so it
+stops listing the dialog to every program attached to the avatar, and
+`no` says so.  If slgod cannot be told, the error is printed and the
+dialog stays listed.
 
 A teleport request is the other exception.  Nothing can be sent to
 refuse one -- a viewer's No button sends nothing either, and the person

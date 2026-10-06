@@ -28,7 +28,8 @@ the way.
 **-a, --all**
 
 Include the things `ignore` has set aside.  Without it they are not
-listed and not counted at the prompt, which is what `ignore` is for.
+listed and not counted at the prompt, which is what `ignore` is for.  `ignore` is this shell's own note;
+`no` on a dialog is what stops slgod listing it to every program.
 If everything waiting has been ignored, the listing says so and points
 at `-a`.
 

@@ -275,3 +275,81 @@ func TestThePromptCountFollowsWhatArrivesAndWhatGoes(t *testing.T) {
 	}
 	becomes("(2) /$ ")
 }
+
+// keptDialogMsg is a script dialog as the daemon names it: off the wire,
+// under a key.
+func keptDialogMsg(t *testing.T, key string, channel int32, buttons ...string) *sl.Message {
+	t.Helper()
+	m := dialogFrom("a lamp", "on or off?", channel, buttons...)
+	body, err := m.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &sl.Message{ID: msg.IDOf(m), Name: "ScriptDialog", Body: body, At: time.Now(), Offer: key}
+}
+
+func dialogReplies(x *testShell) int {
+	n := 0
+	for _, m := range x.grid.Sent() {
+		if _, ok := m.(*msg.ScriptDialogReply); ok {
+			n++
+		}
+	}
+	return n
+}
+
+// TestNoToADialogIgnoresItForEveryClient: the viewer's Ignore sends
+// nothing, so the dialog stayed in slgod's list for every other client
+// for an hour.  It is told to the daemon instead, and nothing is sent.
+func TestNoToADialogIgnoresItForEveryClient(t *testing.T) {
+	x, k := newKeptShell(t, &sl.OfferRecord{Since: time.Now(), Limit: 100})
+	relayKept(t, x, k, keptDialogMsg(t, "dialog:3", -4300, "on", "off"))
+
+	got := x.do(t, "no 1")
+	for _, want := range []string{"ignored the dialog from [Object] a lamp", "nothing is sent", "slgod stops listing it for every program"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("no said %q, want %q in it", got, want)
+		}
+	}
+	if a := k.Asked(); len(a) != 1 || a[0] != "dialog:3 ignored" {
+		t.Errorf("the daemon was told %q", a)
+	}
+	if n := dialogReplies(x); n != 0 {
+		t.Errorf("%d replies went to the grid", n)
+	}
+	if got := x.do(t, "waiting"); !strings.Contains(got, "nothing waiting") {
+		t.Errorf("the dialog is still listed: %q", got)
+	}
+}
+
+// TestNoToATextBoxIgnoresItToo is the same for llTextBox.
+func TestNoToATextBoxIgnoresItToo(t *testing.T) {
+	x, k := newKeptShell(t, &sl.OfferRecord{Since: time.Now(), Limit: 100})
+	relayKept(t, x, k, keptDialogMsg(t, "dialog:4", -4301, "!!llTextBox!!"))
+
+	if got := x.do(t, "no 1"); !strings.Contains(got, "ignored the text box from [Object] a lamp") {
+		t.Errorf("no said %q", got)
+	}
+	if a := k.Asked(); len(a) != 1 || a[0] != "dialog:4 ignored" {
+		t.Errorf("the daemon was told %q", a)
+	}
+	if n := dialogReplies(x); n != 0 {
+		t.Errorf("%d replies went to the grid", n)
+	}
+}
+
+// TestIgnoreOnADialogStaysThisShellsOwn: ignore does not reach the daemon.
+func TestIgnoreOnADialogStaysThisShellsOwn(t *testing.T) {
+	x, k := newKeptShell(t, &sl.OfferRecord{Since: time.Now(), Limit: 100})
+	relayKept(t, x, k, keptDialogMsg(t, "dialog:5", -4302, "on", "off"))
+
+	if got := x.do(t, "ignore 1"); !strings.Contains(got, "still waiting") {
+		t.Errorf("ignore said %q", got)
+	}
+	if a := k.Asked(); len(a) != 0 {
+		t.Errorf("the daemon was told %q", a)
+	}
+	if got := x.do(t, "waiting -a"); !strings.Contains(got, "dialog") {
+		t.Errorf("an ignored dialog is not listed with -a: %q", got)
+	}
+}
