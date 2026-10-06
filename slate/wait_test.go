@@ -121,3 +121,64 @@ func TestAWaitDoesNotPrintAProtocolLineAsChat(t *testing.T) {
 	mustNotHave(t, res, "slate bridge")
 	mustNotHave(t, res, "ready")
 }
+
+// A step's expectations are armed when its wait returns: what changed
+// during the wait is the state the step starts from.
+// Why: doc/slate-language.md#steps-and-timing
+
+// settleGrid is a grid whose sign's glow goes from 0 to 128 200 ms after
+// "go" is said, well inside the 700 ms wait of the step after it.
+func settleGrid(t *testing.T) *fakeGrid {
+	f := newGrid(t)
+	f.whenSaid("go", func() { f.changeAfter(t, 200*time.Millisecond, signLocal, withGlow(0, 128)) })
+	return f
+}
+
+const settled = hdr + "say \"go\" on 0\nwait 700ms\n"
+
+func TestAnIsAfterAWaitDoesNotPassOnTheReadingFromBeforeIt(t *testing.T) {
+	res := play(t, settleGrid(t), settled+"expect glow sign face 0 is 0 within 1s\n")
+	wantExit(t, res, 1)
+	res = play(t, settleGrid(t), settled+"expect glow sign face 0 is 0.5 within 1s\n")
+	wantExit(t, res, 0)
+}
+
+func TestIsAnyAfterAWaitBindsTheReadingAtItsEnd(t *testing.T) {
+	res := play(t, settleGrid(t), settled+"expect glow sign face 0 is any within 1s as $g\n")
+	wantExit(t, res, 0)
+	mustHave(t, res, "capture $g = 0.502")
+}
+
+func TestBecomesAndChangesAfterAWaitCompareWithTheReadingAtItsEnd(t *testing.T) {
+	// The change happened during the wait, so nothing changes after it.
+	wantExit(t, play(t, settleGrid(t), settled+"expect glow sign face 0 changes within 1s\n"), 1)
+	wantExit(t, play(t, settleGrid(t), settled+"expect glow sign face 0 becomes 0.5 within 1s\n"), 1)
+	// A change after the wait is one.
+	f := settleGrid(t)
+	f.whenSaid("go", func() { f.changeAfter(t, 900*time.Millisecond, signLocal, withGlow(0, 255)) })
+	wantExit(t, play(t, f, settled+"expect glow sign face 0 becomes 1 within 1s\n"), 0)
+}
+
+func TestWhatWasSaidDuringAWaitIsNotWhatItsStepExpects(t *testing.T) {
+	f := newGrid(t)
+	f.whenSaid("go", func() {
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			f.relay(chatMsg("Example Sign", idSign, sl.ChatSay, "early"))
+		}()
+	})
+	wantExit(t, play(t, f, hdr+"say \"go\" on 0\nwait 500ms\nexpect say \"early\" on public from object sign within 1s\n"), 1)
+}
+
+// A stimulus whose effect is the point arms before it is sent: a product
+// that answers at once is not missed.
+func TestATouchAndAFaceDragStillSeeAnAnswerThatComesAtOnce(t *testing.T) {
+	for _, step := range []string{
+		"touch sign face 0",
+		"drag sign face 0 from 0.1 0.5 to 0.9 0.5 over 100ms",
+	} {
+		f := newGrid(t)
+		f.onGrab(signLocal, func() { f.change(signLocal, withGlow(0, 128)) })
+		wantExit(t, play(t, f, hdr+step+"\nexpect glow sign face 0 becomes 0.5 within 1s\n"), 0)
+	}
+}

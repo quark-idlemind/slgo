@@ -41,7 +41,7 @@ func (s *stepRun) sitStimulus(st *Sit) (*stimulus, error) {
 }
 
 // waitStimulus sends nothing for d, as a blocking stimulus: the step's
-// expectations start when it returns. It hears meanwhile as every other
+// expectations are armed when it returns (armOnReturn). It hears meanwhile as every other
 // wait of the runner does: each line, dialog and permission request that
 // comes is taken in and printed when it comes, not when the wait ends, so
 // a long wait neither shows a burst late nor overflows the chat
@@ -49,7 +49,8 @@ func (s *stepRun) sitStimulus(st *Sit) (*stimulus, error) {
 // Why: doc/slate-language.md#wait
 func (s *stepRun) waitStimulus(d time.Duration) *stimulus {
 	return &stimulus{
-		blocking: true,
+		blocking:    true,
+		armOnReturn: true,
 		send: func(ctx context.Context, budget time.Duration) (string, error) {
 			until := time.Now().Add(d)
 			for {
