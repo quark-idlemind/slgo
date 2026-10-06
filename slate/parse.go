@@ -470,7 +470,7 @@ func (p *parser) startsStimulus() bool {
 		return false
 	}
 	switch p.tok.text {
-	case "touch", "drag", "say", "pay", "sit", "stand", "choose", "answer", "send", "wear", "rez", "take", "wait", "drop", "group":
+	case "touch", "drag", "say", "pay", "sit", "stand", "choose", "answer", "send", "wear", "rez", "take", "delete", "wait", "drop", "group":
 		return true
 	default:
 		return false
@@ -559,6 +559,8 @@ func (p *parser) stimulus() (*Stimulus, error) {
 		s.Rez, err = p.rezItem()
 	case "take":
 		s.TakeOff, err = p.takeOff()
+	case "delete":
+		s.Delete, err = p.deleteObj()
 	case "drop":
 		s.Drop, err = p.drop()
 	case "group":
@@ -2567,6 +2569,18 @@ func (p *parser) takeOff() (*TakeOff, error) {
 		return nil, err
 	}
 	return &TakeOff{Name: name}, nil
+}
+
+// deleteObj reads delete binding.
+func (p *parser) deleteObj() (*Delete, error) {
+	if err := p.want("delete"); err != nil {
+		return nil, err
+	}
+	name, err := p.ident()
+	if err != nil {
+		return nil, err
+	}
+	return &Delete{Name: name}, nil
 }
 
 // drop reads drop ident (into | onto) binding link? and, for onto, face

@@ -1107,18 +1107,21 @@ Each is reported and each makes the run fail:
     the land doesn't run this ...        will not run where it is
 
 The compiler's line and column **count from zero** -- measured, a bad
-token on the fifth line of a script reports line 4 -- but `sl` sends
-every script with a newline in front of it, so the numbers you see here
-are one higher than that and land on the line your editor shows. `(3,
-4)` is the fourth line of your file.
+token on the fifth line of a script reports line 4 -- and `sl` sends the
+script exactly as you wrote it and shows the compiler's numbers
+unchanged, as a viewer does (it moves its cursor to that row, counted
+from zero). `(3, 4)` is the fourth line of your file, counting the first
+as line 0.
 
-The newline is there for a different reason. An upload sometimes reaches
-Second Life's compiler EMPTY, and the compiler says the same thing about
-that as about a script wrong at its very first character: `(0, 0) :
-ERROR : Syntax error`. With a newline in front, nothing we send has
-anything on line 0, so `(0, 0)` can only be an upload that went missing
--- and one that did is simply sent again. Measured on thirty scripts at
-once: three runs in eight failed that way before, none in eight after.
+An upload sometimes reaches Second Life's compiler EMPTY, and the
+compiler says the same thing about that as about a script wrong at its
+very first character: `(0, 0) : ERROR : Syntax error`. So when every
+error of an answer is `(0, 0)`, `sl` sends the script once more and
+reports the second answer. A script that really is wrong at its start
+costs one extra upload and gets the same answer. Measured on thirty
+scripts at once, with a newline put in front of each so that `(0, 0)`
+could only mean a missing upload: three runs in eight failed that way
+before the retry, none in eight after.
 
 The last is said as soon as the script has compiled, without waiting
 for the timeout: the region is running no scripts, or the object is

@@ -506,10 +506,9 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 	if !res.Compiled {
 		// The rest of what the capability said, when it said anything.
 		// "(0, 0) : ERROR : Syntax error" here is an upload that reached
-		// the compiler empty even when sl asked again -- sl puts a
-		// newline in front of every script, so nothing of the caller's
-		// is on line 0 -- and the rest of the answer is the only place
-		// its reason could be.
+		// the compiler empty even when sl asked again, or a script wrong
+		// at its first character -- the compiler says the same of both --
+		// and the rest of the answer is the only place its reason could be.
 		if res.State != "" && res.State != "complete" {
 			say("%sthe upload came back %q\n", tag(path), res.State)
 		}

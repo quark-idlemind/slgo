@@ -518,9 +518,21 @@ Measured, because a retry was nearly built on the opposite belief:
 	a bad token on the FIFTH line            (4, 10) : ERROR : Syntax error
 
 So `(0, 0)` is a real position, and an empty body is **indistinguishable**
-from a syntax error on the first character. Nothing may read `(0, 0)` as
-"the upload was empty" and ask again: for somebody whose script really is
-wrong at its start, that is a second upload and the same answer.
+from a syntax error on the first character. So `(0, 0)` does not prove the
+upload was empty, and `sl` does not claim it: it sends the source once
+more as given, when every error of an answer is `(0, 0)`, and reports the
+second answer. Somebody whose script really is wrong at its start pays
+one extra upload and gets the same answer. (An earlier version put a
+newline in front of every script to tell the two apart; the newline was
+stored, so a script saved by `sl` was not the text written.)
+
+Measured on 2026-10-06 with the test avatar and an invented box, after the
+change: a script saved with `slsh new --in` read back with `slsh cat --in`
+byte for byte, for a script whose first line is code, one with an error on
+its third line and one wrong at its first character; three rounds of cat
+then save left it unchanged; the third-line error read `(2, 24)` and the
+first-character one `(0, 0)`. An empty source going up as one space was
+not measured: `slsh new` gives an empty file the default script instead.
 
 Also measured while looking for a way to force an error at the start:
 `$` and `#` both COMPILE there, and `$` compiles inside `state_entry`
