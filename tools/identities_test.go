@@ -443,17 +443,52 @@ func TestTheListHoldsFiveSparesOfEachKind(t *testing.T) {
 	}
 }
 
+// probeInCheckout writes b to a file called name in a directory of its
+// own at the top of the checkout and returns the path relative to the
+// checkout, which is what check-identities reads (it refuses a file
+// outside it).  The directory is made for this call and removed after it,
+// so two runs in one checkout never share a probe, and its name starts
+// with "_" so that Go does not look inside it.
+func probeInCheckout(t *testing.T, name string, b []byte) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("..", "_probe-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(filepath.Base(dir), name)
+}
+
+// TestNoTestWritesAFixedFileInTheCheckout: a file a test writes at a path
+// that is the same for every run is shared by two runs in one checkout,
+// and is a stray file in the root while it exists.  A probe goes through
+// probeInCheckout.
+func TestNoTestWritesAFixedFileInTheCheckout(t *testing.T) {
+	files, err := filepath.Glob("*_test.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, l := range strings.Split(string(b), "\n") {
+			if strings.Contains(l, "os.WriteFile(filepath.Join(\"..\"") {
+				t.Errorf("%s:%d writes a fixed path in the checkout: use probeInCheckout", f, i+1)
+			}
+		}
+	}
+}
+
 // TestCheckIdentitiesRefusesAnUnlistedName runs the whole check, as a
 // commit would, over a file that names something not on the list.
 func TestCheckIdentitiesRefusesAnUnlistedName(t *testing.T) {
 	needPerl(t)
-	// check-identities reads files inside the checkout, so the probe is
-	// made at its top and removed again.
-	probe := "zz_names_probe.go"
-	if err := os.WriteFile(filepath.Join("..", probe), []byte("var g = Group{Name: \""+strange+"\"}\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(filepath.Join("..", probe))
+	probe := probeInCheckout(t, "names_probe.go", []byte("var g = Group{Name: \""+strange+"\"}\n"))
 	cmd := exec.Command("sh", "tools/check-identities", probe)
 	cmd.Dir = ".."
 	cmd.Env = append(os.Environ(), "SLGO_IDENTITIES=/nonexistent")
@@ -650,11 +685,7 @@ func TestScanImagesRefusesMetadata(t *testing.T) {
 // commit would, over an image that carries a text chunk.
 func TestCheckIdentitiesRefusesAnImageWithMetadata(t *testing.T) {
 	needPerl(t)
-	probe := "zz_image_probe.png"
-	if err := os.WriteFile(filepath.Join("..", probe), pngWith(t, "tEXt", []byte("Software\x00Example Software /example/path")), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(filepath.Join("..", probe))
+	probe := probeInCheckout(t, "image_probe.png", pngWith(t, "tEXt", []byte("Software\x00Example Software /example/path")))
 	cmd := exec.Command("sh", "tools/check-identities", probe)
 	cmd.Dir = ".."
 	cmd.Env = append(os.Environ(), "SLGO_IDENTITIES=/nonexistent")
@@ -668,11 +699,7 @@ func TestCheckIdentitiesRefusesAnImageWithMetadata(t *testing.T) {
 // image is checked, not skipped as having no text, and one Go wrote passes.
 func TestCheckIdentitiesPassesACleanImageOnItsOwn(t *testing.T) {
 	needPerl(t)
-	probe := "zz_clean_image_probe.png"
-	if err := os.WriteFile(filepath.Join("..", probe), encoded(t, func(w *bytes.Buffer) error { return png.Encode(w, smallImage()) }), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(filepath.Join("..", probe))
+	probe := probeInCheckout(t, "clean_image_probe.png", encoded(t, func(w *bytes.Buffer) error { return png.Encode(w, smallImage()) }))
 	cmd := exec.Command("sh", "tools/check-identities", probe)
 	cmd.Dir = ".."
 	cmd.Env = append(os.Environ(), "SLGO_IDENTITIES=/nonexistent")
