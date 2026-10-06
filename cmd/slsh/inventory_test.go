@@ -499,9 +499,10 @@ func TestCatPullsTheTextOutOfTheContainer(t *testing.T) {
 		t.Errorf("cat printed %q, want %q", got, want)
 	}
 
-	// A script is not in a container and is printed as it stands.
+	// A script is not in a container and is printed as it stands, to a
+	// pipe, which a test's terminal is.
 	serveAsset(t, x, "default { state_entry() { } }\n\n", false)
-	if got, want := x.do(t, "cat /Scripts/probe"), "default { state_entry() { } }\n"; got != want {
+	if got, want := x.do(t, "cat /Scripts/probe"), "default { state_entry() { } }\n\n"; got != want {
 		t.Errorf("cat of a script printed %q, want %q", got, want)
 	}
 
@@ -533,7 +534,7 @@ func TestCatSaysWhoRefusedIt(t *testing.T) {
 		t.Errorf("cat under a folder that is not there printed %q", got)
 	}
 	for _, line := range []string{"cat", "cat one two"} {
-		if got := x.do(t, line); !strings.Contains(got, "usage: cat [--in OBJECT] PATH") {
+		if got := x.do(t, line); !strings.Contains(got, "usage: cat [--in OBJECT] [-o FILE] PATH") {
 			t.Errorf("%q printed %q", line, got)
 		}
 	}
@@ -1190,7 +1191,7 @@ func TestAnIdNamesOneThingWhereverItIs(t *testing.T) {
 		t.Errorf("cat by id printed %q, want %q", got, want)
 	}
 	// And two folders down, which costs a listing from the root to find.
-	if got, want := x.do(t, "cat "+testProbe.String()), "the script\n"; got != want {
+	if got, want := x.do(t, "cat "+testProbe.String()), "the script"; got != want {
 		t.Errorf("cat by an id further down printed %q, want %q", got, want)
 	}
 

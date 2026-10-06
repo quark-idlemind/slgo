@@ -764,6 +764,21 @@ func (w *termWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// writeExact writes s as it is, with nothing made visible and no line
+// folded, for the text of a script or a notecard going to something that
+// is not a terminal.  The transcript keeps the visible form, so the
+// file says what a screen would have.
+func (w *termWriter) writeExact(s string) {
+	w.t.mu.Lock()
+	if !w.t.closed {
+		io.WriteString(w.t.out, s)
+	}
+	w.t.mu.Unlock()
+	for _, line := range strings.Split(strings.TrimSuffix(visible(s), "\n"), "\n") {
+		w.log.line("  " + line)
+	}
+}
+
 // say puts one line on the screen and the same line in the transcript.
 // Indented there, so that a command's output can be told from the
 // command, from what was heard and from what was said.

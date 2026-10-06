@@ -23,6 +23,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -738,6 +739,7 @@ func catReadable(e sl.Entry) error {
 
 type catOptions struct {
 	In   string `getopt:"--in=OBJECT  read it from inside a rezzed object, not from inventory"`
+	Out  string `getopt:"--out -o=FILE  write the exact text here, whatever the terminal is"`
 	Help bool   `getopt:"--help -h    show what this command takes"`
 }
 
@@ -751,7 +753,7 @@ func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		return usageError("cat")
 	}
 	if o.In != "" {
-		return sh.catInside(ctx, out, o.In, args[0])
+		return sh.catInside(ctx, out, o, args[0])
 	}
 	// thingAt: what is read is the asset at the other end of a link,
 	// the way double-clicking a notecard link opens the notecard.
@@ -771,8 +773,7 @@ func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 			(e.Owner == sh.s.Me() && e.OwnerMask&sl.PermCopy != 0)
 		return whyNotRead(err, e.Name, sl.AssetType(e.Type), mayCopy)
 	}
-	printText(out, sl.AssetType(e.Type), b)
-	return nil
+	return sh.printText(out, o.Out, sl.AssetType(e.Type), b)
 }
 
 // catInside prints a notecard or a script from inside an object.
@@ -783,8 +784,8 @@ func cmdCat(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 // reading.  It is asked for through the object, which is how the
 // simulator decides whether this avatar may see it -- a script without
 // modify rights for us is refused there, not here.
-func (sh *Shell) catInside(ctx context.Context, out io.Writer, what, name string) error {
-	obj, err := sh.insideObject(ctx, what, 0)
+func (sh *Shell) catInside(ctx context.Context, out io.Writer, o catOptions, name string) error {
+	obj, err := sh.insideObject(ctx, o.In, 0)
 	if err != nil {
 		return err
 	}
@@ -809,8 +810,7 @@ func (sh *Shell) catInside(ctx context.Context, out io.Writer, what, name string
 			(it.OwnerID == sh.s.Me() && it.OwnerMask&sl.PermCopy != 0)
 		return whyNotRead(err, it.Name, t, mayCopy)
 	}
-	printText(out, t, b)
-	return nil
+	return sh.printText(out, o.Out, t, b)
 }
 
 // whyNotRead says why the region would not hand over a notecard, when
@@ -833,16 +833,96 @@ func whyNotRead(err error, name string, t sl.AssetType, mayCopy bool) error {
 		name, err)
 }
 
-// printText prints what cat read: a notecard without its wrapper, and a
-// script as it is.
-func printText(out io.Writer, t sl.AssetType, b []byte) {
+// printText gives what cat read: the text of a notecard or a script,
+// to a file when asked, as it is when it goes to a pipe or a file, and
+// in caret form, with a warning, on a terminal.
+//
+// The asset's one terminating NUL is not part of the text: a viewer
+// reads up to it and puts one of its own after what it read, and writes
+// a script back without one (Firestorm 885631b93a, llpreviewscript.cpp:
+// LLPreviewLSL::onLoadComplete 2638-2646 and LLLiveLSLEditor::loadScriptText
+// 2995-3011 read the asset's bytes into a buffer one longer and end it with
+// 0; LLScriptEdCore::writeToFile 1122-1151 writes the editor's text with
+// fputs, which adds none; llpreviewnotecard.cpp:524-542 reads a notecard
+// the same way).  A script printed with the NUL ended in a line "^@".
+//
+// Why the text is not shown in caret form when it is data: doc/slsh.md#why-cat-gives-the-text-as-it-is
+func (sh *Shell) printText(out io.Writer, file string, t sl.AssetType, b []byte) error {
+	b = bytes.TrimSuffix(b, []byte{0})
+	exact := string(b)
 	if t == sl.AssetNotecard {
-		if text, ok := notecardText(b); ok {
-			fmt.Fprintln(out, text)
-			return
+		if text, ok := notecardBody(b); ok {
+			exact = text
 		}
 	}
-	fmt.Fprintln(out, strings.TrimRight(string(b), "\n"))
+	// What goes to a pipe: a script as it is, and a notecard the way
+	// cat has always printed one, with its trailing newlines made one.
+	// Only the control characters in the body were at issue.
+	data := exact
+	if t == sl.AssetNotecard {
+		data = strings.TrimRight(exact, "\n") + "\n"
+	}
+	if file != "" {
+		if err := os.WriteFile(file, []byte(exact), 0o644); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "%s: %d bytes\n", file, len(exact))
+		return nil
+	}
+	if sh.textIsData(out) {
+		return writeExact(out, data)
+	}
+	shown := strings.TrimRight(exact, "\n")
+	fmt.Fprintln(out, shown)
+	if visible(shown) != shown {
+		fmt.Fprintln(out, "(control characters are shown in caret form, ^? for DEL and ^M for CR; "+
+			"\"cat -o FILE\" writes the exact text)")
+	}
+	return nil
+}
+
+// textIsData says whether the text cat is giving goes somewhere that
+// takes its bytes as they are: a file, or the shell's own output when
+// that is not a terminal ("slsh -c 'cat x' > x.lsl").
+//
+// Only cat asks.  Chat, names and listings printed to a pipe are still
+// somebody else's words and stay through visible whatever they go to;
+// a script or a notecard is the one output that is a document, whose
+// bytes are the point.
+func (sh *Shell) textIsData(out io.Writer) bool {
+	w, ok := out.(*termWriter)
+	return !ok || !w.t.screen
+}
+
+// writeExact writes s to out as it is.  The shell's own output, when it
+// is not a terminal, takes it past the filter that Print is.
+func writeExact(out io.Writer, s string) error {
+	if w, ok := out.(*termWriter); ok {
+		w.writeExact(s)
+		return nil
+	}
+	_, err := io.WriteString(out, s)
+	return err
+}
+
+// notecardBody is the text of a notecard, exactly: the container says
+// how many bytes it is, and what follows is that many, with whatever
+// they hold.  Without a length that fits, it is what notecardText finds.
+func notecardBody(b []byte) (string, bool) {
+	s := string(b)
+	i := strings.Index(s, "Text length ")
+	if i < 0 {
+		return "", false
+	}
+	rest := s[i+len("Text length "):]
+	j := strings.IndexByte(rest, '\n')
+	if j < 0 {
+		return "", false
+	}
+	if n, err := strconv.Atoi(strings.TrimSpace(rest[:j])); err == nil && n >= 0 && j+1+n <= len(rest) {
+		return rest[j+1 : j+1+n], true
+	}
+	return notecardText(b)
 }
 
 // notecardText pulls the text out of the notecard container.
