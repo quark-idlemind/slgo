@@ -84,21 +84,19 @@ type Result struct {
 	// complaints, of which there is at most one: the compiler reports
 	// the first error and stops.
 	//
-	// The line and column in one count from zero -- measured, a bad
-	// token on the fifth line reports line 4 -- but this package sends
-	// every script with a newline in front of it, so the numbers a
-	// CALLER sees are one higher than the offsets in what it handed
-	// over.  Which is to say they match what an editor shows.  See
-	// leadingNewline for why the newline is there, and it is not for
-	// this.
+	// The line and column are the compiler's own, unchanged, and count
+	// from zero -- measured, a bad token on the fifth line reports line
+	// 4.  The script is sent as given, so they are offsets into what the
+	// caller handed over; the viewer shows the same text and puts its
+	// cursor on that 0-based row (llpreviewscript.cpp, onErrorList).
 	Compiled bool
 	Errors   []string
 
 	// State and Message are the rest of what the capability said, kept
 	// for the times the errors alone do not explain themselves.  An
-	// upload that reached the compiler empty is not one of those: with
-	// the newline in front, "(0, 0) : ERROR : Syntax error" can mean
-	// nothing else, and it is sent again once (see leadingNewline).
+	// upload that reached the compiler empty is not one of those:
+	// "(0, 0) : ERROR : Syntax error" is sent again once (see install),
+	// and the second answer is the one reported.
 	State   string
 	Message string
 
@@ -581,9 +579,9 @@ func (w *Session) onScriptRunning(fn func(object, item msg.UUID, running bool)) 
 // UpdateScriptTask, which compiles it inside the object and starts it,
 // and is the same call Run makes -- which is why running a script always
 // worked while installing a listener never did.  It goes up as Run's
-// does, with a newline in front (see leadingNewline): the compiler's
-// line numbers are one higher than offsets into source, and an upload
-// that reached the compiler empty is sent again, once.
+// does, with the source exactly as given: the compiler's line numbers
+// are offsets into it, and an answer of "(0, 0)" is sent again, once
+// (see install).
 //
 // Reusing the name replaces that script rather than adding another: an
 // object keeps every copy it is given and renames the newcomer.
@@ -642,41 +640,20 @@ func (w *Session) InstallScript(ctx context.Context, o *Object, name, source str
 	return up, nil
 }
 
-// leadingNewline is put in front of every script this package installs,
-// and it is not decoration.
-//
-// The compiler counts lines from zero and answers an EMPTY upload with
-// "(0, 0) : ERROR : Syntax error" -- the same thing it says about a real
-// script that is wrong at its very first character.  Measured, both.
-// That mattered because an upload sometimes reaches Second Life's
-// compiler empty: the body leaves here whole, goes to an uploader URL
-// nothing else is using, and the capability answers that it COMPLETED
-// and made an asset, and the asset compiles as nothing.
-//
-// With a newline in front, nothing this package sends has anything on
-// line 0, so:
-//
-//	123 456        -> (0, 0) : ERROR : Syntax error
-//	\n123 456      -> (1, 0) : ERROR : Syntax error
-//
-// and "(0, 0)" can only mean the body never arrived.  Measured, both of
-// those, which is what makes install able to ask again without ever
-// hiding a caller's own mistake.
-//
-// It costs the caller's line numbers being one higher than the offsets
-// in their file -- which is to say the numbers now match what an editor
-// shows, since editors count from one.  See Result.Errors.
-const leadingNewline = "\n"
-
-// emptyUpload is the compiler's answer to a body that did not arrive.
-// It cannot be anything else; see leadingNewline.
+// emptyUpload is the compiler's answer to a body that did not arrive,
+// and also to a script that is wrong at its very first character:
+// measured, both say it.  An upload is sent again on it, once.
+// Why: doc/slots.md#the-compilers-line-numbers-count-from-zero
 const emptyUpload = "(0, 0)"
 
-// install puts a script into an object, asking a second time when the
-// upload plainly arrived empty.
+// install puts a script into an object, sending the source as given and
+// asking a second time when the answer is "(0, 0)" throughout.
 //
-// Once.  A second empty answer is worth reporting rather than chasing:
-// what it would mean is not the hiccup this is for.
+// That answer is an upload that arrived empty, or a script wrong at its
+// first character; they cannot be told apart, so it is asked twice and
+// the second answer is reported.  A caller's own mistake costs one
+// extra upload and is not hidden.  Once: a second "(0, 0)" is worth
+// reporting rather than chasing.
 func (w *Session) install(ctx context.Context, item, object msg.UUID, source string, running bool) (*UploadResult, error) {
 	send := func() (*UploadResult, error) {
 		return w.upload(ctx, "UpdateScriptTask", map[string]any{
@@ -684,16 +661,25 @@ func (w *Session) install(ctx context.Context, item, object msg.UUID, source str
 			"task_id":           object.String(),
 			"is_script_running": running,
 			"target":            "mono",
-		}, []byte(leadingNewline+source))
+		}, scriptBody(source))
 	}
 
 	up, err := send()
 	if err != nil || up.Compiled || !arrivedEmpty(up) {
 		return up, err
 	}
-	// Nothing of the caller's was on the line the compiler is
-	// complaining about, so this is not their script being wrong.
 	return send()
+}
+
+// scriptBody is what goes up for a script's source: the text as given,
+// except that an empty one is a single space, as the viewer does
+// (LLScriptEdCore::writeToFile: "a completely empty script - stuff in
+// one space so it can store properly", SL-46889).
+func scriptBody(source string) []byte {
+	if source == "" {
+		return []byte(" ")
+	}
+	return []byte(source)
 }
 
 // arrivedEmpty is whether the compiler was handed nothing.

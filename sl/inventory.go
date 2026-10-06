@@ -203,16 +203,15 @@ type UploadResult struct {
 	//
 	// The two numbers are the line and the column and BOTH COUNT FROM
 	// ZERO.  Measured: a bad token on the fifth line of a script is
-	// reported as line 4.  It is worth knowing before writing anything
-	// that acts on the numbers, and worth knowing for a second reason:
+	// reported as line 4.  They are the compiler's, not adjusted: the
+	// viewer shows them unchanged and moves its cursor to that row.
 	//
 	// An EMPTY upload -- a body that did not arrive -- comes back as
 	// "(0, 0) : ERROR : Syntax error", and so does a real syntax error
 	// on the first character of a real script.  Measured, both, and they
-	// are indistinguishable.  So nothing here may treat (0, 0) as
-	// evidence that the upload was empty and ask again: for the person
-	// whose script has a typo in its first line, that would be a second
-	// upload and the same answer.
+	// are indistinguishable.  So (0, 0) is not evidence of anything by
+	// itself: InstallScript and Run send such an upload once more, and
+	// report the second answer, which for a real mistake is the same.
 	Errors []string
 
 	Body []byte
@@ -339,7 +338,7 @@ func (w *Session) SaveScript(ctx context.Context, item msg.UUID, source string) 
 	return w.upload(ctx, "UpdateScriptAgent", map[string]any{
 		"item_id": item.String(),
 		"target":  "mono",
-	}, []byte(source))
+	}, scriptBody(source))
 }
 
 // SaveNotecard writes a notecard in agent inventory.

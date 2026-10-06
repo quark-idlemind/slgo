@@ -173,10 +173,8 @@ func TestRunListensBeforeItCompiles(t *testing.T) {
 		!strings.Contains(got, thePrim.String()) || !strings.Contains(got, "mono") {
 		t.Errorf("the capability was asked %q", got)
 	}
-	// With a newline in front of it, which is what makes an upload that
-	// arrived empty tell itself apart from a script that is wrong at its
-	// first character.  See leadingNewline.
-	if got := string(<-up.body); got != "\ndefault {}" {
+	// Exactly the source, nothing in front of it.
+	if got := string(<-up.body); got != "default {}" {
 		t.Errorf("uploaded %q", got)
 	}
 
@@ -534,8 +532,8 @@ func TestInstallScriptIsTheHalfThatCompiles(t *testing.T) {
 	if got := string(<-up.asked); !strings.Contains(got, theChild.String()) {
 		t.Errorf("the capability was asked %q, want the item inside the object", got)
 	}
-	// With the newline in front that Run sends; see leadingNewline.
-	if got := string(<-up.body); got != "\ndefault {}" {
+	// Exactly the source, as Run sends it.
+	if got := string(<-up.body); got != "default {}" {
 		t.Errorf("uploaded %q", got)
 	}
 	res, err := wait()
@@ -547,8 +545,8 @@ func TestInstallScriptIsTheHalfThatCompiles(t *testing.T) {
 	}
 }
 
-// TestInstallScriptSendsAnEmptyUploadAgain, as Run does: with the
-// newline in front, "(0, 0)" can only be an upload that arrived empty.
+// TestInstallScriptSendsAnEmptyUploadAgain, as Run does: "(0, 0)" may be
+// an upload that arrived empty, and is sent once more.
 func TestInstallScriptSendsAnEmptyUploadAgain(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
@@ -1582,9 +1580,8 @@ func TestTheEventQueueEndingIsNotTheSessionEnding(t *testing.T) {
 // and the capability answers that it completed and made an asset that
 // compiles as nothing.  Three runs in eight of thirty scripts hit it.
 //
-// It is worth asking again exactly because it cannot be the caller's
-// fault: every script goes out with a newline in front, so nothing of
-// theirs is on the line the compiler names.
+// The answer is "(0, 0)", which a script wrong at its first character
+// gets as well, so the source is sent again exactly as given.
 func TestAnUploadThatArrivedEmptyIsSentAgain(t *testing.T) {
 	w, f := newFakeSession(t)
 	var tries atomic.Int32
@@ -1598,10 +1595,9 @@ func TestAnUploadThatArrivedEmptyIsSentAgain(t *testing.T) {
 		return 200, `<llsd><map><key>state</key><string>complete</string>` +
 			`<key>compiled</key><boolean>1</boolean></map></llsd>`
 	})
-	_ = up
 
-	res, err := w.install(context.Background(), msg.UUID{15: 1}, msg.UUID{15: 2},
-		"default { state_entry() {} }", true)
+	const src = "default { state_entry() {} }"
+	res, err := w.install(context.Background(), msg.UUID{15: 1}, msg.UUID{15: 2}, src, true)
 	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
@@ -1611,22 +1607,30 @@ func TestAnUploadThatArrivedEmptyIsSentAgain(t *testing.T) {
 	if got := tries.Load(); got != 2 {
 		t.Errorf("the script was uploaded %d times, want the empty one and one more", got)
 	}
+	for i := 0; i < 2; i++ {
+		select {
+		case got := <-up.body:
+			if string(got) != src {
+				t.Errorf("upload %d was %q, want the source as given", i+1, got)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("upload %d never reached the server", i+1)
+		}
+	}
 }
 
-// TestAScriptWrongAtItsFirstCharacterIsNotSentAgain: the newline in
-// front is what makes this distinguishable.  Without it the compiler
-// says "(0, 0)" about a caller's own mistake as well, and asking again
-// would cost an upload and answer the same thing.
-func TestAScriptWrongAtItsFirstCharacterIsNotSentAgain(t *testing.T) {
+// TestAScriptWrongAtItsFirstCharacterIsSentOnceMoreAndReported: the
+// compiler says "(0, 0)" about it as it does about an empty upload, so
+// it is asked twice -- and the second answer, the same, is the one the
+// caller gets, with the compiler's own numbers.
+func TestAScriptWrongAtItsFirstCharacterIsSentOnceMoreAndReported(t *testing.T) {
 	w, f := newFakeSession(t)
 	var tries atomic.Int32
 	serveUpload(t, f, "UpdateScriptTask", func() (int, string) {
 		tries.Add(1)
-		// Line ONE, because the newline this package adds pushed the
-		// caller's first line down.
 		return 200, `<llsd><map><key>state</key><string>complete</string>` +
 			`<key>compiled</key><boolean>0</boolean>` +
-			`<key>errors</key><array><string>(1, 0) : ERROR : Syntax error` +
+			`<key>errors</key><array><string>(0, 0) : ERROR : Syntax error` +
 			`</string></array></map></llsd>`
 	})
 
@@ -1638,33 +1642,80 @@ func TestAScriptWrongAtItsFirstCharacterIsNotSentAgain(t *testing.T) {
 	if res.Compiled {
 		t.Fatal("a script that will not compile was reported as having")
 	}
-	if got := tries.Load(); got != 1 {
-		t.Errorf("a caller's own mistake was uploaded %d times", got)
+	if len(res.Errors) != 1 || res.Errors[0] != "(0, 0) : ERROR : Syntax error" {
+		t.Errorf("errors = %q, want the compiler's own", res.Errors)
+	}
+	if got := tries.Load(); got != 2 {
+		t.Errorf("a caller's own mistake was uploaded %d times, want 2", got)
 	}
 }
 
-// TestTheScriptGoesOutWithANewlineInFrontOfIt: the whole of the above
-// rests on it, and it is one character that nothing else would notice
-// going missing.
-func TestTheScriptGoesOutWithANewlineInFrontOfIt(t *testing.T) {
+// TestAnErrorOnALaterLineIsNotSentAgainAndIsNotShifted: the numbers are
+// the compiler's, 0-based, and only an all-"(0, 0)" answer is repeated.
+func TestAnErrorOnALaterLineIsNotSentAgainAndIsNotShifted(t *testing.T) {
 	w, f := newFakeSession(t)
-	up := serveUpload(t, f, "UpdateScriptTask", func() (int, string) {
+	var tries atomic.Int32
+	serveUpload(t, f, "UpdateScriptTask", func() (int, string) {
+		tries.Add(1)
 		return 200, `<llsd><map><key>state</key><string>complete</string>` +
-			`<key>compiled</key><boolean>1</boolean></map></llsd>`
+			`<key>compiled</key><boolean>0</boolean>` +
+			`<key>errors</key><array><string>(2, 4) : ERROR : Syntax error` +
+			`</string></array></map></llsd>`
 	})
-
-	const src = "default { state_entry() {} }"
-	if _, err := w.install(context.Background(), msg.UUID{15: 1}, msg.UUID{15: 2},
-		src, true); err != nil {
+	res, err := w.install(context.Background(), msg.UUID{15: 1}, msg.UUID{15: 2},
+		"default {\n  state_entry() {\n    1 2\n  }\n}", true)
+	if err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	select {
-	case got := <-up.body:
-		if string(got) != "\n"+src {
-			t.Errorf("sent %q, want it with a newline in front", got)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("nothing was uploaded")
+	if len(res.Errors) != 1 || res.Errors[0] != "(2, 4) : ERROR : Syntax error" {
+		t.Errorf("errors = %q, want the compiler's own", res.Errors)
+	}
+	if got := tries.Load(); got != 1 {
+		t.Errorf("uploaded %d times, want 1", got)
+	}
+}
+
+// TestTheScriptGoesOutAsGiven: nothing is put in front of it or after
+// it, so a script saved and read back is the same text.  An empty one
+// goes as one space, as the viewer sends it.
+func TestTheScriptGoesOutAsGiven(t *testing.T) {
+	for _, c := range []struct{ name, src, want string }{
+		{"code", "default { state_entry() {} }", "default { state_entry() {} }"},
+		{"a blank first line", "\ndefault {}\n", "\ndefault {}\n"},
+		{"empty", "", " "},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			w, f := newFakeSession(t)
+			up := serveUpload(t, f, "UpdateScriptTask", func() (int, string) {
+				return 200, `<llsd><map><key>state</key><string>complete</string>` +
+					`<key>compiled</key><boolean>1</boolean></map></llsd>`
+			})
+			if _, err := w.install(context.Background(), msg.UUID{15: 1}, msg.UUID{15: 2},
+				c.src, true); err != nil {
+				t.Fatalf("install: %v", err)
+			}
+			select {
+			case got := <-up.body:
+				if string(got) != c.want {
+					t.Errorf("sent %q, want %q", got, c.want)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("nothing was uploaded")
+			}
+		})
+	}
+}
+
+// TestAnEmptyScriptIsSavedAsTheViewerSavesIt: one space, so that it
+// stores (SL-46889), on SaveScript as on install.
+func TestAnEmptyScriptIsSavedAsTheViewerSavesIt(t *testing.T) {
+	w, f := newFakeSession(t)
+	up := serveUpload(t, f, "UpdateScriptAgent", compiles)
+	if _, err := w.SaveScript(context.Background(), msg.UUID{15: 1}, ""); err != nil {
+		t.Fatalf("SaveScript: %v", err)
+	}
+	if got := string(<-up.body); got != " " {
+		t.Errorf("sent %q, want one space", got)
 	}
 }
 
@@ -1905,7 +1956,7 @@ func TestAScriptTypedAsLsShowsItIsInstalled(t *testing.T) {
 	answerContents(t, f, thePrim, theContentsFile)
 
 	<-up.asked
-	if got := string(<-up.body); got != "\ndefault {}" {
+	if got := string(<-up.body); got != "default {}" {
 		t.Errorf("uploaded %q", got)
 	}
 	if _, err := wait(); err != nil {

@@ -152,16 +152,14 @@ func TestALineIsPrintedAsItArrivesAndTaggedWithItsScript(t *testing.T) {
 		t.Errorf("the sentinel was printed as output:\n%s", got.String())
 	}
 	// And the source really went up: what is being watched is a run.
-	// sl puts a newline in front of every script it installs, so that an
-	// upload which arrived empty can be told from one whose first line is
-	// wrong.  What matters here is that the source went up at all.
+	// What matters here is that the source went up, as given.
 	f.mu.Lock()
 	ran, sources := f.ran, append([]string(nil), f.sources...)
 	f.mu.Unlock()
 	if ran != 1 {
 		t.Errorf("%d scripts ran", ran)
 	}
-	if len(sources) != 1 || strings.TrimPrefix(sources[0], "\n") != "default {}" {
+	if len(sources) != 1 || sources[0] != "default {}" {
 		t.Errorf("what was sent was %q", sources)
 	}
 
