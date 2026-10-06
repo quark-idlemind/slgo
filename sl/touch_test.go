@@ -2,7 +2,12 @@ package sl
 
 import (
 	"context"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"math"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -438,5 +443,57 @@ func TestADragAlongAFaceSendsTheTextureToo(t *testing.T) {
 	}
 	if n := len(sentOf[*msg.RequestMultipleObjects](f)); n != 0 {
 		t.Errorf("the appearance was asked for %d times though it was known", n)
+	}
+}
+
+// TestAnAnimationIsCheckedAgainstTheFacesTheViewerCounts: a touch asks
+// the same question a drag on the screen does, whether the animation
+// names a face the prim has, with the viewer's count of faces and not a
+// table's.  A box has six, and an animation naming face 7 is on all of
+// them; on a prim of eight it is on that face alone.
+func TestAnAnimationIsCheckedAgainstTheFacesTheViewerCounts(t *testing.T) {
+	faces := PlainFaces(6)
+	faces[0] = turned()
+	anim := make([]byte, 16)
+	anim[0], anim[1] = 0x01, 7
+	if _, ok := mappingOf(faces, anim, 6, 0); ok {
+		t.Error("an animation naming a face the prim has not left face 0 mapped")
+	}
+	if _, ok := mappingOf(faces, anim, 8, 0); !ok {
+		t.Error("with eight faces an animation naming face 7 left face 0 unmapped")
+	}
+	if _, ok := mappingOf(faces, nil, 6, -1); ok {
+		t.Error("no face has a mapping")
+	}
+	if _, ok := mappingOf(faces, nil, 6, 6); ok {
+		t.Error("a face the prim does not have has a mapping")
+	}
+}
+
+// TestUVIsWorkedOutInOnePlace: a touch (placeTouches) and a drag on the
+// screen (withUV) both ask mappingOf, and nothing else in sl calls
+// SurfaceToTexture.  A
+// second place would be a second answer for the one question, which is
+// how a plain touch once sent ST for UV where a click sent the mapped one.
+func TestUVIsWorkedOutInOnePlace(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") || file == "touch.go" || file == "huddrag.go" {
+			continue
+		}
+		f, err := parser.ParseFile(fset, file, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			if c, ok := n.(*ast.SelectorExpr); ok && c.Sel.Name == "SurfaceToTexture" {
+				t.Errorf("%s works a UV out itself: ask mappingOf (touch.go)", fset.Position(c.Pos()))
+			}
+			return true
+		})
 	}
 }

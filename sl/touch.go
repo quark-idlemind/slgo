@@ -187,6 +187,7 @@ func (w *Session) placeTouches(ctx context.Context, o *Object, ts ...Touch) ([]T
 	out := slices.Clone(ts)
 	var faces []Face
 	var anim []byte
+	var n int
 	read := false
 	for i, t := range out {
 		haveST, haveUV := t.ST != (msg.Vector3{}), t.UV != (msg.Vector3{})
@@ -197,23 +198,22 @@ func (w *Session) placeTouches(ctx context.Context, o *Object, ts ...Touch) ([]T
 			t.ST, haveST = middle, true
 		}
 		if !read && t.Face >= 0 {
-			faces, anim = w.looksOf(ctx, o)
+			faces, anim, n = w.looksOf(ctx, o)
 			read = true
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
 		}
-		entry := t.Face >= 0 && t.Face < len(faces) &&
-			!faces[t.Face].Planar() && !animated(anim, t.Face, len(faces))
+		mapping, entry := mappingOf(faces, anim, n, t.Face)
 		switch {
 		case !entry && haveST:
 			t.UV = t.ST
 		case !entry:
 			t.ST = t.UV
 		case haveST:
-			t.UV = faces[t.Face].SurfaceToTexture(t.ST)
+			t.UV = mapping.SurfaceToTexture(t.ST)
 		default:
-			st, err := faces[t.Face].TextureToSurface(t.UV)
+			st, err := mapping.TextureToSurface(t.UV)
 			if err != nil {
 				return nil, fmt.Errorf("sl: touching face %d of %s at uv %g,%g: %w", t.Face, o, t.UV.X, t.UV.Y, err)
 			}
@@ -224,22 +224,44 @@ func (w *Session) placeTouches(ctx context.Context, o *Object, ts ...Touch) ([]T
 	return out, nil
 }
 
-// looksOf is what o looks like, face by face, and its texture animation,
-// read as Faces reads them.  Nothing comes back when they cannot be read,
-// which a touch takes as a face with no entry.
-func (w *Session) looksOf(ctx context.Context, o *Object) ([]Face, []byte) {
+// looksOf is what o looks like, face by face, its texture animation, and
+// how many faces it has as the viewer counts them (the count the
+// animation is checked against), read as Faces reads them.  Nothing comes
+// back when they cannot be read, which a touch takes as a face with no
+// entry.
+func (w *Session) looksOf(ctx context.Context, o *Object) ([]Face, []byte, int) {
 	if o == nil || o.ID.IsZero() {
-		return nil, nil
+		return nil, nil, 0
 	}
 	found, err := w.fetch(ctx, "", o.ID.String())
 	if err != nil || len(found) == 0 {
-		return nil, nil
+		return nil, nil, 0
 	}
 	faces, seen, _, err := w.appearance(ctx, o, found[0])
 	if err != nil {
-		return nil, nil
+		return nil, nil, 0
 	}
-	return faces, seen.TextureAnim
+	n, ok := seen.FaceCount()
+	if !ok {
+		n = len(faces)
+	}
+	return faces, seen.TextureAnim, n
+}
+
+// mappingOf is the texture mapping the viewer applies to a touch on a
+// face, from what the object looks like: the face's own entry, unless the
+// face is not the object's, is mapped by planar projection or runs a
+// texture animation, where the viewer uses more than the entry and a
+// touch sends ST for UV.  n is the object's number of faces.  Every place
+// a UV is worked out from an ST -- a touch, a drag on the screen -- asks
+// here, and nowhere else calls Face.SurfaceToTexture
+// (TestUVIsWorkedOutInOnePlace).
+// Why: doc/slate-runner.md#stimuli
+func mappingOf(faces []Face, anim []byte, n, face int) (Face, bool) {
+	if face < 0 || face >= len(faces) || faces[face].Planar() || animated(anim, face, n) {
+		return Face{}, false
+	}
+	return faces[face], true
 }
 
 // TouchStart begins a touch: the script's touch_start.

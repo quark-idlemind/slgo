@@ -128,7 +128,7 @@ the +Y edge, and T grows up. Clicks at the pixels predicted for five S,T
 came back within 0.001 in S, and with a constant 0.005 in T, about one
 point of rounding. On the face turned 30 degrees, clicks spaced evenly
 across it came back 0.0997, 0.4987 and 0.8978. A face's texture repeats,
-offset and rotation do not enter S,T; they make UV.
+offset and rotation do not enter S,T; they make UV. A touch that is not a click on the screen (`touch OBJ face N at S T`, `sl.Touch`, `slsh touch --st`) makes the same UV from the same ST, by the same mapping (`mappingOf`, `sl/touch.go`), so that a script reading UV sees the point it would from a click there; `slsh touch --uv` is sent as given and ST is worked back from it.
 
 **Measured** on every face, each turned to the viewer and clicked
 right of its middle and above it. The sides of a box follow its profile,
