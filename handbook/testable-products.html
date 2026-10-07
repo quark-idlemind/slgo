@@ -69,7 +69,7 @@ ff0000      open-button
               <li>The name and the text are one field each. A field that holds a space, a double quote, a backslash or a <code>#</code> is written in double quotes, with <code>\"</code> and <code>\\</code> the only escapes inside: <code>"Left Arrow"</code>. Any other field is one word. The text is for people and tools; Slate does not use it.</li>
               <li>A line whose first non-blank character is <code>#</code> is a comment; blank lines are ignored. The texture id may be in either case. One file may hold several textures.</li>
               <li><strong>A name may repeat within a texture.</strong> A texture that carries several versions of one panel, an atlas, has an <code>ok-button</code> area in each version. The face shows a window onto one version, and Slate touches the area of that name that is inside the window.</li>
-              <li>An element's point is the centre of its box, which is inside every shape a template uses, so the record has no shape.</li>
+              <li>An element's point is the centre of its box, and the box is chosen so that its centre is inside the element: the element's own bounding box for a rectangle, a rounded rectangle, a circle or an ellipse, and a smaller box inside it for a shape whose bounding box's centre is not, such as a right triangle (the half-width, half-height box in its right-angled corner). So the record has no shape.</li>
               <li>The record can be written by hand or by a tool. A line that cannot be read stops the run at setup and names the file and the line.</li>
             </ul>
           </div></li>
