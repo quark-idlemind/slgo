@@ -532,7 +532,7 @@ func (sh *Shell) detachFromOutfit(ctx context.Context, out io.Writer, want strin
 	if err := sh.s.TakeOff(ctx, l.Item); err != nil {
 		return true, err
 	}
-	if err := sh.s.DeleteItem(ctx, l.Link); err != nil {
+	if err := sh.s.DeleteItem(ctx, l.Link); err != nil && !errors.Is(err, sl.ErrGone) {
 		return true, fmt.Errorf("%s was asked to come off, and its link is still in the "+
 			"Current Outfit folder: %w", l.Name, err)
 	}

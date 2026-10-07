@@ -144,6 +144,10 @@ func (w *Session) CreateFolder(ctx context.Context, parent msg.UUID, name string
 // afterwards, which was checked rather than assumed. There is therefore
 // no gentler option to offer, and pretending otherwise would be worse
 // than saying so.
+//
+// An item the service says was deleted already is answered 410, and the
+// error matches ErrGone.  Callers that only want the item gone treat
+// that as done; rm reports it.
 func (w *Session) DeleteItem(ctx context.Context, item msg.UUID) error {
 	return w.aisDelete(ctx, "item", item)
 }

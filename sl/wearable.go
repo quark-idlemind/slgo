@@ -321,7 +321,7 @@ func (w *Session) WearWearable(ctx context.Context, it *Item, replace bool) ([]s
 			if !l.Wearable || l.Slot != slot {
 				continue
 			}
-			if err := w.DeleteItem(ctx, l.Link); err != nil {
+			if err := w.DeleteItem(ctx, l.Link); err != nil && !errors.Is(err, ErrGone) {
 				return nil, fmt.Errorf("sl: taking off %s: %w", l.Name, err)
 			}
 			off = append(off, l.Name)
@@ -377,6 +377,7 @@ func (w *Session) RememberWorn(ctx context.Context, it *Item) error {
 //
 // Every, not the first: two links to one item is a state a viewer can
 // leave behind, and taking a thing off should not need doing twice.
+// A link the service answers 410 for is counted as removed.
 func (w *Session) ForgetWorn(ctx context.Context, item msg.UUID) (int, error) {
 	worn, err := w.Outfit(ctx)
 	if err != nil {
@@ -387,7 +388,11 @@ func (w *Session) ForgetWorn(ctx context.Context, item msg.UUID) (int, error) {
 		if l.Item != item {
 			continue
 		}
-		if err := w.DeleteItem(ctx, l.Link); err != nil {
+		// A link the service says was deleted already is gone, which
+		// is what was asked for: the viewer treats the same answer as
+		// done (Firestorm 885631b93a, llaisapi.cpp:891, the 410 branch).
+		// Why: doc/outfit.md#a-link-already-gone
+		if err := w.DeleteItem(ctx, l.Link); err != nil && !errors.Is(err, ErrGone) {
 			return n, err
 		}
 		n++
@@ -398,7 +403,7 @@ func (w *Session) ForgetWorn(ctx context.Context, item msg.UUID) (int, error) {
 // TakeOffWearable removes a wearable's link from the Current Outfit
 // folder and asks for a rebake.
 func (w *Session) TakeOffWearable(ctx context.Context, link msg.UUID) error {
-	if err := w.DeleteItem(ctx, link); err != nil {
+	if err := w.DeleteItem(ctx, link); err != nil && !errors.Is(err, ErrGone) {
 		return err
 	}
 	return w.UpdateAppearance(ctx)

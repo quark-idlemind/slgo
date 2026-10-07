@@ -69,6 +69,30 @@ textures and beside the point: the bake is also what has the simulator
 send the avatar its own list of what is worn, as measured above, and
 `worn` and `dress` check against that list.
 
+## A link already gone
+
+`detach` takes the object off and then deletes its link in the Current
+Outfit folder. Seen once on the owner's avatar: the service answered
+that delete with `InventoryAPIv3: status 410: ... Item does not exist
+or was already deleted.`, and `detach` then said the link was still in
+the folder and would bring the object back at the next login. The
+folder held no such link afterwards. The object had been worn without a
+link by Slate and worn again by slsh just before, which is the only explanation this tree has for the folder
+listing a link the service no longer had; it was not reproduced.
+
+A 410 on deleting an item means the item is not there, so slgo counts
+the link as removed. Firestorm does the same in effect: its AIS error
+handler, on a 410 for a removed item, logs that the item no longer
+exists at the server, fetches the parent folder again and drops its own
+copy (Firestorm 885631b93a, `llaisapi.cpp:891`, the `410` branch in
+`invokeAISCommandCoro`); the user is told nothing. `CapError` matches `sl.ErrGone`
+for a 410, `ForgetWorn`, `TakeOffWearable`, the replace step of
+`WearWearable`, `detachFromOutfit` and the deletes of a script's inventory
+copy use it, and `rm` does not: it reports the 410, since that is the
+answer to what it was asked. Any other status still leaves the sentence
+about the link. The 410 path is tested over fakes only: a 410 could not
+be provoked on demand to measure it live.
+
 ## Putting an outfit back on
 
 The simulator puts most of an avatar's attachments back by itself at
