@@ -5,6 +5,7 @@ package slate
 // Why: doc/slate-runner.md#gltf-materials
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -109,6 +110,20 @@ func TestGLTFParseAndCheck(t *testing.T) {
 		"expect gltf normaltexture a face 1 is none\n",
 		"expect gltf ormtexture a face 1 changes\n",
 		"expect gltf emissivetexture a face 1 is ffffffff-ffff-ffff-ffff-ffffffffffff\n",
+		"expect gltf baserepeats a face 1 is 2 3\n",
+		"expect gltf baseoffset a face 1 is 0.25 -0.5\n",
+		"expect gltf baserotation a face 1 is 0.25\n",
+		"expect gltf normalrepeats a face 1 is none\n",
+		"expect gltf normaloffset a face 1 becomes 1 2 near 0.01 within 2s\n",
+		"expect gltf normalrotation a face 1 is -0.25 near 0.01\n",
+		"expect gltf ormrepeats a face 1 changes\n",
+		"expect gltf ormoffset a face 1 becomes original\n",
+		"expect gltf ormrotation a face 1 is 1\n",
+		"expect gltf emissiverepeats a face 1 is 0.5 0.5 near 10 percent\n",
+		"expect gltf emissiveoffset a face 1 is none\n",
+		"expect gltf emissiverotation a face 1 is -1\n",
+		"expect gltf baseoffset a face 1 is any within 1s as $o\nthen expect gltf ormrepeats a face 1 is $o\nthen expect offset a face 1 is $o\n",
+		"expect gltf baserotation a face 1 is any within 1s as $r\nthen expect gltf emissiverotation a face 1 is $r\nthen expect rotation a face 1 is $r\n",
 		"expect gltf metallic a face 1 is any within 1s as $v\nthen expect gltf roughness a face 1 is $v\n",
 		"expect gltf colour a face 1 is any within 1s as $c\nthen expect gltf emissive a face 1 is $c\n",
 		"expect gltf basetexture a face 1 is any within 1s as $t\nthen expect gltf material a face 1 is $t\nexpect texture a face 1 is $t\n",
@@ -151,6 +166,51 @@ func TestGLTFParseAndCheck(t *testing.T) {
 	checkErr(t, h+"expect gltf override a face 0 is any within 1s as $n\nthen expect gltf metallic a face 0 is $n\n", "capture type mismatch")
 	checkErr(t, h+"expect gltf alphamode a face 0 is any within 1s as $n\nthen expect gltf cutoff a face 0 is $n\n", "capture type mismatch")
 	checkErr(t, h+"expect gltf metallic b face 0 is 0\n", "b is not")
+	parseErr(t, h+"expect gltf baserepeats a face 0 is 2\n", "expected a number")
+	parseErr(t, h+"expect gltf baserotation a face 0 is 0.25 0.5\n", "expected a stimulus, expect, then, or do, found 0.5")
+	checkErr(t, h+"expect gltf baserotation a face 0 is 1.5\n", "gltf baserotation 1.5 is outside -1 to 1")
+	checkErr(t, h+"expect gltf ormrotation a face 0 is 0.1 near 5 percent\n", "a rotation takes near in turns, not percent")
+	checkErr(t, h+"expect gltf baseoffset a face 0 is any near 1 within 1s as $n\n", "is any takes no near")
+	checkErr(t, h+"expect gltf baseoffset a face 0 is 0 0 near 0\n", "near 0 is not above 0")
+	checkErr(t, h+"expect gltf baseoffset a face 0 is any within 1s as $n\nthen expect gltf baserotation a face 0 is $n\n", "capture type mismatch")
+	checkErr(t, h+"expect gltf baserotation a face 0 is any within 1s as $n\nthen expect gltf baserepeats a face 0 is $n\n", "capture type mismatch")
+	checkErr(t, h+"expect gltf baserepeats a face 0 is none as $x\n", "none is no value to bind")
+	checkErr(t, h+"expect gltf baserepeats a face all is 1 1\n", "there is no face all")
+}
+
+// aTransformOverride sets a different transform on each slot, in the
+// radians the wire carries, and leaves the emissive slot's offset and
+// rotation alone.
+func aTransformOverride() *msg.GLTFOverride {
+	o := &msg.GLTFOverride{}
+	o.Transforms[msg.GLTFSlotBase] = msg.GLTFTransform{Offset: &[2]float32{0.25, 0.5}, Scale: &[2]float32{2, 3}, Rotation: fl(1.5708)}
+	o.Transforms[msg.GLTFSlotNormal] = msg.GLTFTransform{Offset: &[2]float32{-1, 0}, Scale: &[2]float32{4, 0.5}, Rotation: fl(float32(math.Pi))}
+	o.Transforms[msg.GLTFSlotMetallicRoughness] = msg.GLTFTransform{Offset: &[2]float32{0, 0.75}, Scale: &[2]float32{1, 1}, Rotation: fl(0)}
+	o.Transforms[msg.GLTFSlotEmissive] = msg.GLTFTransform{Scale: &[2]float32{0.5, 0.25}}
+	return o
+}
+
+func TestEverySlotsTransformIsRead(t *testing.T) {
+	f := newGridWithOverride(t, withOverride(2, aTransformOverride()))
+	res := play(t, f, hdr+`expect gltf baserepeats sign face 2 is 2 3 within 500ms
+expect gltf baseoffset sign face 2 is 0.25 0.5 within 500ms
+expect gltf baserotation sign face 2 is 0.25 within 500ms
+expect gltf normalrepeats sign face 2 is 4 0.5 within 500ms
+expect gltf normaloffset sign face 2 is -1 0 within 500ms
+expect gltf normalrotation sign face 2 is 0.5 within 500ms
+expect gltf ormrepeats sign face 2 is 1 1 within 500ms
+expect gltf ormoffset sign face 2 is 0 0.75 within 500ms
+expect gltf ormrotation sign face 2 is 0 within 500ms
+expect gltf emissiverepeats sign face 2 is 0.5 0.25 within 500ms
+`)
+	wantExit(t, res, 0)
+	mustHave(t, res, "gltf baserepeats sign face 2 2 3", "gltf baseoffset sign face 2 0.25 0.5", "gltf baserotation sign face 2 0.25",
+		"gltf normalrotation sign face 2 0.5", "gltf ormoffset sign face 2 0 0.75", "gltf emissiverepeats sign face 2 0.5 0.25")
+	// Each prop reads its own slot and its own field.
+	res = play(t, f, hdr+"expect gltf normalrepeats sign face 2 is 2 3 within 150ms\n")
+	wantExit(t, res, 1)
+	mustHave(t, res, "gltf normalrepeats sign face 2 4 0.5")
+	wantExit(t, play(t, f, hdr+"expect gltf baseoffset sign face 2 is 2 3 within 150ms\n"), 1)
 }
 
 func TestAnOverrideIsOnAFaceThatHasOne(t *testing.T) {
@@ -378,4 +438,130 @@ func TestAnOverrideOnANegativeIsAWindow(t *testing.T) {
 	wantExit(t, play(t, f, hdr+"expect no gltf metallic sign face 2 is 0.75 within 300ms\n"), 0)
 	res := play(t, f, hdr+"expect no gltf metallic sign face 2 is 0.25 within 300ms\n")
 	wantExit(t, res, 1)
+}
+
+func TestARotationIsRadiansReadAsTurns(t *testing.T) {
+	// The wire's 1.5708 is a quarter turn; two pi and zero are one angle; an
+	// angle is compared the short way round.
+	rot := func(r float32) func(*sl.Seen) {
+		o := &msg.GLTFOverride{}
+		o.Transforms[msg.GLTFSlotBase].Rotation = &r
+		return withOverride(2, o)
+	}
+	f := newGridWithOverride(t, rot(1.5708))
+	wantExit(t, play(t, f, hdr+"expect gltf baserotation sign face 2 is 0.25 within 300ms\n"), 0)
+	wantExit(t, play(t, f, hdr+"expect gltf baserotation sign face 2 is -0.75 within 300ms\n"), 0)
+	wantExit(t, play(t, f, hdr+"expect gltf baserotation sign face 2 is 0.5 near 0.3 within 300ms\n"), 0)
+	res := play(t, f, hdr+"expect gltf baserotation sign face 2 is 0.3 within 150ms\n")
+	wantExit(t, res, 1)
+	mustHave(t, res, "gltf baserotation sign face 2 0.25")
+	// 90 degrees as a script gives it is not 90 turns: the face's -1 to 1 does not take it.
+	checkErr(t, hdr+"expect gltf baserotation sign face 2 is 90\n", "outside -1 to 1")
+	for _, r := range []float32{0, 2 * math.Pi, -2 * math.Pi} {
+		f = newGridWithOverride(t, rot(r))
+		wantExit(t, play(t, f, hdr+"expect gltf baserotation sign face 2 is 0 within 300ms\n"), 0)
+		wantExit(t, play(t, f, hdr+"expect gltf baserotation sign face 2 is 1 within 300ms\n"), 0)
+	}
+	// Three quarters of a turn is a quarter back, either way.
+	f = newGridWithOverride(t, rot(3*math.Pi/2))
+	wantExit(t, play(t, f, hdr+"expect gltf baserotation sign face 2 is -0.25 within 300ms\n"), 0)
+	wantExit(t, play(t, f, hdr+"expect gltf baserotation sign face 2 is 0.75 within 300ms\n"), 0)
+	// The region's own rounding of the radians is within the tolerance: 1.5707
+	// is a few millionths of a turn short of a quarter, 1.57 is not.
+	f = newGridWithOverride(t, rot(1.57075))
+	wantExit(t, play(t, f, hdr+"expect gltf baserotation sign face 2 is 0.25 within 300ms\n"), 0)
+	f = newGridWithOverride(t, rot(1.57))
+	wantExit(t, play(t, f, hdr+"expect gltf baserotation sign face 2 is 0.25 within 150ms\n"), 1)
+	wantExit(t, play(t, f, hdr+"expect gltf baserotation sign face 2 is 0.25 near 0.001 within 300ms\n"), 0)
+	// A slot's rotation is its own.
+	wantExit(t, play(t, f, hdr+"expect gltf normalrotation sign face 2 is none within 300ms\n"), 0)
+	wantExit(t, play(t, f, hdr+"expect gltf normalrotation sign face 2 is 0 within 150ms\n"), 1)
+}
+
+func TestATransformTheOverrideDoesNotSetIsNone(t *testing.T) {
+	f := newGridWithOverride(t, withOverride(2, aTransformOverride()))
+	// The emissive slot sets only its repeats; the others are unset, and
+	// a zero is a value that none is not.
+	res := play(t, f, hdr+`expect gltf emissiveoffset sign face 2 is none within 300ms
+expect gltf emissiverotation sign face 2 is none within 300ms
+expect gltf ormrotation sign face 2 is 0 within 300ms
+`)
+	wantExit(t, res, 0)
+	mustHave(t, res, "gltf emissiveoffset sign face 2 none", "gltf ormrotation sign face 2 0")
+	res = play(t, f, hdr+"expect gltf ormrotation sign face 2 is none within 150ms\n")
+	wantExit(t, res, 1)
+	// An override that sets no transform, and a face with none, read none.
+	f.change(signLocal, withOverride(2, &msg.GLTFOverride{Metallic: fl(1)}))
+	wantExit(t, play(t, f, hdr+`expect gltf baserepeats sign face 2 is none within 300ms
+expect gltf baseoffset sign face 2 is none within 300ms
+expect gltf baserotation sign face 2 is none within 300ms
+expect gltf baserepeats sign face 0 is none within 300ms
+`), 0)
+	wantExit(t, play(t, f, hdr+"expect gltf baserepeats sign face 2 is 1 1 within 150ms\n"), 1)
+	// A slot's transform alone makes an override.
+	f.change(signLocal, withOverride(2, aTransformOverride()))
+	wantExit(t, play(t, f, hdr+"expect gltf override sign face 2 is on within 300ms\n"), 0)
+}
+
+func TestATransformIsNearAndBecomes(t *testing.T) {
+	f := newGridWithOverride(t, withOverride(2, aTransformOverride()))
+	moves(t, f, map[string]func(*sl.Seen){
+		"turn": func(o *sl.Seen) {
+			ov := aTransformOverride()
+			ov.Transforms[msg.GLTFSlotBase].Rotation = fl(math.Pi)
+			ov.Transforms[msg.GLTFSlotBase].Offset = &[2]float32{0.5, 0.5}
+			ov.Transforms[msg.GLTFSlotBase].Scale = &[2]float32{5, 5}
+			withOverride(2, ov)(o)
+		},
+		"back": withOverride(2, aTransformOverride()),
+		"drop": withOverride(2, &msg.GLTFOverride{Metallic: fl(1)}),
+	})
+	wantExit(t, play(t, f, hdr+`expect gltf baserepeats sign face 2 is 2.05 2.95 near 0.1 within 300ms
+expect gltf baserepeats sign face 2 is 2.05 2.95 near 5 percent within 300ms
+expect gltf baseoffset sign face 2 is 0.3 0.45 near 0.1 within 300ms
+expect gltf baserotation sign face 2 is 0.24 near 0.02 within 300ms
+`), 0)
+	res := play(t, f, hdr+"expect gltf baserepeats sign face 2 is 2.05 3 within 150ms\n")
+	wantExit(t, res, 1)
+	mustHave(t, res, "gltf baserepeats sign face 2 2 3")
+	res = play(t, f, hdr+"expect gltf baseoffset sign face 2 is 0.3 0.5 near 0.01 within 150ms\n")
+	wantExit(t, res, 1)
+	mustHave(t, res, "tolerance 0.01")
+	// A float32 offset is read whole: the literal is what the session holds.
+	g := newGridWithOverride(t, withOverride(2, &msg.GLTFOverride{Transforms: [msg.GLTFSlots]msg.GLTFTransform{{Offset: &[2]float32{0.3, 0.1}}}}))
+	wantExit(t, play(t, g, hdr+"expect gltf baseoffset sign face 2 is 0.3 0.1 within 300ms\n"), 0)
+
+	res = play(t, f, hdr+`expect gltf baserepeats sign face 2 is 2 3 within 300ms
+say "turn" on 0
+expect gltf baserepeats sign face 2 becomes 5 5 within 1s
+expect gltf baseoffset sign face 2 becomes 0.5 0.5 within 1s
+expect gltf baserotation sign face 2 becomes 0.5 within 1s
+expect no gltf normalrepeats sign face 2 changes within 300ms
+say "back" on 0
+expect gltf baserotation sign face 2 becomes original within 1s
+expect gltf baserepeats sign face 2 becomes original within 1s
+say "drop" on 0
+expect gltf baserepeats sign face 2 becomes none within 1s
+expect gltf baserotation sign face 2 becomes none within 1s
+`)
+	wantExit(t, res, 0)
+}
+
+func TestATransformIsCaptured(t *testing.T) {
+	f := newGridWithOverride(t, withOverride(2, aTransformOverride()))
+	res := play(t, f, hdr+`expect gltf baseoffset sign face 2 is any within 500ms as $o
+then expect gltf baseoffset sign face 2 is $o within 500ms
+expect gltf baserepeats sign face 2 is any within 500ms as $s
+then expect gltf baserepeats sign face 2 is $s within 500ms
+expect gltf baserotation sign face 2 is any within 500ms as $r
+then expect gltf baserotation sign face 2 is $r within 500ms
+then expect gltf normalrotation sign face 2 is $r within 150ms
+`)
+	wantExit(t, res, 1)
+	mustHave(t, res, "unmatched gltf normalrotation sign face 2 is $r", "gltf normalrotation sign face 2 0.5")
+	mustNotHave(t, res, "unmatched gltf baserotation")
+	// An unset slot field has no value to be any of.
+	res = play(t, f, hdr+"expect gltf emissiverotation sign face 2 is any within 200ms as $r\n")
+	wantExit(t, res, 1)
+	mustHave(t, res, "gltf emissiverotation sign face 2 none")
 }

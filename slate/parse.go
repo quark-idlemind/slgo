@@ -2089,6 +2089,10 @@ func (p *parser) gltfValue(x *GLTFExp) error {
 			}
 		}
 		return nil
+	case "baserepeats", "baseoffset", "normalrepeats", "normaloffset",
+		"ormrepeats", "ormoffset", "emissiverepeats", "emissiveoffset":
+		x.Pair, err = p.pair()
+		return err
 	case "alphamode":
 		if p.tok.kind != kWord || !slices.Contains(GLTFAlphaModes, p.tok.text) {
 			return p.unexpected("expected opaque, blend, mask, none, original, or a capture")

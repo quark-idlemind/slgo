@@ -137,7 +137,38 @@ const (
 	kGLTFNormalTexture
 	kGLTFORMTexture
 	kGLTFEmissiveTexture
+	// The transform an override sets on a texture slot: for each slot,
+	// base, normal, orm and emissive, its repeats, offset and rotation,
+	// in the order of GLTFProps.  Rotation is in turns.
+	kGLTFBaseRepeats
+	kGLTFBaseOffset
+	kGLTFBaseRotation
+	kGLTFNormalRepeats
+	kGLTFNormalOffset
+	kGLTFNormalRotation
+	kGLTFORMRepeats
+	kGLTFORMOffset
+	kGLTFORMRotation
+	kGLTFEmissiveRepeats
+	kGLTFEmissiveOffset
+	kGLTFEmissiveRotation
 )
+
+// gltfTransformAt is, for a kind that reads a texture slot's transform, the
+// slot (msg.GLTFSlot*) and the field: 0 repeats, 1 offset, 2 rotation.
+func (k stateKind) gltfTransformAt() (slot, field int, ok bool) {
+	if k < kGLTFBaseRepeats || k > kGLTFEmissiveRotation {
+		return 0, 0, false
+	}
+	i := int(k - kGLTFBaseRepeats)
+	return i / 3, i % 3, true
+}
+
+// isGLTFRotation is whether a kind reads a slot's rotation.
+func (k stateKind) isGLTFRotation() bool {
+	_, f, ok := k.gltfTransformAt()
+	return ok && f == 2
+}
 
 // readsMaterial is whether a kind is read from a face's material, which
 // only the RenderMaterials capability serves.
@@ -188,6 +219,14 @@ const (
 // region's own rounding of a value has not been measured.
 // Why: doc/slate-runner.md#gltf-materials
 const gltfTol = 1e-6
+
+// gltfRotTol is the tolerance of an override's texture rotation, in turns.
+// It travels as radians the region prints to about five figures (r1.5708 for
+// a quarter turn), so a reading can be off by 5e-5 rad, which is 8e-6 of a
+// turn; ten millionths of a turn is above that.  Inferred from that one
+// message: how many figures the region prints has not been measured.
+// Why: doc/slate-runner.md#gltf-materials
+const gltfRotTol = 1e-5
 
 // levelTol is the tolerance of glow, colour and alpha: one step of the
 // byte they travel as, round(value * 255).
@@ -399,6 +438,12 @@ func (k stateKind) floor() (float64, bool) {
 	case kGLTFColour, kGLTFAlpha, kGLTFEmissive, kGLTFMetallic, kGLTFRoughness, kGLTFCutoff:
 		return gltfTol, true
 	}
+	if _, f, ok := k.gltfTransformAt(); ok {
+		if f == 2 {
+			return gltfRotTol, true
+		}
+		return gltfTol, true
+	}
 	return 0, false
 }
 
@@ -482,12 +527,23 @@ func (k stateKind) gapOf(a, ref *reading, t *tolerance, byDiff bool) (gap, bool)
 	case kGLTFAlpha, kGLTFMetallic, kGLTFRoughness, kGLTFCutoff:
 		xs, ys, floor = []float64{a.num}, []float64{ref.num}, gltfTol
 	default:
-		return gap{}, false
+		_, f, ok := k.gltfTransformAt()
+		if !ok {
+			return gap{}, false
+		}
+		switch f {
+		case 0:
+			xs, ys, floor = a.rep[:], ref.rep[:], gltfTol
+		case 1:
+			xs, ys, floor = a.off[:], ref.off[:], gltfTol
+		default:
+			xs, ys, floor = []float64{a.turns}, []float64{ref.turns}, gltfRotTol
+		}
 	}
 	var worst gap
 	for i := range xs {
 		d := xs[i] - ys[i]
-		if k == kRotation {
+		if k == kRotation || k.isGLTFRotation() {
 			d = wrapTurn(d)
 		}
 		g := gap{math.Abs(d), t.allowed(floor, ys[i])}
@@ -605,6 +661,12 @@ func (k stateKind) matchesTol(r, want *reading, t *tolerance) bool {
 
 // capType is the type of the capture of a kind.
 func (k stateKind) capType() CaptureType {
+	if _, f, ok := k.gltfTransformAt(); ok {
+		if f == 2 {
+			return CapNumber
+		}
+		return CapPair
+	}
 	switch k {
 	case kTexture, kNormalMap, kSpecularMap:
 		return CapUUID
@@ -719,6 +781,15 @@ func (k stateKind) gltfText(r *reading) string {
 	if r.unset {
 		return "none"
 	}
+	if _, f, ok := k.gltfTransformAt(); ok {
+		switch f {
+		case 0:
+			return fmt.Sprintf("%g %g", r.rep[0], r.rep[1])
+		case 1:
+			return fmt.Sprintf("%g %g", r.off[0], r.off[1])
+		}
+		return fmt.Sprintf("%g", r6(r.turns))
+	}
 	switch k {
 	case kGLTFOverride, kGLTFDoubleSided:
 		if r.on {
@@ -790,6 +861,15 @@ func (k stateKind) value(r *reading) capValue {
 	}
 	if k == kText {
 		return capValue{typ: CapText, text: r.str}
+	}
+	if _, f, ok := k.gltfTransformAt(); ok {
+		switch f {
+		case 0:
+			return capValue{typ: CapPair, pair: r.rep}
+		case 1:
+			return capValue{typ: CapPair, pair: r.off}
+		}
+		return capValue{typ: CapNumber, num: r.turns}
 	}
 	switch k {
 	case kGLTFOverride, kGLTFDoubleSided:
@@ -894,11 +974,11 @@ func (k stateKind) want(v capValue) *reading {
 		r.col = v.triple
 	case kLightIntensity, kLightRadius, kLightFalloff, kProjFOV, kProjFocus, kProjAmbiance:
 		r.num = v.num
-	case kOffset:
+	case kOffset, kGLTFBaseOffset, kGLTFNormalOffset, kGLTFORMOffset, kGLTFEmissiveOffset:
 		r.off = v.pair
-	case kRepeats:
+	case kRepeats, kGLTFBaseRepeats, kGLTFNormalRepeats, kGLTFORMRepeats, kGLTFEmissiveRepeats:
 		r.rep = v.pair
-	case kRotation:
+	case kRotation, kGLTFBaseRotation, kGLTFNormalRotation, kGLTFORMRotation, kGLTFEmissiveRotation:
 		r.turns = v.num
 	case kFullbright:
 		r.bright = v.on
@@ -1183,6 +1263,29 @@ func gltfReading(k stateKind, o *sl.Seen, face int, at time.Time) *reading {
 		tex(msg.GLTFSlotMetallicRoughness)
 	case kGLTFEmissiveTexture:
 		tex(msg.GLTFSlotEmissive)
+	default:
+		slot, f, ok := k.gltfTransformAt()
+		if !ok {
+			break
+		}
+		t := ov.Transforms[slot]
+		switch f {
+		case 0:
+			if v := t.Scale; v != nil {
+				r.rep = [2]float64{float64(v[0]), float64(v[1])}
+				set(true)
+			}
+		case 1:
+			if v := t.Offset; v != nil {
+				r.off = [2]float64{float64(v[0]), float64(v[1])}
+				set(true)
+			}
+		default:
+			if v := t.Rotation; v != nil {
+				r.turns = float64(*v) / (2 * math.Pi)
+				set(true)
+			}
+		}
 	}
 	return r
 }
@@ -1929,6 +2032,18 @@ func (s *stepRun) gltfWant(x *GLTFExp, se *stateExp) error {
 			}
 		}
 	default:
+		if _, f, ok := se.kind.gltfTransformAt(); ok {
+			pair := [2]float64{float64(float32(x.Pair.S.Value)), float64(float32(x.Pair.T.Value))}
+			switch f {
+			case 0:
+				se.want.rep = pair
+			case 1:
+				se.want.off = pair
+			default:
+				se.want.turns = x.Num.Value
+			}
+			break
+		}
 		se.want.num = float64(float32(x.Num.Value))
 	}
 	return nil

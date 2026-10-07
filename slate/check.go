@@ -1402,6 +1402,9 @@ func (c *checker) near(e Expect) error {
 	if e.Turn != nil && n.Percent {
 		return c.err(n.Span, "a turn takes near in degrees, not percent: an angle has no size to be a share of")
 	}
+	if e.GLTF != nil && gltfTransform(e.GLTF.Prop) == "rotation" && n.Percent {
+		return c.err(n.Span, "a rotation takes near in turns, not percent: an angle has no size to be a share of")
+	}
 	if e.Rot != nil && n.Percent {
 		return c.err(n.Span, "a rotation takes near in turns, not percent: an angle has no size to be a share of")
 	}
@@ -1527,7 +1530,21 @@ func gltfIsNumber(prop string) bool {
 	case "colour", "alpha", "emissive", "metallic", "roughness", "cutoff":
 		return true
 	}
-	return false
+	return gltfTransform(prop) != ""
+}
+
+// gltfTransform is the field of a texture slot's transform a gltf prop
+// reads, repeats, offset or rotation, and the empty string for a prop that
+// is not one.
+func gltfTransform(prop string) string {
+	for _, f := range []string{"repeats", "offset", "rotation"} {
+		for _, slot := range []string{"base", "normal", "orm", "emissive"} {
+			if prop == slot+f {
+				return f
+			}
+		}
+	}
+	return ""
 }
 
 // gltfType is the type of what a gltf prop reads, and so of its capture.
@@ -1541,6 +1558,9 @@ func gltfType(prop string) CaptureType {
 		return CapText
 	case "material", "basetexture", "normaltexture", "ormtexture", "emissivetexture":
 		return CapUUID
+	}
+	if gltfTransform(prop) == "repeats" || gltfTransform(prop) == "offset" {
+		return CapPair
 	}
 	return CapNumber
 }
@@ -1581,6 +1601,14 @@ func (c *checker) gltfExp(e Expect, x *GLTFExp, same map[string]bool) error {
 		}
 	case "alpha", "metallic", "roughness", "cutoff":
 		return c.unitLevel(x.Num, "gltf "+x.Prop)
+	case "baserotation", "normalrotation", "ormrotation", "emissiverotation":
+		return c.unitInterval(x.Num, "gltf "+x.Prop)
+	case "baserepeats", "baseoffset", "normalrepeats", "normaloffset",
+		"ormrepeats", "ormoffset", "emissiverepeats", "emissiveoffset":
+		if err := c.exact(x.Pair.S); err != nil {
+			return err
+		}
+		return c.exact(x.Pair.T)
 	case "material", "basetexture", "normaltexture", "ormtexture", "emissivetexture":
 		if _, err := msg.ParseUUID(x.ID); err != nil {
 			return c.err(x.IDAt, "%q is not an id", x.ID)
