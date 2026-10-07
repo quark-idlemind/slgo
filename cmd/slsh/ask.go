@@ -49,6 +49,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -138,7 +139,7 @@ func cmdAsk(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		why = askWhyNoModel(ac.URL, err)
+		why = askWhyNoModel(ac.URL, ac.Model, err)
 		client = nil
 	}
 	if client == nil {
@@ -232,8 +233,9 @@ func askUserHints(out io.Writer) ([]askindex.Hint, error) {
 	return hints, nil
 }
 
-// askWhyNoModel says in a line why the model was not heard from.
-func askWhyNoModel(url string, err error) string {
+// askWhyNoModel says in a line why the model was not heard from.  model
+// is how_model, which may be empty.
+func askWhyNoModel(url, model string, err error) string {
 	var se *llm.StatusError
 	switch {
 	case errors.Is(err, llm.ErrUnreachable):
@@ -241,9 +243,31 @@ func askWhyNoModel(url string, err error) string {
 	case errors.Is(err, llm.ErrTimeout):
 		return "the model at " + url + " did not answer in time"
 	case errors.As(err, &se):
+		if askNoStructuredOutput(se) {
+			return "the model" + askNamed(model) + " at " + url + " cannot keep to how's answer format " +
+				"(structured output); with Ollama on a Mac, use a GGUF build of the model, such as " +
+				"qwen3.5:4b-q4_K_M, not the default MLX one: " + askOneLine(err.Error())
+		}
 		return "the model at " + url + " refused: " + askOneLine(err.Error())
 	}
 	return "the model's answer could not be used: " + askOneLine(err.Error())
+}
+
+// askNamed is " NAME" for a configured model and nothing for none.
+func askNamed(model string) string {
+	if model == "" {
+		return ""
+	}
+	return " " + model
+}
+
+// askNoStructuredOutput is the refusal of a request carrying a JSON
+// schema: Ollama's MLX runner answers 501 "structured output is
+// unavailable".  Any other 501 is not this.
+// Why: doc/slsh.md#setting-up-the-model
+func askNoStructuredOutput(se *llm.StatusError) bool {
+	return se.Code == http.StatusNotImplemented &&
+		strings.Contains(strings.ToLower(se.Message), "structured output")
 }
 
 // askPrintAnswer is a checked answer from the model.

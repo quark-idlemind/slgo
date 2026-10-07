@@ -89,7 +89,17 @@ with `set` like any other:
 For Ollama on the same machine, with a model it has pulled:
 
     set how_url http://127.0.0.1:11434
-    set how_model qwen3.5:4b
+    set how_model qwen3.5:4b-q4_K_M
+
+Name a GGUF build, as above, and not the bare `qwen3.5:4b`.  `how` asks
+the server for an answer in a fixed format (a JSON schema), and the
+default tags of Ollama on a Mac are MLX builds, which refuse that with
+`501 Not Implemented: structured output is unavailable`.  A tag ending
+`-q4_K_M` or `-q8_0` is a GGUF build; `-mlx`, `-nvfp4` and `-mxfp8` are
+MLX.  `ollama show MODEL` gives the quantization (nvfp4 is MLX) and
+`ollama ps` the runner: "llamacpp" takes the format, "mlx" does not.
+This was measured on a Mac with Ollama 0.40.0; it is not known what the
+default tag is on other systems.
 
 `how_extra` is for what one model needs and another would refuse.  A
 model that reasons at length before it answers should be told not to.

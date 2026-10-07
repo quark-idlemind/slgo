@@ -279,10 +279,37 @@ cmd/slsh/testdata/ask-questions.tsv):
 Found first with the answer dropped kept not-found at 100% on both and
 took the 4B's wrong kept suggestions from 7% of questions to 2%.
 
+The record of that eval does not say which build the default tags
+`qwen3.5:4b` and `qwen3.5:2b` were then; see "Which model tags to pull".
+
 That is why `askAnswer` has no free-text answer in it.  There was one,
 and nothing printed it; what it did was give the model a sentence to
 write before it had chosen anything -- and the instructions supplied
 the sentence, "slsh has no command for that", ready to copy.
+
+### Which model tags to pull
+
+`how` always asks the server for a JSON schema (`askSchema`, sent as
+`response_format`).  Measured on 2026-10-06 on an Apple Silicon Mac with
+Ollama 0.40.0: `ollama pull qwen3.5:4b` (and `gemma4:e4b`) gave an MLX
+build -- `ollama show` said quantization nvfp4, `ollama ps` said runner
+"mlx" -- and its OpenAI-compatible endpoint refused a request with a
+schema, HTTP 501 and the body `structured output is unavailable`.  The
+GGUF tags (`qwen3.5:4b-q4_K_M`, `qwen3.5:2b-q4_K_M`,
+`gemma4:e4b-it-q4_K_M`) ran on runner "llamacpp" and accepted it, giving
+`{"found": true}` back for a one-property schema.
+
+So the set-up text names the GGUF tags.  Ollama's tag pages list both
+kinds: `-mlx`, `-nvfp4` and `-mxfp8` are MLX, `-q4_K_M` and `-q8_0` are
+GGUF.  Which build the default tag gives depends on the platform; it was
+measured on a Mac only, and nothing is claimed here about Linux.
+
+`askWhyNoModel` recognises the refusal -- status 501 and a body that
+names structured output -- and says to use a GGUF build, naming the
+configured model, with the server's own words after it.  Any other 501
+and every other error is worded as before.  There is no set-up check for
+`how` (no `how --check`, no doctor command), and the first question is
+the first request, so a person finds out from that line.
 
 ### Find, asking to learn something
 
