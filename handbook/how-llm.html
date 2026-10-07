@@ -49,7 +49,7 @@
           <li>A server that speaks the OpenAI-style <code>/v1/chat/completions</code>:
             <strong>Ollama</strong> (the simplest) or llama.cpp's <strong>llama-server</strong>.</li>
           <li>A small model, a few billion parameters. It can run on the same machine
-            as slsh. <a href="slsh-guide.html#how-model">slsh's guide</a> recommends <code>qwen3.5:4b</code> under Ollama.</li>
+            as slsh. <a href="slsh-guide.html#how-model">slsh's guide</a> recommends <code>qwen3.5:4b-q4_K_M</code> under Ollama.</li>
           <li>No account and no API key. slsh sends no key, so hosted services that
             need one (OpenAI, Anthropic and the like) cannot be used directly.</li>
         </ul>
@@ -68,12 +68,21 @@
               <code>127.0.0.1:11434</code>. These install steps are Ollama's, not
               slgo's, and are not repeated here.</p></div></li>
           <li><div class="step-body"><h3>Fetch the model</h3>
-            <div class="term" data-where="laptop"><pre><span class="p">$ </span>ollama pull qwen3.5:4b</pre></div></div></li>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>ollama pull qwen3.5:4b-q4_K_M</pre></div>
+            <p>The <code>-q4_K_M</code> matters. <code>how</code> asks the server for an
+              answer in a fixed format (a JSON schema), and the default
+              <code>qwen3.5:4b</code> is, on a Mac with Ollama 0.40.0 as measured, an MLX
+              build, which refuses that with <code>501 Not Implemented: structured output
+              is unavailable</code>. <code>ollama show</code> on the model gives its
+              quantization (<code>nvfp4</code> is MLX), and <code>ollama ps</code> its runner
+              (<code>llamacpp</code> works, <code>mlx</code> does not). Tags ending
+              <code>-q4_K_M</code> or <code>-q8_0</code> are GGUF builds; <code>-mlx</code>,
+              <code>-nvfp4</code> and <code>-mxfp8</code> are MLX.</p></div></li>
           <li><div class="step-body"><h3>Tell slsh where it is</h3>
             <p>At the slsh prompt. Each <code>set</code> is saved in
               <code>~/.config/slsh/config</code>, so this is done once.</p>
             <div class="term" data-where="laptop" data-where-label="at the slsh prompt"><pre><span class="p">/$ </span>set how_url http://127.0.0.1:11434
-<span class="p">/$ </span>set how_model qwen3.5:4b
+<span class="p">/$ </span>set how_model qwen3.5:4b-q4_K_M
 <span class="p">/$ </span>set how_extra '{"reasoning_effort": "none"}'</pre></div>
             <p>The last line matters for Qwen3 and Qwen3.5 models, which otherwise
               reason at length before answering. <a href="slsh-guide.html#how-model">slsh's guide</a> measured one taking
@@ -146,6 +155,10 @@
           <dd>Check the server is running and the address is right: open
             <code>http://127.0.0.1:11434</code> in a browser for Ollama. A first
             question after starting Ollama can be slow while the model loads.</dd>
+          <dt>the model cannot keep to how's answer format (structured output)</dt>
+          <dd>Ollama's MLX build of the model, which on a Mac is the default tag, refuses the
+            schema <code>how</code> sends. Pull a GGUF tag such as <code>qwen3.5:4b-q4_K_M</code>
+            and <code>set how_model</code> to it (<a href="#ollama">the steps above</a>).</dd>
           <dt>slsh will not start after <code>set how_url</code> or <code>set how_extra</code></dt>
           <dd>The value in the config file is not one slsh accepts: an address without
             <code>http://</code>, or <code>how_extra</code> that is not a JSON object.

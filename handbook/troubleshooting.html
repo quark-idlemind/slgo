@@ -593,12 +593,13 @@ Or pass -no-auth to serve loopback without it.</span></pre></div>
               <li><code>nothing is answering at &lt;url&gt;</code>: the model server is not running, or is on another port.</li>
               <li><code>the model at &lt;url&gt; did not answer in time</code>: slower than <code>how_timeout</code> (2 minutes by default).</li>
               <li><code>the model at &lt;url&gt; refused: …</code>: the server answered with an error, such as a 404 for a model name it does not have.</li>
+              <li><code>the model qwen3.5:4b at &lt;url&gt; cannot keep to how's answer format (structured output)…</code>: Ollama's MLX build of the model, which on a Mac is the default tag, refuses the schema <code>how</code> sends (a 501). Pull a GGUF tag such as <code>qwen3.5:4b-q4_K_M</code> and <code>set how_model</code> to it; <code>ollama ps</code> shows runner <code>llamacpp</code> for one that works.</li>
             </ul>
             <h4>Fix</h4>
             <p>Start the model server, and check the URL and model name. Ollama needs <code>how_model</code>; llama-server ignores it.</p>
             <div class="term" data-where="laptop"><pre><span class="p">$ </span>curl -s http://127.0.0.1:11434/v1/models
 <span class="p">$ </span>slsh -c 'set how_url http://127.0.0.1:11434'
-<span class="p">$ </span>slsh -c 'set how_model qwen3.5:4b'</pre></div>
+<span class="p">$ </span>slsh -c 'set how_model qwen3.5:4b-q4_K_M'</pre></div>
             <p>There is no API key setting. <code>how</code> sends no <code>Authorization</code> header, so a hosted service that needs a key cannot be used directly.</p>
           </div>
         </details>

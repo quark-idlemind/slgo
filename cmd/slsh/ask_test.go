@@ -149,8 +149,67 @@ func TestAskRunUnreachableKeepsTheCandidates(t *testing.T) {
 	if err == nil || res == nil || len(res.Candidates) == 0 {
 		t.Fatalf("res %+v err %v", res, err)
 	}
-	if !strings.Contains(askWhyNoModel(url, err), "nothing is answering") {
-		t.Errorf("why %q", askWhyNoModel(url, err))
+	if !strings.Contains(askWhyNoModel(url, "", err), "nothing is answering") {
+		t.Errorf("why %q", askWhyNoModel(url, "", err))
+	}
+}
+
+// askRefusing is a server answering every request with one status and body.
+func askRefusing(t *testing.T, code int, body string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, body, code)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func askWhyOf(t *testing.T, srv *httptest.Server, model string) string {
+	t.Helper()
+	res, err := askRun(context.Background(), newAskClient(askConfig{URL: srv.URL, Model: model}, nil), askHomeQuestion, nil)
+	if err == nil || res == nil {
+		t.Fatalf("res %+v err %v", res, err)
+	}
+	return askWhyNoModel(srv.URL, model, err)
+}
+
+func TestAskNoStructuredOutputSaysToUseAGGUFBuild(t *testing.T) {
+	srv := askRefusing(t, http.StatusNotImplemented, "structured output is unavailable")
+	why := askWhyOf(t, srv, "qwen-test:4b")
+	for _, want := range []string{
+		"the model qwen-test:4b at " + srv.URL,
+		"structured output",
+		"GGUF",
+		"qwen3.5:4b-q4_K_M",
+		"the model's server said 501 Not Implemented: structured output is unavailable",
+	} {
+		if !strings.Contains(why, want) {
+			t.Errorf("why %q lacks %q", why, want)
+		}
+	}
+	if strings.Contains(why, "refused") {
+		t.Errorf("why %q is the general wording", why)
+	}
+	if why := askWhyOf(t, srv, ""); !strings.HasPrefix(why, "the model at "+srv.URL+" cannot keep") {
+		t.Errorf("without a model name: %q", why)
+	}
+}
+
+func TestAskOtherRefusalsAreUnchanged(t *testing.T) {
+	for _, c := range []struct {
+		code int
+		body string
+		want string
+	}{
+		{501, "not implemented", "refused: the model's server said 501 Not Implemented: not implemented"},
+		{404, "model not found", "refused: the model's server said 404 Not Found: model not found"},
+		{500, "structured output is unavailable", "refused: the model's server said 500 Internal Server Error: structured output is unavailable"},
+	} {
+		srv := askRefusing(t, c.code, c.body)
+		why := askWhyOf(t, srv, "qwen-test:4b")
+		if why != "the model at "+srv.URL+" "+c.want {
+			t.Errorf("%d %q: why %q", c.code, c.body, why)
+		}
 	}
 }
 
