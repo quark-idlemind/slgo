@@ -918,7 +918,9 @@ var (
 // material, and the fields an override sets.  The order is the order of the
 // stateKinds that read them.
 var GLTFProps = []string{"override", "material", "colour", "alpha", "emissive", "metallic", "roughness",
-	"alphamode", "cutoff", "doublesided", "basetexture", "normaltexture", "ormtexture", "emissivetexture"}
+	"alphamode", "cutoff", "doublesided", "basetexture", "normaltexture", "ormtexture", "emissivetexture",
+	"baserepeats", "baseoffset", "baserotation", "normalrepeats", "normaloffset", "normalrotation",
+	"ormrepeats", "ormoffset", "ormrotation", "emissiverepeats", "emissiveoffset", "emissiverotation"}
 
 // GLTFAlphaModes are the alpha modes an override sets, as the viewer names
 // them.
@@ -929,7 +931,9 @@ var GLTFAlphaModes = []string{"opaque", "blend", "mask"}
 // for override, which is on or off, and material, the value of a field is
 // `none` when the face's override does not set it, or what it sets: On for
 // doublesided and override, ID for material and the textures, R G B for
-// colour and emissive, Mode for alphamode and Num for the rest.  None is
+// colour and emissive, Mode for alphamode, Pair for the repeats and offset
+// of a texture slot, and Num for the rest, a slot's rotation among them
+// (in turns).  None is
 // the word none; the zero value of the others is only meaningful for the
 // prop.  Any and Use are as for TextureExp, and Use has the type of what
 // is read.  FaceAll is kept so that the check can refuse it with the place
@@ -952,6 +956,7 @@ type GLTFExp struct {
 	Mode     string
 	ModeAt   Span
 	Num      Number
+	Pair     ST
 	R, G, B  Number
 }
 

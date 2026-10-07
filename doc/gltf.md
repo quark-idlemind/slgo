@@ -123,9 +123,16 @@ At login, on the same test region, the region sent about a hundred
 overrides for the objects in view, and every one of them parsed: they
 carried `tex` (an array of uuids, one with an undef slot), `bc`, `ec`,
 `mf`, `rf` and `ac` as reals or arrays of reals, `am` as an integer, `ds`
-as a boolean, and `ti` with `s` only. `ti`'s `o` and `r` and the no-texture
-sentinel are from the viewer's reader and the ids it writes
-(`getOverrideLLSD`, `:684-754`), and no region was seen to send them. A
+as a boolean, and `ti` with `s` only. The no-texture sentinel is from the
+viewer's reader and the ids it writes (`getOverrideLLSD`, `:684-754`), and no
+region was seen to send it. `ti`'s `o` and `r` were seen on 2026-10-07: a
+product's override on its base slot, set by a script with repeats `<2, 3>`,
+offset `<0.25, 0.5>` and a rotation of 90 (degrees, as the script gave it),
+arrived as `'ti':[{'o':[r0.25,r0.5],'r':r1.5708,'s':[r2,r3]}]`, the other
+slots with no `ti`. The offset and scale are as given and the rotation is in
+radians. Slate reads them as `baserepeats`, `baseoffset`, `baserotation` and
+the same for the other slots, the rotation in turns
+([GLTF materials](slate-runner.md#gltf-materials)). A
 colour or offset that is defined and not an array is read by the viewer as
 zeros and is skipped here; no region has been seen to send one.
 
@@ -233,10 +240,11 @@ comma is an error where the viewer skips it.
 Measured: that the capability is what makes the region send overrides; that
 a plain face takes no override and a face with the blank material does; the
 two messages above and their timing (about 3 s after a set, 60 ms after a
-clear); every key and its type but `ti`'s `o` and `r`, from the login
-burst, all of which parsed; the login burst.
+clear; every key and its type but `ti`'s `o` and `r`, from the login
+burst, all of which parsed; the login burst; `ti`'s `o` and `r`, and which
+slot a transform lands on, from the one message above.
 
-From the viewer and not measured: `ti`'s `o` and `r`, the whole-set meaning of a message, the waiting for the object, the sentinel
+From the viewer and not measured: the whole-set meaning of a message, the waiting for the object, the sentinel
 texture, the render material block's layout; that a region sends an
 override on a face again after the face's material changes.
 Inferred: that `ModifyMaterialParams` is asked for and never used here; that
