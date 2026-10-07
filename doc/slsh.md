@@ -613,6 +613,30 @@ its prims along, so `link a b` can make an object of seven; and a
 person watching wants to know that. Counting the arguments would print
 "2 prims" and be wrong in exactly the case worth reporting.
 
+### links: asking the object
+
+`links OBJECT` is the third thing the commands share a word for, and the
+only one that reads. The store numbers a set by the packets that listed
+it, which is a reading; the number a script gets from `llGetLinkNumber` is
+the region's own. `links` has the object say it, by a script dropped into
+the root for about a second ([the script, what it needs and what is
+measured](scripts.md#the-links-of-an-object-from-its-own-script)), prints
+it beside what the store had with `differs` where they part, and gives
+the store the object's order ([what the store does with
+it](objects.md#confirmed-by-the-objects-own-script)). The drop and the script's removal are two
+changes of the object's inventory, and its own scripts get `changed()`
+with CHANGED_INVENTORY for each, so a product that reloads, resets or
+re-reads a notecard on that is left in another state than it was found
+in; `links` is for when a person asks, and Slate does it only for a
+`linkmap` header ([the language](slate-language.md#objects-names-and-link-numbers)).
+So it is a command
+that reads and also writes to the store, and says so in its last line:
+the verdict is worked out from what the store held before, and then the
+store is told, so a second run of it says the store agrees. It is
+refused, with a sentence and before anything is dropped, for an object
+the avatar may not modify, and for a prim that is part of another object,
+whose number means nothing without the whole.
+
 ## What wear and detach are called, and what they take
 
 `wear`, `detach` and `dress` finish what `worn` started.  Listing the

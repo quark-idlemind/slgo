@@ -162,6 +162,12 @@ type fakeBackend struct {
 	noteErr    error
 	flushErr   error
 
+	// confirms is every ConfirmLinkOrder the store was asked for, and
+	// confirmWith and confirmErr what it answers.
+	confirms    []confirmCall
+	confirmWith *LinkConfirmation
+	confirmErr  error
+
 	// locks is what has been taken, and lockedBy is who TryLock
 	// should say holds one rather than handing it over.
 	locks    map[string]bool
@@ -985,6 +991,25 @@ func (f *fakeBackend) Flush(ctx context.Context) (int, error) {
 	n := len(f.objects)
 	f.objects = nil
 	return n, nil
+}
+
+// confirmCall is one ConfirmLinkOrder.
+type confirmCall struct {
+	Root msg.UUID
+	Keys []msg.UUID
+}
+
+func (f *fakeBackend) ConfirmLinkOrder(ctx context.Context, root msg.UUID, keys []msg.UUID) (*LinkConfirmation, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.confirms = append(f.confirms, confirmCall{root, append([]msg.UUID(nil), keys...)})
+	if f.confirmErr != nil {
+		return nil, f.confirmErr
+	}
+	if f.confirmWith != nil {
+		return f.confirmWith, nil
+	}
+	return &LinkConfirmation{}, nil
 }
 
 func (f *fakeBackend) Friends(ctx context.Context) ([]Friend, error) {

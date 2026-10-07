@@ -31,8 +31,12 @@ block's place in it, and the parent the update gave. `listed` marks the
 description that put the prim in its parent's list, which fixed its place
 in the link order (the children of a set are numbered by the sequence number of the packet that listed them, and then the block, not by arrival, within one circuit: the daemon's avatars in a region each have a circuit of their own, shown as `circuit N`, and when two that each described the whole set disagree on its order a line under the prim says so), and `answer to a request` one that followed a notice
 that the region believed the session held the prim, or a request for it.
-It is what to read when `touch` by link number reaches the wrong prim or
-Slate says the order of a set is not known. With `-c` it is every prim,
+A set whose order the object's own script gave (`links`, or Slate's setup)
+says so under each of its prims, `order from the object's own script at
+`*time*, and when that is not what the packets said, `the packets said
+otherwise` and which link numbers changed.  It is what to read when
+`touch` by link number reaches the wrong prim or Slate says the order of
+a set is not known. With `-c` it is every prim,
 without it the roots; a prim is described as the store heard it since the
 daemon started, and a daemon older than the record prints "no description
 recorded".

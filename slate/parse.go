@@ -257,7 +257,7 @@ func (p *parser) header() error {
 
 func (p *parser) isHeader() bool {
 	switch p.tok.text {
-	case "timeout", "allow", "object", "avatar", "item", "probe", "listen":
+	case "timeout", "allow", "object", "avatar", "item", "probe", "linkmap", "listen":
 		return p.tok.kind == kWord
 	default:
 		return false
@@ -280,6 +280,8 @@ func (p *parser) headers() error {
 			err = p.item()
 		case "probe":
 			err = p.probe()
+		case "linkmap":
+			err = p.linkMap()
 		case "listen":
 			err = p.listen()
 		}
@@ -439,6 +441,22 @@ func (p *parser) probe() error {
 		return err
 	}
 	p.script.Probes = append(p.script.Probes, Probe{
+		Span: cover(start, p.prev.span),
+		Name: name,
+	})
+	return nil
+}
+
+func (p *parser) linkMap() error {
+	start := p.tok.span
+	if err := p.want("linkmap"); err != nil {
+		return err
+	}
+	name, err := p.ident()
+	if err != nil {
+		return err
+	}
+	p.script.LinkMaps = append(p.script.LinkMaps, LinkMapHeader{
 		Span: cover(start, p.prev.span),
 		Name: name,
 	})
@@ -2974,7 +2992,7 @@ func (p *parser) beginsItem() bool {
 	}
 	switch p.tok.text {
 	case "expect", "then", "do", "test", "sequence", "before", "after",
-		"object", "avatar", "item", "allow", "probe", "listen", "timeout", "slate":
+		"object", "avatar", "item", "allow", "probe", "linkmap", "listen", "timeout", "slate":
 		return true
 	}
 	return false

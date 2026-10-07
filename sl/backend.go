@@ -286,6 +286,15 @@ type Backend interface {
 	// Flush empties the object cache, and says how much it held.
 	Flush(ctx context.Context) (int, error)
 
+	// ConfirmLinkOrder gives the object store the order a script in the
+	// object numbered its prims in: keys are the prims by link number,
+	// the root first, seated avatars left out.  The store takes the
+	// script's order where it differs and says so; a set the keys do not
+	// name exactly is refused with ErrLinkSetDiffers and nothing is
+	// changed.  A daemon older than the call answers ErrNotSupported.
+	// Why: doc/objects.md#confirmed-by-the-objects-own-script
+	ConfirmLinkOrder(ctx context.Context, root msg.UUID, keys []msg.UUID) (*LinkConfirmation, error)
+
 	// Friends is the friend list and who is logged in.
 	Friends(ctx context.Context) ([]Friend, error)
 

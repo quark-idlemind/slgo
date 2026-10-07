@@ -173,6 +173,12 @@ type fakeGrid struct {
 	// how is what Descriptions says of each object, by id.
 	how map[msg.UUID][]sl.Description
 
+	// confirms is the keys of each ConfirmLinkOrder, and confirmWith and
+	// confirmErr what it answers (links_test.go).
+	confirms    [][]msg.UUID
+	confirmWith *sl.LinkConfirmation
+	confirmErr  error
+
 	// presenceCalls counts how many times the avatar has been asked
 	// where it is, and presenceFailAt is the one to refuse.  A command
 	// that asks twice -- tp waits for the move and then reads the

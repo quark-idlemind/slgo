@@ -1067,7 +1067,8 @@ The region is where the shell has grown most. `where` is the region and
 the position, `look` is what the simulator said about the region, `who`
 lists the avatars nearest first and `map` draws them. `objects` is what
 the region has described standing there and `worn` is what this avatar
-is carrying; `rez`, `place`, `move`, `link`, `unlink`, `take`, `wear`,
+is carrying; `rez`, `place`, `move`, `link`, `unlink`, `links` (which asks the object for
+its own link numbers), `take`, `wear`,
 `detach`, `drop`, `perms`, `texture`, `touch`, `dump` and `reform` do
 things to it, and `start` and `stop` run the scripts inside it.
 

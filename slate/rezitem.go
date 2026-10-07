@@ -99,6 +99,10 @@ func (s *stepRun) rezStimulus(x *RezItem) (*stimulus, error) {
 			if err := s.t.watch.poll(ctx, true); err != nil {
 				return "", err
 			}
+			// A link N in a later step reads the store's order: nothing
+			// is dropped into a rezzed or worn object, and the
+			// transcript says so once.
+			s.r.noteStoreOrder(b)
 			return fmt.Sprintf("rezzed %q at <%g, %g, %g> as %s", it.Name, pos.X, pos.Y, pos.Z, name), nil
 		},
 	}, nil

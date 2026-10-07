@@ -826,7 +826,9 @@ come. It claims this, and no more:
   seen so far from that sending. It does not say the set is complete.
   Slate's `link N` says the same in its docs and in the sentence for
   an unknown order: the number is the store's best reading of the
-  region's order, and only a probe is the script's own count.
+  region's order, and only a script's own count is certain: a probe's,
+  or the one `slsh links` and Slate's setup (for a `linkmap` object) take
+  ([below](#confirmed-by-the-objects-own-script)).
 
 **Why this and not less.** The strict rule this replaced (known only
 when every child came in one message, with no gap in the sequence)
@@ -842,8 +844,58 @@ measurement and from how Firestorm asks.
 number (`touch` by name or id reaches the prim whatever its number is);
 give the object a probe in a Slate file (`probe NAME`), whose scripts
 report the link numbers the prims have, which is the truth the store
-only estimates; or have the set described again: take it and rez it, or
-take it off and wear it again.
+only estimates; ask the object for its own numbering (`slsh links`, or
+a Slate file's `linkmap NAME` header, which does it at setup for an object
+a step addresses with `link N`), which needs the avatar to be allowed to
+modify it, and puts a script in and takes it out, which the object's own
+scripts hear as two `CHANGED_INVENTORY` events; or have the set
+described again: take it and rez it, or take it off and wear it again.
+
+### Confirmed by the object's own script
+
+The packets give a reading of the order; the region's own count is
+`llGetLinkKey`, and a script in the object can say it. `Session.LinkMap`
+drops a one-shot script into the root that says each link's number, key
+and name to its owner and removes itself ([the script, and what it costs,
+in scripts.md](scripts.md#the-links-of-an-object-from-its-own-script)).
+`Objects.ConfirmOrder(root, keys)` then gives the store those keys, root
+first, in link order (`agent/confirm.go`; over a daemon,
+`ConfirmLinkOrder`, which a daemon older than it answers as not
+supported).
+
+- It needs the keys to be the root's and every prim the store holds under
+  it, each once; a script that says another set (a prim the store has not
+  been told of yet is the usual reason) is refused with `ErrSetDiffers` and
+  nothing changes, and the caller asks again once the store has seen them.
+  Seated avatars are not in the keys: they are numbered after the prims, in
+  the order they sat, whatever order the prims are in.
+- If the store's order is the script's, the set is marked **confirmed**: a
+  state above the packet reading, known by the region's own count, with
+  the time. Its `LinkKnown` is true whatever the packets said (a child that
+  came as an answer to a request, circuits that disagreed), and its
+  `LinkNote` is empty. `slsh objects --how` shows it as `order from the
+  object's own script at <time>`.
+- If it is not, the store takes the script's order, marks the set
+  confirmed and says it corrected the packets: `--how` adds `the packets
+  said otherwise` and the link numbers whose prim changed. The set is then
+  given an order outright, so the keys do not reorder it again.
+- A prim joining the set or leaving it (a link, an unlink, a kill of a child
+  or of the root, a prim described under another parent) drops the
+  confirmation, since the order of what came is not the script's to say. A
+  set that had been corrected is then not known, as no order is known
+  for the prim that joined; one that had agreed falls back to what the
+  packets said. A flush drops every confirmation. Nothing is kept longer
+  than the object: one entry per root, deleted with it, so the state is as
+  bounded as the objects are.
+- A repeat of a description the store already has, or the keys another
+  circuit gives the same children, change nothing.
+
+**What it does not do.** A script cannot be put in an object the avatar
+may not modify, so the order of a no-mod product stays the store's best
+reading from the packets, and every message that says so says it that way.
+The count is of the prims the store was told of: if the region has not
+described one, the script's count has one more prim than the store has,
+and the order is not applied.
 
 **What Firestorm does.** It numbers a child by its place in its parent's
 child list, appended in the order updates give it a parent

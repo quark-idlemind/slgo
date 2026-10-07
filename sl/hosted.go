@@ -15,6 +15,9 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
@@ -238,6 +241,43 @@ func (h *Hosted) Flush(ctx context.Context) (int, error) {
 	return h.conn.Flush(ctx)
 }
 
+func (h *Hosted) ConfirmLinkOrder(ctx context.Context, root msg.UUID, keys []msg.UUID) (*LinkConfirmation, error) {
+	ks := make([]string, len(keys))
+	for i, k := range keys {
+		ks[i] = k.String()
+	}
+	r, err := h.conn.ConfirmLinkOrder(ctx, ks)
+	if err != nil {
+		switch status.Code(err) {
+		case codes.Unimplemented:
+			return nil, fmt.Errorf("%w: this daemon is older than the call", ErrNotSupported)
+		case codes.InvalidArgument:
+			return nil, fmt.Errorf("%w: %s", ErrLinkSetDiffers, status.Convert(err).Message())
+		case codes.FailedPrecondition:
+			return nil, fmt.Errorf("%w: %s", ErrNotHere, status.Convert(err).Message())
+		}
+		return nil, err
+	}
+	c := &LinkConfirmation{At: time.UnixMilli(r.At), Corrected: r.Corrected}
+	for _, n := range r.Moved {
+		c.Moved = append(c.Moved, int(n))
+	}
+	return c, nil
+}
+
+// linkConfirmedFromPB is what a daemon said of a set's confirmation, or
+// nil for one that was not confirmed.
+func linkConfirmedFromPB(o *pb.ObjectInfo) *LinkConfirmation {
+	if !o.LinkConfirmed {
+		return nil
+	}
+	c := &LinkConfirmation{At: time.UnixMilli(o.LinkConfirmedAt), Corrected: o.LinkCorrected}
+	for _, n := range o.LinkMoved {
+		c.Moved = append(c.Moved, int(n))
+	}
+	return c
+}
+
 func (h *Hosted) Send(ctx context.Context, m msg.Message, reliable bool) error {
 	return h.conn.Send(ctx, m, reliable)
 }
@@ -393,25 +433,26 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			continue
 		}
 		s := &Seen{
-			Object:       Object{ID: oid, Local: o.Local},
-			Owner:        parseUUIDOrZero(o.Owner),
-			Position:     fromPB(o.Position),
-			Scale:        fromPB(o.Scale),
-			Rotation:     quatFromPB(o.Rotation),
-			Shape:        shapeFromPB(o.Shape),
-			Parent:       o.Parent,
-			PCode:        uint8(o.Pcode),
-			TextureEntry: o.TextureEntry,
-			TextureAnim:  o.TextureAnim,
-			Click:        uint8(o.Click),
-			ClickKnown:   o.ClickKnown,
-			Sculpt:       msg.SculptMark{Kind: msg.SculptKind(o.SculptKind), ID: parseUUIDOrZero(o.SculptId)},
-			LinkNumber:   int(o.LinkNumber),
-			LinkKnown:    o.LinkKnown,
-			LinkNote:     o.LinkNote,
-			Text:         o.Text,
-			Light:        lightFromPB(o.Light),
-			Projector:    projectorFromPB(o.Projector),
+			Object:        Object{ID: oid, Local: o.Local},
+			Owner:         parseUUIDOrZero(o.Owner),
+			Position:      fromPB(o.Position),
+			Scale:         fromPB(o.Scale),
+			Rotation:      quatFromPB(o.Rotation),
+			Shape:         shapeFromPB(o.Shape),
+			Parent:        o.Parent,
+			PCode:         uint8(o.Pcode),
+			TextureEntry:  o.TextureEntry,
+			TextureAnim:   o.TextureAnim,
+			Click:         uint8(o.Click),
+			ClickKnown:    o.ClickKnown,
+			Sculpt:        msg.SculptMark{Kind: msg.SculptKind(o.SculptKind), ID: parseUUIDOrZero(o.SculptId)},
+			LinkNumber:    int(o.LinkNumber),
+			LinkKnown:     o.LinkKnown,
+			LinkNote:      o.LinkNote,
+			LinkConfirmed: linkConfirmedFromPB(o),
+			Text:          o.Text,
+			Light:         lightFromPB(o.Light),
+			Projector:     projectorFromPB(o.Projector),
 
 			RenderMaterials: renderMaterialsFromPB(o.RenderMaterials),
 			GLTF:            gltfFromPB(o.GltfOverrides),

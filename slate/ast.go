@@ -158,6 +158,7 @@ type Script struct {
 	Avatars   []Avatar
 	Items     []Item
 	Probes    []Probe
+	LinkMaps  []LinkMapHeader
 	Listens   []Listen
 	Tests     []Test
 	Befores   []Block // Check allows at most one
@@ -358,6 +359,13 @@ type Item struct {
 
 // Probe is one probe header: the object that gets a probe script.
 type Probe struct {
+	Span Span
+	Name Ident
+}
+
+// LinkMapHeader is one linkmap header: the object that has its own script
+// say the link numbers, by a script dropped into it for a moment.
+type LinkMapHeader struct {
 	Span Span
 	Name Ident
 }

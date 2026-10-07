@@ -45,6 +45,7 @@ func Check(s *Script) error {
 		items:    map[string]Span{},
 		gone:     map[string]Span{},
 		probes:   map[string]Probe{},
+		linkMaps: map[string]bool{},
 		listens:  map[int32]struct{}{},
 	}
 	if err := c.headers(); err != nil {
@@ -107,6 +108,7 @@ type checker struct {
 	rezAny   map[string]bool       // names one of those bound in some test: delete in after each may name them
 	phase    Phase                 // the part of the test the step being checked came from
 	probes   map[string]Probe
+	linkMaps map[string]bool
 	listens  map[int32]struct{}
 }
 
@@ -292,6 +294,10 @@ func (c *checker) headers() error {
 		i := i
 		items = append(items, placed{c.s.Probes[i].Span.Start, func() error { return c.probeAt(i) }})
 	}
+	for i := range c.s.LinkMaps {
+		i := i
+		items = append(items, placed{c.s.LinkMaps[i].Span.Start, func() error { return c.linkMapAt(i) }})
+	}
 	for i := range c.s.Listens {
 		i := i
 		items = append(items, placed{c.s.Listens[i].Span.Start, func() error { return c.listenAt(i) }})
@@ -440,6 +446,30 @@ func (c *checker) probeAt(i int) error {
 		return c.err(pr.Name.Span, "%s already has a probe", pr.Name.Text)
 	}
 	c.probes[pr.Name.Text] = pr
+	return nil
+}
+
+// linkMapAt checks a linkmap header: it names a header object that a step
+// addresses with link N, once, and that has no probe, whose hello map is
+// already the script's own count of every link.
+func (c *checker) linkMapAt(i int) error {
+	lm := c.s.LinkMaps[i]
+	name := lm.Name.Text
+	if !c.declared[name] {
+		return c.err(lm.Name.Span, "%s is not an object; linkmap names a header object, not a name a step binds with as, wear or rez", name)
+	}
+	if c.linkMaps[name] {
+		return c.err(lm.Name.Span, "%s already has a linkmap", name)
+	}
+	for _, p := range c.s.Probes {
+		if p.Name.Text == name {
+			return c.err(lm.Name.Span, "%s has a probe, whose hello already gives every link number; linkmap would drop a script for nothing", name)
+		}
+	}
+	if !linkUsers(c.s)[name] {
+		return c.err(lm.Name.Span, "no step addresses %s with link N, so its link numbers are not needed; remove the linkmap", name)
+	}
+	c.linkMaps[name] = true
 	return nil
 }
 

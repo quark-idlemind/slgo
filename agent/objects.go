@@ -172,6 +172,12 @@ type Object struct {
 	// Why: doc/objects.md#ordering-by-the-packet
 	LinkNote string
 
+	// LinkConfirmed is set when a script in the object numbered the set
+	// and the store took that (ConfirmOrder): the order is then known by
+	// the region's own count, whatever the packets said.
+	// Why: doc/objects.md#confirmed-by-the-objects-own-script
+	LinkConfirmed *LinkConfirmation
+
 	// First and Last are when the simulator first and last said
 	// anything about this object.  Last is what Trim ages an orphan by.
 	First time.Time
@@ -334,6 +340,13 @@ type Objects struct {
 	verdicts map[uint32]orderVerdict
 	explicit map[uint32]bool
 
+	// confirms is, by the root's local id, the sets whose order a script
+	// in the object numbered (ConfirmOrder), which is known by the
+	// region's own count and stronger than the packets.  An entry goes
+	// when a prim joins the set or leaves it, and with the root.
+	// Why: doc/objects.md#confirmed-by-the-objects-own-script
+	confirms map[uint32]*LinkConfirmation
+
 	// notes is what was said about local ids no update has yet described
 	// (cached, requested, killed), bounded by noteCap; see describe.go.
 	notes     map[uint32]*note
@@ -379,7 +392,7 @@ func newObjects() *Objects {
 		sitters: map[uint32][]msg.UUID{}, sitUnordered: map[uint32]bool{},
 		misordered: map[msg.UUID]bool{}, links: map[uint32]namedLink{},
 		lastLive: map[uint32]time.Time{}, unwitnessed: map[uint32]bool{},
-		rootless: map[uint32]bool{}, verdicts: map[uint32]orderVerdict{}, explicit: map[uint32]bool{}, notes: map[uint32]*note{}, pendingGLTF: map[uint32]pendingOverride{},
+		rootless: map[uint32]bool{}, verdicts: map[uint32]orderVerdict{}, explicit: map[uint32]bool{}, confirms: map[uint32]*LinkConfirmation{}, notes: map[uint32]*note{}, pendingGLTF: map[uint32]pendingOverride{},
 		now: time.Now}
 }
 
@@ -473,6 +486,7 @@ func (o *Objects) Linkset(root uint32) []*Object {
 		if v := o.byID[id]; v != nil {
 			k := *v
 			k.LinkNumber, k.LinkKnown, k.LinkNote = 2+i, o.knownLocked(root), o.noteLocked(root)
+			k.LinkConfirmed = o.confirms[root]
 			out = append(out, &k)
 		}
 	}
@@ -498,6 +512,7 @@ func (o *Objects) numberLocked(c *Object, find func(uint32) *Object) {
 		set = c.Local
 	}
 	c.LinkKnown, c.LinkNote = o.knownLocked(set), o.noteLocked(set)
+	c.LinkConfirmed = o.confirms[set]
 	// A sitter's number needs only the count of prims, not their order.
 	if c.PCode == pcodeAvatar && c.Parent != 0 {
 		c.LinkKnown = !o.sitUnordered[c.Parent]
@@ -510,6 +525,9 @@ func (o *Objects) numberLocked(c *Object, find func(uint32) *Object) {
 // and the root has been described (not rootless).
 // Why: doc/objects.md#when-a-set-is-known
 func (o *Objects) knownLocked(set uint32) bool {
+	if o.confirms[set] != nil {
+		return true
+	}
 	if o.unordered[set] || o.unwitnessed[set] || o.rootless[set] {
 		return false
 	}
@@ -616,6 +634,7 @@ func (o *Objects) linkLocked(v *Object, ev evidence) {
 		v.listed, v.listedUnder = true, v.Parent
 		return
 	}
+	o.unconfirmLocked(v.Parent)
 	o.witnessLocked(v, ev, live)
 	v.keys, v.exempt = nil, live || ev.msg == 0
 	if !v.exempt && !ev.refill {
@@ -973,6 +992,7 @@ func (o *Objects) unlinkLocked(v *Object) {
 		v.listed = false
 		return
 	}
+	o.unconfirmLocked(v.listedUnder)
 	list := o.kids[v.listedUnder]
 	for i, id := range list {
 		if id == v.ID {
@@ -1011,6 +1031,7 @@ func (o *Objects) forgetLocked(v *Object) {
 	delete(o.rootless, v.Local)
 	delete(o.verdicts, v.Local)
 	delete(o.explicit, v.Local)
+	delete(o.confirms, v.Local)
 	for _, id := range o.kids[v.Local] {
 		if c := o.byID[id]; c != nil {
 			c.listed = false
@@ -1115,6 +1136,7 @@ func (o *Objects) Flush() int {
 	o.rootless = map[uint32]bool{}
 	o.verdicts = map[uint32]orderVerdict{}
 	o.explicit = map[uint32]bool{}
+	o.confirms = map[uint32]*LinkConfirmation{}
 	o.notes = map[uint32]*note{}
 	o.notesLost = time.Time{}
 	o.lastLive = map[uint32]time.Time{}

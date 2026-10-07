@@ -211,6 +211,9 @@ func (b *fakeBackend) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours
 	return &sl.Neighbours{}, nil
 }
 func (b *fakeBackend) Flush(ctx context.Context) (int, error) { return 0, nil }
+func (b *fakeBackend) ConfirmLinkOrder(ctx context.Context, root msg.UUID, keys []msg.UUID) (*sl.LinkConfirmation, error) {
+	return nil, sl.ErrNotSupported
+}
 func (b *fakeBackend) Friends(ctx context.Context) ([]sl.Friend, error) {
 	return []sl.Friend{{ID: harnessOther, Online: true}}, nil
 }

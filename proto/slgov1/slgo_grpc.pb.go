@@ -65,6 +65,7 @@ const (
 	Grid_Ground_FullMethodName           = "/slgo.v1.Grid/Ground"
 	Grid_Neighbours_FullMethodName       = "/slgo.v1.Grid/Neighbours"
 	Grid_Flush_FullMethodName            = "/slgo.v1.Grid/Flush"
+	Grid_ConfirmLinkOrder_FullMethodName = "/slgo.v1.Grid/ConfirmLinkOrder"
 	Grid_Cap_FullMethodName              = "/slgo.v1.Grid/Cap"
 	Grid_Send_FullMethodName             = "/slgo.v1.Grid/Send"
 	Grid_Control_FullMethodName          = "/slgo.v1.Grid/Control"
@@ -205,6 +206,14 @@ type GridClient interface {
 	// cached then describes somewhere else.  This is for a client that
 	// knows the cache is wrong for a reason the server cannot see.
 	Flush(ctx context.Context, in *FlushRequest, opts ...grpc.CallOption) (*FlushResponse, error)
+	// ConfirmLinkOrder gives the daemon's object store the order a script in
+	// an object numbered its prims in, so that the set is known by the
+	// region's own count. The keys are the prims' by link number, the root
+	// first; seated avatars are not in them. The store takes the script's
+	// order where it differs, and says so. A set whose prims the script does
+	// not name exactly is refused, with the store unchanged.
+	// Why: doc/objects.md#confirmed-by-the-objects-own-script
+	ConfirmLinkOrder(ctx context.Context, in *ConfirmLinkOrderRequest, opts ...grpc.CallOption) (*ConfirmLinkOrderResponse, error)
 	// Cap makes an HTTP request against one of the agent's
 	// capabilities.  The server holds the URLs and does the request; it
 	// has no idea what any of them mean.  This is what keeps inventory,
@@ -506,6 +515,16 @@ func (c *gridClient) Flush(ctx context.Context, in *FlushRequest, opts ...grpc.C
 	return out, nil
 }
 
+func (c *gridClient) ConfirmLinkOrder(ctx context.Context, in *ConfirmLinkOrderRequest, opts ...grpc.CallOption) (*ConfirmLinkOrderResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfirmLinkOrderResponse)
+	err := c.cc.Invoke(ctx, Grid_ConfirmLinkOrder_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *gridClient) Cap(ctx context.Context, in *CapRequest, opts ...grpc.CallOption) (*CapResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CapResponse)
@@ -752,6 +771,14 @@ type GridServer interface {
 	// cached then describes somewhere else.  This is for a client that
 	// knows the cache is wrong for a reason the server cannot see.
 	Flush(context.Context, *FlushRequest) (*FlushResponse, error)
+	// ConfirmLinkOrder gives the daemon's object store the order a script in
+	// an object numbered its prims in, so that the set is known by the
+	// region's own count. The keys are the prims' by link number, the root
+	// first; seated avatars are not in them. The store takes the script's
+	// order where it differs, and says so. A set whose prims the script does
+	// not name exactly is refused, with the store unchanged.
+	// Why: doc/objects.md#confirmed-by-the-objects-own-script
+	ConfirmLinkOrder(context.Context, *ConfirmLinkOrderRequest) (*ConfirmLinkOrderResponse, error)
 	// Cap makes an HTTP request against one of the agent's
 	// capabilities.  The server holds the URLs and does the request; it
 	// has no idea what any of them mean.  This is what keeps inventory,
@@ -937,6 +964,9 @@ func (UnimplementedGridServer) Neighbours(context.Context, *NeighboursRequest) (
 }
 func (UnimplementedGridServer) Flush(context.Context, *FlushRequest) (*FlushResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Flush not implemented")
+}
+func (UnimplementedGridServer) ConfirmLinkOrder(context.Context, *ConfirmLinkOrderRequest) (*ConfirmLinkOrderResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfirmLinkOrder not implemented")
 }
 func (UnimplementedGridServer) Cap(context.Context, *CapRequest) (*CapResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Cap not implemented")
@@ -1269,6 +1299,24 @@ func _Grid_Flush_Handler(srv interface{}, ctx context.Context, dec func(interfac
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Grid_ConfirmLinkOrder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfirmLinkOrderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GridServer).ConfirmLinkOrder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Grid_ConfirmLinkOrder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GridServer).ConfirmLinkOrder(ctx, req.(*ConfirmLinkOrderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Grid_Cap_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CapRequest)
 	if err := dec(in); err != nil {
@@ -1526,6 +1574,10 @@ var Grid_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Flush",
 			Handler:    _Grid_Flush_Handler,
+		},
+		{
+			MethodName: "ConfirmLinkOrder",
+			Handler:    _Grid_ConfirmLinkOrder_Handler,
 		},
 		{
 			MethodName: "Cap",

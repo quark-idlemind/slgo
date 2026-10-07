@@ -207,6 +207,7 @@ var askQuestions = []askQuestion{
 	{"do I click on an object", "touch", 3},
 	{"do I offer somebody a teleport to where I am", "lure", 3},
 	{"do I link several prims together", "link", 3},
+	{"do I find which link number each prim of an object has", "links", 3},
 	{"do I change the colour of one face of an object", "texture", 3},
 	{"do I let other people copy my object", "perms", 3},
 	{"do I log another avatar in", "login", 3},

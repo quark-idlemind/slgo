@@ -132,7 +132,7 @@ var groups = []group{
 		members: []string{"where", "parcel", "group", "invite", "maturity", "tp", "landmark", "sit", "stand", "animate", "walk", "face", "halt", "who", "look", "simstats", "map", "regions", "neighbours",
 			"objects", "worn", "wear",
 			"detach", "dress", "move", "dump", "rez", "reform", "touch", "texture",
-			"take", "place", "perms", "drop", "fetch", "start", "stop", "link", "unlink"},
+			"take", "place", "perms", "drop", "fetch", "start", "stop", "link", "unlink", "links"},
 	},
 	{
 		name:    "money",

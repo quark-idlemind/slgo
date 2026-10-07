@@ -106,6 +106,101 @@ Measured on Agni on 5 October 2026, with `RezScript` from this branch:
 Nothing comes back to say the script went in or started: the contents
 and `GetScriptRunning` are how a caller finds out.
 
+## The links of an object, from its own script
+
+The order the store reads off the packets is a reading ([Confirmed by the
+object's own script](objects.md#confirmed-by-the-objects-own-script)). The
+region's own count is what a script in the object sees, and `Session.
+LinkMap(ctx, object)` has one say it: a script dropped into the root with
+`RezScript` ([above](#dropping-a-script-into-an-object)), from a copy kept
+in the avatar's inventory, so that a call costs a drop and about a second
+and not an upload.
+
+**The script** (`linkMapSource`, `sl/linkmap.go`) runs in `state_entry`.
+For each link from 1 to `llGetNumberOfPrims()` (just link 0 when that is
+1) it says to the owner only, with `llOwnerSay`, `LINKMAP <n> <key>
+<name>`, the key from `llGetLinkKey` and the name from `llGetLinkName`;
+then `LINKMAP done <sent> <seated>`, where `<sent>` is how many link lines
+it said before (1 for a lone prim; for a set with sitters, the prims only,
+so not what `llGetNumberOfPrims` returned); then it removes itself with
+`llRemoveInventory(llGetScriptName())`. It says nothing else. Seated
+avatars are told by `llGetAgentSize` and left out of the lines, counted in
+the last one: `llGetNumberOfPrims` counts them after the prims, the store
+numbers sitters after the prims too, and a sitter never moves a prim's
+number, so the map is of the prims and says how many sat. A prim that is
+the only one but has somebody on it is link 1, as the store numbers it.
+
+**Who may ask.** The avatar must own the object and the object's owner
+mask must let it modify, or `LinkMap` returns `ErrCannotModify` before
+anything is dropped, read from the object's properties (one selection, let
+go again). The rule is the viewer's, with one narrowing: an object the
+avatar does not own is refused though its group or everyone may modify it,
+since `llOwnerSay` is heard by the object's owner and the script would
+speak to somebody else. Land that runs no scripts (`ScriptsBlocked`) is
+refused too, `ErrScriptsStopped`, rather than waited out.
+
+**The item.** It is "slgo linkmap" in the Scripts folder, made on first
+use with `CreateItem` and `SaveScript` and kept. Its description says
+which source it holds, `slgo linkmap v2` (`linkMapVersion`), set only after
+the source has compiled. A copy whose description is another is stale: the
+source is saved over it in place, and the description set again. Two items
+of the name are refused, with their ids, rather than one chosen. A hand
+edit of the source that leaves the description is not noticed.
+
+**Listening.** The subscription is made before the drop and hears owner
+chat from the root's id only, so another object's lines, and the root's own
+talk in open chat, are never taken. It ends at the done line or at
+`Options.LinkMapTimeout` (15 s), whichever is first, and it is over when
+the done line has come and every link line it counts is in; no line at all
+is an `ErrTimeout` that says the script may not have run, and a part of a
+map says how many links it had. The lines must be every prim once, by the
+script's own count, and the first must be the root, or the map is refused.
+
+**The reader waits for the count, not for a time.** The script's lines
+are said microseconds apart, and once in about ten calls on fresh lone
+prims the end was handled with the link line not yet heard ("counted 1
+prims and gave 0", measured live 6 October 2026; the cause is not known:
+the relay and the client's stream were read for a reorder and a late
+subscription and nothing was found, since everything on that path is one
+ordered queue and the subscription is made at the daemon from the start).
+A pause after the end line (500 ms was the first fix) is a guess about
+how late a line may be, so the end line now says how many link lines were
+sent, and `LinkMap` holds on until it has exactly that many, by distinct
+link number, however late they come and in any order, the end line first
+or last, all under the one `LinkMapTimeout`. At the timeout the error says
+how many of how many: "said it sent 6 link lines and 5 were heard". More
+distinct links than the end said is a map refused, not a longer wait. The
+source changed (the end line's first number was `llGetNumberOfPrims`, the
+prims and the sitters, and is now the lines sent), so the description is
+v2 and a copy of v1 in an avatar's inventory is saved over on its next use.
+
+**What it costs the object.** The script going in and taking itself out are
+two changes of the object's inventory, and every script already in the
+object gets `changed()` with `CHANGED_INVENTORY` for each. A product that
+reloads its configuration, resets or re-reads a notecard on that event is
+left in another state than it was found in. `slsh links` is a person's
+request and does it; a Slate file does it only for an object a `linkmap`
+header names ([the language](slate-language.md#objects-names-and-link-numbers)).
+
+**What is left.** The contents of the object are read afterwards and
+polled a few seconds for the script to be gone; a copy still there is
+removed (`RemoveTaskInventory`), and what could not be done comes back as a
+warning on the map, not as a failure of it. The copy an object makes of a
+second drop is called "slgo linkmap 1" and so on, and counts as ours. This
+runs even when the caller gave up, on a context of its own.
+
+**Measured** on 6 October 2026, by the prototype of the script this one is
+taken from (a shell script around `slsh`, not this code): on a modifiable
+worn object of 14 prims and a rezzed one of 6 it gave every link, by key,
+in about a second of chat after a drop that returned in 0.2 s; a whole check
+took 2.9 s and left nothing in the object. Uploading the script into the
+object instead, which restarts it, took about ten seconds before it ran, so
+a drop of a kept copy is what this uses. What is not measured is the Go
+call itself on the grid: it was written afterwards and is tested over a
+fake. To measure live: a modifiable worn object, a rezzed set, an object that
+may not be modified (refused, with nothing dropped), and a lone prim (link
+0, which the script asks `llGetLinkKey(0)` for).
+
 ## Whether a script is running
 
 `SetScriptRunning` is answered by nothing at all, so `ScriptRunning`

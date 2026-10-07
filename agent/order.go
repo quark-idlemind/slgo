@@ -180,7 +180,7 @@ func (o *Objects) orderLocked(p uint32) {
 // noteLocked is why the set under this parent is not known by its keys, or
 // empty.
 func (o *Objects) noteLocked(set uint32) string {
-	if v, ok := o.verdicts[set]; ok && !v.ok && !o.explicit[set] {
+	if v, ok := o.verdicts[set]; ok && !v.ok && !o.explicit[set] && o.confirms[set] == nil {
 		return v.note
 	}
 	return ""

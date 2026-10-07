@@ -544,6 +544,20 @@ func TestObjectsHowPrintsTheLinkOrderAndHowEachPrimWasDescribed(t *testing.T) {
 	if got := x.do(t, "objects --how lamp"); strings.Contains(got, "local 41") {
 		t.Errorf("--how listed a child without -c:\n%s", got)
 	}
+
+	// A set the object's own script numbered says so, and what it changed.
+	x.grid.objects[0].LinkConfirmed = &sl.LinkConfirmation{At: at}
+	x.grid.objects[1].LinkConfirmed = &sl.LinkConfirmation{At: at, Corrected: true, Moved: []int{2, 3}}
+	x.grid.objects[1].LinkKnown, x.grid.objects[1].LinkNote = true, ""
+	got = x.do(t, "objects --how -c lamp")
+	for _, want := range []string{
+		"      link 1, order not known; local 40, parent 0\n      order from the object's own script at 03:04:05\n",
+		"      link 2, known; local 41, parent 40\n      order from the object's own script at 03:04:05, the packets said otherwise (links 2 and 3 changed)\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("--how is missing %q:\n%s", want, got)
+		}
+	}
 }
 
 // TestACommandsOutputIsShownRatherThanObeyed.

@@ -230,6 +230,12 @@ type Seen struct {
 	// agent.Object.LinkNote.
 	LinkNote string
 
+	// LinkConfirmed is set when a script in the object numbered the set
+	// and the store took that: the order is known by the region's own
+	// count.  See Session.ConfirmLinkOrder.
+	// Why: doc/objects.md#confirmed-by-the-objects-own-script
+	LinkConfirmed *LinkConfirmation
+
 	// Text is the floating text above the object.
 	Text string
 
@@ -826,6 +832,39 @@ func (w *Session) Region(ctx context.Context) (*Region, error) {
 		return nil, fmt.Errorf("sl: the region handshake has not arrived")
 	}
 	return r, nil
+}
+
+// LinkConfirmation is what a script's own numbering of a set did to the
+// store: when, and whether the store's order was another one.
+type LinkConfirmation = agent.LinkConfirmation
+
+// ErrLinkSetDiffers is why a script's order was not applied: its prims are
+// not the ones the store holds under the root, which is usually a prim the
+// store has not been told of yet.
+var ErrLinkSetDiffers = agent.ErrSetDiffers
+
+// ConfirmLinkOrder gives the object store the order a script in the object
+// numbered its prims in, so that the set is known by the region's own count
+// where the packets could only be read.  Where the store's order differs
+// it takes the script's, and the result says so.  LinkMap gets the order.
+// Why: doc/objects.md#confirmed-by-the-objects-own-script
+func (w *Session) ConfirmLinkOrder(ctx context.Context, root *Object, m LinkMap) (*LinkConfirmation, error) {
+	if root == nil || root.ID != m.Root {
+		return nil, errors.New("sl: the link map is of another object")
+	}
+	c, err := w.b.ConfirmLinkOrder(ctx, root.ID, m.PrimKeys())
+	if err != nil {
+		return nil, confirmErr(err)
+	}
+	return c, nil
+}
+
+// confirmErr is the store's refusal as this package says it.
+func confirmErr(err error) error {
+	if errors.Is(err, agent.ErrNoSuchObject) {
+		return fmt.Errorf("sl: %w: %v", ErrNotHere, err)
+	}
+	return err
 }
 
 // Flush empties the server's object cache.
