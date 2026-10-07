@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -1172,6 +1173,18 @@ type CapError struct {
 
 func (e *CapError) Error() string {
 	return fmt.Sprintf("sl: %s: status %d: %s", e.What, e.Status, e.Body)
+}
+
+// ErrGone is what a 410 from a capability matches under errors.Is: what
+// was asked about is not there, and was deleted already.  For a delete
+// that is the result wanted, so a caller deleting something it means to
+// have gone asks errors.Is(err, ErrGone) rather than reading the status
+// or the text.
+var ErrGone = errors.New("already deleted")
+
+// Is makes a 410 match ErrGone.
+func (e *CapError) Is(target error) bool {
+	return target == ErrGone && e.Status == http.StatusGone
 }
 
 // Temporary is whether asking again might do better: the far end

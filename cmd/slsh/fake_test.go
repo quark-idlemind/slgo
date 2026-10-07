@@ -103,6 +103,11 @@ type fakeGrid struct {
 	sent   []msg.Message
 	onSend func(msg.Message)
 
+	// deleteAs, when not zero, is the status an AIS delete of an item
+	// answers.  A 410 also removes the item, as the service's own copy
+	// of the folder is what said it was gone already.
+	deleteAs int
+
 	// land is what Land answers, and landErr a daemon that will not.
 	land    *sl.Land
 	landErr error
@@ -471,6 +476,14 @@ func (f *fakeGrid) inventoryRequest(r *http.Request) (string, int) {
 	case "DELETE":
 		switch {
 		case kind == "item":
+			if f.deleteAs == http.StatusGone {
+				removeItem(f.inv, id)
+			}
+			if f.deleteAs == http.StatusGone {
+				return "Item does not exist or was already deleted.", f.deleteAs
+			} else if f.deleteAs != 0 {
+				return "the service had a bad moment", f.deleteAs
+			}
 			if !removeItem(f.inv, id) {
 				return "no such item", http.StatusNotFound
 			}

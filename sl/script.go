@@ -252,7 +252,7 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 		// object has its own now, which is the one every later run
 		// updates, and one of these was being left behind in inventory
 		// for every object a script was ever put into.
-		if err := w.DeleteItem(ctx, it.ID); err != nil {
+		if err := w.DeleteItem(ctx, it.ID); err != nil && !errors.Is(err, ErrGone) {
 			warnings = append(warnings, fmt.Sprintf(
 				"the copy of %q in inventory could not be deleted: %v", s.Name, err))
 		}
@@ -387,7 +387,7 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 func (w *Session) dropScriptCopy(ctx context.Context, it *Item, name string) error {
 	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	if err := w.DeleteItem(dctx, it.ID); err != nil {
+	if err := w.DeleteItem(dctx, it.ID); err != nil && !errors.Is(err, ErrGone) {
 		return fmt.Errorf("sl: the copy of %q in inventory could not be deleted: %w", name, err)
 	}
 	return nil
@@ -625,7 +625,7 @@ func (w *Session) InstallScript(ctx context.Context, o *Object, name, source str
 			return nil, errors.Join(fmt.Errorf("sl: %q never turned up inside %s", name, o),
 				w.dropScriptCopy(ctx, it, name))
 		}
-		if err := w.DeleteItem(ctx, it.ID); err != nil {
+		if err := w.DeleteItem(ctx, it.ID); err != nil && !errors.Is(err, ErrGone) {
 			leftover = fmt.Errorf("the copy of %q in inventory could not be deleted: %w", name, err)
 		}
 	}

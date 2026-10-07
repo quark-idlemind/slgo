@@ -23,6 +23,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -568,8 +569,12 @@ func cmdWear(ctx context.Context, r *req, out io.Writer, args []string) error {
 	}
 	point := 0
 	if len(rest) == 2 {
-		p, ok := sl.AttachPointNamed(rest[1])
-		if !ok {
+		p, err := sl.ParseAttachPoint(rest[1])
+		if err != nil {
+			var start *sl.AttachPointStartError
+			if errors.As(err, &start) {
+				return fmt.Errorf("%v; say which", start)
+			}
 			return fmt.Errorf("no attachment point called %q", rest[1])
 		}
 		point = p

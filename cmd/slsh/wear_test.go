@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 	"testing"
@@ -783,5 +784,84 @@ func TestWearingAWearableThroughALinkWearsTheThing(t *testing.T) {
 	}
 	if pointsAt != shape {
 		t.Errorf("the outfit links to %v, want the item %v", pointsAt, shape)
+	}
+}
+
+// cofLinksTo counts the links in the Current Outfit folder that point
+// at an item.
+func cofLinksTo(x *testShell, item msg.UUID) int {
+	x.grid.mu.Lock()
+	defer x.grid.mu.Unlock()
+	n := 0
+	for _, it := range findDirOfType(x.grid.inv, sl.FolderCurrentOutfit).Items {
+		if it.IsLink && it.Asset == item {
+			n++
+		}
+	}
+	return n
+}
+
+// TestDetachingALinkTheServiceSaysIsGoneCountsItRemoved: the service
+// answers a delete of a link that was deleted already with 410, which
+// leaves the folder as wanted.  Saying the link was left, and would
+// bring the object back at the next login, was false.
+func TestDetachingALinkTheServiceSaysIsGoneCountsItRemoved(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000f1")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000f1")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+	x.do(t, "wear Objects/a hat")
+	if n := cofLinksTo(x, hat); n != 1 {
+		t.Fatalf("%d links to the hat after wearing it, want 1", n)
+	}
+
+	x.grid.mu.Lock()
+	x.grid.deleteAs = http.StatusGone
+	x.grid.mu.Unlock()
+	x.grid.AnswerDetach(0)
+	got := x.do(t, "detach a hat")
+
+	if !strings.Contains(got, "no longer worn") {
+		t.Errorf("detach printed %q, want it to say the hat is no longer worn", got)
+	}
+	for _, bad := range []string{"still in the Current Outfit", "come back", "410"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("detach printed %q, which says %q of a link that is gone", got, bad)
+		}
+	}
+	if n := cofLinksTo(x, hat); n != 0 {
+		t.Errorf("%d links to the hat remain, want none", n)
+	}
+	if n := x.grid.Baked(); n != 2 {
+		t.Errorf("%d rebakes, want 2: a gone link is a change to the folder like any other", n)
+	}
+}
+
+// TestDetachingWithAServiceErrorStillSaysTheLinkIsLeft: any other
+// failure to delete the link keeps the sentence.
+func TestDetachingWithAServiceErrorStillSaysTheLinkIsLeft(t *testing.T) {
+	hat := msg.MustParseUUID("c75d7e57-7e57-c0de-b372-0000000000f2")
+	hatWorn := msg.MustParseUUID("d22b7e57-7e57-c0de-0e4e-0000000000f2")
+
+	x := newTestShell(t)
+	addObjectItem(x, hat, "a hat")
+	x.grid.AnswerAttach(t, hatWorn, 11, 1)
+	x.do(t, "wear Objects/a hat")
+
+	x.grid.mu.Lock()
+	x.grid.deleteAs = http.StatusInternalServerError
+	x.grid.mu.Unlock()
+	x.grid.AnswerDetach(0)
+	got := x.do(t, "detach a hat")
+
+	for _, want := range []string{"a hat is no longer worn", "its link is still in the Current Outfit folder", "status 500"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("detach printed %q, want it to say %q", got, want)
+		}
+	}
+	if n := cofLinksTo(x, hat); n != 1 {
+		t.Errorf("%d links to the hat remain, want the one the service would not delete", n)
 	}
 }

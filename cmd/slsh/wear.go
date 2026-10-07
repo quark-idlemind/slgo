@@ -305,8 +305,16 @@ func attachPointArg(text string) (int, error) {
 		}
 		return n, nil
 	}
-	if p, ok := sl.AttachPointNamed(text); ok {
+	p, err := sl.ParseAttachPoint(text)
+	if err == nil {
 		return p, nil
+	}
+	var start *sl.AttachPointStartError
+	if errors.As(err, &start) {
+		if start.Ambiguous() {
+			return 0, fmt.Errorf("--at: %v; say which, or give its number", start)
+		}
+		return 0, fmt.Errorf("--at: %v", start)
 	}
 	return 0, fmt.Errorf("--at: %q is not an attachment point; name one the way the viewer does, "+
 		"as in \"left hand\" or \"HUD top right\", or give its number", text)
@@ -524,7 +532,7 @@ func (sh *Shell) detachFromOutfit(ctx context.Context, out io.Writer, want strin
 	if err := sh.s.TakeOff(ctx, l.Item); err != nil {
 		return true, err
 	}
-	if err := sh.s.DeleteItem(ctx, l.Link); err != nil {
+	if err := sh.s.DeleteItem(ctx, l.Link); err != nil && !errors.Is(err, sl.ErrGone) {
 		return true, fmt.Errorf("%s was asked to come off, and its link is still in the "+
 			"Current Outfit folder: %w", l.Name, err)
 	}

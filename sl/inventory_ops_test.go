@@ -1712,3 +1712,31 @@ func TestFolderOfTypeFindsTheLowestIdAndTheRoot(t *testing.T) {
 		t.Error("FolderOfType(FolderNone) found a folder")
 	}
 }
+
+// TestAnItemTheServiceSaysIsGoneMatchesErrGone: a delete answered 410
+// is an error that errors.Is finds ErrGone in, without reading its
+// text, and only a 410 is: another refusal is not "already deleted".
+func TestAnItemTheServiceSaysIsGoneMatchesErrGone(t *testing.T) {
+	w, f := newFakeSession(t)
+	a := serveAIS(t, f, nil)
+
+	a.refuse(http.StatusGone)
+	err := w.DeleteItem(context.Background(), theChild)
+	if err == nil {
+		t.Fatal("DeleteItem hid the 410 from its caller; rm would say it deleted something")
+	}
+	if !errors.Is(err, ErrGone) {
+		t.Errorf("a 410 delete is %v, which is not ErrGone", err)
+	}
+	var ce *CapError
+	if !errors.As(err, &ce) || ce.Status != http.StatusGone {
+		t.Errorf("a 410 delete is %v, want the CapError to keep its status", err)
+	}
+
+	for _, status := range []int{http.StatusForbidden, http.StatusNotFound, http.StatusInternalServerError} {
+		a.refuse(status)
+		if err := w.DeleteItem(context.Background(), theChild); errors.Is(err, ErrGone) {
+			t.Errorf("a %d delete matches ErrGone", status)
+		}
+	}
+}

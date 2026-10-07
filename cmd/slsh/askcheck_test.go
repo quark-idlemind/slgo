@@ -196,6 +196,12 @@ func TestCheckCommandLineChecksWordsFromTheShellsLists(t *testing.T) {
 		{"wear --at POINT PATH", ""},
 		{"wear --at elbow PATH", `wear: --at: "elbow" is not an attachment point`},
 		{"wear --at 900 PATH", "wear: --at: 900 is not an attachment point"},
+		{`wear --at "HUD centre" PATH`, `wear: --at: "HUD centre" is HUD centre 1 or HUD centre 2; say which, or give its number`},
+		{`wear --at "hud center" PATH`, `is HUD centre 1 or HUD centre 2; say which, or give its number`},
+		{`wear --at left PATH`, `"left" is left ear, left eye, left foot`},
+		{`wear --at "left ring" PATH`, `did you mean "left ring finger"`},
+		{`wear --at "HUD centre 1" PATH`, ""},
+		{`wear --at "Skull" PATH`, ""},
 
 		// perms: letters, all or none.
 		{"perms --owner mct --next none NAME", ""},
