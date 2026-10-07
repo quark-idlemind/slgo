@@ -375,36 +375,42 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 		if id != "" && o.ID.String() != id {
 			continue
 		}
-		s := &Seen{
-			Object:       Object{ID: o.ID, Local: o.Local, Name: o.Name},
-			Owner:        o.Owner,
-			Position:     o.Position,
-			Scale:        o.Scale,
-			Rotation:     o.Rotation,
-			Parent:       o.Parent,
-			PCode:        o.PCode,
-			TextureEntry: o.TextureEntry,
-			TextureAnim:  o.TextureAnim,
-			Click:        o.Click,
-			ClickKnown:   o.ClickKnown,
-			Sculpt:       o.Sculpt,
-			Light:        o.Light,
-			Projector:    o.Projector,
-
-			RenderMaterials: o.RenderMaterials,
-			GLTF:            o.GLTF,
-			Shape:           o.Shape,
-			LinkNumber:      o.LinkNumber,
-			LinkKnown:       o.LinkKnown,
-			LinkNote:        o.LinkNote,
-			LinkConfirmed:   o.LinkConfirmed,
-			Text:            o.Text,
-			AttachPoint:     o.AttachPoint,
-			AttachItem:      o.AttachItem,
-		}
-		out = append(out, s)
+		out = append(out, seenFromAgent(o))
 	}
 	return out, nil
+}
+
+// seenFromAgent is what a client is handed of an object the agent holds.
+func seenFromAgent(o *agent.Object) *Seen {
+	return &Seen{
+		Object:        Object{ID: o.ID, Local: o.Local, Name: o.Name},
+		Owner:         o.Owner,
+		Position:      o.Position,
+		Scale:         o.Scale,
+		Rotation:      o.Rotation,
+		Parent:        o.Parent,
+		PCode:         o.PCode,
+		TextureEntry:  o.TextureEntry,
+		TextureAnim:   o.TextureAnim,
+		Click:         o.Click,
+		ClickKnown:    o.ClickKnown,
+		Material:      o.Material,
+		MaterialKnown: o.MaterialKnown,
+		Sculpt:        o.Sculpt,
+		Light:         o.Light,
+		Projector:     o.Projector,
+
+		RenderMaterials: o.RenderMaterials,
+		GLTF:            o.GLTF,
+		Shape:           o.Shape,
+		LinkNumber:      o.LinkNumber,
+		LinkKnown:       o.LinkKnown,
+		LinkNote:        o.LinkNote,
+		LinkConfirmed:   o.LinkConfirmed,
+		Text:            o.Text,
+		AttachPoint:     o.AttachPoint,
+		AttachItem:      o.AttachItem,
+	}
 }
 
 // Land reads what this process's own agent was told.

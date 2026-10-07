@@ -1418,6 +1418,8 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.gltfExp(e)
 	case p.kw("click"):
 		return p.clickExp(e)
+	case p.kw("substance"):
+		return p.substanceExp(e)
 	case p.kw("text"):
 		return p.floatTextExp(e)
 	case p.kw("fullbright"):
@@ -2163,6 +2165,44 @@ func (p *parser) clickExp(e *Expect) error {
 		}
 	}
 	e.Click = x
+	return nil
+}
+
+// substanceExp reads substance OBJ link? and the state: after is or
+// becomes, one of the eight names of PRIM_MATERIAL, original, a capture,
+// or after is, any.
+func (p *parser) substanceExp(e *Expect) error {
+	if err := p.want("substance"); err != nil {
+		return err
+	}
+	name, err := p.ident()
+	if err != nil {
+		return err
+	}
+	link, err := p.optLink()
+	if err != nil {
+		return err
+	}
+	st, err := p.state()
+	if err != nil {
+		return err
+	}
+	x := &SubstanceExp{Name: name, Link: link, State: st}
+	if st.Kind != StateChanges && !st.Original {
+		if x.Any, x.Use, err = p.reading(); err != nil {
+			return err
+		}
+		if !x.Any && x.Use == nil {
+			if _, ok := SubstanceBytes[p.tok.text]; p.tok.kind != kWord || !ok {
+				return p.unexpected("expected a material name (stone, metal, glass, wood, flesh, plastic, rubber or light) or original")
+			}
+			x.Word = p.tok.text
+			if err := p.next(); err != nil {
+				return err
+			}
+		}
+	}
+	e.Substance = x
 	return nil
 }
 

@@ -445,6 +445,8 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			TextureAnim:   o.TextureAnim,
 			Click:         uint8(o.Click),
 			ClickKnown:    o.ClickKnown,
+			Material:      uint8(o.Material),
+			MaterialKnown: o.MaterialKnown,
 			Sculpt:        msg.SculptMark{Kind: msg.SculptKind(o.SculptKind), ID: parseUUIDOrZero(o.SculptId)},
 			LinkNumber:    int(o.LinkNumber),
 			LinkKnown:     o.LinkKnown,

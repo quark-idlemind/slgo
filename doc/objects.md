@@ -75,6 +75,34 @@ touch action, so it cannot also mean that nothing has said:
 true is touch. Forgetting an appearance does not forget the byte. The
 values are named beside `Seen.Click` in sl (`ClickTouch` and the rest).
 
+## The physical material
+
+A prim's physical material is the byte a script sets with
+`PRIM_MATERIAL`: 0 stone, 1 metal, 2 glass, 3 wood, 4 flesh, 5 plastic,
+6 rubber, 7 light, Linden's published `PRIM_MATERIAL_*` constants (the
+same eight in Firestorm's `keywords_lsl_default.xml`, `lllslconstants.h`
+and `material_codes.h`, which has `LL_MCODE_MASK`, 0x0F, for the bits
+the viewer reads it by).  A full `ObjectUpdate` carries it as `Material`
+and a compressed update in its fixed header, next to the click byte; a
+terse update does not.  The store keeps the last byte either kind gave
+as `Object.Material`, with `Object.MaterialKnown` set, and, as with the
+click action, stone is zero, so a zero `Material` with `MaterialKnown`
+false is "no update has said".  A terse update, a cached notice and a
+forgotten appearance leave the byte alone, and a compressed update that
+did not decode past its header still says it.  The byte is kept whole:
+the viewer keeps it whole too (`LLPrimitive::setMaterial`) and masks it
+where it is used, so a byte past the eight reaches a client as it came.
+The values are named beside `Seen.Material` in sl (`MaterialStone` and the
+rest).
+
+On the wire the byte is `ObjectInfo.material` (field 32) with
+`material_known` (field 33), both new numbers.  A client older than them
+reads neither and so `MaterialKnown` false for every prim; a daemon older
+than them sends neither and a newer client reads the same.  Absent is
+told from stone by the flag and by nothing else.
+
+Measured on 2026-10-07 with the test avatar and an invented box whose script set `PRIM_MATERIAL` on each touch: a box rezzed by slgo read `wood` (slgo rezzes with material 3), and glass, rubber, stone and wood again each read back as set, in the same tens of milliseconds as the script's own chat line saying it had set them (so within the store at once; the exact delay from the call was not taken apart).
+
 ## The camera, as soon as it moves
 
 `lookFrom` tells the store where an agent is looking whenever the

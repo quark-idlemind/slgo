@@ -4837,7 +4837,15 @@ type ObjectInfo struct {
 	// oldest first, and the one that listed it under its parent when that
 	// is older than the rest. Only when ObjectsRequest.how is set.
 	// Why: doc/objects.md#how-an-object-was-described
-	How           []*ObjectDescription `protobuf:"bytes,26,rep,name=how,proto3" json:"how,omitempty"`
+	How []*ObjectDescription `protobuf:"bytes,26,rep,name=how,proto3" json:"how,omitempty"`
+	// The prim's physical material byte (LSL's PRIM_MATERIAL_*: 0 stone, 1
+	// metal, 2 glass, 3 wood, 4 flesh, 5 plastic, 6 rubber, 7 light), and
+	// whether an update said it: stone is zero, so material 0 with
+	// material_known false means none has.  A client older than the fields
+	// reads every object as not known.
+	// Why: doc/objects.md#the-physical-material
+	Material      uint32 `protobuf:"varint,32,opt,name=material,proto3" json:"material,omitempty"`
+	MaterialKnown bool   `protobuf:"varint,33,opt,name=material_known,json=materialKnown,proto3" json:"material_known,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5087,6 +5095,20 @@ func (x *ObjectInfo) GetHow() []*ObjectDescription {
 		return x.How
 	}
 	return nil
+}
+
+func (x *ObjectInfo) GetMaterial() uint32 {
+	if x != nil {
+		return x.Material
+	}
+	return 0
+}
+
+func (x *ObjectInfo) GetMaterialKnown() bool {
+	if x != nil {
+		return x.MaterialKnown
+	}
+	return false
 }
 
 // ObjectDescription is one way an object was described.
@@ -8005,7 +8027,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
 	"\x05named\x18\x02 \x01(\tR\x05named\x12\x0e\n" +
 	"\x02id\x18\x03 \x01(\tR\x02id\x12\x10\n" +
-	"\x03how\x18\x04 \x01(\bR\x03how\"\xdc\b\n" +
+	"\x03how\x18\x04 \x01(\bR\x03how\"\x9f\t\n" +
 	"\n" +
 	"ObjectInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
@@ -8045,7 +8067,9 @@ const file_slgo_proto_rawDesc = "" +
 	"\tprojector\x18\x17 \x01(\v2\x16.slgo.v1.PrimProjectorR\tprojector\x12D\n" +
 	"\x10render_materials\x18\x18 \x03(\v2\x19.slgo.v1.PrimFaceMaterialR\x0frenderMaterials\x12@\n" +
 	"\x0egltf_overrides\x18\x19 \x03(\v2\x19.slgo.v1.PrimGLTFOverrideR\rgltfOverrides\x12,\n" +
-	"\x03how\x18\x1a \x03(\v2\x1a.slgo.v1.ObjectDescriptionR\x03how\"\x9b\x02\n" +
+	"\x03how\x18\x1a \x03(\v2\x1a.slgo.v1.ObjectDescriptionR\x03how\x12\x1a\n" +
+	"\bmaterial\x18  \x01(\rR\bmaterial\x12%\n" +
+	"\x0ematerial_known\x18! \x01(\bR\rmaterialKnown\"\x9b\x02\n" +
 	"\x11ObjectDescription\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\rR\x04kind\x12\x16\n" +
 	"\x06parent\x18\x02 \x01(\rR\x06parent\x12\x10\n" +

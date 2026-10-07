@@ -98,7 +98,7 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	prim := msg.MustParseUUID("14ff7e57-7e57-c0de-3d5f-1eb0c71e7610")
 	anim := []byte{1, 0xff, 4, 4, 0, 0, 0, 0, 0, 0, 0x80, 0x40, 0, 0, 0x20, 0x41}
 	upd := &msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{{ID: 4242, FullID: prim, PCode: 9,
-		TextureEntry: []byte{7, 7, 7}, TextureAnim: anim, ClickAction: 2,
+		TextureEntry: []byte{7, 7, 7}, TextureAnim: anim, ClickAction: 2, Material: 5,
 		ExtraParams: lightedMesh(prim)}}}
 	r.sim.send(upd, 0)
 	waitFor(t, 5*time.Second, "the object update to be recorded", func() bool {
@@ -119,6 +119,9 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 	}
 	if o := all.GetObjects()[0]; o.GetClick() != 2 || !o.GetClickKnown() {
 		t.Errorf("click %d known %v, want 2, known", o.GetClick(), o.GetClickKnown())
+	}
+	if o := all.GetObjects()[0]; o.GetMaterial() != 5 || !o.GetMaterialKnown() {
+		t.Errorf("material %d known %v, want 5, known", o.GetMaterial(), o.GetMaterialKnown())
 	}
 	// A mesh block is its kind and the asset it names.
 	if o := all.GetObjects()[0]; o.GetSculptKind() != 5 || o.GetSculptId() != prim.String() {

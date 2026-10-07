@@ -23,6 +23,7 @@ type capValue struct {
 	pair   [2]float64 // CapPair
 	num    float64    // CapNumber
 	click  uint8      // CapClick
+	sub    uint8      // CapSubstance
 	triple [3]float64 // CapTriple
 	vec    [3]float64 // CapVector
 	on     bool       // CapOnOff
@@ -56,6 +57,8 @@ func (v capValue) String() string {
 		return fmt.Sprintf("%g", v.num)
 	case CapClick:
 		return fmt.Sprintf("%d", v.click)
+	case CapSubstance:
+		return substanceText(v.sub)
 	case CapTriple:
 		return fmt.Sprintf("%g %g %g", v.triple[0], v.triple[1], v.triple[2])
 	case CapVector:

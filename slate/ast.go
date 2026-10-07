@@ -74,6 +74,32 @@ var ClickBytes = map[string]uint8{
 	"disabled": sl.ClickDisabled,
 }
 
+// SubstanceBytes maps a physical material's name to PRIM_MATERIAL. The
+// values are Linden's published constants (sl.MaterialStone and the rest);
+// SubstanceNames is the same list in order, to print a byte.
+var SubstanceBytes = map[string]uint8{
+	"stone":   sl.MaterialStone,
+	"metal":   sl.MaterialMetal,
+	"glass":   sl.MaterialGlass,
+	"wood":    sl.MaterialWood,
+	"flesh":   sl.MaterialFlesh,
+	"plastic": sl.MaterialPlastic,
+	"rubber":  sl.MaterialRubber,
+	"light":   sl.MaterialLight,
+}
+
+// SubstanceNames is the name of each byte of SubstanceBytes, by byte.
+var SubstanceNames = [...]string{"stone", "metal", "glass", "wood", "flesh", "plastic", "rubber", "light"}
+
+// substanceText is a material byte as the transcript says it: its name,
+// or its number when it is none of the eight.
+func substanceText(b uint8) string {
+	if int(b) < len(SubstanceNames) {
+		return SubstanceNames[b]
+	}
+	return fmt.Sprintf("%d", b)
+}
+
 // Error is a lexical, grammatical, or static failure at one byte.
 // The text is the exit-2 line: filename:line:column: reason.
 type Error struct {
@@ -246,14 +272,15 @@ func (c Capture) String() string { return "$" + c.Name }
 type CaptureType int
 
 const (
-	CapText   CaptureType = iota // a line, a message, an item name, a group, a label
-	CapUUID                      // a texture reading
-	CapPair                      // an offset or repeats reading
-	CapNumber                    // a rotation, glow or alpha reading
-	CapClick                     // a click action reading
-	CapTriple                    // a colour reading
-	CapOnOff                     // a fullbright reading
-	CapVector                    // a position or size reading
+	CapText      CaptureType = iota // a line, a message, an item name, a group, a label
+	CapUUID                         // a texture reading
+	CapPair                         // an offset or repeats reading
+	CapNumber                       // a rotation, glow or alpha reading
+	CapClick                        // a click action reading
+	CapSubstance                    // a physical material reading
+	CapTriple                       // a colour reading
+	CapOnOff                        // a fullbright reading
+	CapVector                       // a position or size reading
 )
 
 func (t CaptureType) String() string {
@@ -268,6 +295,8 @@ func (t CaptureType) String() string {
 		return "number"
 	case CapClick:
 		return "click"
+	case CapSubstance:
+		return "substance"
 	case CapTriple:
 		return "colour triple"
 	case CapOnOff:
@@ -718,6 +747,7 @@ type Expect struct {
 	Repeats    *VecExp
 	Rot        *RotExp
 	Click      *ClickExp
+	Substance  *SubstanceExp
 	FloatText  *TextExp
 	Fullbright *FullbrightExp
 	Glow       *GlowExp
@@ -970,6 +1000,20 @@ type ClickExp struct {
 	Action string
 	Any    bool
 	Use    *Capture
+}
+
+// SubstanceExp is expect substance OBJ link? changes / is / becomes: the
+// prim's physical material, PRIM_MATERIAL. The byte is
+// SubstanceBytes[Word] when Word is set, which is the name an is or
+// becomes gives; Any and Use are as for ClickExp, and Use is a
+// substance capture.
+type SubstanceExp struct {
+	Name  Ident
+	Link  *Int
+	State State
+	Word  string
+	Any   bool
+	Use   *Capture
 }
 
 // TextExp is expect text OBJ link? changes / is / becomes: the floating text
