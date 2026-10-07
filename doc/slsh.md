@@ -648,6 +648,27 @@ were worse in both halves: attach is what the protocol calls it rather
 than what a person does, and remove sits one letter from `rm`, which
 deletes things.
 
+## Naming an attachment point
+
+`wear --at POINT` takes a point by number or by name, and a name is a
+whole name: either the one slsh prints (`HUD centre 1`) or the viewer's
+own (`Skull`), in any case and with `center` for `centre`.  A name that
+is only the start of some, taken word by word, is refused with the
+points it could be, in the order of their names (so `HUD centre 1` comes
+before `HUD centre 2`, though the viewer numbers them the other way):
+
+    wear: --at: "HUD centre" is HUD centre 1 or HUD centre 2; say which, or give its number
+
+and `left` lists everything that begins with the word.  A start that
+only one point has (`left ring`) is refused too, naming that point and
+not wearing on it.  The viewer's attach menu lists whole names only (read, not
+measured), slsh took only whole names before this, and an object put on the wrong point has to
+be found and taken off again, so a guess is not offered.  A part of a
+word (`ch`) is not a start and is refused like any other unknown name.
+Slate's `wear ITEM on "POINT"` and `expect attached` read a point the
+same way, and end with `say which` without the number, which they cannot take;
+slbotd's `wear` too.  The parser is `sl.ParseAttachPoint`.
+
 ## Why wear adds rather than replaces
 
 A point can hold more than one attachment, and which of the two happens

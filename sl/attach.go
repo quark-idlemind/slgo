@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -177,6 +178,81 @@ var attachPointsByName = func() map[string]int {
 func AttachPointNamed(name string) (int, bool) {
 	point, ok := attachPointsByName[strings.ToLower(strings.TrimSpace(name))]
 	return point, ok
+}
+
+// ErrNoAttachPoint is what ParseAttachPoint says of a name that is
+// neither a point nor the start of one.
+var ErrNoAttachPoint = errors.New("sl: not an attachment point")
+
+// AttachPointStartError is a name that is not a point's whole name but
+// begins the names of one or more: "HUD centre" begins "HUD centre 1"
+// and "HUD centre 2", and "left" begins a dozen.
+type AttachPointStartError struct {
+	Name   string // as the person typed it
+	Points []int  // the points it begins, by the name printed
+}
+
+// Ambiguous is whether the name begins more than one point's.
+func (e *AttachPointStartError) Ambiguous() bool { return len(e.Points) > 1 }
+
+// Error names what the name could have meant, as this package prints
+// them.  It does not say how to choose, which depends on whether the
+// caller takes a number: see the callers.
+func (e *AttachPointStartError) Error() string {
+	names := make([]string, len(e.Points))
+	for i, p := range e.Points {
+		names[i] = AttachPointName(p)
+	}
+	if len(names) == 1 {
+		return fmt.Sprintf("%q is not a whole attachment point name; did you mean %q", e.Name, names[0])
+	}
+	return fmt.Sprintf("%q is %s or %s", e.Name, strings.Join(names[:len(names)-1], ", "), names[len(names)-1])
+}
+
+// attachWords is a point's name as the words it is matched by: folded
+// to lower case, spaces collapsed, and "center" spelt as the table spells
+// it.
+func attachWords(name string) []string {
+	return strings.Fields(strings.ReplaceAll(strings.ToLower(name), "center", "centre"))
+}
+
+// ParseAttachPoint is AttachPointNamed that says why it found nothing.
+//
+// A whole name, either of a point's two, gives the point.  A name that is
+// the first words of the name of one or more points -- not a part of a
+// word, so "ch" is nothing and "left" is the dozen that begin "left" --
+// gives an *AttachPointStartError listing them, and anything else gives
+// ErrNoAttachPoint.  It never picks one of several, and it does not take
+// a start that only one point has either: the viewer's menu has whole
+// names and nothing shorter, and a person who types "left ring" is
+// shown the name rather than having it guessed.
+func ParseAttachPoint(name string) (int, error) {
+	if p, ok := AttachPointNamed(name); ok {
+		return p, nil
+	}
+	in := attachWords(name)
+	if len(in) == 0 {
+		return 0, ErrNoAttachPoint
+	}
+	var points []int
+	for point, n := range attachPointNames {
+		for _, full := range []string{n.name, n.viewer} {
+			w := attachWords(full)
+			if len(in) < len(w) && slices.Equal(in, w[:len(in)]) {
+				points = append(points, point)
+				break
+			}
+		}
+	}
+	if len(points) == 0 {
+		return 0, ErrNoAttachPoint
+	}
+	// By the name printed, so that "HUD centre 1" comes before "HUD
+	// centre 2" though the viewer numbers them the other way round.
+	slices.SortFunc(points, func(a, b int) int {
+		return strings.Compare(AttachPointName(a), AttachPointName(b))
+	})
+	return 0, &AttachPointStartError{Name: strings.TrimSpace(name), Points: points}
 }
 
 // AttachAdd asks for an attachment to be added rather than to replace

@@ -226,6 +226,15 @@ after each {
 	refuses(t, w2Hdr+"touch a anywhere\nexpect attached a on \"Lap\"\n", "\"Lap\"", "is not an attachment point sl knows")
 	refuses(t, w2Hdr+"touch a anywhere\nexpect no attached a on \"Lap\"\n", "\"Lap\"", "is not an attachment point sl knows")
 	mustCheck(t, w2Hdr+"wear hat on \" HUD TOP LEFT \" as h\n")
+	// A name that only begins several points' names says which, and one
+	// that begins a single point's says that one; neither is guessed.
+	refuses(t, w2Hdr+"wear hat on \"HUD centre\" as h\n", "\"HUD centre\"", `"HUD centre" is HUD centre 1 or HUD centre 2; say which`)
+	refuses(t, w2Hdr+"wear hat on \"hud center\" as h\n", "\"hud center\"", `"hud center" is HUD centre 1 or HUD centre 2; say which`)
+	refuses(t, w2Hdr+"wear hat on \"left\" as h\n", "\"left\"", `"left" is left ear, left eye, left foot`)
+	refuses(t, w2Hdr+"wear hat on \"left ring\" as h\n", "\"left ring\"", `did you mean "left ring finger"`)
+	refuses(t, w2Hdr+"touch a anywhere\nexpect attached a on \"HUD centre\"\n", "\"HUD centre\"", "is HUD centre 1 or HUD centre 2; say which")
+	mustCheck(t, w2Hdr+"wear hat on \"HUD centre 1\" as h\n")
+	mustCheck(t, w2Hdr+"wear hat on \"hud center 2\" as h\n")
 	// The wear name is a new binding, unique.
 	refuses(t, w2Hdr+"wear hat on \"Chest\" as a\n", "last:a\n", "a is already bound")
 	refuses(t, w2Hdr+"wear hat on \"Chest\" as vest\n", "last:vest\n", "vest is already bound")

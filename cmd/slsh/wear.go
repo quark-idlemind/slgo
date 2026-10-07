@@ -305,8 +305,16 @@ func attachPointArg(text string) (int, error) {
 		}
 		return n, nil
 	}
-	if p, ok := sl.AttachPointNamed(text); ok {
+	p, err := sl.ParseAttachPoint(text)
+	if err == nil {
 		return p, nil
+	}
+	var start *sl.AttachPointStartError
+	if errors.As(err, &start) {
+		if start.Ambiguous() {
+			return 0, fmt.Errorf("--at: %v; say which, or give its number", start)
+		}
+		return 0, fmt.Errorf("--at: %v", start)
 	}
 	return 0, fmt.Errorf("--at: %q is not an attachment point; name one the way the viewer does, "+
 		"as in \"left hand\" or \"HUD top right\", or give its number", text)

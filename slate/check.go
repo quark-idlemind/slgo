@@ -1,6 +1,7 @@
 package slate
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -420,7 +421,11 @@ func (c *checker) itemAt(i int) error {
 // attachPoint checks the string of wear ... on and attached ... on: a point
 // sl knows. A name it does not know is not guessed at.
 func (c *checker) attachPoint(name string, sp Span) error {
-	if _, ok := sl.AttachPointNamed(name); !ok {
+	if _, err := sl.ParseAttachPoint(name); err != nil {
+		var start *sl.AttachPointStartError
+		if errors.As(err, &start) {
+			return c.err(sp, "%s", startOfPoint(start))
+		}
 		return c.err(sp, "%q is not an attachment point sl knows; write one by name, such as \"HUD Top Left\" or \"Chest\"", name)
 	}
 	return nil

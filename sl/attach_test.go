@@ -21,6 +21,7 @@ package sl
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1002,4 +1003,64 @@ func TestAnAttachmentTheRegionKillsIsNoLongerWorn(t *testing.T) {
 			t.Error("the kill of the old local id took the redescribed attachment off")
 		}
 	})
+}
+
+// TestAShortenedPointNameSaysWhichItCouldBe: a name that is the first
+// words of several points' names is refused with all of them, in point
+// order, and never resolved to one; the whole names and the numbers
+// they stand for are as they were.
+func TestAShortenedPointNameSaysWhichItCouldBe(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		points []int
+	}{
+		{"HUD centre", []int{HUDCenter1, HUDCenter2}},
+		{"hud center", []int{HUDCenter1, HUDCenter2}},
+		{"  HUD   Centre ", []int{HUDCenter1, HUDCenter2}},
+		{"left", []int{13, 15, 7, 5, 54, 25, 21, 27, 29, 41, 3, 20, 26, 45}},
+		{"left ring", []int{41}},
+		{"avatar", []int{40}},
+	} {
+		got, err := ParseAttachPoint(c.name)
+		var start *AttachPointStartError
+		if !errors.As(err, &start) {
+			t.Errorf("ParseAttachPoint(%q) = %d, %v, want the points it begins", c.name, got, err)
+			continue
+		}
+		if !slices.Equal(start.Points, c.points) {
+			t.Errorf("ParseAttachPoint(%q) begins %v, want %v", c.name, start.Points, c.points)
+		}
+		if start.Ambiguous() != (len(c.points) > 1) {
+			t.Errorf("ParseAttachPoint(%q).Ambiguous() = %v for %v", c.name, start.Ambiguous(), c.points)
+		}
+	}
+
+	_, err := ParseAttachPoint("HUD centre")
+	if want := `"HUD centre" is HUD centre 1 or HUD centre 2`; err == nil || err.Error() != want {
+		t.Errorf("the message is %v, want %q", err, want)
+	}
+	_, err = ParseAttachPoint("left")
+	if err == nil || !strings.Contains(err.Error(), "left ear, left eye, left foot") ||
+		!strings.Contains(err.Error(), " or left wing") {
+		t.Errorf("the message for left is %v, want every candidate, the last after \"or\"", err)
+	}
+	_, err = ParseAttachPoint("left ring")
+	if want := `"left ring" is not a whole attachment point name; did you mean "left ring finger"`; err == nil || err.Error() != want {
+		t.Errorf("the message is %v, want %q", err, want)
+	}
+
+	// A whole name wins over being the start of others: "HUD top" begins
+	// "HUD top left" and is a point.  A number is not this function's.
+	for name, want := range map[string]int{"HUD top": HUDTop, "hud centre 1": HUDCenter1, "HUD Center 2": HUDCenter2, "left hand": 5} {
+		if got, err := ParseAttachPoint(name); err != nil || got != want {
+			t.Errorf("ParseAttachPoint(%q) = %d, %v, want %d", name, got, err, want)
+		}
+	}
+
+	// Not the start of any name: a part of a word, nothing, or nothing known.
+	for _, name := range []string{"ch", "elbow", "", "  ", "hud centre 3", "left hand 2"} {
+		if _, err := ParseAttachPoint(name); !errors.Is(err, ErrNoAttachPoint) {
+			t.Errorf("ParseAttachPoint(%q) = %v, want ErrNoAttachPoint", name, err)
+		}
+	}
 }

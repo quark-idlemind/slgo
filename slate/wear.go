@@ -12,6 +12,7 @@ package slate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -56,9 +57,9 @@ func (s *stepRun) wearStimulus(w *Wear) (*stimulus, error) {
 	if it == nil {
 		return nil, fmt.Errorf("%s is not an item", w.Item.Text)
 	}
-	point, ok := sl.AttachPointNamed(w.Point)
-	if !ok {
-		return nil, fmt.Errorf("%q is not an attachment point sl knows", w.Point)
+	point, err := sl.ParseAttachPoint(w.Point)
+	if err != nil {
+		return nil, pointError(w.Point, err)
 	}
 	name := w.As.Text
 	// The name is made now and filled in when Wear returns, since the
@@ -226,9 +227,9 @@ func (s *stepRun) attachedExpect(x *expState) error {
 	e := x.e.Attached
 	ax := &attachedExp{name: e.Name.Text, off: e.Off}
 	if !e.Off {
-		p, ok := sl.AttachPointNamed(e.Point)
-		if !ok {
-			return fmt.Errorf("%q is not an attachment point sl knows", e.Point)
+		p, err := sl.ParseAttachPoint(e.Point)
+		if err != nil {
+			return pointError(e.Point, err)
 		}
 		ax.point = p
 	}
@@ -292,4 +293,23 @@ func (s *stepRun) evalAttached(x *expState, ax *attachedExp) error {
 		}
 	}
 	return nil
+}
+
+// startOfPoint is what to say of a name that begins the names of
+// points without being one: which they are, and that a name settles it.
+// Slate has no number to give instead.
+func startOfPoint(e *sl.AttachPointStartError) string {
+	if e.Ambiguous() {
+		return e.Error() + "; say which"
+	}
+	return e.Error()
+}
+
+// pointError is the error for a point ParseAttachPoint refused.
+func pointError(name string, err error) error {
+	var start *sl.AttachPointStartError
+	if errors.As(err, &start) {
+		return errors.New(startOfPoint(start))
+	}
+	return fmt.Errorf("%q is not an attachment point sl knows", name)
 }
