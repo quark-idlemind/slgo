@@ -164,6 +164,52 @@
         <p>The file is read once, at startup; change it and restart. Backstory files are the exception: they are read again on every turn. Stopping slbotd leaves every avatar logged in.</p>
       </section>
 
+      <section id="slate">
+        <h2>slate</h2>
+        <p>Runs a Slate test file against a product, as the avatar slgod holds. Slate is experimental in 1.0 and may change in any release (<a href="testing.html#what">what that means</a>). The run goes to standard output as it happens; only a usage error and a failed dial go to standard error. <code>-x</code> and <code>--x</code> both work. The language is in <a href="../doc/slate-language.md">doc/slate-language.md</a>, the runner in <a href="../doc/slate-runner.md">doc/slate-runner.md</a>, and <a href="testing.html">the testing pages</a> teach it.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Flag</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>slate [flags] FILE</code></td><td class="what">Run the tests in FILE. Exactly one file.</td></tr>
+            <tr><td><code>-addr ADDR</code></td><td class="what">Where slgod is. Empty asks <code>$SLGO_ADDR</code>, then sl-host, and a machine without sl-host uses <code>localhost:7807</code>.</td></tr>
+            <tr><td><code>-agent NAME</code></td><td class="what">Which avatar is the tester. Default: <code>$SLGO_AGENT</code>, or the session slgod has held longest.</td></tr>
+            <tr><td><code>-run REGEX</code></td><td class="what">Run only the tests whose names match (RE2, unanchored). One that does not compile, or matches no test, is exit 4.</td></tr>
+            <tr><td><code>--pay</code></td><td class="what">Allow the file's <code>pay</code> steps to spend Linden dollars. The file must also say <code>allow pay</code>; either alone pays nothing.</td></tr>
+            <tr><td><code>--screen WxH</code></td><td class="what">The world view a <code>drag ... on screen</code> is given in, in pixels. Default 1920x1025 (a 1920x1080 window less the menu bar).</td></tr>
+            <tr><td><code>--hud-zoom Z</code></td><td class="what">The zoom HUDs are drawn at. Default 1.</td></tr>
+            <tr><td><code>--avatar NAME=PROFILE</code></td><td class="what">The slgod profile that drives the file's second avatar NAME. Repeatable, one for each <code>avatar NAME</code> the file declares, such as <code>--avatar visitor=example-two</code>. A second avatar is never chosen for you.</td></tr>
+            <tr><td><code>-make-bridge</code></td><td class="what">Make the <code>slate bridge</code> item once, where the avatar may build. Takes no file, and only <code>-addr</code> and <code>-agent</code> beside it. Safe to run twice.</td></tr>
+            <tr><td><code>-version</code>, <code>-h</code></td><td class="what">The build, or the usage. Both exit 0.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Exit</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td class="what">Every test passed. Cleanup warnings may still be printed.</td></tr>
+            <tr><td>1</td><td class="what">A test failed.</td></tr>
+            <tr><td>2</td><td class="what">The file did not parse or failed a check. Nothing was dialled.</td></tr>
+            <tr><td>3</td><td class="what">Setup failed: the dial, an object or item not found, a second avatar not given, the bridge or a probe. Outranks 1.</td></tr>
+            <tr><td>4</td><td class="what">slate was used wrongly: a missing file, an unknown flag, a bad <code>-run</code> pattern. Nothing was dialled.</td></tr>
+          </tbody>
+        </table></div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Header word</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>slate 1</code></td><td class="what">The first statement of every file.</td></tr>
+            <tr><td><code>timeout 10s</code></td><td class="what">How long a step waits when an expectation has no <code>within</code>. Default 10s; at least 100ms, at most 120s.</td></tr>
+            <tr><td><code>object NAME is "in-world name"</code></td><td class="what">Bind a prim by its exact, case-sensitive name. <code>description "..."</code> or <code>description matching "RE"</code> tells objects of one name apart.</td></tr>
+            <tr><td><code>item NAME is "item" in "Folder"</code></td><td class="what">An inventory item, in a top-level folder, for <code>wear</code>, <code>rez</code> and <code>drop</code>.</td></tr>
+            <tr><td><code>avatar NAME</code></td><td class="what">A second avatar, given to the run with <code>--avatar</code>.</td></tr>
+            <tr><td><code>allow pay</code></td><td class="what">Lets a <code>pay</code> step run, with <code>--pay</code>.</td></tr>
+            <tr><td><code>allow permission P... from OBJ</code></td><td class="what">Grant the named permissions to that object's requests. The words are <code>take-controls</code>, <code>trigger-animation</code>, <code>attach</code>, <code>change-links</code>, <code>track-camera</code>, <code>control-camera</code>, <code>teleport</code> and <code>override-animations</code>. <code>debit</code> is never one.</td></tr>
+            <tr><td><code>probe OBJ</code></td><td class="what">Install a probe script in every prim, for link messages and for the object's own link numbers. Needs the bridge.</td></tr>
+            <tr><td><code>linkmap OBJ</code></td><td class="what">Have the object's own script say its link numbers at setup. It changes the object's inventory twice.</td></tr>
+            <tr><td><code>listen N</code></td><td class="what">A channel the bridge listens on, so <code>expect say ... on N</code> can match. Not 0 or 2147483647; at most 63.</td></tr>
+          </tbody>
+        </table></div>
+        <p>Every other word, and the sentence each failure prints, is in <a href="../doc/slate-language.md">doc/slate-language.md</a>.</p>
+      </section>
+
       <section id="environment">
         <h2>Environment variables</h2>
         <p>For one command, put <code>env NAME=value</code> in front of it, which is the same in every shell. For the rest of a terminal session it is <code>export NAME=value</code> in sh and zsh, and <code>setenv NAME value</code> in csh. <a href="platforms.html#shells">Shells</a> has the rest.</p>
