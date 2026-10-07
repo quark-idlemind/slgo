@@ -71,8 +71,8 @@ A UUID is one token, so a leading digit does not split it; hex is case-insensiti
 No word is reserved. The words below have a meaning, and each has it only where the grammar expects that word; anywhere else it is an ordinary word and can be a name. Within one production a word position is either a fixed word or a name, never a choice between the two, so the parser needs no list of forbidden names. An object binding, a probe, a linkmap, a sequence name, a `do` target and the name a rez binds with `as` each take any word: `object button is "Test HUD"` and `touch button button text "Open"` are both legal. A step begins with a stimulus word, `expect`, `then` or `do`, and the file begins with `slate 1`. An error message names the word that was expected. The in-world name is a string, so a prim may be called anything. `{` and `}` are tokens, not words. `null` is the UUID `00000000-0000-0000-0000-000000000000`. The words with a meaning are:
 
 ```text
-slate timeout allow pay permission object avatar is probe linkmap listen
-touch anywhere link face at button text pattern symbol image box circle oval
+slate timeout allow pay permission object avatar is probe linkmap listen elements
+touch anywhere link face at button text pattern symbol image box circle oval element
 drag from to over press dwell say on as tester owner of avatar anyone
 public debug direct sit stand wait choose answer send num key
 expect no within then dialog textbox texture offset repeats rotation
@@ -105,7 +105,7 @@ This is a PEG. Alternatives are tried in the order written. Repetition is greedy
 
 ```ebnf
 script      = "slate" "1" header* ( suite / body )
-header      = timeout / allow / objectDecl / avatarDecl / itemDecl / probe / linkmap / listen
+header      = timeout / allow / objectDecl / avatarDecl / itemDecl / probe / linkmap / listen / elements
 timeout     = "timeout" duration
 allow       = "allow" ( "pay" / "permission" permName+ "from" IDENT )
 permName    = "take-controls" / "trigger-animation" / "attach" / "change-links"
@@ -116,6 +116,7 @@ itemDecl    = "item" ident "is" string "in" string   (* item name, top-level fol
 probe       = "probe" ident
 linkmap     = "linkmap" ident
 listen      = "listen" integer
+elements    = "elements" string   (* a record file, or a directory of *.tsv files *)
 
 suite       = toplevel+
 toplevel    = before / after / sequence / test
@@ -142,11 +143,13 @@ target      = "anywhere"
             / "link" integer refine?
             / refine
 refine      = "anywhere"
-            / "face" integer at?
+            / "face" integer ( at / element )?
+            / "element" string
             / "button" nth? part+ face?
             / "showing" shown at?
 shown       = uuid / capture
 nth         = integer
+element     = "element" string   (* an exact name from an element record, not a pattern *)
 at          = "at" number number
 face        = "face" integer
 part        = "text" ( string / capture )
@@ -351,7 +354,8 @@ Static checks run after the parse, before anything is dialled. A failure is exit
 | Named groups | A `matching` pattern of a positive expectation binds each of its named groups, `(?P<name>...)`, as the text capture `$name`. A group name that appears twice in one pattern is an error, since RE2 allows it and the binding would be ambiguous. A name that cannot be written as a capture (it must begin with a letter and hold letters, digits and underscores) is an error. |
 | `is any` | `any` is legal only after `is`, never after `becomes`, and only on an expectation that has `as $x`, since it asserts nothing and exists only to capture the reading. |
 | Face all captures | A capture bound by a `face all` expectation holds every face, and only a `face all` expectation of the same type can use it. A capture bound for one face is refused by a `face all`, and a `face all` capture is refused anywhere else. |
-| Showing | `showing` cannot be combined with `link`, `face`, `button` or `anywhere`; it finds the prim and the face itself. Its UUID or capture is a texture, and a capture must be uuid. `any` and `original` are refused after it. |
+| Elements | `element` cannot be combined with `at`, `button`, `anywhere` or `showing`; it finds the point on the face itself. Its name is a literal, not empty, and `matching` is refused after it. The file needs an `elements` header (`element needs an elements header saying where the records are`), whose path is not empty. Whether the path exists and its records are well formed is known only when the run starts ([Element records](#element-records)). |
+| Showing | `showing` cannot be combined with `link`, `face`, `button`, `element` or `anywhere`; it finds the prim and the face itself. Its UUID or capture is a texture, and a capture must be uuid. `any` and `original` are refused after it. |
 
 `image` and `oval` pass the static check and fail at run time; see [Buttons](#buttons).
 
@@ -471,6 +475,8 @@ A touch on a face sends both of a viewer's coordinates. `at S T` is the point on
 | two or more | The step fails and lists the centres, as an unguarded touch does. |
 
 A face the search refuses (planar, animated, a finder error, `image` or `oval`) fails the step, and is not a count of none. A face with no texture contributes no tuples. A prim with no textured face therefore counts as none and sends nothing, where an unguarded touch refuses it with `no face of "<name>" has a texture`. A guarded step has no expectations, so the step after it is written `then expect ...` and holds a positive expectation, naming the state the block is driving towards: a misspelt label then fails at that expectation instead of being skipped silently on every run.
+
+**Touch element.** `touch OBJ [link N] [face F] element "NAME"` touches the area a record calls NAME, on the face that shows it; it is [Element records](#element-records).
 
 **Touch showing.** `touch OBJ showing UUID` touches the face that shows a texture, and `touch OBJ showing $tile` the face that shows the texture a capture holds. It is for a palette with one picture on each face, where the label that a button search would use is not there. The runner first asks the region to describe every prim of `OBJ`'s linkset again and reads their faces, because the store can keep an old texture for seconds after a script changes a face ([Texture](slate-runner.md#texture)). It then looks at every face of every prim of the linkset for the texture: exactly the faces a prim has, counted from its shape ([How many faces a prim has](objects.md#how-many-faces-a-prim-has)), or, for a sculpt or a mesh, the faces its texture entry names. Exactly one (prim, face) must show it, and that face is touched at its middle, or at `S T` when `at S T` follows. A texture shown nowhere, or on two or more faces, fails the step before any touch is sent, and the failure lists each prim and face ([Reading the result](#reading-the-result)). `OBJ` needs no probe: the touch goes to the prim found by its id. For a sculpt or a mesh the face count is not known, and a face the entry does not name shows the default texture, which can make a search for that texture ambiguous; see [Known limitations](#known-limitations).
 
@@ -973,6 +979,49 @@ slate: step N: button part oval is allowed, and the finder does not match one; a
 ```
 
 A button step that fails after a search leaves the face pictures in the system temp directory and prints their paths ([Reading the result](#reading-the-result), the button sentences). How the click point is computed is in [Buttons](slate-runner.md#buttons).
+
+## Element records
+
+A button search reads the picture a face shows. A product that is designed to be tested can instead say, in a plain file, where each of its touch areas is on its texture, and a test can then touch an area by its name: `touch hud element "Open"`. The file is a record, written by hand or by a tool, and Slate reads it as it is; it fetches nothing and guesses nothing.
+
+**The record.** One line for each area of a texture, with the texture's id, the area's name, its box in the texture's own coordinates, and optionally its text:
+
+```text
+# texture id                           element        u0   v0   u1   v1    text
+1b2b7e57-7e57-c0de-e90f-3d68ad60c7a8   open-button    0.10 0.62 0.45 0.78 Open
+1b2b7e57-7e57-c0de-e90f-3d68ad60c7a8   "Left Arrow"   0.05 0.30 0.20 0.45 L
+```
+
+- A line has 6 or 7 fields separated by any run of spaces or tabs: the texture id, the element name, `u0 v0 u1 v1`, and the text when there is one. A tool and a person write the same lines and they read the same.
+- The name and the text are one field each. A field that holds white space, a double quote, a backslash or a `#` is written in double quotes, with `\"` and `\\` the only escapes inside; any other field is one word. The text is read as UTF-8 and is not used by Slate: it is for the people and tools that keep the record. More than 7 fields is an error, so unquoted text with a space in it is refused.
+- A line whose first non-blank character is `#` is a comment, and a blank line is skipped. A `#` anywhere else is part of a field.
+- The texture id is a UUID, in either case. One file may hold several textures, and the lines of one texture need not be together.
+- U and V are numbers from 0 to 1 across the whole texture, the origin at the bottom left, the way `llDetectedTouchUV` has them ([Stimuli](#stimuli)); they may have any number of decimals. `u0` is less than `u1` and `v0` is less than `v1`.
+- **A name may repeat within a texture.** An atlas holds one version of a panel after another on one texture, with an area of the same name in each, and the face shows one version at a time.
+- The area's centre is the middle of its box. There is no shape: the centre is inside every shape a template uses, and the centre is the only point Slate uses.
+- A line that cannot be read is a setup error that names the file and the line: `slate: setup: elements "panels.tsv": /path/panels.tsv:3: the line ends before the v1; a line is texture id, element, u0 v0 u1 v1, then optional text`.
+
+**The header.** `elements "PATH"` names a file, or a directory whose `*.tsv` files are read in name order; it is relative to the Slate file's directory (an absolute path is used as it is). Several headers add up. A texture recorded in two files is a setup error (exit 3) naming both, because which one is right is not for Slate to say: `texture <uuid> is recorded in both A and B; a texture is recorded in one place`.
+
+**The step.** `touch OBJ [link N] [face F] element "NAME"` finds the faces of the addressed prim (the bound prim, or the prim at `link N`) that show a texture with a record, and `face F` narrows them to one. It then asks, of each area named NAME in those records, whether it is on the face at all, and touches the one that is. The name is exact, in the case it has; `matching` is not offered, because a record's names are chosen by whoever keeps it.
+
+- **Repeats.** A face whose repeat is larger than 1 in size in either direction (`|repeat| > 1`: 2 and -1.5 are, -1 and -0.5 are not) is refused for `element`, with a sentence, because it shows the texture more than once and an area is then in several places. A repeat below 1 is normal: it is a window onto part of the texture, which is how an atlas is shown. A negative repeat up to 1 in size mirrors the texture, and the mapping flips with it.
+- **The visible window.** The centre of each area named NAME is mapped from the texture's U and V to the face's S and T through the face's repeats (sign included), offset and rotation, which is the viewer's mapping from S and T to UV undone, as `Face.TextureToSurface` does it for a touch given a UV ([What a face shows](face-pictures.md#the-mapping)). The areas whose centre lands inside the face, 0 to 1 in S and in T, are the ones showing. A texture repeats beyond 0 to 1, so an offset that moves the window past an edge shows the area one texture over, and that counts. Exactly one showing: it is touched there, as `at S T` touches. A face switched between the versions of an atlas by its offset therefore touches the `ok-button` of the version it shows.
+- **Which face.** A name showing on more than one face fails as ambiguous, listing the faces, unless `face F` names one. A name showing more than once on one face fails the same way.
+- **Faces refused.** A face with a record that has planar mapping or a running texture animation is refused as a button search refuses it, with the same sentences ([Which faces are refused](face-pictures.md#which-faces-are-refused)), and so is one whose repeat is too large.
+
+The step fails before anything is sent, exit 1, with one of these. A touch that was sent reports `touched <name> face F element "NAME" at S T`.
+
+```text
+slate: step N: no face of "Test HUD" shows a texture with an element record
+slate: step N: face 2 of "Test HUD" does not show a texture with an element record
+slate: step N: element "Open" is not in the record of <uuid>, the texture shown on "Test HUD" face 1
+slate: step N: element "Open" is not showing on "Test HUD" face 1 (face 1: repeats 0.5 by 1, offset -0.25 0, rotation 0 degrees)
+slate: step N: element "Open" is showing in 2 places on "Test HUD", faces 1, 4; write face F to choose one
+slate: step N: face 1 of "Test HUD" repeats its texture 2 by 1, and an element is found in the part of the texture a face shows once; a repeat larger than 1 in size shows it more than once, so set the repeats to 1 or less, or touch with at S T
+```
+
+How the record is read and the mapping is applied is in [the runner](slate-runner.md#stimuli).
 
 ## Objects, names and link numbers
 
@@ -1664,6 +1713,31 @@ expect texture sign face 0 becomes $tile within 8s
 ```
 
 If two faces of the HUD show that texture, the touch is not sent and the step fails with the list of both.
+
+### An atlas button found by its name
+
+A panel keeps two versions of itself on one texture, the left half and the right half, and a script switches the face between them by its offset. The record holds an `ok-button` in each version; the face shows one, and `touch panel element "ok-button"` touches the one that is showing. The record is the file `panels.tsv`, beside the Slate file:
+
+```text
+# texture id                           element       u0   v0   u1   v1
+5e557e57-7e57-c0de-d92c-9524fe83dc23   ok-button     0.05 0.40 0.20 0.60
+5e557e57-7e57-c0de-d92c-9524fe83dc23   ok-button     0.55 0.40 0.70 0.60
+5e557e57-7e57-c0de-d92c-9524fe83dc23   "Page Menu"   0.80 0.80 0.95 0.95
+```
+
+The face repeats the texture 0.5 across and slides it by -0.25 to show the left version, or 0.25 for the right. In the left version the first `ok-button` has its centre at U 0.125, which is S 0.25 on the face, and the step touches there:
+
+```slate
+slate 1
+
+object panel is "Example Panel"
+elements "panels.tsv"
+
+touch panel face 0 element "ok-button"
+expect say "ok" on public from object panel
+```
+
+After the script has moved the offset to 0.25 the same step touches the second `ok-button`, at S 0.25 again but on the other version, and `touch panel element "Page Menu"` finds the menu only then: while the left version shows, the step fails with `element "Page Menu" is not showing on "Example Panel" face 0` and the face's repeats and offset.
 
 ### A full-bright toggle on every face
 

@@ -76,7 +76,7 @@ func TestParseRejectsABadFile(t *testing.T) {
 		{"slate 1\nobject a is \"A\"\nthen\n", "then needs an expectation"},
 		{"slate 1\nobject a is \"A\"\ntouch a anywhere\nthen\n", "then needs an expectation"},
 		{"slate 1\ntouch a anywhere\nobject a is \"A\"\n", "headers go before the first step"},
-		{"slate 1\nobject a is \"A\"\ntouch a\n", "expected anywhere, link, face, button, or showing"},
+		{"slate 1\nobject a is \"A\"\ntouch a\n", "expected anywhere, link, face, button, element, or showing"},
 		{"slate 1\nobject a is \"A\"\ntouch a button\n", "a button needs a part"},
 		{"slate 1\nobject a is \"A\"\ntouch a button 1.5 text \"A\"\n", "a button number is a whole number"},
 		{"slate 1\nobject a is \"A\"\nsay \"hi\" on 0 as object a\n", "a stimulus speaks as the tester"},

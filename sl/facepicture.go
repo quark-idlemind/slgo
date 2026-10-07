@@ -144,13 +144,8 @@ func (w *Session) FacePicture(ctx context.Context, o *Object, face int) (image.I
 		return nil, fmt.Errorf("sl: %s has no face %d; it has %d", o, face, len(faces))
 	}
 	f := faces[face]
-	switch {
-	case f.Texture == (msg.UUID{}):
-		return nil, fmt.Errorf("sl: face %d of %s: %w", face, o, ErrNoTexture)
-	case f.Planar():
-		return nil, fmt.Errorf("sl: face %d of %s: %w", face, o, ErrPlanarFace)
-	case animated(seen.TextureAnim, face, len(faces)):
-		return nil, fmt.Errorf("sl: face %d of %s: %w", face, o, ErrAnimatedFace)
+	if err := faceRefusal(f, seen.TextureAnim, face, len(faces), o); err != nil {
+		return nil, err
 	}
 	tex, err := w.TextureImage(ctx, f.Texture)
 	if err != nil {
@@ -161,4 +156,44 @@ func (w *Session) FacePicture(ctx context.Context, o *Object, face int) (image.I
 		return nil, fmt.Errorf("sl: face %d of %s: %w", face, o, err)
 	}
 	return pic, nil
+}
+
+// faceRefusal is the error FacePicture gives for a face whose picture the
+// entry does not say, or nil: no texture, planar mapping, or a running
+// texture animation, in that order. n is the object's number of faces.
+func faceRefusal(f Face, anim []byte, face, n int, o *Object) error {
+	switch {
+	case f.Texture == (msg.UUID{}):
+		return fmt.Errorf("sl: face %d of %s: %w", face, o, ErrNoTexture)
+	case f.Planar():
+		return fmt.Errorf("sl: face %d of %s: %w", face, o, ErrPlanarFace)
+	case animated(anim, face, n):
+		return fmt.Errorf("sl: face %d of %s: %w", face, o, ErrAnimatedFace)
+	}
+	return nil
+}
+
+// FaceRefusals is every face of o and, for each, the error FacePicture
+// would give for it before fetching anything: ErrNoTexture, ErrPlanarFace
+// or ErrAnimatedFace wrapped as it wraps them, or nil. A caller that maps
+// a point through a face's entry without its picture asks here which
+// faces the entry alone does not describe.
+// Why: doc/face-pictures.md#which-faces-are-refused
+func (w *Session) FaceRefusals(ctx context.Context, o *Object) ([]Face, []error, error) {
+	if o == nil {
+		return nil, nil, fmt.Errorf("sl: nothing to look at")
+	}
+	seen, err := w.ObjectByID(ctx, o.ID, w.objectWait())
+	if err != nil {
+		return nil, nil, err
+	}
+	faces, seen, _, err := w.appearance(ctx, o, seen)
+	if err != nil {
+		return nil, nil, err
+	}
+	out := make([]error, len(faces))
+	for i, f := range faces {
+		out[i] = faceRefusal(f, seen.TextureAnim, i, len(faces), o)
+	}
+	return faces, out, nil
 }
