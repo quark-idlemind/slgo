@@ -254,6 +254,41 @@ and nothing checks that the connection really is loopback.
 Each argument names a profile. The sessions stay up until the process is
 signalled; clients attach and detach freely without the grid noticing.
 
+### Starting it twice
+
+An avatar can be in one session on the grid, and a login from anywhere
+else ends the one that is there: "logged you out because you are
+attempting to log in from another location". The running slgod takes that
+as a decision and does not log back in, so the session does not come back
+by itself. A second slgod started by mistake must therefore fail before
+it logs anybody in, and it does. First of all, before the secret is read
+or any avatar is logged in, it takes what only one instance can have:
+
+1. A lock on its config directory (`~/.config/slgod`, or the `-config`
+   directory), the file `slgod.lock`. A second slgod on another port but
+   with the same directory would log the same avatars in just the same.
+   The refusal names the holder's pid. The lock is `flock`, which the
+   operating system lets go of when the process ends however it ends, so
+   there is no stale lock to delete. It guards the directory, so two
+   daemons with the same accounts in different `-config` directories are
+   not caught by it; give each its own accounts, as the `-config`
+   example above does.
+2. The `-listen` address.
+3. The `-viewer` address, if there is one.
+
+A refusal is a non-zero exit with a line that names the address (or the
+lock) and says nobody has been logged in, and the running slgod is
+untouched. Only then are the avatars logged in, and the listeners handed
+to the server. A client that connects in between waits to be accepted
+rather than being refused.
+
+Measured on 2026-10-06 with one slgod holding the test avatar: a second
+started with the same directory and port, one with the same directory on
+another port, and one with another directory on the same port each
+exited within a second with its sentence, and the first kept its session
+throughout. Before this, a second slgod on the same port logged the
+avatar in, ended the first's session, and only then failed to listen.
+
 ### The computer it claims to be
 
 The login server asks a client which computer it is running on -- the
@@ -838,8 +873,8 @@ half a minute unless `-t` says otherwise, and `-t` needs a unit -- `-t
 
 | | |
 |---|---|
-| `-listen ADDR` | address to serve clients on (default `:7807`) |
-| `-config DIR` | keep profiles and slgod's own files (machine identity, seats, viewer certificate) in DIR, instead of `~/.config/slgo` and `~/.config/slgod`; DIR must exist and be mode 700; a file called `secret` in it, if there is one, is this daemon's secret instead of the shared one |
+| `-listen ADDR` | address to serve clients on (default `:7807`); taken before any avatar is logged in, so a second slgod on the same address exits having logged nobody in |
+| `-config DIR` | keep profiles and slgod's own files (machine identity, seats, viewer certificate) in DIR, instead of `~/.config/slgo` and `~/.config/slgod`; DIR must exist and be mode 700; it is locked (`slgod.lock`) for as long as the daemon runs; a file called `secret` in it, if there is one, is this daemon's secret instead of the shared one |
 | `-secret FILE` | the secret clients must prove, instead of `DIR/secret` or `~/.config/slgod/secret`; logged as `secret:` at startup |
 | `-no-auth` | serve without authentication; loopback only, and it is not checked |
 | `-group G`, `-group PROFILE=G` | the group to act as, overriding the profile's own |

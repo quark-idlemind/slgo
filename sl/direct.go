@@ -396,6 +396,7 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			Shape:           o.Shape,
 			LinkNumber:      o.LinkNumber,
 			LinkKnown:       o.LinkKnown,
+			LinkNote:        o.LinkNote,
 			Text:            o.Text,
 			AttachPoint:     o.AttachPoint,
 			AttachItem:      o.AttachItem,

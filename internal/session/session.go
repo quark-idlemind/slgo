@@ -270,10 +270,12 @@ func RunIn(ctx context.Context, s *sl.Session, name string, keep bool) (*sl.Obje
 		if err != nil {
 			return nil, nil, err
 		}
-		for _, seen := range found {
-			if seen.IsRoot() {
-				return &seen.Object, nil, nil
-			}
+		roots, err := s.Roots(ctx, found)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(roots) > 0 {
+			return &roots[0].Object, nil, nil
 		}
 		if len(found) > 0 {
 			// Every match was a child prim: the script would run, but

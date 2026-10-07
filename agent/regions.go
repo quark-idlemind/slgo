@@ -170,7 +170,7 @@ func (a *Agent) enterRegion(region msg.UUID) {
 		store.absorb(old)
 	}
 	a.objects.Store(store)
-	old.Unwatch(a.viewKey())
+	old.Leave(a.viewKey(), a.objCirc)
 	a.regions.Detach(was)
 	// Looking from here from the moment it is here: see lookFrom.
 	a.lookFrom()
@@ -229,7 +229,7 @@ func (a *Agent) leaveRegion() {
 	a.mu.Unlock()
 
 	if o := a.objects.Load(); o != nil {
-		o.Unwatch(a.viewKey())
+		o.Leave(a.viewKey(), a.objCirc)
 	}
 	if a.regions != nil {
 		a.regions.Detach(was)

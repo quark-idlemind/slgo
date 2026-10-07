@@ -477,6 +477,75 @@ func TestObjectsSkipsAvatars(t *testing.T) {
 	}
 }
 
+// TestObjectsHowPrintsTheLinkOrderAndHowEachPrimWasDescribed: a prim whose
+// number is in doubt is read off the record, not guessed at.
+// Why: doc/objects.md#how-an-object-was-described
+func TestObjectsHowPrintsTheLinkOrderAndHowEachPrimWasDescribed(t *testing.T) {
+	var (
+		root = msg.MustParseUUID("139a7e57-7e57-c0de-1d15-f67d88024deb")
+		box  = msg.MustParseUUID("5cca7e57-7e57-c0de-2bd3-aa1299ec7507")
+		sign = msg.MustParseUUID("a1817e57-7e57-c0de-3a38-39e5c1ef23ff")
+	)
+	x := newTestShell(t)
+	x.grid.objects = []*sl.Seen{
+		{Object: sl.Object{ID: root, Local: 40, Name: "a lamp"}, PCode: 9,
+			LinkNumber: 1, LinkKnown: false},
+		{Object: sl.Object{ID: box, Local: 41, Name: "a box"}, PCode: 9, Parent: 40,
+			LinkNumber: 2, LinkKnown: false},
+		{Object: sl.Object{ID: sign, Local: 42, Name: "a sign"}, PCode: 9, Parent: 40,
+			LinkNumber: 3, LinkKnown: false},
+	}
+	at := time.Date(2026, 1, 2, 3, 4, 5, 678000000, time.Local)
+	x.grid.how = map[msg.UUID][]sl.Description{
+		root: {{Kind: sl.DescFull, Seq: 90, Message: 7, Block: 0, Blocks: 2, At: at}},
+		box: {
+			{Kind: sl.DescCached, Seq: 88, At: at},
+			{Kind: sl.DescRequested, At: at},
+			{Kind: sl.DescFull, Parent: 40, Seq: 91, Message: 8, Block: 0, Blocks: 1, Refill: true, Listed: true, At: at},
+			{Kind: sl.DescTerse, Seq: 99, Count: 12, At: at},
+		},
+	}
+
+	// Without the flag, nothing of it.
+	if got := x.do(t, "objects lamp"); strings.Contains(got, "link ") || strings.Contains(got, "packet") {
+		t.Errorf("objects without --how printed the record:\n%s", got)
+	}
+
+	got := x.do(t, "objects --how -c lamp")
+	for _, want := range []string{
+		"      link 1, order not known; local 40, parent 0\n",
+		"      full       03:04:05.678  packet 90, message 7, block 1 of 2, parent 0\n",
+		"      link 2, order not known; local 41, parent 40\n",
+		"      cached     03:04:05.678  packet 88\n",
+		"      requested  03:04:05.678\n",
+		"      full       03:04:05.678  packet 91, message 8, block 1 of 1, parent 40  (listed, answer to a request)\n",
+		"      terse      03:04:05.678  packet 99, 12 updates\n",
+		"      link 3, order not known; local 42, parent 40\n      no description recorded\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("--how is missing %q:\n%s", want, got)
+		}
+	}
+
+	// Circuits that disagree are named, and the note says so.
+	x.grid.objects[1].LinkNote = "circuits 1 and 2 each described every child and disagree on the order"
+	x.grid.how[box] = []sl.Description{{Kind: sl.DescFull, Parent: 40, Circuit: 2, Seq: 41, Message: 3, Block: 1, Blocks: 2, Listed: true, At: at}}
+	got = x.do(t, "objects --how -c lamp")
+	for _, want := range []string{
+		"      link 2, order not known; local 41, parent 40\n      circuits 1 and 2 each described every child and disagree on the order\n",
+		"circuit 2, packet 41, message 3, block 2 of 2, parent 40  (listed)\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("--how is missing %q:\n%s", want, got)
+		}
+	}
+
+	// Without -c only the roots, as for the listing.
+	if got := x.do(t, "objects --how lamp"); strings.Contains(got, "local 41") {
+		t.Errorf("--how listed a child without -c:\n%s", got)
+	}
+}
+
 // TestACommandsOutputIsShownRatherThanObeyed.
 //
 // An object is called whatever its owner typed, and a command's output

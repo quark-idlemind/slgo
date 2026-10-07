@@ -273,11 +273,9 @@ func cmdObjects(ctx context.Context, r *req, out io.Writer, args []string) error
 	// Roots only: a listing of every prim in every linkset is a
 	// thousand lines of the same object, and the root is the thing
 	// anybody names.
-	var roots []*sl.Seen
-	for _, o := range seen {
-		if o.Parent == 0 {
-			roots = append(roots, o)
-		}
+	roots, err := s.Roots(ctx, seen)
+	if err != nil {
+		return err
 	}
 	sort.SliceStable(roots, func(i, j int) bool { return roots[i].Name < roots[j].Name })
 	if len(roots) == 0 {

@@ -387,7 +387,7 @@ func linkset(all []*Seen, o *Object) ([]*Seen, error) {
 	if root.IsAvatar() {
 		return nil, fmt.Errorf("sl: %s is an avatar, not an object", o)
 	}
-	if root.Parent != 0 && !wornUnder(all, root.Parent) {
+	if !root.IsRootIn(all) {
 		for _, s := range all {
 			if s.Local == root.Parent {
 				root = s

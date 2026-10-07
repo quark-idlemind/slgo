@@ -280,11 +280,9 @@ func (sh *Shell) walkTarget(ctx context.Context, name string, rest []string) (ms
 	if err != nil {
 		return msg.Vector3{}, "", err
 	}
-	var roots []*sl.Seen
-	for _, o := range objects {
-		if o.IsRoot() {
-			roots = append(roots, o)
-		}
+	roots, err := sh.s.Roots(ctx, objects)
+	if err != nil {
+		return msg.Vector3{}, "", err
 	}
 	switch len(roots) {
 	case 1:

@@ -176,7 +176,7 @@ func (r *runner) linkBinding(ctx context.Context, all []*sl.Seen, b *binding, li
 	root := members[0]
 	set, err := r.sess.Linkset(ctx, &root.Object)
 	if errors.Is(err, sl.ErrLinkOrderUnknown) {
-		return nil, &linkFault{fmt.Sprintf("the link order of %q is not known; a probe, or taking and rezzing it, gives it", root.Name)}
+		return nil, &linkFault{fmt.Sprintf("the link order of %q is not known; bind the prim by its own name instead of link N, give the object a probe (the tester must own it), or take it and rez or wear it again", root.Name)}
 	}
 	if err != nil {
 		return nil, ctxOr(ctx, &linkFault{fmt.Sprintf("reading the links of %q: %v", root.Name, err)})

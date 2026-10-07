@@ -971,6 +971,15 @@ func (c *Conn) Objects(ctx context.Context, named, id string) (*pb.ObjectsRespon
 	})
 }
 
+// ObjectsHow is Objects with each object's descriptions, which are left
+// out otherwise. A daemon that does not know the field answers without
+// them.
+func (c *Conn) ObjectsHow(ctx context.Context, named, id string) (*pb.ObjectsResponse, error) {
+	return c.grid.Objects(ctx, &pb.ObjectsRequest{
+		Agent: c.agentName(), Named: named, Id: id, How: true,
+	})
+}
+
 // Friends asks who this avatar's friends are and which are logged in.
 //
 // The server holds it for the same reason it holds the objects: the

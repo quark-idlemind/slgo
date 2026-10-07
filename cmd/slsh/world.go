@@ -733,6 +733,7 @@ func (sh *Shell) itemNames(ctx context.Context) map[msg.UUID]string {
 type objectsOptions struct {
 	Children bool   `getopt:"--children -c  the prims of each object as well, indented under it"`
 	Owner    string `getopt:"--owner=WHO    only one owner's things: a uuid, or a pattern for the name"`
+	How      bool   `getopt:"--how          under each object, its link number and how the region described it"`
 	Help     bool   `getopt:"--help -h      show what this command takes"`
 }
 
@@ -769,6 +770,20 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 
 	roots, kids, orphans := linksets(all)
 
+	// how says what the store recorded of each prim an object is shown
+	// with: where it stands in the link order and how it was described.
+	var described map[msg.UUID][]sl.Description
+	if o.How {
+		if described, err = sh.s.Descriptions(ctx); err != nil {
+			return err
+		}
+	}
+	how := func(c *sl.Seen) {
+		if o.How {
+			printHow(out, c, described[c.ID])
+		}
+	}
+
 	shown, hidden := 0, 0
 	unnamed := 0
 	for _, g := range sh.byOwner(roots, orphans) {
@@ -801,6 +816,7 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 			head()
 			fmt.Fprintf(out, "  %-36s %-28s %s\n", r.ID, r.Name, sh.whereIs(r, wearers))
 			shown++
+			how(r)
 			for _, c := range mine {
 				// Browsing shows the objects; searching shows what was
 				// searched for.  Without -c the prims inside are the
@@ -814,6 +830,7 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 				fmt.Fprintf(out, "    %-34s %-28s offset %s\n",
 					c.ID, c.Name, offsetOf(c.Position))
 				shown++
+				how(c)
 			}
 		}
 
@@ -832,6 +849,7 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 			fmt.Fprintf(out, "    %-34s %-28s offset %s, from a root nothing has described\n",
 				c.ID, c.Name, offsetOf(c.Position))
 			shown++
+			how(c)
 		}
 	}
 
@@ -847,6 +865,60 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 			unnamed, pluralPrims(unnamed))
 	}
 	return nil
+}
+
+// printHow is the lines --how adds under a prim: its link number and
+// whether the store believes it, its local id and parent, and each way it
+// was described, oldest first. A listed entry is the one that put the
+// prim in its parent's list, which fixed its place in the order.
+// Why: doc/objects.md#how-an-object-was-described
+func printHow(out io.Writer, c *sl.Seen, ds []sl.Description) {
+	known := "known"
+	if !c.LinkKnown {
+		known = "order not known"
+	}
+	fmt.Fprintf(out, "      link %d, %s; local %d, parent %d\n", c.LinkNumber, known, c.Local, c.Parent)
+	if c.LinkNote != "" {
+		fmt.Fprintf(out, "      %s\n", c.LinkNote)
+	}
+	if len(ds) == 0 {
+		fmt.Fprintln(out, "      no description recorded")
+		return
+	}
+	for _, d := range ds {
+		var notes []string
+		if d.Listed {
+			notes = append(notes, "listed")
+		}
+		if d.Refill {
+			notes = append(notes, "answer to a request")
+		}
+		line := fmt.Sprintf("      %-10s %s", d.Kind, d.At.Format("15:04:05.000"))
+		switch d.Kind {
+		case sl.DescFull, sl.DescCompressed:
+			line += fmt.Sprintf("  %spacket %d, message %d, block %d of %d, parent %d",
+				circuitOf(d), d.Seq, d.Message, d.Block+1, d.Blocks, d.Parent)
+		case sl.DescTerse:
+			line += fmt.Sprintf("  %spacket %d, %d %s", circuitOf(d), d.Seq, d.Count, plural(d.Count, "update", "updates"))
+		default:
+			if d.Seq != 0 {
+				line += fmt.Sprintf("  packet %d", d.Seq)
+			}
+		}
+		if len(notes) > 0 {
+			line += "  (" + strings.Join(notes, ", ") + ")"
+		}
+		fmt.Fprintln(out, line)
+	}
+}
+
+// circuitOf is "circuit N, " for an update that came on a named circuit:
+// a packet's number means something only against another of its circuit.
+func circuitOf(d sl.Description) string {
+	if d.Circuit == 0 {
+		return ""
+	}
+	return fmt.Sprintf("circuit %d, ", d.Circuit)
 }
 
 func pluralPrims(n int) string {

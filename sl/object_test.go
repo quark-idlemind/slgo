@@ -30,6 +30,7 @@ var (
 	thePrim  = msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85")
 	theChild = msg.MustParseUUID("909e7e57-7e57-c0de-177e-107fc4869811")
 	theOther = msg.MustParseUUID("97c27e57-7e57-c0de-c041-be2c2f8cb586")
+	theWorn  = msg.MustParseUUID("f4147e57-7e57-c0de-7846-ce40bb732231")
 )
 
 // anUpdate is one ObjectUpdate, which is how the region says an object

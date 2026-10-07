@@ -154,12 +154,23 @@ type Object struct {
 	LinkNumber int
 
 	// LinkKnown says LinkNumber can be believed: true for a prim that is
-	// not linked, and for the rest the state of its linkset, which a
-	// link made while the store watched leaves unknown.  A sitter's
-	// number does not depend on the prims' order, so it is known unless
-	// several sitters were described already seated.  See
-	// Objects.unordered and Objects.sitUnordered.
+	// not linked, and for the rest the state of its linkset, which is
+	// known only when the store ordered it by the region's own sending:
+	// the root was described and every child seen so far was listed by a
+	// full or compressed update that was not the answer to a request, and
+	// which a link made while the store watches can leave unknown.  It
+	// does not say every child has been seen.  A sitter's number does
+	// not depend on the prims' order, so it is known unless several
+	// sitters were described already seated.  See Objects.unwitnessed,
+	// Objects.rootless, Objects.unordered and Objects.sitUnordered.
+	// Why: doc/objects.md#when-a-set-is-known
 	LinkKnown bool
+
+	// LinkNote says why LinkKnown is false when the circuits that
+	// described the set disagree on its order or none described it whole;
+	// empty otherwise.
+	// Why: doc/objects.md#ordering-by-the-packet
+	LinkNote string
 
 	// First and Last are when the simulator first and last said
 	// anything about this object.  Last is what Trim ages an orphan by.
@@ -187,6 +198,27 @@ type Object struct {
 	heard       bool
 	heardParent uint32
 	moved       bool
+
+	// keys is, for each circuit that described this object afresh under
+	// its parent (not as a refill), the packet's sequence number and the
+	// block's place in it.  Each circuit numbers its packets by itself, so
+	// a key is compared only with another of the same circuit.  exempt
+	// says the object has no key to order by: a live link (at the front)
+	// or a listing that came by no packet.  Dropped with the object, and
+	// with a circuit when its agent leaves the region.
+	// Why: doc/objects.md#ordering-by-the-packet
+	keys   []circKey
+	exempt bool
+
+	// ring is the last few ways this object was described, a fixed array
+	// that is dropped with the object, and listedBy the description that
+	// put it in its parent's list.  See Descriptions.
+	// Why: doc/objects.md#how-an-object-was-described
+	ring        [ringSize]desc
+	ringHead    uint8
+	ringN       uint8
+	listedBy    desc
+	hasListedBy bool
 }
 
 // Objects is what the session has been told about the region.
@@ -211,8 +243,11 @@ type Objects struct {
 
 	// kids is each parent's children, by the parent's local id, in link
 	// order: a child is 2 plus its place here, and the root 1.  A set
-	// described afresh arrives in link order, so its children are
-	// appended.  A prim the store already held that is linked while we
+	// described afresh is sent in link order, in packets of rising
+	// sequence number, but the packets can arrive in another order, so
+	// a child is placed by (sequence, block) of the packet that listed
+	// it, after the children with a smaller one of the same circuit
+	// (orderLocked).  A prim the store already held that is linked while we
 	// watch goes to the front, as link 2: a link of one makes it link 2,
 	// as llCreateLink does (measured), and the region's update for a link
 	// of several is not in link order, so that set is left unknown.  A
@@ -277,6 +312,33 @@ type Objects struct {
 	// parent's local id; see joinWindow.
 	lastLive map[uint32]time.Time
 
+	// unwitnessed holds the parents, by local id, that a live link joined
+	// when the parent was not here, or as an answer to a request.  (A
+	// fresh child that answers a request has no key instead: see
+	// circKey.)  A set is known only when it is not here, not in
+	// rootless and not in unordered, and its keys say so (verdicts).
+	// Why: doc/objects.md#when-a-set-is-known
+	unwitnessed map[uint32]bool
+
+	// rootless holds the parents, by local id, that a child was listed
+	// under before the parent was described.  It goes when the parent is
+	// described, by any kind of update.
+	rootless map[uint32]bool
+
+	// verdicts is, per parent, what the keys of its children say of
+	// their order (see orderVerdict), recomputed whenever a child is
+	// listed, keyed or removed.  explicit holds the parents whose list was
+	// given an order outright (a link this session sent, a whole set
+	// joined to another), which the keys do not reorder or judge.
+	// Why: doc/objects.md#ordering-by-the-packet
+	verdicts map[uint32]orderVerdict
+	explicit map[uint32]bool
+
+	// notes is what was said about local ids no update has yet described
+	// (cached, requested, killed), bounded by noteCap; see describe.go.
+	notes     map[uint32]*note
+	notesLost time.Time
+
 	// pendingGLTF holds material overrides that arrived for a local id the
 	// store has no object for, until the object is described; see gltf.go.
 	pendingGLTF map[uint32]pendingOverride
@@ -316,7 +378,8 @@ func newObjects() *Objects {
 		kids: map[uint32][]msg.UUID{}, unordered: map[uint32]bool{},
 		sitters: map[uint32][]msg.UUID{}, sitUnordered: map[uint32]bool{},
 		misordered: map[msg.UUID]bool{}, links: map[uint32]namedLink{},
-		lastLive: map[uint32]time.Time{}, pendingGLTF: map[uint32]pendingOverride{},
+		lastLive: map[uint32]time.Time{}, unwitnessed: map[uint32]bool{},
+		rootless: map[uint32]bool{}, verdicts: map[uint32]orderVerdict{}, explicit: map[uint32]bool{}, notes: map[uint32]*note{}, pendingGLTF: map[uint32]pendingOverride{},
 		now: time.Now}
 }
 
@@ -381,14 +444,14 @@ func within(at, camera msg.Vector3, far float32) bool {
 func (o *Objects) All() []*Object {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
-	here := make(map[uint32]bool, len(o.byID))
+	here := make(map[uint32]*Object, len(o.byID))
 	for _, v := range o.byID {
-		here[v.Local] = true
+		here[v.Local] = v
 	}
 	out := make([]*Object, 0, len(o.byID))
 	for _, v := range o.byID {
 		c := *v
-		o.numberLocked(&c, func(p uint32) bool { return here[p] })
+		o.numberLocked(&c, func(p uint32) *Object { return here[p] })
 		out = append(out, &c)
 	}
 	return out
@@ -404,12 +467,12 @@ func (o *Objects) Linkset(root uint32) []*Object {
 		return nil
 	}
 	c := *r
-	o.numberLocked(&c, func(p uint32) bool { return o.byLocalLocked(p) != nil })
+	o.numberLocked(&c, o.byLocalLocked)
 	out := []*Object{&c}
 	for i, id := range o.kids[root] {
 		if v := o.byID[id]; v != nil {
 			k := *v
-			k.LinkNumber, k.LinkKnown = 2+i, !o.unordered[root]
+			k.LinkNumber, k.LinkKnown, k.LinkNote = 2+i, o.knownLocked(root), o.noteLocked(root)
 			out = append(out, &k)
 		}
 	}
@@ -424,34 +487,70 @@ func (o *Objects) Linkset(root uint32) []*Object {
 }
 
 // numberLocked fills in the link number and whether to believe it on a
-// copy of an object, given whether a local id is in the store.  A prim
+// copy of an object, given a way to find an object by its local id. A prim
 // with no parent and no children is unlinked, which is known; the rest
 // are as known as their set, which is the one under the parent, or its
 // own for a root.
-func (o *Objects) numberLocked(c *Object, parentHere func(uint32) bool) {
-	c.LinkNumber = o.linkNumberLocked(c, parentHere)
+func (o *Objects) numberLocked(c *Object, find func(uint32) *Object) {
+	c.LinkNumber = o.linkNumberLocked(c, find)
 	set := c.Parent
-	if set == 0 {
+	if o.headsLocked(c, find) {
 		set = c.Local
 	}
-	c.LinkKnown = !o.unordered[set]
+	c.LinkKnown, c.LinkNote = o.knownLocked(set), o.noteLocked(set)
 	// A sitter's number needs only the count of prims, not their order.
 	if c.PCode == pcodeAvatar && c.Parent != 0 {
 		c.LinkKnown = !o.sitUnordered[c.Parent]
 	}
 }
 
-// linkNumberLocked is v's link number, given whether a local id is in
-// the store.  A child whose parent is not here is an orphan, which the
-// viewer does not number either.
-func (o *Objects) linkNumberLocked(v *Object, parentHere func(uint32) bool) int {
+// knownLocked says whether the order of the set under this parent can be
+// believed: nothing linked it in an order the region does not carry
+// (unordered), no child came as an answer to a request (not unwitnessed)
+// and the root has been described (not rootless).
+// Why: doc/objects.md#when-a-set-is-known
+func (o *Objects) knownLocked(set uint32) bool {
+	if o.unordered[set] || o.unwitnessed[set] || o.rootless[set] {
+		return false
+	}
+	if v, ok := o.verdicts[set]; ok && !o.explicit[set] {
+		return v.ok
+	}
+	return true
+}
+
+// headsLocked says whether v is the root of its own linkset: it has no
+// parent, or it is worn, which makes an avatar its parent. The avatar is
+// not a prim of the set, so a worn root is link 1 (0 with no children)
+// whatever its parent is, and its children are numbered under it.
+// Why: doc/objects.md#worn-linksets
+func (o *Objects) headsLocked(v *Object, find func(uint32) *Object) bool {
 	if v.Parent == 0 {
+		return true
+	}
+	if v.PCode == pcodeAvatar {
+		return false
+	}
+	p := find(v.Parent)
+	return p != nil && p.PCode == pcodeAvatar
+}
+
+// linkNumberLocked is v's link number, given a way to find an object by
+// its local id. A child whose parent is not here is an orphan, which the
+// viewer does not number either.
+func (o *Objects) linkNumberLocked(v *Object, find func(uint32) *Object) int {
+	if o.headsLocked(v, find) {
+		// A person standing is not a linkset: what hangs off an avatar
+		// is worn, and each worn root numbers its own set.
+		if v.PCode == pcodeAvatar {
+			return 0
+		}
 		if len(o.kids[v.Local]) > 0 || len(o.sitters[v.Local]) > 0 {
 			return 1
 		}
 		return 0
 	}
-	if !v.listed || !parentHere(v.Parent) {
+	if !v.listed || find(v.Parent) == nil {
 		return 0
 	}
 	if v.PCode == pcodeAvatar {
@@ -481,7 +580,7 @@ func (o *Objects) linkNumberLocked(v *Object, parentHere func(uint32) bool) int 
 // neither: it is a sitter, goes to the end of the sitters, and leaves
 // the prims' order and joinWindow alone.
 // Why: doc/objects.md#link-numbers
-func (o *Objects) linkLocked(v *Object) {
+func (o *Objects) linkLocked(v *Object, ev evidence) {
 	if v.listed && v.listedUnder == v.Parent {
 		return
 	}
@@ -493,10 +592,15 @@ func (o *Objects) linkLocked(v *Object) {
 	if was {
 		o.settleLocked(left)
 	}
+	// A root, worn or not, described after some of its children: the
+	// children were ordered by their packets while it was away, and its
+	// being described is all the set was waiting for.
+	if v.PCode != pcodeAvatar {
+		delete(o.rootless, v.Local)
+	}
 	if v.Parent == 0 {
-		// A root described afresh after its children: if its set is one
-		// the region misorders, they are not in link order either.  A
-		// root it already held says nothing new about the order.
+		// If its set is one the region misorders, the children are not
+		// in link order either.
 		if described && o.misordered[v.ID] && len(o.kids[v.Local]) > 0 {
 			o.misorderLocked(v.Local)
 		}
@@ -511,6 +615,11 @@ func (o *Objects) linkLocked(v *Object) {
 		}
 		v.listed, v.listedUnder = true, v.Parent
 		return
+	}
+	o.witnessLocked(v, ev, live)
+	v.keys, v.exempt = nil, live || ev.msg == 0
+	if !v.exempt && !ev.refill {
+		v.keys = []circKey{{ev.circ, ev.seq, uint16(ev.index)}}
 	}
 	if live {
 		o.kids[v.Parent] = slices.Insert(o.kids[v.Parent], 0, v.ID)
@@ -529,6 +638,7 @@ func (o *Objects) linkLocked(v *Object) {
 		o.kids[v.Parent] = append(o.kids[v.Parent], v.ID)
 	}
 	v.listed, v.listedUnder = true, v.Parent
+	o.orderLocked(v.Parent)
 	// Only a fresh description comes in the region's misordered order; a
 	// live link of one is link 2 whatever the set's history.
 	if !live {
@@ -536,6 +646,45 @@ func (o *Objects) linkLocked(v *Object) {
 			o.misorderLocked(v.Parent)
 		}
 	}
+}
+
+// witnessLocked decides whether v's listing under its parent is
+// evidence of anything, as v is about to be listed.  A parent that is not
+// here yet is marked rootless, which its description undoes; a live link
+// into one, or an answer to a request that links one, is unknown.  A live
+// link of one prim puts it at the front, which is right whatever the
+// set's history.  Whether a fresh listing came by the region's own
+// sending is not decided here but by the keys (circKey): a refill has
+// none.
+// Why: doc/objects.md#when-a-set-is-known
+func (o *Objects) witnessLocked(v *Object, ev evidence, live bool) {
+	p := v.Parent
+	r := o.byLocalLocked(p)
+	switch {
+	case r != nil && r.PCode == pcodeAvatar:
+		// v is worn: the root of its own set.
+	case live && (ev.refill || r == nil):
+		o.unwitnessed[p] = true
+	case r == nil:
+		o.rootless[p] = true
+	}
+}
+
+// listAndRecordLocked lists v under its parent and records how it was
+// described: the ring, and the listing description when this is the
+// one that put it in its parent's list.
+func (o *Objects) listAndRecordLocked(v *Object, ev evidence) {
+	was := v.listed && v.listedUnder == v.Parent
+	o.linkLocked(v, ev)
+	if was {
+		o.keyLocked(v, ev)
+	}
+	d := ev.desc(v.Parent)
+	if !was && v.listed {
+		d.flags |= dfListed
+		v.listedBy, v.hasListedBy = d, true
+	}
+	v.push(d)
 }
 
 // misorderLocked marks a parent's set unknown because its root is in
@@ -630,7 +779,7 @@ func (o *Objects) planJoins(moves []move) map[uint32]*setJoin {
 	}
 	plans := map[uint32]*setJoin{}
 	for parent, vs := range byParent {
-		if len(vs) < 2 || o.unordered[parent] {
+		if len(vs) < 2 || !o.knownLocked(parent) {
 			continue
 		}
 		var root *Object
@@ -643,7 +792,7 @@ func (o *Objects) planJoins(moves []move) map[uint32]*setJoin {
 				root = v
 			}
 		}
-		if root == nil || o.unordered[root.Local] {
+		if root == nil || !o.knownLocked(root.Local) {
 			continue
 		}
 		kids := o.kids[root.Local]
@@ -689,6 +838,7 @@ func (o *Objects) applyJoin(parent uint32, j *setJoin) {
 		}
 	}
 	o.kids[parent] = want
+	o.explicit[parent] = true
 	for _, id := range want {
 		if v := o.byID[id]; v != nil {
 			v.moved = false
@@ -744,10 +894,13 @@ func (o *Objects) applyLinkLocked(parent uint32, rec namedLink) {
 		return
 	}
 	o.kids[parent] = order
+	o.explicit[parent] = true
 	for _, id := range order {
 		o.byID[id].moved = false
 	}
 	delete(o.unordered, parent)
+	// The order was named by the link this session sent, whole.
+	delete(o.unwitnessed, parent)
 	// The region's fresh descriptions of this set stay misordered, so
 	// misordered keeps the root: after a flush the set is unknown again.
 	delete(o.links, parent)
@@ -830,10 +983,17 @@ func (o *Objects) unlinkLocked(v *Object) {
 	if len(list) == 0 {
 		delete(o.kids, v.listedUnder)
 		delete(o.unordered, v.listedUnder)
+		delete(o.unwitnessed, v.listedUnder)
+		delete(o.rootless, v.listedUnder)
+		delete(o.verdicts, v.listedUnder)
+		delete(o.explicit, v.listedUnder)
 	} else {
 		o.kids[v.listedUnder] = list
 	}
 	v.listed = false
+	if len(list) > 0 {
+		o.orderLocked(v.listedUnder)
+	}
 }
 
 // forgetLocked takes an object out of the store, and its child list
@@ -847,6 +1007,10 @@ func (o *Objects) forgetLocked(v *Object) {
 		o.settleLocked(under)
 	}
 	delete(o.unordered, v.Local)
+	delete(o.unwitnessed, v.Local)
+	delete(o.rootless, v.Local)
+	delete(o.verdicts, v.Local)
+	delete(o.explicit, v.Local)
 	for _, id := range o.kids[v.Local] {
 		if c := o.byID[id]; c != nil {
 			c.listed = false
@@ -873,7 +1037,7 @@ func (o *Objects) Get(id msg.UUID) (*Object, bool) {
 		return nil, false
 	}
 	c := *v
-	o.numberLocked(&c, func(p uint32) bool { return o.byLocalLocked(p) != nil })
+	o.numberLocked(&c, o.byLocalLocked)
 	return &c, true
 }
 
@@ -922,7 +1086,7 @@ func (o *Objects) absorb(from *Objects) int {
 		// arrives in is only what All gave, so its set is unordered.
 		v.listed, v.heard, v.heardParent = false, false, 0
 		o.byID[v.ID] = v
-		o.linkLocked(v)
+		o.linkLocked(v, evidence{})
 		if v.Parent != 0 && v.PCode != pcodeAvatar {
 			v.moved = true
 			o.unordered[v.Parent] = true
@@ -947,6 +1111,12 @@ func (o *Objects) Flush() int {
 	o.sitters = map[uint32][]msg.UUID{}
 	o.sitUnordered = map[uint32]bool{}
 	o.unordered = map[uint32]bool{}
+	o.unwitnessed = map[uint32]bool{}
+	o.rootless = map[uint32]bool{}
+	o.verdicts = map[uint32]orderVerdict{}
+	o.explicit = map[uint32]bool{}
+	o.notes = map[uint32]*note{}
+	o.notesLost = time.Time{}
 	o.lastLive = map[uint32]time.Time{}
 	o.pendingGLTF = map[uint32]pendingOverride{}
 	return n
@@ -1141,6 +1311,12 @@ const pcodeAvatar = 47
 // child that turns up first would otherwise be thrown away and never
 // mentioned again.  Trim clears up the ones whose root never came.
 func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, drawDistance float32) {
+	o.updateAt(d, camera, drawDistance, o.direct(DescFull), 0)
+}
+
+// updateAt is update for a block that arrived in a message: the
+// description it is recorded as, and the block's place in it.
+func (o *Objects) updateAt(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, drawDistance float32, in inbound, index int) {
 	pos, rot, havePos := msg.DecodePlacement(d.ObjectData)
 
 	o.mu.Lock()
@@ -1156,10 +1332,11 @@ func (o *Objects) update(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, dra
 	}
 
 	v := o.seen(d.FullID)
+	ev := evidence{inbound: in, index: index, refill: o.takeNotesLocked(v, d.ID, in.at)}
 	o.judgedLocked(v, far)
 	v.Local, v.Parent, v.PCode, v.Scale = d.ID, d.ParentID, d.PCode, d.Scale
 	o.adoptGLTFLocked(v)
-	o.linkLocked(v)
+	o.listAndRecordLocked(v, ev)
 	v.Shape = msg.ShapeOfUpdate(d)
 	v.Click, v.ClickKnown = d.ClickAction, true
 	// A block that does not read says nothing, so the last answer stays.
@@ -1253,6 +1430,11 @@ func (o *Objects) Attachments() []*Object {
 // The owner is taken from here and nowhere else: update does not read
 // one out of a full update.
 func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance float32) {
+	o.compressedAt(c, camera, drawDistance, o.direct(DescCompressed), 0)
+}
+
+// compressedAt is compressed for a block that arrived in a message.
+func (o *Objects) compressedAt(c *msg.Compressed, camera msg.Vector3, drawDistance float32, in inbound, index int) {
 	parent := uint32(0)
 	if c.ParentID != nil {
 		parent = *c.ParentID
@@ -1271,10 +1453,11 @@ func (o *Objects) compressed(c *msg.Compressed, camera msg.Vector3, drawDistance
 	}
 
 	v := o.seen(c.FullID)
+	ev := evidence{inbound: in, index: index, refill: o.takeNotesLocked(v, c.LocalID, in.at)}
 	o.judgedLocked(v, far)
 	v.Local, v.Parent, v.PCode = c.LocalID, parent, c.PCode
 	o.adoptGLTFLocked(v)
-	o.linkLocked(v)
+	o.listAndRecordLocked(v, ev)
 	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
 	v.Click, v.ClickKnown = c.Click, true
 	v.Sculpt = msg.SculptMarkOf(c.ExtraParams)
@@ -1330,10 +1513,16 @@ func (o *Objects) judgedLocked(v *Object, far bool) {
 // had when there is none (llvovolume.cpp:650-668).
 // Why: doc/objects.md#an-appearance-on-a-terse-update
 func (o *Objects) moved(t *msg.Terse, te []byte) bool {
+	return o.movedAt(t, te, o.direct(DescTerse), 0)
+}
+
+// movedAt is moved for a block that arrived in a message.
+func (o *Objects) movedAt(t *msg.Terse, te []byte, in inbound, index int) bool {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	for _, v := range o.byID {
 		if v.Local == t.LocalID {
+			v.push(evidence{inbound: in, index: index}.desc(0))
 			v.Position, v.Rotation, v.Velocity = t.Position, t.Rotation, t.Velocity
 			v.Last = time.Now()
 			v.Moved = v.Last
@@ -1448,7 +1637,7 @@ func (o *Objects) byLocal(local uint32) (*Object, bool) {
 		return nil, false
 	}
 	c := *v
-	o.numberLocked(&c, func(p uint32) bool { return o.byLocalLocked(p) != nil })
+	o.numberLocked(&c, o.byLocalLocked)
 	return &c, true
 }
 
@@ -1509,6 +1698,7 @@ func (o *Objects) kill(local uint32) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	delete(o.pendingGLTF, local)
+	o.notedLocked(DescKilled, 0, []uint32{local})
 	for _, v := range o.byID {
 		if v.Local == local {
 			delete(o.misordered, v.ID)
@@ -1644,6 +1834,8 @@ func (a *Agent) PlacementWidths() map[int]uint64 {
 // They are inline so that the picture is up to date before anything
 // dispatched after them looks at it.
 func (a *Agent) trackObjects() {
+	circ := circuitCount.Add(1)
+	a.objCirc = circ
 	a.Disp.MustHandle("ObjectUpdate", func(p *msg.Packet) {
 		m := p.Message.(*msg.ObjectUpdate)
 		l := a.Look()
@@ -1655,13 +1847,14 @@ func (a *Agent) trackObjects() {
 			moves = append(moves, move{m.ObjectData[i].FullID, m.ObjectData[i].ParentID})
 		}
 		plans := store.planJoins(moves)
+		in := store.arrive(circ, DescFull, p.Header.Sequence, len(m.ObjectData))
 		for i := range m.ObjectData {
 			d := &m.ObjectData[i]
 			a.placements.count(len(d.ObjectData))
 			if store.liveJoin(d.FullID, d.ParentID) {
 				joined[d.ParentID] = append(joined[d.ParentID], d.FullID)
 			}
-			store.update(d, l.Center, l.Far)
+			store.updateAt(d, l.Center, l.Far, in, i)
 			parents = a.orphaned(parents, d.ParentID)
 		}
 		for parent, ids := range joined {
@@ -1697,7 +1890,8 @@ func (a *Agent) trackObjects() {
 			}
 		}
 		plans := store.planJoins(moves)
-		for _, dc := range ds {
+		in := store.arrive(circ, DescCompressed, p.Header.Sequence, len(m.ObjectData))
+		for i, dc := range ds {
 			c, err := dc.c, dc.err
 			if c == nil {
 				continue
@@ -1717,7 +1911,7 @@ func (a *Agent) trackObjects() {
 			if c.ParentID != nil && store.liveJoin(c.FullID, *c.ParentID) {
 				joined[*c.ParentID] = append(joined[*c.ParentID], c.FullID)
 			}
-			store.compressed(c, l.Center, l.Far)
+			store.compressedAt(c, l.Center, l.Far, in, i)
 			if c.ParentID != nil {
 				parents = a.orphaned(parents, *c.ParentID)
 			}
@@ -1740,12 +1934,13 @@ func (a *Agent) trackObjects() {
 		l := a.Look()
 		store := a.Objects()
 		var strangers []uint32
+		in := store.arrive(circ, DescTerse, p.Header.Sequence, len(m.ObjectData))
 		for i := range m.ObjectData {
 			t, err := msg.DecodeTerse(m.ObjectData[i].Data)
 			if err != nil {
 				continue
 			}
-			if store.moved(t, m.ObjectData[i].TextureEntry) {
+			if store.movedAt(t, m.ObjectData[i].TextureEntry, in, i) {
 				continue
 			}
 			// Something the simulator believes we already hold and
@@ -1793,6 +1988,7 @@ func (a *Agent) trackObjects() {
 		for i := range m.ObjectData {
 			ids[i] = m.ObjectData[i].ID
 		}
+		a.Objects().noted(DescCached, p.Header.Sequence, ids...)
 		// Off the dispatch goroutine: this can be several packets and
 		// nothing else can be decoded while it sends.
 		go a.requestCachedObjects(ids)
@@ -1897,6 +2093,7 @@ func (a *Agent) askAgain(local uint32) bool {
 // that cannot parse an oversized request answers none of it rather than
 // the part that fitted.
 func (a *Agent) requestCachedObjects(ids []uint32) {
+	a.Objects().noted(DescRequested, 0, ids...)
 	const batch = 100
 	for len(ids) > 0 {
 		n := min(batch, len(ids))

@@ -18,6 +18,21 @@
 // A grid message crosses as its number and its undecoded bytes, so the
 // server relays a message type it has never heard of and a client can
 // be restarted as often as you like without the grid noticing.
+//
+// # Compatibility
+//
+// What is promised is the wire.  A field number is never reused, and a
+// field never changes type: a new field takes a new number, and a field
+// that is retired keeps its number reserved.  A field one side does not
+// know is zero to it, so every new field is defined so that zero means
+// what a side older than the field did.  That is how slgod and its
+// clients work across versions.  Slots.per_agent is the worked example:
+// a client older than it sends nothing, and slgod reads that as the
+// twelve places per avatar such a client can use.
+//
+// The Go generated from this follows gRPC's conventions rather than
+// slgo's own: a server embeds UnimplementedGridServer, and GridClient
+// gains a method with each new RPC.
 
 package slgov1
 

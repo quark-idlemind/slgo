@@ -133,6 +133,10 @@ type Agent struct {
 	// that something moving on the edge of the draw distance is not
 	// asked for several times a second.  Forgotten on entering another
 	// region.  See askAgain.
+	// objCirc names this agent's circuit to the object store, which keys
+	// the order of a set's children by it (see order.go).
+	objCirc uint32
+
 	askedMu sync.Mutex
 	asked   map[uint32]time.Time
 

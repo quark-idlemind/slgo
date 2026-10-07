@@ -127,12 +127,18 @@ func TestActiveGroupComesFromThePresence(t *testing.T) {
 // rather than guessed from the name.
 func TestWhatIsSeenSaysWhatKindOfThingItIs(t *testing.T) {
 	prim := &Seen{Object: Object{ID: thePrim, Local: 77}, PCode: pcodePrim}
-	if prim.IsAvatar() || !prim.IsRoot() {
+	child := &Seen{Object: Object{ID: theChild, Local: 78}, PCode: pcodePrim, Parent: 77}
+	wearer := &Seen{Object: Object{ID: theOther, Local: 79}, PCode: pcodeAvatar}
+	worn := &Seen{Object: Object{ID: theWorn, Local: 80}, PCode: pcodePrim, Parent: 79}
+	all := []*Seen{prim, child, wearer, worn}
+	if prim.IsAvatar() || !prim.IsRootIn(all) {
 		t.Errorf("an unlinked prim reads as %+v", prim)
 	}
-	child := &Seen{Object: Object{ID: theChild, Local: 78}, PCode: pcodePrim, Parent: 77}
-	if child.IsRoot() {
+	if child.IsRootIn(all) {
 		t.Error("a prim linked under another was reported as a root")
+	}
+	if !worn.IsRootIn(all) {
+		t.Error("a worn root, whose parent is the avatar, was reported as a child")
 	}
 	av := &Seen{Object: Object{ID: theOther}, PCode: pcodeAvatar}
 	if !av.IsAvatar() {
