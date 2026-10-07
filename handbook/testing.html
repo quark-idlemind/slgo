@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Test your product with Slate — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="testing">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Testing · Slate</p>
+    <h1>Test your product with Slate</h1>
+    <p class="standfirst">Slate is a test language for Second Life products. You write down what to touch, say or wear, and what the product must do in answer, and the <code>slate</code> command drives an avatar through it and tells you which steps held. This page sets it up and runs a first test.</p>
+    <div class="meta-row"><span class="pill new">product creators</span><span class="pill time">~30 min</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+
+      <section id="what">
+        <h2>What Slate is, and what it is not</h2>
+        <p>A Slate file names the objects it will drive, then holds one test or several. A test is a list of steps. A step is one thing the tester does (a touch, a chat line, a drag, a dialog answer) and the effects that must follow. The effect is often on another object from the one touched: a button on a HUD changes a face on a sign, and the test says so.</p>
+        <p>The <code>slate</code> command takes one avatar, the tester, from a slgod that is already running, finds each object by its name, does the steps as that avatar, and prints what it saw. A missing effect fails its test when its time is up. A run does not hang.</p>
+        <div class="note warn">
+          <p class="label">Experimental</p>
+          <p>Slate, <code>imgfind</code> (the picture reader behind button touches) and the <code>slate</code> command are experimental in 1.0. They are not covered by slgo's compatibility promise and may change in any release, the language included. A file that works today may need editing after an upgrade. Keep your tests in a place where you can read them again when slgo changes.</p>
+        </div>
+        <p>Slate is not a viewer. It draws nothing. It reads what the region sends the tester (chat, dialogs, object updates, inventory) and what the product's faces carry, and compares that with what your file says. A button is found by reading the picture a face shows, not by looking at a screen.</p>
+        <p>What it does not do, in a few lines:</p>
+        <ul>
+          <li>It drives the tester, and a second avatar only when you hand it one by name. It never picks another avatar for itself.</li>
+          <li>It does not walk, teleport or move the camera. Put the tester next to the product before a run.</li>
+          <li>It does not check particles, read the product's inventory or edit its scripts. It does not delete objects, except those its own <code>rez</code> steps made, and it does not refund a payment.</li>
+          <li>A script's permission request is refused with nothing granted, so the product's script is not left waiting, unless the file names the permission and the object with <code>allow permission</code>.</li>
+          <li>It reads animations and sounds. It does not play or stop either, and it does not read what is in them.</li>
+        </ul>
+        <p>The full list, and every word of the language, is in <a href="../doc/slate-language.md">doc/slate-language.md</a> (its <em>Goals and non-goals</em> and <em>Known limitations</em>). How the runner is built, and what was measured on the grid, is in <a href="../doc/slate-runner.md">doc/slate-runner.md</a>. This handbook points at both rather than copying them.</p>
+      </section>
+
+      <section id="setup">
+        <h2>Set it up</h2>
+        <p>You need slgod running with an avatar to test as. That is the same slgod the <a href="quickstart-local.html">quick start</a> sets up, or one of its own (see <a href="#held">A daemon held for testing</a>). <code>slate</code> is one of the programs <code>go install ./cmd/...</code> builds.</p>
+
+        <h3 id="tester">The tester</h3>
+        <p>The tester is the avatar the run acts as. <code>slate</code> asks the same questions every client does:</p>
+        <ul>
+          <li><code>-addr HOST:PORT</code> says where slgod is. When it is empty, <code>$SLGO_ADDR</code> says. With neither, <code>sl-host</code> is asked if it is installed, and otherwise the answer is <code>localhost:7807</code> (<a href="reference.html#address-order">the order</a>).</li>
+          <li><code>-agent NAME</code> says which avatar: the profile's name, not the avatar's. When it is empty, <code>$SLGO_AGENT</code> says, and otherwise it is the session slgod has held longest.</li>
+        </ul>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slate -addr 127.0.0.1:7807 -agent example lamp.slate</pre></div>
+        <p>Put the tester within reach of the product, in the same region. An object is found by name within draw distance, and a <code>say</code> is ordinary chat, which carries 20 m (<a href="../doc/slate-language.md">doc/slate-language.md</a>, <em>The 20 m rule</em>).</p>
+
+        <h3 id="finder">What a button test needs</h3>
+        <p>A button is found by reading the picture on a face (<a href="testing-recipes.html#buttons">Button text</a>). Reading a word or a pattern uses the <code>tesseract</code> program, which has to be installed on the machine that runs <code>slate</code>. A circle, an arrow or a box is read from the pixels and needs nothing installed (<a href="../doc/imgfind.md">doc/imgfind.md</a>). A file that never touches by button needs neither.</p>
+
+        <h3 id="bridge">The bridge, once</h3>
+        <p>Most files need nothing more. A file that uses <code>probe</code> (to read link messages) or <code>listen</code> (to hear a channel the viewer is never sent) needs a small helper object, the bridge, which the tester wears on a HUD point for the run. It is an item called <code>slate bridge</code> in the tester's inventory, and you make it once for each account:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slate -make-bridge -agent example
+<span class="o">slate: make-bridge: "slate bridge" is in the Objects folder</span></pre></div>
+        <p>Making it rezzes a prim at the tester's feet and takes it into the Objects folder, so the tester needs <strong>build rights where it stands</strong>, this once. A run needs none: nothing is rezzed in the region for the bridge, which is worn and taken off. Run again with the item already there, the command says so and makes nothing, so it is safe to repeat.</p>
+        <p>A file that only touches, sits and reads public chat does not wear the bridge. One that does takes it off at the end and keeps it in inventory for the next run. If a run was killed, the bridge may be left worn and a probe left in the product; the next run reuses or replaces them.</p>
+
+        <h3 id="second">A second avatar</h3>
+        <p>Some products need two: a public mode and a private one, a visitor and an owner. A file declares one with a header, and the run is given the profile that drives it:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slate -agent example --avatar visitor=example-two lamp.slate</pre></div>
+        <p>A second avatar is never chosen for you. Slate does not read what slgod holds to find one, because a daemon may hold avatars lent by other people, and each is the owner's to allow, one flag at a time. A declared avatar with no flag, a flag for a name the file does not declare, a profile that is the tester's own, and a profile the daemon does not hold are each a setup error (exit 3) before any step runs. What it can do, and how it is left as found, is in <a href="testing-recipes.html#second-avatar">the recipes</a>.</p>
+
+        <h3 id="held">A daemon held for testing</h3>
+        <p>An avatar can be in one session on the grid, and a login from anywhere else ends the one that is there. slgod takes that as a decision and does not log back in (<a href="../doc/guide.md">doc/guide.md</a>, <em>Starting it twice</em>). So the tester, and any second avatar, should be avatars that nothing else logs in:</p>
+        <ul>
+          <li><strong>Not an avatar an everyday daemon holds.</strong> A test daemon that logs it in ends the everyday one's session, and the everyday one stays down. Give the test daemon its own config directory, port and accounts: <a href="setups.html#second-slgod">A second slgod beside the first</a>.</li>
+          <li><strong>Not one you also use in a viewer.</strong> Logging in from a viewer without logging out first ends slgod's session, and slgod stays down (<a href="setups.html#viewer-logout">the other way</a>). To watch a test in a viewer, let the viewer take the session slgod already holds (<a href="setups.html#viewer">Letting a viewer take a session</a>) instead of logging in a second time.</li>
+        </ul>
+        <p>slgod's own protection against two daemons is a lock on a config directory and on its ports. Two daemons with the same account in different directories are not caught by it.</p>
+        <div class="note">
+          <p class="label">When one avatar has to move between daemons</p>
+          <p>Sometimes one avatar is the only one that has the right to build or the right group, and it must be held by the everyday daemon at some times and the test daemon at others. slgo does not arrange that, so it is yours to arrange, with a <strong>guard</strong>: one small script that is the only way either daemon is started or stopped for that avatar. It checks that the other daemon has let go of the avatar before it starts this one, and refuses otherwise. Nothing is more costly to find out later than that two daemons each thought the avatar was theirs. This is advice for a setup, not a feature of slgo.</p>
+        </div>
+      </section>
+
+      <section id="first-test">
+        <h2>A first test</h2>
+        <p>An invented product: <strong>Example Lamp</strong>, one prim with a script. Touched, it switches its point light on and says <code>lamp on</code> in public chat. Touched again, it puts the light out and says <code>lamp off</code>. The lamp is on the ground next to the tester. The file, <code>lamp.slate</code>:</p>
+        <div class="file"><div class="name">lamp.slate</div><pre>slate 1
+timeout 10s
+
+object lamp is "Example Lamp"
+
+test "touch lights the lamp" {
+  touch lamp anywhere
+  expect light lamp becomes on within 5s
+  expect say "lamp on" on public from object lamp within 5s
+}</pre></div>
+
+        <h3 id="line-by-line">The file, line by line</h3>
+        <dl>
+          <dt><code>slate 1</code></dt>
+          <dd>Every file begins with this. A file that does not is rejected.</dd>
+          <dt><code>timeout 10s</code></dt>
+          <dd>How long a step waits when an expectation has no <code>within</code> of its own. Without the line it is 10 seconds anyway. It is at least 100 ms and at most 120 s.</dd>
+          <dt><code>object lamp is "Example Lamp"</code></dt>
+          <dd><code>lamp</code> is the name the file uses. <code>"Example Lamp"</code> is the prim's name in the region, matched exactly, capital letters and all. It must find one prim: none, or two with that name, is a setup failure before any step runs. (Two objects of one name are told apart with a <code>description</code>; the recipes page says how.)</dd>
+          <dt><code>test "touch lights the lamp" { ... }</code></dt>
+          <dd>One named test. A file may hold several, with <code>before each</code> and <code>after each</code> blocks to reset the world around them. A file with only steps and no <code>test</code> is one test named after the file.</dd>
+          <dt><code>touch lamp anywhere</code></dt>
+          <dd>The stimulus. It touches face 0 at its middle; the simulator does not check that the point is on the shape. The touch is a click: a press and a release at once.</dd>
+          <dt><code>expect light lamp becomes on within 5s</code></dt>
+          <dd>An expectation: the lamp's point light reads on, after reading off. <code>becomes</code> proves a change, because it needs an earlier reading that was not <code>on</code>. <code>is on</code> would also pass if the lamp were already lit, so it cannot show that the touch did anything. <code>within 5s</code> replaces the 10 seconds for this line.</dd>
+          <dt><code>expect say "lamp on" on public from object lamp within 5s</code></dt>
+          <dd>A chat line. The text is matched exactly and capital letters count; <code>matching "RE"</code> would make it a pattern. <code>public</code> is a whisper, say or shout. <code>from object lamp</code> takes any prim of the lamp's linkset.</dd>
+        </dl>
+        <p>The touch and the two lines after it are one <strong>step</strong>. The two expectations are a set: they may arrive in either order, and both must arrive before their time is up. A new stimulus, or <code>then</code>, starts the next step.</p>
+
+        <h3 id="run">Run it</h3>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slate lamp.slate</pre></div>
+        <p>The run goes to standard output as it happens, so one capture is the whole run. Only a usage error and a failed dial go to standard error.</p>
+
+        <h3 id="transcript">Reading the transcript</h3>
+        <p>A passing run prints lines like these. The lines are the runner's own, with the times invented.</p>
+        <div class="term" data-where="laptop"><pre><span class="o">slate: test "touch lights the lamp"
+07:25:16.512 light lamp off
+07:25:16.671 light lamp on
+07:25:16.712 chat public from lamp: "lamp on"
+slate: pass step 1
+slate: pass test "touch lights the lamp"
+slate: passed 1 tests</span></pre></div>
+        <ul>
+          <li><code>slate: test "..."</code> says a test is starting.</li>
+          <li><code>light lamp off</code> and <code>light lamp on</code> are readings of the lamp, each stamped with the time it arrived (UTC). The first, <code>off</code>, is the reading the step started from. A reading is printed whenever it differs from the last one printed.</li>
+          <li><code>chat public from lamp: "lamp on"</code> is a line of chat. The speaker is your file's name for the object (<code>lamp</code>), not the name in the world. Anybody else is printed by name, and an object's name is marked <code>[Object]</code>, so no object can pass for one of your names.</li>
+          <li><code>slate: pass step 1</code> comes when every expectation of the step has matched.</li>
+          <li><code>slate: pass test</code> and the last line, <code>slate: passed 1 tests</code>, are the verdict. The last line of a run that finished is always its verdict.</li>
+        </ul>
+        <p>When the lamp lights and says nothing, the same file fails like this:</p>
+        <div class="term" data-where="laptop"><pre><span class="o">slate: test "touch lights the lamp"
+07:25:16.713 light lamp off
+07:25:16.869 light lamp on
+slate: fail lamp.slate test "touch lights the lamp" step 1 lines 7-9
+  stimulus: touch lamp anywhere
+    touched lamp anywhere
+  expectations:
+    matched light lamp becomes on within 5s at 07:25:16.869: light lamp on
+    unmatched say "lamp on" on public from object lamp within 5s
+  waited: 5s
+  heard during the step:
+    07:25:16.869 light lamp on
+  seated: no
+  dialog left unanswered: no
+  payment: none
+  captured: none
+slate: failed 1 of 1 tests</span></pre></div>
+        <ul>
+          <li>The <code>fail</code> line names the file, the test, the step's number and the lines of the file it came from. Steps are numbered through <code>before each</code>, the test and <code>after each</code> together.</li>
+          <li><code>stimulus:</code> is your line, and under it what was sent.</li>
+          <li><code>expectations:</code> lists each as <code>matched</code> (with when, and the reading) or <code>unmatched</code>. Here the light came on and the chat line did not.</li>
+          <li><code>waited:</code> is how long the step took. <code>heard during the step:</code> is the transcript lines printed while the step ran, which is the quickest way to see what the product did say.</li>
+          <li><code>seated</code>, <code>dialog left unanswered</code>, <code>payment</code> and <code>captured</code> are always printed, so a failure says whether the avatar was sitting, a dialog was open, money moved, or a value was captured.</li>
+        </ul>
+        <p>A step that fails stops its test. <code>after each</code> still runs, and the run goes on to the next test, with the world as the failure left it. Slate does not retry.</p>
+        <p>To watch what a product says with nothing to expect yet, touch it and <code>wait 6s</code>: a wait prints every line the run hears while it lasts, on every channel (<a href="testing-recipes.html#waits">Waits</a>).</p>
+        <div class="note">
+          <p class="label">Where these lines come from</p>
+          <p>The two transcripts above are what the runner prints for this file, run against a test double of the grid, with the times invented. They are not a capture of the grid. The formats are the ones <a href="../doc/slate-language.md">doc/slate-language.md</a> lists under <em>Reading the result</em>, which also gives the sentence for every failure.</p>
+        </div>
+
+        <h3 id="exit-codes">The exit codes</h3>
+        <p>A script can act on the exit code. The code is 3 if setup failed, else 1 if any test failed, else 0.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Code</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>0</td><td class="what">Every test passed. Cleanup warnings may still be printed.</td></tr>
+            <tr><td>1</td><td class="what">A test failed: a step missed an expectation, a stimulus could not be done, or a rule of the runner stopped it (not the owner, a button the finder cannot match, an ambiguous match).</td></tr>
+            <tr><td>2</td><td class="what">The file did not parse or failed a check. Nothing was dialled and nothing was done in the region.</td></tr>
+            <tr><td>3</td><td class="what">Setup failed: the dial, an object or an item that could not be found, a second avatar not given, the bridge or a probe. Setup outranks a failed test.</td></tr>
+            <tr><td>4</td><td class="what">The command was used wrongly: a missing file, an unknown flag, a <code>-run</code> pattern that does not compile or matches no test. Nothing was dialled.</td></tr>
+          </tbody>
+        </table></div>
+        <p>Code 2 says where, to the line and column. With <code>expect lite lamp becomes on</code> on line 4 of a file:</p>
+        <div class="term" data-where="laptop"><pre><span class="p">$ </span>slate bad.slate
+<span class="o">bad.slate:4:8: expected an expectation, found lite</span>
+<span class="p">$ </span>echo $?
+<span class="o">2</span></pre></div>
+        <p>Code 3 names the thing that was missing, for instance <code>slate: setup: "Example Lamp" is not in the region, or is beyond the draw distance (looked up for 30s)</code>, or, for a file that wears the bridge before you made it, <code>slate: setup: no "slate bridge" in inventory; run slate -make-bridge once where the tester may build</code>. A failed dial is <code>slate: dial: ...</code> on standard error. <code>-run REGEX</code> runs only the tests whose names match, each with its <code>before each</code> and <code>after each</code>.</p>
+      </section>
+
+      <section id="left-behind">
+        <h2>What a run leaves behind</h2>
+        <p>A run puts the tester back as it found it, as far as it can, and says each thing it does. In short:</p>
+        <ul>
+          <li><strong>Offers.</strong> At the end of each test, an inventory offer an object made to the tester that is still waiting is declined, and printed. An offer from a person is left waiting, and printed. An offer your <code>expect give</code> accepted stays accepted, and the item stays in inventory.</li>
+          <li><strong>Dialogs.</strong> A dialog or text box to the tester that is still open is ignored (nothing is sent to the grid) and printed. Only what arrived after the run began is touched; what was already waiting is left.</li>
+          <li><strong>What the runner made.</strong> An object a <code>rez</code> step made is deleted to the tester's Trash when its test ends. What a <code>drop</code> step put into an object, or onto a face, is taken out or put back. A second avatar's group a <code>group</code> step changed is put back at the end of the run.</li>
+          <li><strong>The probe and the bridge.</strong> The probe scripts are removed and the bridge is taken off, keeping it in inventory. A 20-prim object can spend about two minutes at this, after the verdict is known and before the run's last line.</li>
+        </ul>
+        <p>What it does <em>not</em> undo is yours to undo in <code>after each</code>: an item <code>wear</code> put on stays worn until a <code>take off</code>; a seat stays taken until a <code>stand</code>; an object your product rezzed stays in the region until a <code>delete</code> step takes it; money paid and items received are not undone. A killed run can leave an item worn, and the next run's <code>wear</code> then fails with <code>"Example Hat" is already worn on HUD top; take it off first</code>.</p>
+        <p>The details, and the lines each cleanup prints, are in <a href="../doc/slate-language.md">doc/slate-language.md</a> (<em>The tester is left as found</em> and <em>What a run leaves behind</em>) and in <a href="../doc/slate-runner.md">doc/slate-runner.md</a> (<em>Cleanup and what a failure leaves behind</em>).</p>
+      </section>
+
+      <section id="next">
+        <h2>Where next</h2>
+        <div class="cards">
+          <a class="card" href="testing-recipes.html"><span class="k">Recipes</span><span class="t">What a product tester reaches for</span><span class="d">Buttons, HUDs, chat, dialogs, wearing and rezzing, reading a face, a light or a sound, waiting.</span></a>
+          <a class="card" href="testable-products.html"><span class="k">Guide</span><span class="t">Designing a product to be tested</span><span class="d">Test textures, element maps and the habits that make a product easy to test.</span></a>
+          <a class="card" href="reference.html#slate"><span class="k">Look up</span><span class="t">Slate in the reference</span><span class="d">The command's flags, the exit codes and the words of the language.</span></a>
+          <a class="card" href="troubleshooting.html"><span class="k">When it breaks</span><span class="t">Troubleshooting</span><span class="d">Paste the error you got.</span></a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook · for <span class="hb-version">the slgo in this checkout</span> · examples use invented names (Example Resident, Example Lamp) and documentation addresses</span>
+    <span class="pager"><a href="api.html">← Go packages</a> <a href="testing-recipes.html">Test recipes →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

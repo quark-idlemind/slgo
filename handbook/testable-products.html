@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Designing a product to be tested — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="testable-products">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Testing · design</p>
+    <h1>Designing a product to be tested</h1>
+    <p class="standfirst">A product is easy to test when a test can find its buttons, read its state and leave it as it was. This page is advice for the creator: textures made to be read by a machine, a record of what each one holds, and a few habits in the scripts. It is advice, and where it asks for something slgo does not do yet, it says so.</p>
+    <div class="meta-row"><span class="pill new">product creators</span><span class="pill time">~15 min</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+
+      <section id="why">
+        <h2>Why design for it</h2>
+        <p>A test finds a button by reading the picture on a face, the way <a href="testing-recipes.html#buttons">button text</a> does. A picture made for people (soft gradients, a glow, a label sitting on a busy background) is hard for a machine to read, and a test that cannot read it either fails for no fault of the product or passes by luck. What follows is the advice to make a second, plain version of each texture for testing, and to keep a record of what is in each one, so that a test looks things up instead of reading them each time.</p>
+        <p>Slate is experimental in 1.0 (<a href="testing.html#what">what that means</a>). This advice does not depend on any one release: a plain texture and a record of its elements are useful to whatever reads them.</p>
+      </section>
+
+      <section id="textures">
+        <h2>Textures that test easily</h2>
+        <ol class="steps" id="texture-steps">
+          <li><div class="step-body">
+            <h3>Wear a test version of each texture</h3>
+            <p>A test build of the product wears a test version of every texture: near monochrome, high contrast, no glow and no gradients. Dark type on a light button, thin plain outlines, nothing behind a label. The aim is that reading it is easy.</p>
+            <p>The docs give the reason in what the finder was tried on. It was tuned on dark type on a lighter button. Drawing test pictures for buttons on 1 October 2026, a word inside a 4 px outline was not read and one inside a 2 px outline was; a solid filled rectangle was not an outlined box; a pale ellipse with a word in it was read as both the word and a box (<a href="../doc/imgfind.md">doc/imgfind.md</a>, <em>Limits found drawing test pictures for buttons</em>). Those were drawn pictures, not a product's interface, so they say what the finder does on those and not on yours; the reliable way to know is to try it on your own texture (<a href="#today">below</a>).</p>
+          </div></li>
+          <li><div class="step-body">
+            <h3>Work each texture out once</h3>
+            <p>For each test texture, write down what is in it: its elements (buttons, a slider, a panel), their borders, and their text. A test then looks the answer up and does not run the reading each time.</p>
+          </div></li>
+          <li><div class="step-body">
+            <h3>Key the record by the texture's id</h3>
+            <p>The record for a texture is filed under the texture's uuid. That key does not go stale: a texture asset never changes, so a picture that is edited is a new texture with a new id, and the old record still describes the old asset exactly. A record needs updating only when the product starts to wear a different texture, and then the new id has no record yet, which is easy to see.</p>
+            <p>Slate already uses a texture's id as a key in one place. <code>touch hud showing UUID</code> finds the one face of a linkset that shows that texture (<a href="testing-recipes.html#touch">Touch</a>).</p>
+          </div></li>
+          <li><div class="step-body">
+            <h3>Make a colour-keyed map, if you can</h3>
+            <p>The most reliable record is a second picture the same size as the texture, where each element is one flat colour, with a short legend saying which colour is which element. Export it from the designer's layers, where each element already is a layer, and it is exact by construction. Looking up the colour at a point answers "what is here" with no reading of text at all, so it removes OCR altogether.</p>
+          </div></li>
+          <li><div class="step-body">
+            <h3>Keep elements in texture coordinates</h3>
+            <p>Write an element's position in the texture's own coordinates (U and V, each from 0 to 1 across the whole texture), not in the coordinates of one face. A face shows the texture turned, tiled and slid by its rotation, repeats and offset, and the same texture on two faces, or on one face after a script moved it, has the element in two places on the face. Apply the face's repeats, offset and rotation at test time, when you know them. That is the mapping the viewer uses: a touch's texture coordinate is worked out from the point on the face with those three settings, and the picture a face shows is built with them (<a href="../doc/face-pictures.md">doc/face-pictures.md</a>).</p>
+          </div></li>
+          <li><div class="step-body">
+            <h3>Keep the record in a plain file</h3>
+            <p>A plain file is one a designer can open, read and correct by hand, without a program of yours. If the colour map is exported wrongly, or a button moved by a pixel, the fix is a line of text. An invented example of the shape, one line for an element (texture id, element name, its corners in U and V, its text):</p>
+            <div class="file"><div class="name">test-textures.tsv · an example, not a format slgo reads</div><pre># texture id               element       u0    v0    u1    v1    text
+1b2b7e57-7e57-c0de-e90f-3d68ad60c7a8  open-button   0.10  0.62  0.45  0.78  Open
+1b2b7e57-7e57-c0de-e90f-3d68ad60c7a8  close-button  0.55  0.62  0.90  0.78  Close
+1b2b7e57-7e57-c0de-e90f-3d68ad60c7a8  status-strip  0.05  0.05  0.95  0.20</pre></div>
+            <p>And, for a colour map made of that texture, its legend:</p>
+            <div class="file"><div class="name">1b2b7e57.legend · an example</div><pre># colour   element
+ff0000      open-button
+00ff00      close-button
+0000ff      status-strip</pre></div>
+          </div></li>
+        </ol>
+      </section>
+
+      <section id="today">
+        <h2>What slgo does today</h2>
+        <p>This is the part of the advice slgo can use now, and the part it cannot.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Piece</th><th>Today</th></tr></thead>
+          <tbody>
+            <tr><td>The picture a face shows</td><td class="what"><code>FacePicture</code> builds it: the texture, turned, tiled and slid as the face says, and cropped to the face. It refuses a face with planar mapping, one with a running texture animation, and one with no texture. The docs say none of this was measured against a face on the grid; the tests check the mapping against the viewer's (<a href="../doc/face-pictures.md">doc/face-pictures.md</a>). <code>slpic faces OBJECT DIR</code> writes each face's picture as a PNG.</td></tr>
+            <tr><td>Finding a label or a figure in a picture</td><td class="what"><code>imgfind</code> finds a word, a pattern, a circle or ring, an arrow and its direction, and an outlined box, and gives each one's place and centre, which is where a click goes. Text is read with the <code>tesseract</code> program; a drawing or a box is read from the pixels and needs nothing installed. Every threshold was measured on one sample image, and the docs say the first thing to doubt on a picture unlike it is the thresholds (<a href="../doc/imgfind.md">doc/imgfind.md</a>). <code>slpic find IMAGE text TEXT</code> asks it from a shell.</td></tr>
+            <tr><td>A button touch in Slate</td><td class="what">Uses the two above: the face's picture, then <code>imgfind</code>, then a click at the centre of the match (<a href="testing-recipes.html#buttons">Button text</a>).</td></tr>
+            <tr><td>A lookup by texture id</td><td class="what"><code>touch OBJ showing UUID</code> finds the face that shows a texture. That is all: the id finds a face, not an element on it.</td></tr>
+            <tr><td><strong>An element-map lookup</strong></td><td class="what"><strong>Not provided yet.</strong> Slate has no word that takes an element's name, and slgo reads no record keyed by texture id and no colour-keyed map. A touch is <code>at S T</code> on a face, or a button found by reading its picture. An <code>image</code> match (a picture template) and a finder for tiles are in the runner's list of things proposed and not adopted (<a href="../doc/slate-runner.md">doc/slate-runner.md</a>, <em>Open questions</em>).</td></tr>
+          </tbody>
+        </table></div>
+        <p>So until slgo reads such a record, the record is yours to use by hand. Look an element up in it, work out where on the face it is with the face's repeats, offset and rotation, and write that as <code>touch hud face 0 at 0.3 0.7</code>; or use the record to choose the <code>text</code> a button search should look for. The record is still worth keeping: it is what a later slgo, or a test script of your own, would read.</p>
+        <p>Before you write a button test, <strong>try the finder on your own test texture</strong>. Write the face pictures out with <code>slpic faces</code>, run <code>slpic find</code> on one for a label, and see whether it finds exactly one. If it does not, the texture is the thing to change (step 1 above), and that is cheaper than a test that is flaky.</p>
+      </section>
+
+      <section id="habits">
+        <h2>Habits in the scripts</h2>
+        <p>These follow from what a test can and cannot see. Each is a thing the docs say about how Slate reads a product.</p>
+        <h3 id="state">Say your state where a test can hear it</h3>
+        <p>A test cannot read a script's variables. It can read what the region sends: chat, dialogs, a face, a light, floating text, a prim's size and position. So let the product say what state it has reached, in a place a test can listen:</p>
+        <ul>
+          <li><strong>Owner chat.</strong> <code>llOwnerSay</code> is read with <code>expect say ... on owner</code>, and a test that wants to read it runs as the owner.</li>
+          <li><strong>A channel of its own.</strong> A line on a positive channel is heard through the bridge, with <code>listen N</code> in the file, and is matched on that channel only (<a href="testing.html#bridge">the bridge</a>). A channel that nobody else listens on keeps a product's debugging out of public chat.</li>
+          <li><strong>Floating text.</strong> <code>llSetText</code> is read with <code>expect text</code>, byte for byte. Measured on 3 October 2026, it was in the store 96 to 171 ms after the touch.</li>
+          <li><strong>A word for "ready".</strong> A product that says <code>ready</code> once it has finished starting lets a test wait for the word and not for a guess. The reference's HUD example does: it says <code>ready</code> about two seconds after it is worn.</li>
+        </ul>
+        <h3 id="names">Name your prims, and address them by name</h3>
+        <p>A test binds an object by its exact, capital-sensitive name, and the name must find one prim among everything the runner can see. Give the product's root, and every child a test must touch or read, a name no other object near it has. A child with its own name is bound by that name and needs no link number, no script dropped in and no setup. A link number is the object store's best reading of the order the region sent the prims in, unless a test pays for the object's own count (<a href="testing-recipes.html#links">Link numbers</a>). If two objects must share a name, give each a different description, so a test can tell them apart.</p>
+        <p>Where you can, give a button a label a machine can read (<code>text</code> and not only a drawing), keep each label unique on its face, and avoid planar mapping and texture animation on a face a test has to read, since the finder refuses both.</p>
+        <h3 id="inventory">Think before resetting on <code>CHANGED_INVENTORY</code></h3>
+        <p>A product that resets, reloads its configuration or re-reads a notecard whenever its inventory changes is hard to test, because a test can cause the event without meaning to. A <code>drop</code> step puts a script or an item into the product, and takes it out when the test ends. A <code>linkmap</code> drops a script in and removes it. Each is a change of the product's inventory, and every script in the object gets <code>changed()</code> with <code>CHANGED_INVENTORY</code> for each. The test is then run from a state it did not ask for, with nothing in the file to show it.</p>
+        <p>So: <strong>do not reset on <code>CHANGED_INVENTORY</code> unless you mean to.</strong> If the product must react to what is put into it (a notecard for configuration, say), compare what it holds with what it held, and throw its state away only if something it cares about changed. If it does reset, say so where a tester will see it, so they know that <code>linkmap</code> and <code>drop</code> cost a reset, and bind by name instead.</p>
+      </section>
+
+      <section id="next">
+        <h2>Where next</h2>
+        <div class="cards">
+          <a class="card" href="testing.html"><span class="k">Guide</span><span class="t">Test your product with Slate</span><span class="d">Set-up, a first test and the exit codes.</span></a>
+          <a class="card" href="testing-recipes.html"><span class="k">Recipes</span><span class="t">What a product tester reaches for</span><span class="d">Each task, with what spoils it.</span></a>
+          <a class="card" href="setups.html"><span class="k">Recipes</span><span class="t">Setups</span><span class="d">A second slgod for testing, and several avatars.</span></a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook · for <span class="hb-version">the slgo in this checkout</span> · examples use invented names and ids</span>
+    <span class="pager"><a href="testing-recipes.html">← Test recipes</a> <a href="setups.html">Setups →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

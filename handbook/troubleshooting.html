@@ -55,6 +55,7 @@
           <button type="button" class="chip" data-filter="sl-host" aria-pressed="false">sl-host</button>
           <button type="button" class="chip" data-filter="slbotd" aria-pressed="false">slbotd</button>
           <button type="button" class="chip" data-filter="llm" aria-pressed="false">llm</button>
+          <button type="button" class="chip" data-filter="slate" aria-pressed="false">slate</button>
           <button type="button" class="chip" data-filter="macos" aria-pressed="false">macos</button>
           <button type="button" class="chip" data-filter="linux" aria-pressed="false">linux</button>
           <span class="fault-count"></span>
@@ -843,6 +844,52 @@ chat    = *</pre></div>
             <p>The backstory file or directory could not be read, or an include in it is missing or loops. The avatar still answers, with no character. The avatar name in <code>backstory = …</code> must be written exactly as in its <code>avatar</code> line, including case. The startup check ignores case, but the lookup does not (read in the code).</p>
             <h4>Fix</h4>
             <p><code>slbotd --check</code> prints one line per backstory with its size, or <code>BROKEN: …</code>. Backstories are re-read on every turn, so a fix takes effect without a restart.</p>
+          </div>
+        </details>
+
+        <h3 id="g-slate">slate (testing a product)</h3>
+
+        <details class="fault" id="f-slate-bridge" data-tags="slate">
+          <summary><span class="sym"><code>slate: setup: no "slate bridge" in inventory; run slate -make-bridge once where the tester may build</code></span><span class="where-tag">slate</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The file has a <code>probe</code> or a <code>listen</code>, so the run wears the bridge, a small item the tester keeps in its inventory, and this avatar has none. A file that only touches, sits and reads public chat does not wear it. A related line, <code>slate: setup: bridge did not say ready within 30s</code>, is the bridge worn but silent for 30 seconds; the docs record the parcel refusing scripts to the tester entirely as the case they expect it for, and that was not measured.</p>
+            <h4>Fix</h4>
+            <p>Make the bridge once for the avatar, standing where it may build. It prints one line and exits 0, and running it again says the item is already there and makes nothing.</p>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slate -make-bridge -agent example
+<span class="o">slate: make-bridge: "slate bridge" is in the Objects folder</span></pre></div>
+            <p>More in <a href="testing.html#bridge">Test your product with Slate</a>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-slate-object" data-tags="slate">
+          <summary><span class="sym"><code>slate: setup: "Example Sign" is not in the region, or is beyond the draw distance</code>, or <code>names 2 objects</code></span><span class="where-tag">slate</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>An <code>object</code> header names a prim by its exact, case-sensitive name, and it must find exactly one within draw distance. The first sentence says none was found after 30 seconds: the name is spelt differently, the tester is not near it, or it is in another region. <code>names 2 objects</code> says two prims have that name. Both are exit 3, before any step runs.</p>
+            <h4>Fix</h4>
+            <p>Stand the tester next to the product (Slate does not walk or teleport it) and copy the name from the product's own properties. For two of one name, give each header a <code>description</code>: <code>object north is "Example Sign" description "north"</code> (<a href="testing-recipes.html#links">Link numbers</a>).</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-slate-avatar" data-tags="slate">
+          <summary><span class="sym"><code>slate: setup: visitor is declared but no --avatar visitor=... was given</code></span><span class="where-tag">slate</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The file declares a second avatar with <code>avatar visitor</code>, and the run was not told which profile drives it. Slate never picks one: a daemon may hold avatars lent by other people, and each is the owner's to allow, one flag at a time. The other setup errors of this kind are <code>an --avatar was given for visitor, which the file does not declare</code>, <code>the profile given for visitor is the tester's own</code> and <code>the profile given for visitor is not held by the daemon</code>. They name the binding and never the profile.</p>
+            <h4>Fix</h4>
+            <div class="term" data-where="laptop"><pre><span class="p">$ </span>slate -agent example --avatar visitor=example-two lamp.slate</pre></div>
+            <p>Give each declared name exactly one profile that slgod holds and that is not the tester's. More in <a href="testing.html#second">Test your product with Slate</a>.</p>
+          </div>
+        </details>
+
+        <details class="fault" id="f-slate-worn" data-tags="slate">
+          <summary><span class="sym"><code>"Example Hat" is already worn on HUD top; take it off first</code> (a <code>wear</code> step)</span><span class="where-tag">slate</span></summary>
+          <div class="fix">
+            <h4>Why</h4>
+            <p>The item is already on the tester, and Slate sends nothing rather than put on a second copy. The runner never takes off what a test wore, because the test may have failed before it could. A run that was killed leaves the item on, and so does a file with no <code>take off</code> in its <code>after each</code>.</p>
+            <h4>Fix</h4>
+            <p>Take the item off by hand, and put a <code>take off</code> in <code>after each</code> so a failed test cannot leave it worn (<a href="testing-recipes.html#wear">Wear and take off</a>).</p>
           </div>
         </details>
       </section>

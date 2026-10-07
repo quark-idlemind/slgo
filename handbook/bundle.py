@@ -40,7 +40,8 @@ import apidoc  # noqa: E402
 
 PAGES = [
     "index", "quickstart-local", "quickstart-remote", "quickstart-bot",
-    "bot-llm", "slsh-guide", "how-llm", "own-bot", "api", "setups",
+    "bot-llm", "slsh-guide", "how-llm", "own-bot", "api", "testing",
+    "testing-recipes", "testable-products", "setups",
     "sl-host", "platforms", "security", "troubleshooting", "reference",
 ]
 

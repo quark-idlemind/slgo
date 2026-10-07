@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>What a product tester reaches for — slgo handbook</title>
+<link rel="stylesheet" href="handbook.css">
+</head>
+<body>
+<article class="page" id="testing-recipes">
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Testing · recipes</p>
+    <h1>What a product tester reaches for</h1>
+    <p class="standfirst">Short recipes, one for each thing a product test does: touch a button, drag a HUD, answer a dialog, wear and rez, read a face or a light, wait. Each says what to write, points at the section and worked example in the language reference, and says what spoils it.</p>
+    <div class="meta-row"><span class="pill old">existing users</span><span class="pill time">pick what you need</span></div>
+  </header>
+  <div class="body-grid">
+    <nav class="rail" aria-label="On this page"></nav>
+    <main>
+
+      <section id="how-to-read">
+        <h2>How to use this page</h2>
+        <p>You have run a first test (<a href="testing.html#first-test">A first test</a>). These recipes are for the next ones. The full grammar, every word and every sentence a failure prints are in <a href="../doc/slate-language.md">doc/slate-language.md</a>; each recipe names the section to open and the worked example near the end of that file. How the runner does it, and what was measured on the grid, is in <a href="../doc/slate-runner.md">doc/slate-runner.md</a>.</p>
+        <p>Where a recipe says something was <strong>measured</strong>, the docs record a run on the grid, with its date. Where it says <strong>inferred</strong> or <strong>not measured</strong>, the docs read it from the viewer's source or the protocol and nobody has watched it happen. Slate is experimental in 1.0, so every recipe here may change in a release.</p>
+        <p>The examples use invented names (<code>Example Remote</code>, <code>Example Banner</code>) and invented texture ids, as the reference does.</p>
+      </section>
+
+      <section id="touch">
+        <h2>Touch a button, or a place on a face</h2>
+        <p><strong>Reach for it</strong> when the product is driven by touch: a HUD with buttons, a sign, a vendor. Read <em>Stimuli</em> and <em>Buttons</em> in the language reference, and the worked examples <em>A HUD button that changes another object's face</em>, <em>Anywhere, a link and a face</em> and <em>A combination button</em>.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Write</th><th>What is touched</th></tr></thead>
+          <tbody>
+            <tr><td><code>touch sign anywhere</code></td><td class="what">Face 0, at its middle. The simulator does not check that the point is on the shape.</td></tr>
+            <tr><td><code>touch sign face 2</code><br><code>touch sign face 2 at 0.9 0.5</code></td><td class="what">Face 2 at its middle, or at the point S T on it, each from 0 to 1. <code>at 0 0</code> is refused, because a zero point is taken as the middle.</td></tr>
+            <tr><td><code>touch sign link 3</code></td><td class="what">The prim at link number 3 (see <a href="#links">Link numbers</a>). A face or a button may follow.</td></tr>
+            <tr><td><code>touch remote button text "Open"</code></td><td class="what">The button whose picture reads <strong>Open</strong>. See below.</td></tr>
+            <tr><td><code>touch remote showing 5c2d7e57-7e57-c0de-66cc-c66a140e5295</code></td><td class="what">The one face of the linkset that shows that texture, at its middle. For a palette with a picture on each face and no label to read.</td></tr>
+          </tbody>
+        </table></div>
+        <h3 id="buttons">Button text</h3>
+        <p>A button touch is a picture match, then a click at the match's centre. You write no pixels. Slate reads the picture on every face of the prim, looks for the parts you wrote, and clicks once:</p>
+        <div class="file"><div class="name">excerpt</div><pre>touch remote button text "Open" box
+expect texture sign face 0 becomes 47227e57-7e57-c0de-1611-3fe69d620af1 within 8s</pre></div>
+        <p>The parts are <code>text "Menu"</code> (exact, capital letters count), <code>pattern "^Menu$"</code>, <code>symbol "left arrow"</code>, <code>circle</code> and <code>box</code>. Several parts match one button only when their rectangles overlap, so an arrow inside a circle is one button and a label beside another button's outline is not. Exactly one match must exist: none fails the step and says which part was missing; two or more fail it and list each centre, and Slate never clicks the first. A number before the parts (<code>button 2 text "Open"</code>) picks the second match, and <code>face N</code> after them limits the search to one face. <code>image</code> and <code>oval</code> are accepted and always fail, because the finder has neither.</p>
+        <p>It reads the face's picture as the face shows it, with the face's repeats, offset and rotation applied. A face with planar mapping, or a running texture animation, cannot be read: the step fails before the touch and names the face. When a button step fails after a search, the pictures it searched are written to the system temp directory and their paths printed, so you can look at what Slate saw.</p>
+        <div class="note">
+          <p class="label">What the finder reads well</p>
+          <p>The finder was tuned on dark type on a lighter button, and every threshold was measured on one sample image (<a href="../doc/imgfind.md">doc/imgfind.md</a>). A word inside a dark outlined frame is not read, and a solid rectangle is not a <code>box</code>. A small round letter was once found as a <code>box</code>, so a count of boxes is not a count of buttons. Prefer <code>text</code> alone when the label is unique on the face. On one live face a label was misread that the whole texture read correctly. If buttons are hard to find, <a href="testable-products.html">design the textures to be read</a>.</p>
+        </div>
+        <p>A button that may be absent can be pressed only if it is there, in <code>before each</code> or <code>after each</code>: <code>touch remote button text "Close" box if shown</code>, followed by a <code>then expect</code> that names the state you are driving to (worked example <em>A guarded touch that converges on a known state</em>). To see whether a button is there without touching it, <code>expect button remote text "Close" box becomes gone</code>. Write <code>becomes gone</code> and not <code>is gone</code>: a label the finder cannot read counts as zero buttons, so <code>is gone</code> can pass without anything having changed.</p>
+        <h3 id="uv">Where on a face</h3>
+        <p>A touch on a face sends both of the viewer's coordinates. <code>at S T</code> is the point on the face. The texture coordinate is worked out from it with the face's repeats, offset and rotation, as the viewer does. A product that reads the texture coordinate on a prim whose texture is scaled, offset or turned is therefore touched where <code>S T</code> says. Measured on 5 October 2026 on a HUD prim whose script moves its own texture when touched: a plain touch arrived with the coordinate the face's mapping gave at that moment, and once the script had moved the texture, the same point arrived with a different one. A product that moves its own texture moves the coordinate of a point with it, so write the test from the state the product set up.</p>
+        <div class="note warn">
+          <p class="label">Pitfall: two touches too close together</p>
+          <p>The region takes a release and a press of one linkset that come within about a frame of each other for one touch, and the product's script then sees the first <code>touch_start</code> and the second <code>touch_end</code>. Measured on 5 October 2026 on an invented box: with no gap, the second start reached the script in 0 of 5 tries; with a gap of 10 ms in 3 of 5; with 30 ms or more, always. It merges within one linkset, whichever prims are touched, and not across objects. A touch and then a drag of the same object in the next step went about 20 ms apart, and the drag's start was lost. <strong>Slate keeps 90 ms between the release of a linkset and the next press of any prim of it</strong>, so a test needs no <code>wait</code> between touches. If a product still ignores a second touch, it is the product's own timing, and a <code>wait</code> is how a test gives it time. See <a href="../doc/touch-spacing.md">doc/touch-spacing.md</a>.</p>
+        </div>
+      </section>
+
+      <section id="drag">
+        <h2>Drag a slider, or a HUD on the screen</h2>
+        <p><strong>Reach for it</strong> when the product reads a drag: a slider on a face, a HUD that moves or resizes with the mouse. Read <em>Stimuli</em> (<em>Drag</em> and <em>Drag on the screen</em>), and the worked examples <em>Drag a slider</em>, <em>Move and resize a HUD by its glass</em> and <em>A HUD dragged and dragged back</em>. The screen geometry is in <a href="../doc/hud-screen.md">doc/hud-screen.md</a>.</p>
+        <div class="file"><div class="name">excerpt</div><pre>drag slider face 0 from 0.1 0.5 to 0.9 0.5 over 500ms
+expect offset slider face 0 is 0.4 0 within 10s</pre></div>
+        <p>A face drag presses at the first point, moves to the second over the time you give (500 ms if you leave <code>over</code> out) and releases. The release is always sent. The expectation is on what the product did, here the offset it set, and not on the drag's own coordinates. A script that reads a drag from its touch events, as many that move or stretch a picture do, sees the cursor stop only if you add <code>dwell 300ms</code>; without it the last updates can be lost to the release and the amount comes up short. <code>press D</code> holds still at the start first.</p>
+        <h3 id="screen">On the screen</h3>
+        <p>A HUD that moves by the mouse is dragged on the screen. The HUD must be worn on a HUD point (a <code>wear</code> step puts it there):</p>
+        <div class="file"><div class="name">excerpt</div><pre>drag hud on screen from face 0 at 0.5 0.9 by 300 200 over 800ms settle
+expect position hud changes near 0.005 within 10s</pre></div>
+        <p>The start is a point in the world view in pixels from its top left corner, or a point on a face of the HUD (<code>face 0 at 0.5 0.9</code>), which Slate turns into pixels, so you need not know where the HUD sits. The end is <code>to X Y</code> or <code>by DX DY</code>, a distance from the start. The pixels belong to a virtual world view that the run states, not the file: <code>--screen WxH</code> (1920x1025 unless you say) and <code>--hud-zoom Z</code> (1). <code>settle</code> waits up to 5 seconds after the press for the region to say the pressed prim changed, for a HUD that grows a transparent prim to keep the cursor on it. After the release the step waits until the prim has kept one size for a second; one still changing after 5 seconds fails with <code>the HUD was still changing</code>.</p>
+        <p>The move can only be <code>changes</code>, because where the HUD ends depends on where it stood when it was worn, which the file does not know. Do not write a position nobody measured. And when you drag and drag back, put in <code>near</code>: measured on 5 October 2026, a HUD dragged and dragged back by the same pixels came back exactly on one try and a few millimetres off on another, and one resized and resized back came to about 1 percent from its size. The default is a millimetre (<a href="#near">near and tolerances</a>).</p>
+        <div class="note warn">
+          <p class="label">Pitfall: a drag that starts or ends off the view</p>
+          <p>A mouse held down cannot leave the window, so Slate refuses a start or an end that is off the world view, before anything is sent, and does not clamp it: <code>the drag would start at 390,3745, off the 1920x1025 view; nothing was sent</code>. A drag that works on one screen size can fail on another, so say the size you tested on with <code>--screen</code>. A drag has to fit its step's time, too: <code>over</code>, <code>press</code> and <code>dwell</code> together (and 5 seconds more for <code>settle</code>) must not be longer than the longest <code>within</code> in the step, or the <code>timeout</code>. That is refused when the file is checked, with exit 2.</p>
+        </div>
+      </section>
+
+      <section id="chat">
+        <h2>Chat, dialogs and text boxes</h2>
+        <p><strong>Reach for it</strong> for a product that talks, offers a menu or asks a question. Read <em>Speakers and channels</em>, <em>Stimuli</em> (<em>Choose</em>, <em>Answer</em>) and <em>Expectations</em> (<em>Say</em>, <em>Dialog</em>, <em>Text box</em>); the worked examples are <em>Owner chat, a dialog, a give</em>, <em>A dialog button, chosen and then said</em>, <em>A sorted dialog</em>, <em>A text box</em>, <em>Patterns</em> and <em>A channel the viewer does not deliver</em>.</p>
+        <div class="file"><div class="name">excerpt</div><pre>say "menu" on -7 as owner of vendor
+expect dialog from vendor text "Choose a colour" button "Red" button "Blue"
+
+choose "Red" on vendor
+expect say "red" on public from object vendor</pre></div>
+        <ul>
+          <li><strong>Say.</strong> <code>say "..." on N</code> is ordinary chat on channel N. A negative channel is sent as a dialog reply, up to 254 bytes, and is the better choice for menus because a person cannot type it. <code>as owner of OBJ</code> is legal only if the tester owns the object.</li>
+          <li><strong>The 20 m rule.</strong> Before a <code>say</code>, Slate measures the tester's distance to every object the step names, to the root of its linkset. More than 20 m fails the step before the say. The radius was measured (heard at 19.5 m and not at 20.5 m).</li>
+          <li><strong>Hearing.</strong> <code>expect say "red" on public ...</code> is a whisper, say or shout, matched exactly. <code>matching "RE"</code> makes it a pattern (unanchored; <code>^</code> and <code>$</code> to anchor). <code>on owner</code> is <code>llOwnerSay</code>, <code>on debug</code> the debug channel. A number other than 0 needs <code>listen N</code> in the header, and so the bridge, because the viewer is never sent those lines.</li>
+          <li><strong>Dialogs.</strong> A dialog is matched by its text and by <code>button</code> clauses, and can be held to <code>only</code> those buttons, <code>ordered</code>, <code>sorted</code>, or a <code>count</code>. The buttons are counted in the order the script gave <code>llDialog</code>, measured to be the order the simulator sends them in, and not the order a person sees on screen.</li>
+          <li><strong>Answering.</strong> <code>choose</code> presses a button of the dialog matched earlier: by its label, <code>matching</code>, <code>button N</code>, or a captured label. The choose is its own step. <code>answer "text" on OBJ</code> types into a text box, and a text box is matched by <code>expect textbox</code>, not <code>expect dialog</code>. A dialog nobody answers is ignored at the end of the test.</li>
+          <li><strong>Listening.</strong> To see what a product says, touch it and <code>wait 6s</code> (<a href="#waits">Waits</a>).</li>
+        </ul>
+      </section>
+
+      <section id="worn">
+        <h2>Wear, rez, drop and delete</h2>
+        <p><strong>Reach for it</strong> when the product is something the tester puts on, rezzes or feeds. Read <em>Stimuli</em> (<em>Wear</em>, <em>Rez</em>, <em>Take off</em>, <em>Delete</em>, <em>Drop into</em>, <em>Drop onto</em>), and the worked examples <em>A HUD worn for each test</em>, <em>A vendor's balloon, deleted afterwards</em> and <em>An item dropped into an object, and a texture onto a face</em>. The item comes from a top-level folder of the tester's inventory, named in the header: <code>item hat is "Example Hat" in "Objects"</code>.</p>
+        <h3 id="wear">Wear and take off</h3>
+        <div class="file"><div class="name">excerpt</div><pre>before each {
+  wear hat on "HUD Top Left" as hud
+  expect attached hud on "HUD Top Left" within 10s
+  expect say "ready" on public from object hud within 10s
+}
+
+after each {
+  take off hud
+  expect attached hud off within 5s
+}</pre></div>
+        <p>The point is named in full, in either case; a name that only begins several points' names is refused with the choices. <code>hud</code> is bound to the worn object when <code>wear</code> returns. Put the <code>take off</code> in <code>after each</code>: the runner never takes off what a test wore, because the test may have failed before its own, and a killed run can leave the item worn, so that the next <code>wear</code> fails with <code>is already worn</code>. Measured (eighth round, <a href="../doc/slate-runner.md">doc/slate-runner.md</a>): <code>wear</code> returns after about 0.2 s, and the product's own <code>on_rez</code> and <code>attach</code> arrive about 2 s after that, so the default 10 seconds covers it and <code>within 1s</code> does not.</p>
+        <h3 id="rez">Rez a copy</h3>
+        <p><code>rez crate at 130 128 25 as made</code> rezzes an item at a region position, and <code>rez crate by 1 0 0 as made</code> at an offset from the tester. The object is deleted to the tester's Trash when the test ends, whatever the outcome, and the transcript says so. Measured on 3 October 2026: where the parcel does not let the tester build, the grid makes nothing and sends an alert about 1.2 s after the request, which Slate quotes as the step's failure; where it does, a rez returned after about 2.1 s.</p>
+        <h3 id="delete">Delete what the product rezzed</h3>
+        <p>A product that rezzes (a vendor that makes a balloon) is tested with <code>expect rez name "Example Balloon" from vendor as balloon</code>. That claims a new root prim near the vendor (within 10 m, which is the old <code>llRezObject</code> limit used as a guess, not a rule the region is known to enforce). What the product rezzed is <strong>not deleted for you</strong>. A runner that cleaned up everything would hide a product that forgot to clean up after itself, or one meant to leave its object, and deleting only what a test names is the safer default in somebody else's region. A test that wants a clean region says so:</p>
+        <div class="file"><div class="name">excerpt</div><pre>after each {
+  delete balloon
+}</pre></div>
+        <p><code>delete</code> sends the object to the tester's Trash, and only an object the tester owns: one that is not the tester's fails the step before anything is sent. In <code>after each</code> it may name a binding the test body made; if the test never made it, the step says so and passes. An object the product has already removed is not a failure. Measured on 6 October 2026: a worn HUD's button rezzed an object from its contents, a test claimed it with <code>expect rez ... as</code>, and <code>delete</code> in <code>after each</code> took it to the Trash.</p>
+        <h3 id="drop">Drop an item into an object</h3>
+        <p><code>drop card into box</code> puts a copy of an inventory item into an object's contents, as a viewer does when you drag it on. <code>drop card onto panel face 2</code> puts a texture on one face. Both are the tester's alone and both are put back at the end of the test: the copy is removed, the face's old texture is restored, and a line says so. An item the tester may not copy is refused, because the drop would move it out of inventory and the run could not give it back. A script dropped in this way runs: measured on 5 October 2026, a full-permission script ran about a second after the drop (<a href="../doc/scripts.md">doc/scripts.md</a>).</p>
+        <div class="note warn">
+          <p class="label">Pitfall: a script or an item dropped into a product changes its inventory</p>
+          <p>A product sees <code>changed()</code> with <code>CHANGED_INVENTORY</code> when a <code>drop</code> puts something in, and again when the end of the test takes it out. A product that resets, reloads its configuration or re-reads a notecard on that event is then in a state your test did not ask for, and nothing in the file shows it. If the product reacts to its inventory, expect that reaction in the same step as the drop, and write the later steps knowing it happened. The same event is the price of <code>linkmap</code> (<a href="#links">Link numbers</a>), and a reason for <a href="testable-products.html#inventory">a product not to reset on it</a> unless it means to.</p>
+        </div>
+      </section>
+
+      <section id="reading">
+        <h2>Read what the product set</h2>
+        <p><strong>Reach for it</strong> to check the effect of a touch on a face, a light, a sound or an animation. Every reading is an <code>expect</code> in one of three forms: <code>is X</code> (a reading equals X, even if it already did), <code>becomes X</code> (it equals X and an earlier reading in the step did not) and <code>changes</code> (it differs from the baseline). Use <code>becomes</code> or <code>changes</code> to show that the stimulus did something. A value may be <code>original</code> (what it was when the test began), a capture (<code>$x</code> bound by an earlier step), or <code>any</code> with <code>as $x</code> to capture whatever it is. A reading can arrive late: a texture changed by a script can read old for several seconds, which Slate meets by asking the region again about once a second.</p>
+        <div class="tablewrap"><table>
+          <thead><tr><th>You want</th><th>Write</th><th>What the docs say</th></tr></thead>
+          <tbody>
+            <tr><td>Texture</td><td><code>expect texture sign face 0 becomes UUID</code></td><td class="what">Also <code>offset</code>, <code>repeats</code> (two numbers) and <code>rotation</code>, which is a fraction of a turn, <code>0.25</code> being a quarter. <code>face all</code> reads every face. Worked example <em>A HUD button that changes another object's face</em>.</td></tr>
+            <tr><td>Full-bright, glow, colour, alpha</td><td><code>expect glow sign face 1 is 0.5</code></td><td class="what">Each is one byte; glow 0.5 reads as 128 (measured 1 October 2026), so a value matches within one step of the byte. <em>A full-bright toggle on every face</em>.</td></tr>
+            <tr><td>Alpha mode</td><td><code>expect alphamode sign face 1 becomes mask</code></td><td class="what">Read from the face's material. A face a script gave the mode <code>blend</code> and nothing else has no material and reads <code>default</code>, never <code>blend</code> (measured; <a href="../doc/materials.md">doc/materials.md</a>). Needs the session's <code>RenderMaterials</code> capability or the run stops with exit 3. <em>A face's alpha mode</em>.</td></tr>
+            <tr><td>Normal and specular maps, glossiness, environment</td><td><code>expect normalmap sign face 1 is none</code></td><td class="what">From the same material. <code>none</code> is the null key. A material made for a normal map alone reads glossiness 51 and environment 0 (measured on 5 October 2026), and a face with no material reads 0 for both. <em>A face's normal and specular maps</em>.</td></tr>
+            <tr><td>glTF material</td><td><code>expect gltf metallic panel face 2 is 0.25</code></td><td class="what">One face at a time, never <code>all</code>. A face takes an override only once it has a glTF material, so a field on a face without one reads <code>none</code>. Needs <code>ModifyMaterialParams</code>. The region says an override about three seconds after the script's call (measured on a box; <a href="../doc/gltf.md">doc/gltf.md</a>). <em>A shiny panel</em>.</td></tr>
+            <tr><td>Light and projector</td><td><code>expect light lamp link 2 becomes on</code><br><code>expect light lamp link 2 radius is 8</code></td><td class="what">A light is on while its block is in the prim's updates. The numbers of a light that is off have no reading, so write <code>becomes off</code> for "the light went out". Measured on 5 October 2026 on a box whose script set its light: the colour, intensity, radius and falloff read back as the numbers asked for (the colour to a byte, 128/255 reading 0.502), and a light switched off read <code>off</code>, the region sending no block for it (<a href="../doc/slate-runner.md">doc/slate-runner.md</a>, <em>Light and projector</em>). <em>A lamp that lights</em>.</td></tr>
+            <tr><td>Animation</td><td><code>expect animation UUID becomes on from hat</code></td><td class="what">The tester's playing animations, from the list the region sends about every three seconds. The id is the animation's asset id; a first run with a made-up id prints the real one for every animation started by an object a <code>from</code> names. The permission is the object's, so add <code>allow permission trigger-animation from hat</code>. <code>from</code> was measured for a worn object's script on 6 October 2026. <em>A hat that says hello</em>.</td></tr>
+            <tr><td>Sound</td><td><code>expect sound UUID from bell gain 1 within 3s</code><br><code>expect sound UUID becomes looping from lamp</code></td><td class="what">A sound heard is an event, a loop is a state, and a loop at gain 0 is still looping. Measured on 6 October 2026 with a worn object playing sounds for its owner: one-shots read with their gain, and a loop read <code>looping</code> and then <code>stopped</code>. A sound triggered at a place rather than attached, and a preload, have not been watched (<a href="../doc/sounds.md">doc/sounds.md</a>). <em>A doorbell and a warning lamp</em>.</td></tr>
+            <tr><td>Floating text</td><td><code>expect text sign becomes "Open"</code></td><td class="what">What <code>llSetText</code> put over the prim, byte for byte; no text reads as the empty string. Measured on 3 October 2026: the text was in the store 96 to 171 ms after the touch in 20 of 20 touches.</td></tr>
+            <tr><td>Position and size</td><td><code>expect position hud changes near 0.005</code><br><code>expect size lid is 0.8 0.4 0.016</code></td><td class="what">In metres, as the object store holds them. A worn root reads as its offset from the attach point, a child as its position in its root's frame, a rezzed root in the region (<em>Position and size</em>).</td></tr>
+            <tr><td>How a prim is turned</td><td><code>expect turn jar link 2 becomes 0 110 0 near 0.5</code></td><td class="what">Euler degrees, compared as rotations, so <code>180 0 0</code> and <code>0 180 180</code> are one turn. A child's is relative to its root. Read from the code and the protocol, not measured. <em>A lid that turns</em>.</td></tr>
+            <tr><td>Click action</td><td><code>expect click chair becomes touch</code></td><td class="what">Linden's published constants (<code>touch</code>, <code>sit</code>, <code>buy</code>, <code>pay</code>, <code>open</code>, <code>play</code>, <code>media</code>, <code>zoom</code>, <code>disabled</code>), not measured here. <em>Sit, the click action, stand</em>.</td></tr>
+            <tr><td>A button shown or gone</td><td><code>expect button remote text "Close" box becomes shown</code></td><td class="what">The finder's count of buttons. Put both sides of a swap in the step that has the stimulus. <em>A button that goes and another that appears</em>.</td></tr>
+          </tbody>
+        </table></div>
+        <p>To say that something did <strong>not</strong> happen, write <code>expect no ... within 2s</code>. A negative still needs a real reading: no reading at all is a failure, not a pass. Silence is the pass for chat, dialogs, gives and rezzes.</p>
+      </section>
+
+      <section id="near">
+        <h2><code>near</code> and tolerances</h2>
+        <p><strong>Reach for it</strong> when a number is worked out, or a drag came back almost where it started. The docs list the default tolerance of each reading: offset within 2/32767, repeats 1e-4, rotation 2/32768 of a turn, position and size 0.001 m on each axis, turn 0.007 degrees of angle, glow, colour and alpha 1/255, and a texture, a click, full-bright, an alpha mode and the maps exactly. A difference smaller than the tolerance is not a change.</p>
+        <div class="file"><div class="name">excerpt</div><pre>expect position hud becomes original near 0.005 within 10s
+expect size hud link 3 is 0.8 0.4 0.016 near 2 percent within 5s</pre></div>
+        <p><code>near N</code> is a margin in the reading's own unit: metres for position and size, a fraction of a turn for rotation, degrees for a turn, 0 to 1 for glow, colour and alpha. <code>near N percent</code> is a share of the wanted value, of each component by itself, and does not apply to a rotation or a turn. Each component is compared alone; they are not combined, except that a turn is one angle. A share is no help for a component at or near 0.</p>
+        <p>A <code>near</code> never makes the test stricter than the reading can be: one below the least the grid reports is judged by the least, and the transcript says so. A passing line says how far off the reading was, and a failing line how far the nearest reading was, so the test tells you how much slack it needed. Only numbers take <code>near</code>: a texture, a map, a click, text, an alpha mode, chat, a dialog, a give or a count refuses it when the file is checked.</p>
+      </section>
+
+      <section id="waits">
+        <h2>Waits, <code>within</code>, <code>then</code> and the arm point</h2>
+        <p><strong>Reach for it</strong> whenever a step has to be told when to look. Read <em>Steps and timing</em> in the language reference and the worked examples <em>A toggle</em>, <em>A suite with before and after</em>, <em>A negative check</em> and <em>Listening to what a product says</em>.</p>
+        <ul>
+          <li><strong><code>within D</code></strong> is how long one expectation may take. Without it the step takes the file's <code>timeout</code>, or 10 seconds. An expectation still unmatched when its own time is up fails the step at that moment.</li>
+          <li><strong>A step is a set.</strong> The expectations after one stimulus may arrive in any order, and all must arrive. An event can satisfy only one expectation, so two expectations for the same chat line need two chat lines.</li>
+          <li><strong><code>then</code></strong> means "after what the previous set matched". Use it only for a real sequence, because the grid does not preserve the order of reports from two prims, or of a texture change and a chat line from a script. Otherwise put the expectations in one step.</li>
+          <li><strong><code>wait 4s</code></strong> sends nothing for four seconds and listens. It is for a product that ignores a touch that comes too soon, a script that has to finish something, or a run that only wants to see what a product says: every line the run hears while it lasts is printed with its time, on every channel, whether or not anything expects it. A wait is at most the step's time, which is at most 120 seconds.</li>
+        </ul>
+        <h3 id="arm-point">The arm point</h3>
+        <p>A step sees only events at or after its <strong>arm point</strong>. A step that starts with a stimulus arms just before the stimulus is sent, so nothing the product does in answer is missed, even if it answers before the stimulus returns. A step after a <code>then</code>, or with no stimulus, arms when the previous step passed.</p>
+        <div class="note warn">
+          <p class="label">Pitfall: a wait is armed after it, not before</p>
+          <p><code>wait</code> is the one stimulus that arms when it returns, because its effect is time and what you say after it is about the state it ended in. Expectations in a wait's step read the world as it is when the wait ends. A line or a dialog heard <em>during</em> the wait is not the step's, and a change that happened during it is not a change after it. So <code>wait 4s</code> then <code>expect colour sign face 2 is 1 1 1</code> passes only if the face is white after four seconds, and not if it was white when the wait began; and <code>becomes</code> and <code>changes</code> take their baseline from the end of the wait. To catch something a product does while you wait, write the expectation in the step <em>before</em> the wait, or in a step of its own:</p>
+          <div class="file"><div class="name">excerpt</div><pre>touch hud button text "Scan"
+expect say "scanning" on owner from object hud within 3s
+
+wait 6s</pre></div>
+          <p>The first step of each test arms when that test starts, and events from an earlier test are never eligible, so a <code>before each</code> that sets up state is not satisfied by what the previous test left behind.</p>
+        </div>
+      </section>
+
+      <section id="second-avatar">
+        <h2>A second avatar</h2>
+        <p><strong>Reach for it</strong> when the product behaves differently for a visitor, a member of a group or an owner. Read <em>A second avatar</em> in the language reference, and the worked examples of that name and <em>A second avatar in a group</em>. Setting the run up is on <a href="testing.html#second">the first page</a>.</p>
+        <div class="file"><div class="name">excerpt</div><pre>object sign is "Example Sign"
+avatar visitor
+
+touch sign anywhere as visitor
+expect dialog from sign to visitor text "Pick one" button "Red" within 5s
+choose "Red" on sign as visitor</pre></div>
+        <p>A second avatar touches, drags on a face, says, chooses and answers, and has its active group set with <code>group visitor "Example Group"</code>. It does nothing else: it never pays, sits, wears, rezzes or deletes, and <code>as visitor</code> on those is refused when the file is checked. It must be in the same region as the tester and near what it touches; Slate does not move it. What it says is heard by the tester and is matched with <code>from avatar visitor</code>. Its inventory offers are declined the moment they are seen, a permission request to it is always refused, and a group a step changed is put back at the end of the run. Its name and profile never appear in the transcript, only its binding.</p>
+      </section>
+
+      <section id="links">
+        <h2>Link numbers, <code>linkmap</code> and <code>probe</code></h2>
+        <p><strong>Reach for it</strong> only when a product's behaviour is on a child prim you cannot name any other way. Read <em>Objects, names and link numbers</em> in the language reference, and <a href="../doc/objects.md">doc/objects.md</a> for how the store numbers links.</p>
+        <ul>
+          <li><strong>Prefer names.</strong> A prim with its own name is bound by that name (<code>object lid is "Example Jar Lid"</code>) and needs no number and no setup. Two objects of one name are told apart with a <code>description</code>: <code>object north is "Example Sign" description "north"</code> (worked example <em>Two objects of one name</em>).</li>
+          <li><strong>Without anything extra</strong>, <code>link N</code> is the object store's order. The store's order is its best reading from the packets, in the order the region sent the set, not the script's own count. The transcript says so once per object: <code>link order of box is the store's best reading from the packets (no linkmap header for it)</code>. When the store cannot vouch for an order (a set several prims joined in one update while it watched, or a child the region described only as an answer to a request) <code>link N</code> fails with a sentence that offers the other ways: <code>the link order of "Example Tip Jar" is not known; bind the prim by its own name instead of link N, give the object a probe (the tester must own it), or take it and rez or wear it again</code>.</li>
+          <li><strong><code>linkmap OBJ</code></strong> makes it the object's own count. A small script is dropped into the root, says each link's number, key and name to the owner, and removes itself; the store then takes those numbers. The transcript says what came of it: <code>link order of hud corrected by its own script: the store had other prims at links 2 and 3 (7 links)</code>.</li>
+          <li><strong><code>probe OBJ</code></strong> gives the order too, from a script in every prim, and is what <code>send</code> and <code>expect link</code> (link messages) need. A probe and a linkmap on one object is refused. The tester must own an object that gets either, may modify it, and the parcel must run scripts.</li>
+        </ul>
+        <div class="note warn">
+          <p class="label">Pitfall: linkmap changes the product's inventory twice</p>
+          <p><strong>That is two changes of the object's inventory, the script going in and the script going out, and every script in the object gets <code>changed()</code> with <code>CHANGED_INVENTORY</code> for each.</strong> A product that reloads its configuration, resets, or re-reads its notecards on that event is tested from a state the file did not ask for, and no step is there to show it. That is why nothing is dropped unless the file says <code>linkmap</code>: you have chosen to risk it for the certainty. A probe also puts a script in each prim and takes it out at the end; the docs record the two events for <code>linkmap</code> only. If your product resets on <code>CHANGED_INVENTORY</code>, bind by name instead, or let the store's order stand. A worn or rezzed object bound by <code>wear</code> or <code>rez</code> cannot have a linkmap and keeps the store's order.</p>
+        </div>
+      </section>
+
+      <section id="more">
+        <h2>Not covered here</h2>
+        <p>Some things a product test does are in the reference and not repeated:</p>
+        <ul>
+          <li><strong>Pay.</strong> <code>pay vendor L$5 reason "tip"</code> needs <code>allow pay</code> in the file and <code>--pay</code> on the command line. Either alone does not pay.</li>
+          <li><strong>Sit and stand, and gives.</strong> <em>Sit and stand</em>, <em>Give</em> and <em>A folder given</em>. The runner never stands the avatar up or takes an item back.</li>
+          <li><strong>Permission requests.</strong> Refused unless the file names them with <code>allow permission</code>; <code>debit</code> is never one of them.</li>
+          <li><strong>Link messages</strong> with <code>send</code> and <code>expect link</code>, which need a probe.</li>
+          <li><strong>Sequences, <code>before each</code> and <code>after each</code>, <code>-run</code>.</strong> <em>Tests, sequences, before and after</em>.</li>
+        </ul>
+      </section>
+
+      <section id="next">
+        <h2>Where next</h2>
+        <div class="cards">
+          <a class="card" href="testing.html"><span class="k">Guide</span><span class="t">Test your product with Slate</span><span class="d">Set-up, a first test and the exit codes.</span></a>
+          <a class="card" href="testable-products.html"><span class="k">Guide</span><span class="t">Designing a product to be tested</span><span class="d">Textures a test can read, and habits that make a product easy to test.</span></a>
+          <a class="card" href="reference.html#slate"><span class="k">Look up</span><span class="t">Slate in the reference</span><span class="d">The command's flags, the exit codes and the header words.</span></a>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <footer>
+    <span>slgo handbook · for <span class="hb-version">the slgo in this checkout</span> · examples use invented names (Example Remote, Example Banner) and documentation addresses</span>
+    <span class="pager"><a href="testing.html">← Test with Slate</a> <a href="testable-products.html">Design to be tested →</a></span>
+  </footer>
+</div>
+</article>
+<script src="handbook.js"></script>
+</body>
+</html>

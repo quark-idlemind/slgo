@@ -23,6 +23,9 @@
     { id: "how-llm", title: "slsh + LLM", group: "use", d: "how, with a language model beside it" },
     { id: "own-bot", title: "Your own bot", group: "use", d: "a program of your own in Go: a greeter, step by step" },
     { id: "api", title: "Go packages", group: "use", d: "every package's documentation, from its source" },
+    { id: "testing", title: "Test with Slate", group: "test", d: "set-up, a first test, the exit codes" },
+    { id: "testing-recipes", title: "Test recipes", group: "test", d: "what a product tester reaches for, task by task" },
+    { id: "testable-products", title: "Design to be tested", group: "test", d: "textures and habits that make a product easy to test" },
     { id: "setups", title: "Setups", group: "run", d: "services, several avatars, moving slgod, upgrading" },
     { id: "sl-host", title: "sl-host", group: "run", d: "one address at home, another away" },
     { id: "platforms", title: "Linux & macOS", group: "run", d: "where the two differ, and mixing them" },
@@ -33,6 +36,7 @@
   var GROUPS = [
     { key: "setup", title: "Set up" },
     { key: "use", title: "Using slgo" },
+    { key: "test", title: "Testing" },
     { key: "run", title: "Keep it running" }
   ];
 
