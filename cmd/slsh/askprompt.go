@@ -407,20 +407,35 @@ func askFirstWord(line string) string {
 // the object asked for, and an object with the wrong shape is an error
 // rather than an empty answer, so that "the model said nothing useful"
 // and "the model said there is no such command" stay two things.
+//
+// The wrapping can also come after the object: a stray closing "```" or
+// "</think>" with nothing opening it.  Stripping as above then leaves
+// no object, so the object is looked for before the marker -- in the
+// text ahead of the first fence, and, when nothing outside the
+// reasoning has a brace at all, in the text ahead of the last
+// "</think>" -- and the last well-formed object there with both keys is
+// taken.  An object outside the reasoning always wins over one inside
+// it, and a reply cut off inside an unclosed <think> still has none.
+// Why: doc/slsh.md (how, without a schema)
 func parseAskReply(text string) (askAnswer, error) {
 	s := text
+	reasoning := ""
 	// A reasoning block, closed or (cut off) not.  Everything up to the
 	// last closing tag goes, whether or not the opening one is there:
 	// some chat templates write "<think>" into the prompt themselves, so
 	// that the reply starts inside the reasoning and only the close
 	// shows -- and reasoning is where a stray "{" is likeliest.
 	if i := strings.LastIndex(s, "</think>"); i >= 0 {
+		reasoning = s[:i]
 		s = s[i+len("</think>"):]
 	} else if i := strings.Index(s, "<think>"); i >= 0 {
 		s = s[:i]
 	}
+	answer := s
+	beforeFence := s
 	// A fence: whatever is between the first ``` line and the next.
 	if i := strings.Index(s, "```"); i >= 0 {
+		beforeFence = s[:i]
 		rest := s[i+3:]
 		if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
 			rest = rest[nl+1:] // past "json" or whatever the fence was labelled
@@ -430,25 +445,71 @@ func parseAskReply(text string) (askAnswer, error) {
 		}
 		s = rest
 	}
+	a, err := parseAskObject(s, text)
+	if err == nil {
+		return a, nil
+	}
+	// A stray closing marker after the object.
+	if raw, ok := lastAskObject(beforeFence); ok {
+		return parseAskObject(raw, text)
+	}
+	if !strings.Contains(answer, "{") {
+		if raw, ok := lastAskObject(reasoning); ok {
+			return parseAskObject(raw, text)
+		}
+	}
+	return askAnswer{}, err
+}
+
+// lastAskObject is the last well-formed JSON object in s that has the
+// keys asked for, found by trying each "{" in turn.
+func lastAskObject(s string) (string, bool) {
+	found, ok := "", false
+	for i := 0; i < len(s); {
+		j := strings.IndexByte(s[i:], '{')
+		if j < 0 {
+			break
+		}
+		i += j
+		dec := json.NewDecoder(strings.NewReader(s[i:]))
+		var raw map[string]json.RawMessage
+		if err := dec.Decode(&raw); err != nil {
+			i++
+			continue
+		}
+		end := i + int(dec.InputOffset())
+		_, f := raw["found"]
+		_, g := raw["suggestions"]
+		if f && g {
+			found, ok = s[i:end], true
+		}
+		i = end
+	}
+	return found, ok
+}
+
+// parseAskObject reads the object in s, with whatever is round it, as an
+// answer; whole is the full reply, quoted in an error.
+func parseAskObject(s, whole string) (askAnswer, error) {
 	// Anything round the object.
 	lo, hi := strings.IndexByte(s, '{'), strings.LastIndexByte(s, '}')
 	if lo < 0 || hi < lo {
-		return askAnswer{}, fmt.Errorf("the model's reply has no JSON object in it: %s", askExcerptOf(text))
+		return askAnswer{}, fmt.Errorf("the model's reply has no JSON object in it: %s", askExcerptOf(whole))
 	}
 	s = s[lo : hi+1]
 
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(s), &raw); err != nil {
-		return askAnswer{}, fmt.Errorf("the model's reply is not valid JSON (%v): %s", err, askExcerptOf(text))
+		return askAnswer{}, fmt.Errorf("the model's reply is not valid JSON (%v): %s", err, askExcerptOf(whole))
 	}
 	for _, k := range []string{"found", "suggestions"} {
 		if _, ok := raw[k]; !ok {
-			return askAnswer{}, fmt.Errorf("the model's reply has no %q: %s", k, askExcerptOf(text))
+			return askAnswer{}, fmt.Errorf("the model's reply has no %q: %s", k, askExcerptOf(whole))
 		}
 	}
 	var a askAnswer
 	if err := json.Unmarshal([]byte(s), &a); err != nil {
-		return askAnswer{}, fmt.Errorf("the model's reply is not the shape asked for (%v): %s", err, askExcerptOf(text))
+		return askAnswer{}, fmt.Errorf("the model's reply is not the shape asked for (%v): %s", err, askExcerptOf(whole))
 	}
 	return a, nil
 }

@@ -287,6 +287,28 @@ and nothing printed it; what it did was give the model a sentence to
 write before it had chosen anything -- and the instructions supplied
 the sentence, "slsh has no command for that", ready to copy.
 
+Without the schema (`response_format` left out, the prompt still asking
+for JSON in its shape), measured on 2026-10-07 on 134 dev questions and
+250 held-out ones the development had not seen, qwen3.5:4b:
+
+| build, schema | held-out: right | "not found" | wrong kept |
+|---|---|---|---|
+| GGUF (q4_K_M), with the schema | 55% | 85% | 12% |
+| GGUF (q4_K_M), without | 56% | 85% | 12% |
+| MLX (nvfp4), without (it refuses the schema) | 60% | 74% | 21% |
+
+On the GGUF build the schema made no measurable difference (the dev set
+the same: 86% right, 83% "not found", 7% wrong, either way), so the order
+of the reply's properties is held by the prompt alone there.  The MLX
+build says "not found" less and keeps a wrong command almost twice as
+often; it cannot be asked with the schema, so whether that is the build
+or the missing schema is not known.  Either way it is the worse
+program, and `how` does not fall back to asking without the schema: a
+server that refuses it gets the GGUF sentence below.  `parseAskReply`
+reads a reply with no schema behind it, including an object followed by
+a stray "```" or "</think>", which the GGUF build writes without the
+schema (33 of 134 dev answers before the parser took them).
+
 ### Which model tags to pull
 
 `how` always asks the server for a JSON schema (`askSchema`, sent as

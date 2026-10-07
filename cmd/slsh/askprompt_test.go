@@ -247,6 +247,7 @@ func TestTheSchemaNamesOnlyTheCommandsShown(t *testing.T) {
 }
 
 func TestParseAskReplyForgivesWrapping(t *testing.T) {
+	const stale = `{"found": true, "answer": "x", "suggestions": [{"command": "tp", "command_line": "tp home", "why": "w", "quote": "q"}]}`
 	const obj = `{"found": true, "answer": "Use landmark.", "suggestions": [{"command": "landmark", "command_line": "landmark --set-home", "why": "sets home", "quote": "Make where this avatar is standing the place home is."}]}`
 	for name, text := range map[string]string{
 		"bare":            obj,
@@ -259,6 +260,16 @@ func TestParseAskReplyForgivesWrapping(t *testing.T) {
 		// close is in the reply, with a brace inside it.
 		"only a close": "The person wants {home}, so landmark.\n</think>\n\n" + obj,
 		"two blocks":   "<think>a {</think> <think>b }</think>\n" + obj,
+		// The object came first, and a marker nothing opened follows.
+		"then a stray fence":        obj + " ```",
+		"then a stray fence, lines": obj + "\n```\n",
+		"then a fence and prose":    obj + "\n```\nHope {this} helps.",
+		"then a stray close":        obj + " </think>",
+		"then a fence and a close":  obj + " ``` </think>",
+		"thought, then a close":     "<think>hmm {x}</think>\n" + obj + "\n</think>",
+		// One inside the reasoning and one after it: the one after wins.
+		"both":            "<think>maybe " + stale + "</think>\n" + obj,
+		"both, one close": "maybe " + stale + "\n</think>\n" + obj,
 	} {
 		a, err := parseAskReply(text)
 		if err != nil {
@@ -287,14 +298,17 @@ func TestParseAskReplyTakesNotFound(t *testing.T) {
 // an empty answer would read as "no such command", which is a claim.
 func TestParseAskReplyRefusesWhatIsNotAnAnswer(t *testing.T) {
 	for name, text := range map[string]string{
-		"prose":            "You can use the landmark command.",
-		"empty":            "",
-		"broken":           `{"found": true, "suggestions": [`,
-		"cut off thinking": "<think>the person wants {\"found\": true, \"suggestions\": []}",
-		"no found":         `{"answer": "x", "suggestions": []}`,
-		"no suggestions":   `{"found": true, "answer": "x"}`,
-		"wrong type":       `{"found": "yes", "answer": "x", "suggestions": []}`,
-		"array":            `[{"found": true}]`,
+		"prose":                "You can use the landmark command.",
+		"empty":                "",
+		"broken":               `{"found": true, "suggestions": [`,
+		"cut off thinking":     "<think>the person wants {\"found\": true, \"suggestions\": []}",
+		"cut off, fenced":      "<think>the person wants {\"found\": true, \"suggestions\": []}\n```",
+		"stray close, no keys": `{"answer": "x"} </think>`,
+		"stray fence, broken":  `{"found": true, "suggestions": [ ` + "```",
+		"no found":             `{"answer": "x", "suggestions": []}`,
+		"no suggestions":       `{"found": true, "answer": "x"}`,
+		"wrong type":           `{"found": "yes", "answer": "x", "suggestions": []}`,
+		"array":                `[{"found": true}]`,
 	} {
 		if a, err := parseAskReply(text); err == nil {
 			t.Errorf("%s: taken as %+v", name, a)
