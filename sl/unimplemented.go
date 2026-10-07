@@ -110,6 +110,10 @@ func (UnimplementedBackend) TryLock(context.Context, string) (bool, string, erro
 
 func (UnimplementedBackend) Flush(context.Context) (int, error) { return 0, ErrNotSupported }
 
+func (UnimplementedBackend) ConfirmLinkOrder(context.Context, msg.UUID, []msg.UUID) (*LinkConfirmation, error) {
+	return nil, ErrNotSupported
+}
+
 func (UnimplementedBackend) Friends(context.Context) ([]Friend, error) {
 	return nil, ErrNotSupported
 }

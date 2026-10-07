@@ -868,8 +868,9 @@ func cmdObjects(ctx context.Context, sh *Shell, out io.Writer, args []string) er
 }
 
 // printHow is the lines --how adds under a prim: its link number and
-// whether the store believes it, its local id and parent, and each way it
-// was described, oldest first. A listed entry is the one that put the
+// whether the store believes it, whether the object's own script gave the
+// order, its local id and parent, and each way it was described, oldest
+// first. A listed entry is the one that put the
 // prim in its parent's list, which fixed its place in the order.
 // Why: doc/objects.md#how-an-object-was-described
 func printHow(out io.Writer, c *sl.Seen, ds []sl.Description) {
@@ -878,6 +879,13 @@ func printHow(out io.Writer, c *sl.Seen, ds []sl.Description) {
 		known = "order not known"
 	}
 	fmt.Fprintf(out, "      link %d, %s; local %d, parent %d\n", c.LinkNumber, known, c.Local, c.Parent)
+	if k := c.LinkConfirmed; k != nil {
+		line := "order from the object's own script at " + k.At.Format("15:04:05")
+		if k.Corrected {
+			line += ", the packets said otherwise (" + linkWords(k.Moved) + " changed)"
+		}
+		fmt.Fprintf(out, "      %s\n", line)
+	}
 	if c.LinkNote != "" {
 		fmt.Fprintf(out, "      %s\n", c.LinkNote)
 	}

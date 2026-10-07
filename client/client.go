@@ -1211,6 +1211,16 @@ func (c *Conn) Flush(ctx context.Context) (int, error) {
 	return int(r.Forgotten), nil
 }
 
+// ConfirmLinkOrder gives the server's object store the order a script in
+// an object numbered its prims in: the keys, root first, by link number.
+// The server refuses a set the keys do not name exactly with
+// codes.InvalidArgument, and a root it does not hold with
+// codes.FailedPrecondition; a server older than the call answers
+// codes.Unimplemented.
+func (c *Conn) ConfirmLinkOrder(ctx context.Context, keys []string) (*pb.ConfirmLinkOrderResponse, error) {
+	return c.grid.ConfirmLinkOrder(ctx, &pb.ConfirmLinkOrderRequest{Agent: c.agentName(), Keys: keys})
+}
+
 // ---------------------------------------------------------- capabilities
 
 // A Conn is an agent.CapDoer, so anything written against capabilities

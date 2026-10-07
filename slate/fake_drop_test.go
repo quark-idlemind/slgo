@@ -63,6 +63,10 @@ type dropGrid struct {
 	// ahead of it in the contents: a product reacting to the drop.
 	product []heldItem
 	stuck   bool // a RemoveTaskInventory is ignored
+
+	// scriptHook is first to see a RezScript, and says it took it: the
+	// drop of a script that does not stay (fake_linkmap_test.go).
+	scriptHook func(*msg.RezScript) bool
 }
 
 // withDropping makes the grid answer reads of a prim's contents, and the
@@ -167,6 +171,9 @@ func (g *dropGrid) update(x *msg.UpdateTaskInventory) {
 // It is kept apart from update so that a drop sent the wrong way for a
 // script, or to the wrong prim, shows as a copy that never comes.
 func (g *dropGrid) rezScript(x *msg.RezScript) {
+	if g.scriptHook != nil && g.scriptHook(x) {
+		return
+	}
 	g.addCopy(x.UpdateBlock.ObjectLocalID, x.InventoryBlock.ItemID, x.InventoryBlock.Name)
 }
 

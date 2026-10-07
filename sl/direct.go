@@ -397,6 +397,7 @@ func (d *Direct) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			LinkNumber:      o.LinkNumber,
 			LinkKnown:       o.LinkKnown,
 			LinkNote:        o.LinkNote,
+			LinkConfirmed:   o.LinkConfirmed,
 			Text:            o.Text,
 			AttachPoint:     o.AttachPoint,
 			AttachItem:      o.AttachItem,
@@ -522,6 +523,10 @@ func (d *Direct) Unlock(name string) error { return nil }
 
 func (d *Direct) Flush(ctx context.Context) (int, error) {
 	return d.a.Objects().Flush(), nil
+}
+
+func (d *Direct) ConfirmLinkOrder(ctx context.Context, root msg.UUID, keys []msg.UUID) (*LinkConfirmation, error) {
+	return d.a.Objects().ConfirmOrder(root, keys)
 }
 
 func (d *Direct) Friends(ctx context.Context) ([]Friend, error) {

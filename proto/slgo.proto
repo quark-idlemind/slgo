@@ -174,6 +174,15 @@ service Grid {
   // knows the cache is wrong for a reason the server cannot see.
   rpc Flush(FlushRequest) returns (FlushResponse);
 
+  // ConfirmLinkOrder gives the daemon's object store the order a script in
+  // an object numbered its prims in, so that the set is known by the
+  // region's own count. The keys are the prims' by link number, the root
+  // first; seated avatars are not in them. The store takes the script's
+  // order where it differs, and says so. A set whose prims the script does
+  // not name exactly is refused, with the store unchanged.
+  // Why: doc/objects.md#confirmed-by-the-objects-own-script
+  rpc ConfirmLinkOrder(ConfirmLinkOrderRequest) returns (ConfirmLinkOrderResponse);
+
   // Cap makes an HTTP request against one of the agent's
   // capabilities.  The server holds the URLs and does the request; it
   // has no idea what any of them mean.  This is what keeps inventory,
@@ -1460,6 +1469,18 @@ message ObjectInfo {
   // set disagree or none described it whole.  Empty otherwise.
   string link_note = 27;
 
+  // Set when a script in the object numbered the set and the daemon took
+  // that (ConfirmLinkOrder): link_number is then known by the region's own
+  // count. link_confirmed_at is when, in Unix milliseconds; link_corrected
+  // says the daemon's order was not the script's, and link_moved the link
+  // numbers whose prim it changed. A client older than the fields reads
+  // them as not confirmed.
+  // Why: doc/objects.md#confirmed-by-the-objects-own-script
+  bool link_confirmed = 28;
+  int64 link_confirmed_at = 29;
+  bool link_corrected = 30;
+  repeated uint32 link_moved = 31;
+
   // The point light and the projector of the prim, each present only
   // while the prim has the block: a light switched off has none.
   // Why: doc/lights.md
@@ -1856,6 +1877,20 @@ message NoteFriendRequest {
 message NoteFriendResponse {}
 
 message FlushRequest { string agent = 1; }
+
+message ConfirmLinkOrderRequest {
+  string agent = 1;
+  // The root's id, then the rest of the prims in link order.
+  repeated string keys = 2;
+}
+
+message ConfirmLinkOrderResponse {
+  // Unix milliseconds the daemon applied it.
+  int64 at = 1;
+  bool corrected = 2;
+  // The link numbers whose prim was another one in the daemon's order.
+  repeated uint32 moved = 3;
+}
 
 message FlushResponse {
   // Forgotten is how many objects the cache held.

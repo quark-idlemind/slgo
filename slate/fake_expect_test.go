@@ -76,6 +76,7 @@ type objRequest struct {
 type fakeProps struct {
 	name, desc string
 	owner      msg.UUID
+	ownerMask  uint32 // the owner's permissions on the object; none unless a test says
 }
 
 // fakeOffer is what accepting an offer delivers.
@@ -124,7 +125,7 @@ func (f *fakeGrid) afterSend(m msg.Message) {
 			for _, o := range f.objects {
 				if p, ok := f.ex.props[o.ID]; ok && o.Local == d.ObjectLocalID {
 					reply = append(reply, msg.ObjectProperties_ObjectData{
-						ObjectID: o.ID, OwnerID: p.owner,
+						ObjectID: o.ID, OwnerID: p.owner, OwnerMask: p.ownerMask,
 						Name: []byte(p.name + "\x00"), Description: []byte(p.desc + "\x00"),
 					})
 				}
@@ -185,7 +186,18 @@ func (f *fakeGrid) setProps(id msg.UUID, name, desc string, owner msg.UUID) {
 	if f.ex.props == nil {
 		f.ex.props = map[msg.UUID]fakeProps{}
 	}
-	f.ex.props[id] = fakeProps{name, desc, owner}
+	p := f.ex.props[id]
+	f.ex.props[id] = fakeProps{name: name, desc: desc, owner: owner, ownerMask: p.ownerMask}
+}
+
+// setOwnerMaskOf says what the owner may do with an object, as its
+// properties tell: permAll, or without sl.PermModify for a no-mod one.
+func (f *fakeGrid) setOwnerMaskOf(id msg.UUID, mask uint32) {
+	f.ex.mu.Lock()
+	defer f.ex.mu.Unlock()
+	p := f.ex.props[id]
+	p.ownerMask = mask
+	f.ex.props[id] = p
 }
 
 // ------------------------------------------------------ changing a prim
@@ -355,6 +367,7 @@ type invItem struct {
 	// when zero) and the owner's permissions (none are served when zero).
 	asset     msg.UUID
 	ownerMask uint32
+	desc      string
 }
 
 func (v *fakeInv) add(folder, id msg.UUID, name string, typ int) {
@@ -402,9 +415,15 @@ func (v *fakeInv) setOwnerMask(id msg.UUID, mask uint32) {
 }
 
 // withInventory serves an inventory with a Scripts and an Objects folder
-// under the root, and returns it to add to.
+// under the root, and returns it to add to; asked again it is the same one.
 func (f *fakeGrid) withInventory(t *testing.T) *fakeInv {
 	t.Helper()
+	f.ex.mu.Lock()
+	have := f.ex.inv
+	f.ex.mu.Unlock()
+	if have != nil {
+		return have
+	}
 	v := &fakeInv{folders: []invFolder{
 		{testInvRoot, msg.UUID{}, "My Inventory"},
 		{idScriptsFolder, testInvRoot, "Scripts"},
@@ -488,19 +507,22 @@ func (v *fakeInv) serve(w http.ResponseWriter, r *http.Request) {
 		if it.ownerMask != 0 {
 			perms = fmt.Sprintf(`<key>permissions</key><map><key>owner_mask</key><integer>%d</integer></map>`, it.ownerMask)
 		}
-		fmt.Fprintf(&b, `<key>%s</key><map><key>item_id</key><string>%s</string><key>parent_id</key><string>%s</string><key>asset_id</key><string>%s</string><key>name</key><string>%s</string><key>desc</key><string></string><key>type</key><integer>%d</integer><key>inv_type</key><integer>%d</integer><key>flags</key><integer>0</integer><key>created_at</key><integer>1265521621</integer>%s</map>`,
-			it.id, it.id, id, asset, it.name, it.typ, it.typ, perms)
+		fmt.Fprintf(&b, `<key>%s</key><map><key>item_id</key><string>%s</string><key>parent_id</key><string>%s</string><key>asset_id</key><string>%s</string><key>name</key><string>%s</string><key>desc</key><string>%s</string><key>type</key><integer>%d</integer><key>inv_type</key><integer>%d</integer><key>flags</key><integer>0</integer><key>created_at</key><integer>1265521621</integer>%s</map>`,
+			it.id, it.id, id, asset, it.name, it.desc, it.typ, it.typ, perms)
 	}
 	b.WriteString(`</map><key>links</key><map/></map></map></llsd>`)
 	w.Header().Set("Content-Type", "application/llsd+xml")
 	io.WriteString(w, b.String())
 }
 
-// folderType is the preferred type of a folder by its name: the Trash is
-// the only one that is told apart.
+// folderType is the preferred type of a folder by its name: the Trash and
+// the Scripts folder are the only ones that are told apart.
 func folderType(name string) int {
-	if name == "Trash" {
+	switch name {
+	case "Trash":
 		return sl.FolderTrash
+	case "Scripts":
+		return int(sl.FolderTypeOf(sl.AssetLSLText))
 	}
 	return -1
 }

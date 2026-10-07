@@ -66,6 +66,11 @@ type fakeGrid struct {
 	linkOrder   map[uint32][]msg.UUID // root local id -> its children in the store's link order (setLinkOrder)
 	linkUnknown map[uint32]bool       // root local id -> the set's order is not known (unknownLinks)
 
+	// What the store was given by ConfirmLinkOrder (fake_linkmap_test.go).
+	confirmed     map[uint32]*sl.LinkConfirmation // root local id -> what a script's order did
+	confirmCalls  [][]msg.UUID                    // the keys of each call
+	confirmRefuse int                             // the next calls answer that the set differs
+
 	group     msg.UUID    // the tester's active group, in Presence
 	groups    []sl.Group  // the groups the avatar has joined, in Presence
 	sess      *sl.Session // the last session made
@@ -145,6 +150,7 @@ func (f *fakeGrid) session(t *testing.T) *sl.Session {
 	if err != nil {
 		t.Fatalf("sl.New: %v", err)
 	}
+
 	t.Cleanup(func() { f.Close() })
 	f.mu.Lock()
 	f.sess = w
@@ -436,6 +442,9 @@ func (f *fakeGrid) numberLinks(all []*sl.Seen) {
 			set = par.Local
 		}
 		o.LinkKnown = !f.linkUnknown[set]
+		if c := f.confirmed[set]; c != nil {
+			o.LinkKnown, o.LinkConfirmed = true, c
+		}
 		switch {
 		case o.Parent != 0 && !worn(o):
 			for i, k := range kids[o.Parent] {
@@ -524,7 +533,7 @@ func (f *fakeGrid) Close() error {
 func testCfg() runCfg {
 	return runCfg{lookup: 200 * time.Millisecond, props: 150 * time.Millisecond, chatDepth: 256, poll: 5 * time.Millisecond,
 		objects: 10 * time.Millisecond, redescribe: 60 * time.Millisecond, click: 300 * time.Millisecond,
-		settle: 40 * time.Millisecond, inv: 20 * time.Millisecond}
+		settle: 40 * time.Millisecond, inv: 20 * time.Millisecond, linkMap: 800 * time.Millisecond}
 }
 
 // play parses and checks src, and runs it against the grid.

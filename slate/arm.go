@@ -163,7 +163,7 @@ func arrived(at time.Time) time.Time {
 }
 
 func (r *runner) observeChat(l sl.Line) {
-	if r.observeWire(l) {
+	if r.observeWire(l) || r.isLinkMapLine(l) {
 		return
 	}
 	ev := &event{kind: evChat, at: arrived(l.At), line: l}

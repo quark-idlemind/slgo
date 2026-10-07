@@ -551,7 +551,11 @@ func (f *fakeGrid) Neighbours(ctx context.Context, set *bool) (*sl.Neighbours, e
 	return &sl.Neighbours{}, nil
 }
 
-func (f *fakeGrid) Flush(ctx context.Context) (int, error)           { return 0, nil }
+func (f *fakeGrid) Flush(ctx context.Context) (int, error) { return 0, nil }
+
+func (f *fakeGrid) ConfirmLinkOrder(ctx context.Context, root msg.UUID, keys []msg.UUID) (*sl.LinkConfirmation, error) {
+	return nil, sl.ErrNotSupported
+}
 func (f *fakeGrid) Friends(ctx context.Context) ([]sl.Friend, error) { return nil, nil }
 
 func (f *fakeGrid) NoteFriend(ctx context.Context, id msg.UUID, online bool) error { return nil }

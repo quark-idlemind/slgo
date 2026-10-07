@@ -4808,6 +4808,17 @@ type ObjectInfo struct {
 	// Why the order is not known, when the circuits that described the
 	// set disagree or none described it whole.  Empty otherwise.
 	LinkNote string `protobuf:"bytes,27,opt,name=link_note,json=linkNote,proto3" json:"link_note,omitempty"`
+	// Set when a script in the object numbered the set and the daemon took
+	// that (ConfirmLinkOrder): link_number is then known by the region's own
+	// count. link_confirmed_at is when, in Unix milliseconds; link_corrected
+	// says the daemon's order was not the script's, and link_moved the link
+	// numbers whose prim it changed. A client older than the fields reads
+	// them as not confirmed.
+	// Why: doc/objects.md#confirmed-by-the-objects-own-script
+	LinkConfirmed   bool     `protobuf:"varint,28,opt,name=link_confirmed,json=linkConfirmed,proto3" json:"link_confirmed,omitempty"`
+	LinkConfirmedAt int64    `protobuf:"varint,29,opt,name=link_confirmed_at,json=linkConfirmedAt,proto3" json:"link_confirmed_at,omitempty"`
+	LinkCorrected   bool     `protobuf:"varint,30,opt,name=link_corrected,json=linkCorrected,proto3" json:"link_corrected,omitempty"`
+	LinkMoved       []uint32 `protobuf:"varint,31,rep,packed,name=link_moved,json=linkMoved,proto3" json:"link_moved,omitempty"`
 	// The point light and the projector of the prim, each present only
 	// while the prim has the block: a light switched off has none.
 	// Why: doc/lights.md
@@ -5013,6 +5024,34 @@ func (x *ObjectInfo) GetLinkNote() string {
 		return x.LinkNote
 	}
 	return ""
+}
+
+func (x *ObjectInfo) GetLinkConfirmed() bool {
+	if x != nil {
+		return x.LinkConfirmed
+	}
+	return false
+}
+
+func (x *ObjectInfo) GetLinkConfirmedAt() int64 {
+	if x != nil {
+		return x.LinkConfirmedAt
+	}
+	return 0
+}
+
+func (x *ObjectInfo) GetLinkCorrected() bool {
+	if x != nil {
+		return x.LinkCorrected
+	}
+	return false
+}
+
+func (x *ObjectInfo) GetLinkMoved() []uint32 {
+	if x != nil {
+		return x.LinkMoved
+	}
+	return nil
 }
 
 func (x *ObjectInfo) GetLight() *PrimLight {
@@ -7472,6 +7511,121 @@ func (x *FlushRequest) GetAgent() string {
 	return ""
 }
 
+type ConfirmLinkOrderRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Agent string                 `protobuf:"bytes,1,opt,name=agent,proto3" json:"agent,omitempty"`
+	// The root's id, then the rest of the prims in link order.
+	Keys          []string `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmLinkOrderRequest) Reset() {
+	*x = ConfirmLinkOrderRequest{}
+	mi := &file_slgo_proto_msgTypes[89]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmLinkOrderRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmLinkOrderRequest) ProtoMessage() {}
+
+func (x *ConfirmLinkOrderRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[89]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmLinkOrderRequest.ProtoReflect.Descriptor instead.
+func (*ConfirmLinkOrderRequest) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{89}
+}
+
+func (x *ConfirmLinkOrderRequest) GetAgent() string {
+	if x != nil {
+		return x.Agent
+	}
+	return ""
+}
+
+func (x *ConfirmLinkOrderRequest) GetKeys() []string {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
+type ConfirmLinkOrderResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Unix milliseconds the daemon applied it.
+	At        int64 `protobuf:"varint,1,opt,name=at,proto3" json:"at,omitempty"`
+	Corrected bool  `protobuf:"varint,2,opt,name=corrected,proto3" json:"corrected,omitempty"`
+	// The link numbers whose prim was another one in the daemon's order.
+	Moved         []uint32 `protobuf:"varint,3,rep,packed,name=moved,proto3" json:"moved,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmLinkOrderResponse) Reset() {
+	*x = ConfirmLinkOrderResponse{}
+	mi := &file_slgo_proto_msgTypes[90]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmLinkOrderResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmLinkOrderResponse) ProtoMessage() {}
+
+func (x *ConfirmLinkOrderResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_slgo_proto_msgTypes[90]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmLinkOrderResponse.ProtoReflect.Descriptor instead.
+func (*ConfirmLinkOrderResponse) Descriptor() ([]byte, []int) {
+	return file_slgo_proto_rawDescGZIP(), []int{90}
+}
+
+func (x *ConfirmLinkOrderResponse) GetAt() int64 {
+	if x != nil {
+		return x.At
+	}
+	return 0
+}
+
+func (x *ConfirmLinkOrderResponse) GetCorrected() bool {
+	if x != nil {
+		return x.Corrected
+	}
+	return false
+}
+
+func (x *ConfirmLinkOrderResponse) GetMoved() []uint32 {
+	if x != nil {
+		return x.Moved
+	}
+	return nil
+}
+
 type FlushResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Forgotten is how many objects the cache held.
@@ -7482,7 +7636,7 @@ type FlushResponse struct {
 
 func (x *FlushResponse) Reset() {
 	*x = FlushResponse{}
-	mi := &file_slgo_proto_msgTypes[89]
+	mi := &file_slgo_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7494,7 +7648,7 @@ func (x *FlushResponse) String() string {
 func (*FlushResponse) ProtoMessage() {}
 
 func (x *FlushResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_slgo_proto_msgTypes[89]
+	mi := &file_slgo_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7507,7 +7661,7 @@ func (x *FlushResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlushResponse.ProtoReflect.Descriptor instead.
 func (*FlushResponse) Descriptor() ([]byte, []int) {
-	return file_slgo_proto_rawDescGZIP(), []int{89}
+	return file_slgo_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *FlushResponse) GetForgotten() int32 {
@@ -7851,7 +8005,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x14\n" +
 	"\x05named\x18\x02 \x01(\tR\x05named\x12\x0e\n" +
 	"\x02id\x18\x03 \x01(\tR\x02id\x12\x10\n" +
-	"\x03how\x18\x04 \x01(\bR\x03how\"\xc3\a\n" +
+	"\x03how\x18\x04 \x01(\bR\x03how\"\xdc\b\n" +
 	"\n" +
 	"ObjectInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
@@ -7881,7 +8035,12 @@ const file_slgo_proto_rawDesc = "" +
 	"linkNumber\x12\x1d\n" +
 	"\n" +
 	"link_known\x18\x15 \x01(\bR\tlinkKnown\x12\x1b\n" +
-	"\tlink_note\x18\x1b \x01(\tR\blinkNote\x12(\n" +
+	"\tlink_note\x18\x1b \x01(\tR\blinkNote\x12%\n" +
+	"\x0elink_confirmed\x18\x1c \x01(\bR\rlinkConfirmed\x12*\n" +
+	"\x11link_confirmed_at\x18\x1d \x01(\x03R\x0flinkConfirmedAt\x12%\n" +
+	"\x0elink_corrected\x18\x1e \x01(\bR\rlinkCorrected\x12\x1d\n" +
+	"\n" +
+	"link_moved\x18\x1f \x03(\rR\tlinkMoved\x12(\n" +
 	"\x05light\x18\x16 \x01(\v2\x12.slgo.v1.PrimLightR\x05light\x124\n" +
 	"\tprojector\x18\x17 \x01(\v2\x16.slgo.v1.PrimProjectorR\tprojector\x12D\n" +
 	"\x10render_materials\x18\x18 \x03(\v2\x19.slgo.v1.PrimFaceMaterialR\x0frenderMaterials\x12@\n" +
@@ -8104,9 +8263,16 @@ const file_slgo_proto_rawDesc = "" +
 	"\x06online\x18\x03 \x01(\bR\x06online\"\x14\n" +
 	"\x12NoteFriendResponse\"$\n" +
 	"\fFlushRequest\x12\x14\n" +
-	"\x05agent\x18\x01 \x01(\tR\x05agent\"-\n" +
+	"\x05agent\x18\x01 \x01(\tR\x05agent\"C\n" +
+	"\x17ConfirmLinkOrderRequest\x12\x14\n" +
+	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x12\n" +
+	"\x04keys\x18\x02 \x03(\tR\x04keys\"^\n" +
+	"\x18ConfirmLinkOrderResponse\x12\x0e\n" +
+	"\x02at\x18\x01 \x01(\x03R\x02at\x12\x1c\n" +
+	"\tcorrected\x18\x02 \x01(\bR\tcorrected\x12\x14\n" +
+	"\x05moved\x18\x03 \x03(\rR\x05moved\"-\n" +
 	"\rFlushResponse\x12\x1c\n" +
-	"\tforgotten\x18\x01 \x01(\x05R\tforgotten2\x85\r\n" +
+	"\tforgotten\x18\x01 \x01(\x05R\tforgotten2\xde\r\n" +
 	"\x04Grid\x126\n" +
 	"\x05Login\x12\x15.slgo.v1.LoginRequest\x1a\x16.slgo.v1.LoginResponse\x12:\n" +
 	"\x06Stream\x12\x15.slgo.v1.ClientPacket\x1a\x15.slgo.v1.ServerPacket(\x010\x01\x12E\n" +
@@ -8125,7 +8291,8 @@ const file_slgo_proto_rawDesc = "" +
 	"\x06Ground\x12\x16.slgo.v1.GroundRequest\x1a\x17.slgo.v1.GroundResponse\x12E\n" +
 	"\n" +
 	"Neighbours\x12\x1a.slgo.v1.NeighboursRequest\x1a\x1b.slgo.v1.NeighboursResponse\x126\n" +
-	"\x05Flush\x12\x15.slgo.v1.FlushRequest\x1a\x16.slgo.v1.FlushResponse\x120\n" +
+	"\x05Flush\x12\x15.slgo.v1.FlushRequest\x1a\x16.slgo.v1.FlushResponse\x12W\n" +
+	"\x10ConfirmLinkOrder\x12 .slgo.v1.ConfirmLinkOrderRequest\x1a!.slgo.v1.ConfirmLinkOrderResponse\x120\n" +
 	"\x03Cap\x12\x13.slgo.v1.CapRequest\x1a\x14.slgo.v1.CapResponse\x123\n" +
 	"\x04Send\x12\x14.slgo.v1.SendRequest\x1a\x15.slgo.v1.SendResponse\x12<\n" +
 	"\aControl\x12\x17.slgo.v1.ControlRequest\x1a\x18.slgo.v1.ControlResponse\x122\n" +
@@ -8152,7 +8319,7 @@ func file_slgo_proto_rawDescGZIP() []byte {
 }
 
 var file_slgo_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 92)
+var file_slgo_proto_msgTypes = make([]protoimpl.MessageInfo, 94)
 var file_slgo_proto_goTypes = []any{
 	(AgentEvent_Kind)(0),             // 0: slgo.v1.AgentEvent.Kind
 	(AgentInfo_State)(0),             // 1: slgo.v1.AgentInfo.State
@@ -8247,9 +8414,11 @@ var file_slgo_proto_goTypes = []any{
 	(*NoteFriendRequest)(nil),        // 90: slgo.v1.NoteFriendRequest
 	(*NoteFriendResponse)(nil),       // 91: slgo.v1.NoteFriendResponse
 	(*FlushRequest)(nil),             // 92: slgo.v1.FlushRequest
-	(*FlushResponse)(nil),            // 93: slgo.v1.FlushResponse
-	nil,                              // 94: slgo.v1.StatusResponse.UnhandledEntry
-	nil,                              // 95: slgo.v1.StatusResponse.PlacementWidthsEntry
+	(*ConfirmLinkOrderRequest)(nil),  // 93: slgo.v1.ConfirmLinkOrderRequest
+	(*ConfirmLinkOrderResponse)(nil), // 94: slgo.v1.ConfirmLinkOrderResponse
+	(*FlushResponse)(nil),            // 95: slgo.v1.FlushResponse
+	nil,                              // 96: slgo.v1.StatusResponse.UnhandledEntry
+	nil,                              // 97: slgo.v1.StatusResponse.PlacementWidthsEntry
 }
 var file_slgo_proto_depIdxs = []int32{
 	14, // 0: slgo.v1.ClientPacket.attach:type_name -> slgo.v1.Attach
@@ -8277,9 +8446,9 @@ var file_slgo_proto_depIdxs = []int32{
 	27, // 22: slgo.v1.HostResponse.agent:type_name -> slgo.v1.AgentInfo
 	27, // 23: slgo.v1.ListAgentsResponse.agents:type_name -> slgo.v1.AgentInfo
 	27, // 24: slgo.v1.StatusResponse.agent:type_name -> slgo.v1.AgentInfo
-	94, // 25: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
+	96, // 25: slgo.v1.StatusResponse.unhandled:type_name -> slgo.v1.StatusResponse.UnhandledEntry
 	36, // 26: slgo.v1.StatusResponse.viewer:type_name -> slgo.v1.ViewerEndpoint
-	95, // 27: slgo.v1.StatusResponse.placement_widths:type_name -> slgo.v1.StatusResponse.PlacementWidthsEntry
+	97, // 27: slgo.v1.StatusResponse.placement_widths:type_name -> slgo.v1.StatusResponse.PlacementWidthsEntry
 	15, // 28: slgo.v1.SendRequest.message:type_name -> slgo.v1.OutboundMessage
 	53, // 29: slgo.v1.MoveRequest.target:type_name -> slgo.v1.Vector3
 	2,  // 30: slgo.v1.MoveEvent.state:type_name -> slgo.v1.MoveEvent.State
@@ -8324,46 +8493,48 @@ var file_slgo_proto_depIdxs = []int32{
 	82, // 69: slgo.v1.Grid.Ground:input_type -> slgo.v1.GroundRequest
 	84, // 70: slgo.v1.Grid.Neighbours:input_type -> slgo.v1.NeighboursRequest
 	92, // 71: slgo.v1.Grid.Flush:input_type -> slgo.v1.FlushRequest
-	39, // 72: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
-	41, // 73: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
-	43, // 74: slgo.v1.Grid.Control:input_type -> slgo.v1.ControlRequest
-	45, // 75: slgo.v1.Grid.Move:input_type -> slgo.v1.MoveRequest
-	47, // 76: slgo.v1.Grid.Face:input_type -> slgo.v1.FaceRequest
-	49, // 77: slgo.v1.Grid.Halt:input_type -> slgo.v1.HaltRequest
-	50, // 78: slgo.v1.Grid.Posture:input_type -> slgo.v1.PostureRequest
-	87, // 79: slgo.v1.Grid.Friends:input_type -> slgo.v1.FriendsRequest
-	90, // 80: slgo.v1.Grid.NoteFriend:input_type -> slgo.v1.NoteFriendRequest
-	19, // 81: slgo.v1.Grid.Handled:input_type -> slgo.v1.HandledRequest
-	37, // 82: slgo.v1.Grid.ViewerCredential:input_type -> slgo.v1.ViewerCredentialRequest
-	5,  // 83: slgo.v1.Grid.Login:output_type -> slgo.v1.LoginResponse
-	16, // 84: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
-	33, // 85: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
-	35, // 86: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
-	29, // 87: slgo.v1.Grid.Host:output_type -> slgo.v1.HostResponse
-	31, // 88: slgo.v1.Grid.Logout:output_type -> slgo.v1.LogoutResponse
-	55, // 89: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
-	70, // 90: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
-	58, // 91: slgo.v1.Grid.Attachments:output_type -> slgo.v1.AttachmentsResponse
-	72, // 92: slgo.v1.Grid.Region:output_type -> slgo.v1.RegionInfo
-	74, // 93: slgo.v1.Grid.SimStats:output_type -> slgo.v1.SimStatsResponse
-	78, // 94: slgo.v1.Grid.RegionDetails:output_type -> slgo.v1.RegionDetailsResponse
-	81, // 95: slgo.v1.Grid.Land:output_type -> slgo.v1.LandInfo
-	83, // 96: slgo.v1.Grid.Ground:output_type -> slgo.v1.GroundResponse
-	85, // 97: slgo.v1.Grid.Neighbours:output_type -> slgo.v1.NeighboursResponse
-	93, // 98: slgo.v1.Grid.Flush:output_type -> slgo.v1.FlushResponse
-	40, // 99: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
-	42, // 100: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
-	44, // 101: slgo.v1.Grid.Control:output_type -> slgo.v1.ControlResponse
-	46, // 102: slgo.v1.Grid.Move:output_type -> slgo.v1.MoveEvent
-	48, // 103: slgo.v1.Grid.Face:output_type -> slgo.v1.FaceResponse
-	52, // 104: slgo.v1.Grid.Halt:output_type -> slgo.v1.HaltResponse
-	51, // 105: slgo.v1.Grid.Posture:output_type -> slgo.v1.PostureResponse
-	89, // 106: slgo.v1.Grid.Friends:output_type -> slgo.v1.FriendsResponse
-	91, // 107: slgo.v1.Grid.NoteFriend:output_type -> slgo.v1.NoteFriendResponse
-	20, // 108: slgo.v1.Grid.Handled:output_type -> slgo.v1.HandledResponse
-	38, // 109: slgo.v1.Grid.ViewerCredential:output_type -> slgo.v1.ViewerCredentialResponse
-	83, // [83:110] is the sub-list for method output_type
-	56, // [56:83] is the sub-list for method input_type
+	93, // 72: slgo.v1.Grid.ConfirmLinkOrder:input_type -> slgo.v1.ConfirmLinkOrderRequest
+	39, // 73: slgo.v1.Grid.Cap:input_type -> slgo.v1.CapRequest
+	41, // 74: slgo.v1.Grid.Send:input_type -> slgo.v1.SendRequest
+	43, // 75: slgo.v1.Grid.Control:input_type -> slgo.v1.ControlRequest
+	45, // 76: slgo.v1.Grid.Move:input_type -> slgo.v1.MoveRequest
+	47, // 77: slgo.v1.Grid.Face:input_type -> slgo.v1.FaceRequest
+	49, // 78: slgo.v1.Grid.Halt:input_type -> slgo.v1.HaltRequest
+	50, // 79: slgo.v1.Grid.Posture:input_type -> slgo.v1.PostureRequest
+	87, // 80: slgo.v1.Grid.Friends:input_type -> slgo.v1.FriendsRequest
+	90, // 81: slgo.v1.Grid.NoteFriend:input_type -> slgo.v1.NoteFriendRequest
+	19, // 82: slgo.v1.Grid.Handled:input_type -> slgo.v1.HandledRequest
+	37, // 83: slgo.v1.Grid.ViewerCredential:input_type -> slgo.v1.ViewerCredentialRequest
+	5,  // 84: slgo.v1.Grid.Login:output_type -> slgo.v1.LoginResponse
+	16, // 85: slgo.v1.Grid.Stream:output_type -> slgo.v1.ServerPacket
+	33, // 86: slgo.v1.Grid.ListAgents:output_type -> slgo.v1.ListAgentsResponse
+	35, // 87: slgo.v1.Grid.Status:output_type -> slgo.v1.StatusResponse
+	29, // 88: slgo.v1.Grid.Host:output_type -> slgo.v1.HostResponse
+	31, // 89: slgo.v1.Grid.Logout:output_type -> slgo.v1.LogoutResponse
+	55, // 90: slgo.v1.Grid.Presence:output_type -> slgo.v1.PresenceResponse
+	70, // 91: slgo.v1.Grid.Objects:output_type -> slgo.v1.ObjectsResponse
+	58, // 92: slgo.v1.Grid.Attachments:output_type -> slgo.v1.AttachmentsResponse
+	72, // 93: slgo.v1.Grid.Region:output_type -> slgo.v1.RegionInfo
+	74, // 94: slgo.v1.Grid.SimStats:output_type -> slgo.v1.SimStatsResponse
+	78, // 95: slgo.v1.Grid.RegionDetails:output_type -> slgo.v1.RegionDetailsResponse
+	81, // 96: slgo.v1.Grid.Land:output_type -> slgo.v1.LandInfo
+	83, // 97: slgo.v1.Grid.Ground:output_type -> slgo.v1.GroundResponse
+	85, // 98: slgo.v1.Grid.Neighbours:output_type -> slgo.v1.NeighboursResponse
+	95, // 99: slgo.v1.Grid.Flush:output_type -> slgo.v1.FlushResponse
+	94, // 100: slgo.v1.Grid.ConfirmLinkOrder:output_type -> slgo.v1.ConfirmLinkOrderResponse
+	40, // 101: slgo.v1.Grid.Cap:output_type -> slgo.v1.CapResponse
+	42, // 102: slgo.v1.Grid.Send:output_type -> slgo.v1.SendResponse
+	44, // 103: slgo.v1.Grid.Control:output_type -> slgo.v1.ControlResponse
+	46, // 104: slgo.v1.Grid.Move:output_type -> slgo.v1.MoveEvent
+	48, // 105: slgo.v1.Grid.Face:output_type -> slgo.v1.FaceResponse
+	52, // 106: slgo.v1.Grid.Halt:output_type -> slgo.v1.HaltResponse
+	51, // 107: slgo.v1.Grid.Posture:output_type -> slgo.v1.PostureResponse
+	89, // 108: slgo.v1.Grid.Friends:output_type -> slgo.v1.FriendsResponse
+	91, // 109: slgo.v1.Grid.NoteFriend:output_type -> slgo.v1.NoteFriendResponse
+	20, // 110: slgo.v1.Grid.Handled:output_type -> slgo.v1.HandledResponse
+	38, // 111: slgo.v1.Grid.ViewerCredential:output_type -> slgo.v1.ViewerCredentialResponse
+	84, // [84:112] is the sub-list for method output_type
+	56, // [56:84] is the sub-list for method input_type
 	56, // [56:56] is the sub-list for extension type_name
 	56, // [56:56] is the sub-list for extension extendee
 	0,  // [0:56] is the sub-list for field type_name
@@ -8406,7 +8577,7 @@ func file_slgo_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_slgo_proto_rawDesc), len(file_slgo_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   92,
+			NumMessages:   94,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

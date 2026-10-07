@@ -1322,3 +1322,66 @@ func lightedMesh(tex msg.UUID) []byte {
 	b = append(b, cat(tex[:], f32(1.5), f32(-0.25), f32(0.125))...)
 	return b
 }
+
+// TestConfirmLinkOrderAppliesAScriptsOrderToTheStore: the keys, root
+// first, name the order a script in the object numbered its prims in;
+// the daemon takes it and says what it changed, and tells every client
+// of the set afterwards that it is confirmed.
+// Why: doc/objects.md#confirmed-by-the-objects-own-script
+func TestConfirmLinkOrderAppliesAScriptsOrderToTheStore(t *testing.T) {
+	r := newRig(t, agent.Caps{})
+	ctx := context.Background()
+	h, _ := r.srv.Agent("example")
+
+	root := msg.MustParseUUID("27637e57-7e57-c0de-47ab-3430a7a06ef4")
+	a := msg.MustParseUUID("7d757e57-7e57-c0de-aef1-cc32ddd326f5")
+	b := msg.MustParseUUID("7e907e57-7e57-c0de-71cf-9e8caf4e7139")
+	r.sim.send(&msg.ObjectUpdate{ObjectData: []msg.ObjectUpdate_ObjectData{
+		{ID: 61, FullID: root, PCode: 9},
+		{ID: 62, ParentID: 61, FullID: a, PCode: 9},
+		{ID: 63, ParentID: 61, FullID: b, PCode: 9},
+	}}, 0)
+	waitFor(t, 5*time.Second, "the set to be recorded", func() bool {
+		return h.Agent().Objects().Count() == 3
+	})
+
+	got, err := r.srv.ConfirmLinkOrder(ctx, &pb.ConfirmLinkOrderRequest{
+		Agent: "example", Keys: []string{root.String(), b.String(), a.String()}})
+	if err != nil {
+		t.Fatalf("ConfirmLinkOrder: %v", err)
+	}
+	if !got.GetCorrected() || len(got.GetMoved()) != 2 || got.GetMoved()[0] != 2 || got.GetAt() == 0 {
+		t.Errorf("answer %v, want links 2 and 3 moved", got)
+	}
+	all, err := r.srv.Objects(ctx, &pb.ObjectsRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range all.GetObjects() {
+		want := map[string]uint32{root.String(): 1, b.String(): 2, a.String(): 3}[o.GetId()]
+		if o.GetLinkNumber() != want || !o.GetLinkKnown() || !o.GetLinkConfirmed() || !o.GetLinkCorrected() || o.GetLinkConfirmedAt() == 0 {
+			t.Errorf("%s: link %d known %v confirmed %v corrected %v", o.GetId(), o.GetLinkNumber(),
+				o.GetLinkKnown(), o.GetLinkConfirmed(), o.GetLinkCorrected())
+		}
+	}
+
+	// What the keys do not name is refused, and what is not here.
+	for name, tc := range map[string]struct {
+		keys []string
+		code codes.Code
+	}{
+		"a prim short":    {[]string{root.String(), a.String()}, codes.InvalidArgument},
+		"not a uuid":      {[]string{root.String(), "x"}, codes.InvalidArgument},
+		"no keys":         {nil, codes.InvalidArgument},
+		"a child as root": {[]string{a.String(), b.String()}, codes.InvalidArgument},
+	} {
+		_, err := r.srv.ConfirmLinkOrder(ctx, &pb.ConfirmLinkOrderRequest{Agent: "example", Keys: tc.keys})
+		if status.Code(err) != tc.code {
+			t.Errorf("%s: %v, want %v", name, err, tc.code)
+		}
+	}
+	gone := msg.MustParseUUID("8fa57e57-7e57-c0de-1525-479cb10483a8").String()
+	if _, err := r.srv.ConfirmLinkOrder(ctx, &pb.ConfirmLinkOrderRequest{Agent: "example", Keys: []string{gone}}); status.Code(err) != codes.FailedPrecondition {
+		t.Errorf("a root the store does not hold: %v", err)
+	}
+}

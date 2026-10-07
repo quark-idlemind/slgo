@@ -30,7 +30,9 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/client"
@@ -64,10 +66,15 @@ type fakeDaemon struct {
 
 	objects []*pb.ObjectInfo
 	region  *pb.RegionInfo
-	friends []*pb.Friend
-	agents  []*pb.AgentInfo
-	cap     *pb.CapResponse
-	noted   chan *pb.NoteFriendRequest
+
+	// confirmed is every ConfirmLinkOrder asked of the daemon, and
+	// confirm what it answers: a status error when it is one.
+	confirmed []*pb.ConfirmLinkOrderRequest
+	confirm   func(*pb.ConfirmLinkOrderRequest) (*pb.ConfirmLinkOrderResponse, error)
+	friends   []*pb.Friend
+	agents    []*pb.AgentInfo
+	cap       *pb.CapResponse
+	noted     chan *pb.NoteFriendRequest
 
 	// fail, when set, is what every unary call answers with, which is
 	// how the error half of each translation is reached.
@@ -275,6 +282,14 @@ func (d *fakeDaemon) Flush(context.Context, *pb.FlushRequest) (*pb.FlushResponse
 		return nil, d.fail
 	}
 	return &pb.FlushResponse{Forgotten: int32(len(d.objects))}, nil
+}
+
+func (d *fakeDaemon) ConfirmLinkOrder(_ context.Context, r *pb.ConfirmLinkOrderRequest) (*pb.ConfirmLinkOrderResponse, error) {
+	d.confirmed = append(d.confirmed, r)
+	if d.confirm != nil {
+		return d.confirm(r)
+	}
+	return d.UnimplementedGridServer.ConfirmLinkOrder(context.Background(), r)
 }
 
 func (d *fakeDaemon) Friends(context.Context, *pb.FriendsRequest) (*pb.FriendsResponse, error) {
@@ -974,5 +989,65 @@ func TestAgentNameIsAskedRatherThanTested(t *testing.T) {
 	t.Setenv(EnvAgent, "")
 	if got := AgentName(""); got != "" {
 		t.Errorf("AgentName = %q, want the choice left to the daemon", got)
+	}
+}
+
+// TestAConfirmedOrderCrossesTheWireBothWays: the keys go as strings and
+// the daemon's answer comes back as it was said; a set the daemon holds
+// confirmed says so in what Objects returns.
+// Why: doc/objects.md#confirmed-by-the-objects-own-script
+func TestAConfirmedOrderCrossesTheWireBothWays(t *testing.T) {
+	t.Parallel()
+	h, d := newFakeDaemon(t)
+	d.confirm = func(r *pb.ConfirmLinkOrderRequest) (*pb.ConfirmLinkOrderResponse, error) {
+		return &pb.ConfirmLinkOrderResponse{At: 1_700_000_000_250, Corrected: true, Moved: []uint32{3, 4}}, nil
+	}
+	got, err := h.ConfirmLinkOrder(context.Background(), thePrim, []msg.UUID{thePrim, theChild, theOther})
+	if err != nil {
+		t.Fatalf("ConfirmLinkOrder: %v", err)
+	}
+	if !got.Corrected || !reflect.DeepEqual(got.Moved, []int{3, 4}) || !got.At.Equal(time.UnixMilli(1_700_000_000_250)) {
+		t.Errorf("confirmation %+v", got)
+	}
+	if len(d.confirmed) != 1 || !reflect.DeepEqual(d.confirmed[0].Keys, []string{thePrim.String(), theChild.String(), theOther.String()}) {
+		t.Errorf("the daemon was asked %+v", d.confirmed)
+	}
+
+	d.objects = []*pb.ObjectInfo{
+		{Id: thePrim.String(), Local: 77, LinkConfirmed: true, LinkConfirmedAt: 1_700_000_000_250, LinkCorrected: true, LinkMoved: []uint32{3}},
+		{Id: theChild.String(), Local: 78},
+	}
+	seen, err := h.Objects(context.Background(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := seen[0].LinkConfirmed; c == nil || !c.Corrected || !reflect.DeepEqual(c.Moved, []int{3}) {
+		t.Errorf("a confirmed set came as %+v", c)
+	}
+	if seen[1].LinkConfirmed != nil {
+		t.Errorf("an unconfirmed one came as %+v", seen[1].LinkConfirmed)
+	}
+}
+
+// TestADaemonsRefusalsComeBackAsTheErrorsOfThePackage: a daemon older
+// than the call, a set the keys do not name, and a root it does not hold
+// each have their own error.
+func TestADaemonsRefusalsComeBackAsTheErrorsOfThePackage(t *testing.T) {
+	t.Parallel()
+	h, d := newFakeDaemon(t)
+	keys := []msg.UUID{thePrim}
+	if _, err := h.ConfirmLinkOrder(context.Background(), thePrim, keys); !errors.Is(err, ErrNotSupported) {
+		t.Errorf("an older daemon: %v", err)
+	}
+	for code, want := range map[codes.Code]error{
+		codes.InvalidArgument:    ErrLinkSetDiffers,
+		codes.FailedPrecondition: ErrNotHere,
+	} {
+		d.confirm = func(*pb.ConfirmLinkOrderRequest) (*pb.ConfirmLinkOrderResponse, error) {
+			return nil, status.Error(code, "the reason")
+		}
+		if _, err := h.ConfirmLinkOrder(context.Background(), thePrim, keys); !errors.Is(err, want) || !strings.Contains(err.Error(), "the reason") {
+			t.Errorf("%v: %v, want %v and the daemon's words", code, err, want)
+		}
 	}
 }

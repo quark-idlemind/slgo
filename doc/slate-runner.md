@@ -795,7 +795,88 @@ A header binding is one prim: the single `ObjectsNamed` hit, with the 30 s budge
 
 Two header bindings that resolve to prims of the same linkset and that both have a `probe` header are a setup error: one probe covers the whole linkset.
 
-**Link numbers.** Link numbers are not local ids and are not the order any walk returns. They are what `llGetLinkNumber` reports: 0 for an unlinked prim (which still receives messages addressed to link 1, `LINK_ROOT`), 1 for a linked root, 2 and up for children. The runner does not invent a numbering from `Parent`. When the twelfth round was taken the store kept none: measured on 2026-10-01 with seven prims of the tester's own, linked all at once the children took the order the link request named them in, and grown one at a time each new prim became link 2 and moved the rest up, while local ids, the store's order and the positions followed none of that ([Twelfth round](#twelfth-round-link-numbers)). The store now keeps the linking history and gives the number ([Link numbers](objects.md#link-numbers)), so the map is the probe's hello when the binding has a probe, which is the script's own truth and wins, and otherwise `Session.Linkset` of the binding's root, whose order is the store's best reading of the order the region sent the set in (the children placed by the packets that listed them, not by arrival; [When a set is known](objects.md#when-a-set-is-known)), which a viewer reads by arrival and so can get wrong. One function, `runner.linkBinding`, resolves a `link N` for a touch, a drag, a speaker, a dialog and a state expectation. It resolves at the time of use, since a product can relink itself: in a stimulus's prepare, on each poll that reads the prim, and when a line or dialog arrives. A set whose order the store cannot vouch for fails with `the link order of "<name>" is not known; bind the prim by its own name instead of link N, give the object a probe (the tester must own it), or take it and rez or wear it again`, and a number the set does not have with `"<name>" has no link N; it has M prims`; a worn linkset, which `Session.Linkset` refuses because its root's parent is the avatar, is ordered from the numbers of its children. A probe is still the mechanism for the link messages, so `send` and `expect link` need one. While the tester is seated on the linkset the avatar occupies a link number and no probe is installed there, because its `PCode` is 47; a message addressed only to that number is not observed, and the transcript says so on a sit step.
+**Link numbers.** Link numbers are not local ids and are not the order any walk returns. They are what `llGetLinkNumber` reports: 0 for an unlinked prim (which still receives messages addressed to link 1, `LINK_ROOT`), 1 for a linked root, 2 and up for children. The runner does not invent a numbering from `Parent`. When the twelfth round was taken the store kept none: measured on 2026-10-01 with seven prims of the tester's own, linked all at once the children took the order the link request named them in, and grown one at a time each new prim became link 2 and moved the rest up, while local ids, the store's order and the positions followed none of that ([Twelfth round](#twelfth-round-link-numbers)). The store now keeps the linking history and gives the number ([Link numbers](objects.md#link-numbers)), so the map is the probe's hello when the binding has a probe, which is the script's own truth and wins, and otherwise `Session.Linkset` of the binding's root, whose order is the store's best reading of the order the region sent the set in (the children placed by the packets that listed them, not by arrival; [When a set is known](objects.md#when-a-set-is-known)), which a viewer reads by arrival and so can get wrong. One function, `runner.linkBinding`, resolves a `link N` for a touch, a drag, a speaker, a dialog and a state expectation. It resolves at the time of use, since a product can relink itself: in a stimulus's prepare, on each poll that reads the prim, and when a line or dialog arrives. A set whose order the store cannot vouch for fails with `the link order of "<name>" is not known; bind the prim by its own name instead of link N, give the object a probe (the tester must own it), or take it and rez or wear it again`, and a number the set does not have with `"<name>" has no link N; it has M prims`; a worn linkset, which `Session.Linkset` refuses because its root's parent is the avatar, is ordered from the numbers of its children. When the file has a `linkmap` header for the object, setup takes the order from the object's own script first ([Link order from the object's own script](#link-order-from-the-objects-own-script)), and the store's answer is then the script's; without one the store's reading stands, and nothing is dropped. A probe is still the mechanism for the link messages, so `send` and `expect link` need one. While the tester is seated on the linkset the avatar occupies a link number and no probe is installed there, because its `PCode` is 47; a message addressed only to that number is not observed, and the transcript says so on a sit step.
+
+### Link order from the object's own script
+
+A prim of an object the store numbers only by its packets is a best reading
+([When a set is known](objects.md#when-a-set-is-known)). A file makes it
+certain, for the objects it names, with a `linkmap` header
+([the language](slate-language.md#objects-names-and-link-numbers)); the
+runner never does it unasked.
+
+**Why only when asked.** The script going into an object and taking itself
+out again are two changes of the object's inventory, and every script in the
+object is called `changed()` with `CHANGED_INVENTORY` for each. A product
+that reloads its configuration, resets or re-reads its notecards on that
+event is then tested from a state the file did not ask for, and nothing in
+the run shows it. As first built, setup dropped the script into every object
+a `link N` step addressed that had no probe; that was changed to opt-in
+because it was the one thing setup did to the product under test silently.
+The header is named `linkmap` for what it drops, the "slgo linkmap" script
+and `Session.LinkMap`, and it sits beside `probe`, the other header that puts
+a script in an object.
+
+**With the header.** For each header object a `linkmap` names, setup (the
+step `link order`, after the probe's, `runner.setupLinkOrder` in
+`slate/linkorder.go`) takes `Session.LinkMap` of its root, once per root per
+run, and gives the keys to the store (`Session.ConfirmLinkOrder`, [Confirmed
+by the object's own script](objects.md#confirmed-by-the-objects-own-script)).
+The checker (`linkMapAt`, `slate/check.go`) refuses a `linkmap` that names
+anything but a header object, names one twice, names one that has a `probe`
+(its hello map is already the script's own count, link by link, so the drop
+would be for nothing), or names one no step addresses with `link N` (found by
+walking the syntax tree for a node with a name and a link; `linkUsers`). A
+binding a step makes with `wear`, `rez ITEM` or `expect rez` has no header to
+be named by, so none of them is ever dropped into.
+
+It prints one line for each such object:
+
+- `slate: link order of NAME confirmed by its own script (N links)`: the
+  script's count and the store's reading were one.
+- `slate: link order of NAME corrected by its own script: the store had other
+  prims at links 2 and 3 (N links)`: the packets were wrong, the store took
+  the object's, and `link N` follows it.
+- `slate: link order of NAME is the store's best reading from the packets
+  (<why>)`: the script could not be had and the run goes on with the store's
+  reading, which a later `link N` may still refuse. `(its own script could
+  not be had: <why>)` for a drop that was not answered or an object nobody
+  has told the properties of; `(its own script gave an order the store could
+  not take: <why>)` for a store that never saw every prim the script counted,
+  which is asked again for `cfg.linkConfirm` (10 s).
+- `slate: warning: link order of NAME: <w>` for a script that did not remove
+  itself and was taken out, or could not be.
+
+An object the tester may not modify, or on land that runs no scripts, is a
+setup error (exit 3, `slate: setup: linkmap NAME: the tester may not modify
+it, ...`). The file asked for the region's count and cannot have it; going on
+with a guess is what the header was written to avoid. Everything else that
+goes wrong is a line and not a failure, as above, because the store's reading
+is what a file without the header gets anyway.
+
+**Without the header.** Nothing is sent to the object: no selection for its
+permissions, no script. For each binding a step addresses with `link N` that
+has no probe, the transcript says once, when it is bound (at setup for a
+header object, when the step runs for a `wear` or `rez` binding), `slate:
+link order of NAME is the store's best reading from the packets (no linkmap
+header for it)`. A binding with a probe is not told: the probe is the count.
+
+The lines the script says are not in the transcript: the run asked for them
+and `isLinkMapLine` takes them out of the chat the run is shown and
+expects against. `Options.LinkMapTimeout` is the run's `cfg.linkMap`
+(15 s in a run; tests shorten it), given and given back as the payment's
+`MoneyTimeout` is.
+
+**It sits beside the probe, not in place of it.** A probe is the mechanism
+for `send` and `expect link`; the link map is for a file that only needs
+the numbers. The probe needs the tester to own the object and installs a
+script in every prim; the link map needs a script in the root only, for
+about a second, and removes it, with the side effect above. A `link N` on a
+binding whose set stays unknown is as it was.
+
+**Limits.** A set that changes after setup, a link or an unlink the product
+makes, drops the confirmation, and `link N` reads the store's best reading
+again.
 
 **Region position of a prim.** Used by the rez 10 m rule and by the 20 m say check. `Seen.Position` is a region place only when `Parent == 0`; for a child it is an offset from the root, and for an attachment an offset from the wearer (`README.md`). Comparing those numbers to a new root's accepts a rez near the region origin and rejects one sitting next to the linkset. So the position that counts is found by a walk: follow `Parent` until `Parent == 0`, at most eight steps, and use that ancestor's `Position`. The runner implements the walk on `[]*sl.Seen`. (Why not the store's own anchor walk: it is unexported and not on the far side of `DialWeak`.) Offsets are not added and not rotated, so a child metres from its root is measured at the root, and a linkset larger than 10 m can fail a rez that sits beside a distant child. A walk that leaves the store yields no position; that prim is skipped, and if every prim of the linkset is skipped the claim does not match and the rejection reason is `position unknown`.
 

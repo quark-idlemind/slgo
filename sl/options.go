@@ -64,6 +64,12 @@ type Options struct {
 	// re-asking.
 	// Why: doc/objects.md#a-name-a-script-changed
 	NamesAskedAgainEvery time.Duration
+
+	// LinkMapTimeout bounds LinkMap's wait for the object's properties,
+	// which say whether the avatar may modify it, and then for the script
+	// it dropped to say every link of the object and its end.
+	// Why: doc/scripts.md#the-links-of-an-object-from-its-own-script
+	LinkMapTimeout time.Duration
 }
 
 // The defaults for Options.  None of them is a measurement; each is a
@@ -99,6 +105,10 @@ const (
 	// DefaultNamesAskedAgainEvery is about four times the 8 s a full
 	// re-ask of a busy region took.
 	DefaultNamesAskedAgainEvery = 30 * time.Second
+
+	// DefaultLinkMapTimeout is fifteen times the 1 s the script took to
+	// say every link of a 14-prim object after it was dropped.
+	DefaultLinkMapTimeout = 15 * time.Second
 )
 
 // SetOptions replaces the session's Options.  A call already waiting
@@ -115,8 +125,8 @@ func (w *Session) Options() Options {
 }
 
 // moveWait, permissionsWait, deleteWait, moneyWait, regionInfoWait,
-// parcelInfoWait, objectWait, takeOffWait, hudChangeWait and
-// namesAskedAgainEvery are the
+// parcelInfoWait, objectWait, takeOffWait, hudChangeWait,
+// namesAskedAgainEvery and linkMapWait are the
 // bounds in force.
 func (w *Session) moveWait() time.Duration {
 	return orDefault(w.Options().MoveTimeout, DefaultMoveTimeout)
@@ -156,6 +166,10 @@ func (w *Session) hudChangeWait() time.Duration {
 
 func (w *Session) namesAskedAgainEvery() time.Duration {
 	return orDefault(w.Options().NamesAskedAgainEvery, DefaultNamesAskedAgainEvery)
+}
+
+func (w *Session) linkMapWait() time.Duration {
+	return orDefault(w.Options().LinkMapTimeout, DefaultLinkMapTimeout)
 }
 
 func orDefault(d, def time.Duration) time.Duration {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -900,9 +901,33 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 
 			RenderMaterials: renderMaterialsPB(o.RenderMaterials),
 			GltfOverrides:   gltfPB(o.GLTF),
+
+			LinkConfirmed:   o.LinkConfirmed != nil,
+			LinkConfirmedAt: confirmedAt(o.LinkConfirmed),
+			LinkCorrected:   o.LinkConfirmed != nil && o.LinkConfirmed.Corrected,
+			LinkMoved:       confirmedMoved(o.LinkConfirmed),
 		})
 	}
 	return out, nil
+}
+
+// confirmedAt and confirmedMoved are what a confirmed set says on the wire.
+func confirmedAt(c *agent.LinkConfirmation) int64 {
+	if c == nil {
+		return 0
+	}
+	return c.At.UnixMilli()
+}
+
+func confirmedMoved(c *agent.LinkConfirmation) []uint32 {
+	if c == nil {
+		return nil
+	}
+	var out []uint32
+	for _, n := range c.Moved {
+		out = append(out, uint32(n))
+	}
+	return out
 }
 
 // descriptionsPB says how an object was described on the wire.
@@ -1182,6 +1207,39 @@ func (s *Server) Flush(ctx context.Context, req *pb.FlushRequest) (*pb.FlushResp
 		return nil, err
 	}
 	return &pb.FlushResponse{Forgotten: int32(h.Agent().Objects().Flush())}, nil
+}
+
+// ConfirmLinkOrder applies the order a script in an object numbered its
+// prims in to the object store: the keys, root first.
+// Why: doc/objects.md#confirmed-by-the-objects-own-script
+func (s *Server) ConfirmLinkOrder(ctx context.Context, req *pb.ConfirmLinkOrderRequest) (*pb.ConfirmLinkOrderResponse, error) {
+	h, err := s.lookup(req.Agent)
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]msg.UUID, len(req.Keys))
+	for i, k := range req.Keys {
+		if keys[i], err = msg.ParseUUID(k); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "key %d: %v", i+1, err)
+		}
+	}
+	if len(keys) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "no keys: the root is the first")
+	}
+	c, err := h.Agent().Objects().ConfirmOrder(keys[0], keys)
+	switch {
+	case errors.Is(err, agent.ErrSetDiffers):
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, agent.ErrNoSuchObject):
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	case err != nil:
+		return nil, err
+	}
+	out := &pb.ConfirmLinkOrderResponse{At: c.At.UnixMilli(), Corrected: c.Corrected}
+	for _, n := range c.Moved {
+		out.Moved = append(out.Moved, uint32(n))
+	}
+	return out, nil
 }
 
 func (s *Server) Cap(ctx context.Context, req *pb.CapRequest) (*pb.CapResponse, error) {

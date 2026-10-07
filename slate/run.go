@@ -152,6 +152,9 @@ type runCfg struct {
 	wear  time.Duration // Session.Wear, 40 s
 	draw  io.Reader     // the nonce and channels; nil is crypto/rand
 	ops   gridOps       // the grid operations of the bring-up; nil is the session
+
+	linkMap     time.Duration // a link map: the properties, then the script's lines; zero is sl's, 15 s
+	linkConfirm time.Duration // the store seeing every prim a script numbered, 10 s
 }
 
 func defaultCfg() runCfg {
@@ -243,6 +246,10 @@ type runner struct {
 
 	ops gridOps   // what the bring-up and cleanup ask of the grid
 	pr  *probeRun // the bridge and probes; nil when the file has none
+
+	linkUse  map[string]bool   // the names a step addresses with link N (linkorder.go)
+	linkDone map[msg.UUID]bool // the roots whose link order was taken, or said not to be
+	linkSaid map[string]bool   // the bindings said to have the store's reading
 }
 
 // lookup finds a name: bound with as in this test, else a header.
@@ -389,6 +396,7 @@ func (r *runner) setupSteps() []setupStep {
 		{"groups", r.setupGroups},
 		{"linksets", r.setupLinksets},
 		{"probe", r.setupProbe},
+		{"link order", r.setupLinkOrder},
 		{"click", r.setupClick},
 		{"animations", r.setupAnimations},
 		{"sounds", r.setupSounds},

@@ -98,6 +98,10 @@ func (s *stepRun) wearStimulus(w *Wear) (*stimulus, error) {
 			if err := s.t.watch.poll(ctx, true); err != nil {
 				return "", err
 			}
+			// A link N in a later step reads the store's order: nothing
+			// is dropped into a rezzed or worn object, and the
+			// transcript says so once.
+			s.r.noteStoreOrder(b)
 			return fmt.Sprintf("wore %q on %s as %s", it.Name, sl.AttachPointName(a.Point), name), nil
 		},
 	}, nil
