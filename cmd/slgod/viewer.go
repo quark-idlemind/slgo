@@ -252,8 +252,18 @@ func simRepeat(profile string, v *viewerHost, census *viewer.Census, trace *view
 // seed capability in the login response are both built from the
 // address bound here.
 func (vh *viewerHost) serve(addr, certFile, keyFile string) (func(), error) {
-	logf := vh.logf
+	ln, tlsCfg, err := bindViewer(addr, certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+	return vh.serveOn(ln, tlsCfg), nil
+}
 
+// bindViewer loads the certificate and takes the address, and does
+// nothing else.  It is split from serving because the address is taken
+// before any avatar is logged in -- see instance.go -- and served once
+// there is something to hand over.
+func bindViewer(addr, certFile, keyFile string) (net.Listener, *tls.Config, error) {
 	// Loaded before the listener is bound, so that an unreadable or
 	// mismatched pair is a startup error naming the file rather than a
 	// line in the log a minute later, when the viewer cannot connect
@@ -261,7 +271,7 @@ func (vh *viewerHost) serve(addr, certFile, keyFile string) (func(), error) {
 	// the serving goroutine, which is too late to return.
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, fmt.Errorf("viewer login: certificate: %w", err)
+		return nil, nil, fmt.Errorf("viewer login: certificate: %w", err)
 	}
 	tlsCfg := &tls.Config{
 		Certificates: []tls.Certificate{cert},
@@ -270,8 +280,16 @@ func (vh *viewerHost) serve(addr, certFile, keyFile string) (func(), error) {
 
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
-		return nil, fmt.Errorf("viewer login: %w", err)
+		return nil, nil, fmt.Errorf("viewer login: %w", err)
 	}
+	return ln, tlsCfg, nil
+}
+
+// serveOn serves viewer logins on a listener bindViewer took, and
+// returns a function that stops it.
+func (vh *viewerHost) serveOn(ln net.Listener, tlsCfg *tls.Config) func() {
+	logf := vh.logf
+
 	mux := http.NewServeMux()
 	mux.Handle("/", viewer.LoginHandler(vh.find, logf))
 	mux.HandleFunc("/cap/", vh.serveCap)
@@ -293,7 +311,7 @@ func (vh *viewerHost) serve(addr, certFile, keyFile string) (func(), error) {
 		defer cancel()
 		_ = hs.Shutdown(shutdown)
 		vh.closeAll()
-	}, nil
+	}
 }
 
 // Limits on the viewer endpoint's connections.

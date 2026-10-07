@@ -87,11 +87,11 @@
         </details>
 
         <details class="fault" id="f-port-busy" data-tags="slgod">
-          <summary><span class="sym">slgod logs the avatars in, then stops with a <code>listen tcp :7807: bind: …</code> line</span><span class="where-tag">slgod</span></summary>
+          <summary><span class="sym">slgod stops at once with <code>cannot listen on :7807</code> or <code>another slgod … already holds</code></span><span class="where-tag">slgod</span></summary>
           <div class="fix">
             <h4>Why</h4>
-            <p>slgod binds its port only after every avatar has logged in. If something already holds the port, most often another slgod, the bind fails and slgod exits at once. The usual wording is <code>address already in use</code>, which comes from the operating system; the handbook has not captured that exact line. A port you are not allowed to use gives <code>listen tcp 127.0.0.1:1: bind: permission denied</code>.</p>
-            <p>Because slgod exits straight away, it does not log the avatars out. They stay in the world until the grid times them out. We have read this in the code but have not watched it happen.</p>
+            <p>slgod takes its port, and a lock on its config directory, before it logs any avatar in. If something already holds the port, most often another slgod, slgod exits at once with <code>cannot listen on :7807: …</code> and says that nobody has been logged in. The operating system's wording is usually <code>address already in use</code>; the handbook has not captured that exact line. A port you are not allowed to use gives <code>listen tcp 127.0.0.1:1: bind: permission denied</code>. If the lock is what is held, the line is <code>another slgod (pid N) already holds …/slgod.lock</code>.</p>
+            <p>Because nobody was logged in, the slgod that holds the port keeps its avatars. This is read from the code and checked by a test against a fake grid, not watched on the real one.</p>
             <h4>Fix</h4>
             <p>Find what holds the port. If it is another slgod, use that one. Do not start a second slgod for the same profiles (see <a href="#f-second-slgod">the entry below</a>).</p>
             <div class="os-pair">
@@ -255,7 +255,8 @@ Or pass -no-auth to serve loopback without it.</span></pre></div>
           <summary><span class="sym">A second slgod was started, and now neither holds the avatar</span><span class="where-tag">slgod</span></summary>
           <div class="fix">
             <h4>Why</h4>
-            <p>This is worked out from the code; nobody has watched it happen. An avatar can be in only one session on the grid. A second slgod for the same profiles logs the avatars in again, and the grid ends the first daemon's sessions. The first daemon treats being thrown off as deliberate and stays logged out. The second then fails to bind port 7807, because the first still holds it, and exits without logging out. Both have lost their avatars.</p>
+            <p>This is worked out from the code; nobody has watched it happen. An avatar can be in only one session on the grid. A second slgod for the same profiles logs the avatars in again, and the grid ends the first daemon's sessions. The first daemon treats being thrown off as deliberate and stays logged out.</p>
+            <p>A current slgod does not let that happen by starting a second copy on the same port or with the same config directory: it fails before logging anybody in (<a href="#f-port-busy">above</a>). What can still do it is a second slgod with a different <code>-config</code> directory and the same accounts, and a viewer logging in, which the lock cannot see. An slgod from before that change logged in first and failed to bind port 7807 afterwards, and exited without logging out: both had lost their avatars.</p>
             <h4>Fix</h4>
             <p>Stop the second one if it is still running. Then ask the first to bring the avatar back:</p>
             <div class="term" data-where="server"><pre><span class="p">$ </span>slsh -c agents

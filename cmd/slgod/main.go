@@ -20,7 +20,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -122,6 +121,39 @@ func main() {
 		}
 		log.Printf("config: %s", os.Getenv("SLGOD_CONFIG_DIR"))
 	}
+
+	// What only one instance can hold is taken now, before the secret
+	// is read or anything is made, and before any avatar is logged in:
+	// a login from anywhere else ends the session a running daemon
+	// holds, and it does not come back by itself.  A second slgod
+	// started by mistake has to fail here, having logged nobody in,
+	// and not after.  See instance.go.
+	if (*viewerCert == "") != (*viewerKey == "") {
+		log.Fatal("viewer: -viewer-cert and -viewer-key go together")
+	}
+	if *viewerCert != "" && *viewerAt == "" {
+		log.Fatal("viewer: -viewer-cert without -viewer, so there is nothing to serve over TLS")
+	}
+	cfgDir, err := machineConfigDir()
+	if err != nil {
+		log.Fatalf("cannot start: %v", err)
+	}
+	held, err := takeFirst(cfgDir, *listen, *viewerAt, func() (string, string, error) {
+		// Resolved here rather than when serving, because a
+		// certificate that has to be generated should be generated
+		// before the sessions are brought up: a daemon that logs
+		// three avatars in and then dies on an unwritable config
+		// directory has logged them in for nothing.
+		host, _, err := viewer.HostPort(*viewerAt)
+		if err != nil {
+			return "", "", err
+		}
+		return viewerCertFiles(*viewerCert, *viewerKey, host, log.Printf)
+	})
+	if err != nil {
+		log.Fatalf("cannot start: %v", err)
+	}
+	defer held.close()
 
 	// The secret is read before any avatar is logged in.  A daemon that
 	// logged its avatars in and only then found it could not start
@@ -238,25 +270,11 @@ func main() {
 	// relay has to be wired into a session as it logs in -- a session
 	// that came up without it could never pass anything to a viewer
 	// afterwards -- and that is long before there is an endpoint to
-	// serve.
+	// serve.  Its address and certificate are already in hand, taken
+	// before the first login; see takeFirst.
 	var viewers *viewerHost
-	if (*viewerCert == "") != (*viewerKey == "") {
-		log.Fatal("viewer: -viewer-cert and -viewer-key go together")
-	}
-	if *viewerCert != "" && *viewerAt == "" {
-		log.Fatal("viewer: -viewer-cert without -viewer, so there is nothing to serve over TLS")
-	}
-	// Resolved here rather than in serve, because a certificate that
-	// has to be generated should be generated before the sessions are
-	// brought up: a daemon that logs three avatars in and then dies on
-	// an unwritable config directory has logged them in for nothing.
-	var viewerCertFile, viewerKeyFile string
 	if *viewerAt != "" {
 		host, _, err := viewer.HostPort(*viewerAt)
-		if err != nil {
-			log.Fatalf("viewer: %v", err)
-		}
-		viewerCertFile, viewerKeyFile, err = viewerCertFiles(*viewerCert, *viewerKey, host, log.Printf)
 		if err != nil {
 			log.Fatalf("viewer: %v", err)
 		}
@@ -570,10 +588,7 @@ func main() {
 
 	// Now that the sessions are up there is something to hand over.
 	if viewers != nil {
-		stopViewers, err := viewers.serve(*viewerAt, viewerCertFile, viewerKeyFile)
-		if err != nil {
-			log.Fatalf("viewer: %v", err)
-		}
+		stopViewers := viewers.serveOn(held.viewer, held.viewerTLS)
 		defer stopViewers()
 		// After serve, because until it has bound the listener there
 		// is no address to tell anybody.  A server left without this
@@ -582,10 +597,7 @@ func main() {
 		srv.SetViewer(viewers)
 	}
 
-	ln, err := net.Listen("tcp", *listen)
-	if err != nil {
-		log.Fatal(err)
-	}
+	ln := held.listen
 	log.Printf("serving gRPC on %s for %s", ln.Addr(), strings.Join(srv.Names(), ", "))
 
 	go func() {
