@@ -302,6 +302,10 @@ func (c *checker) headers() error {
 		i := i
 		items = append(items, placed{c.s.Listens[i].Span.Start, func() error { return c.listenAt(i) }})
 	}
+	for i := range c.s.Elements {
+		i := i
+		items = append(items, placed{c.s.Elements[i].Span.Start, func() error { return c.elementsAt(i) }})
+	}
 	sort.SliceStable(items, func(i, j int) bool { return items[i].at < items[j].at })
 	for _, it := range items {
 		if err := it.run(); err != nil {
@@ -309,6 +313,17 @@ func (c *checker) headers() error {
 		}
 	}
 	return c.checkPermits()
+}
+
+// elementsAt checks an elements header: a path. The file is read at the
+// start of a run, not here.
+// Why: doc/slate-language.md#element-records
+func (c *checker) elementsAt(i int) error {
+	h := c.s.Elements[i]
+	if strings.TrimSpace(h.Path) == "" {
+		return c.err(h.PathSpan, "an elements path is empty")
+	}
+	return nil
 }
 
 func (c *checker) timeoutAt(i int) error {
@@ -837,6 +852,11 @@ func (c *checker) touch(t *Touch, same map[string]bool) error {
 	if t.Showing != nil {
 		return c.showing(t, same)
 	}
+	if t.Element != nil {
+		if err := c.element(t); err != nil {
+			return err
+		}
+	}
 	if t.Link != nil {
 		if err := c.linkRange(*t.Link); err != nil {
 			return err
@@ -858,6 +878,29 @@ func (c *checker) touch(t *Touch, same map[string]bool) error {
 	return nil
 }
 
+// element checks touch OBJ [link N] [face F] element "NAME": it finds its
+// own point, so no point and no button go with it, and an elements header
+// has to say where the records are.
+// Why: doc/slate-language.md#element-records
+func (c *checker) element(t *Touch) error {
+	e := t.Element
+	for _, o := range []struct {
+		set  bool
+		what string
+	}{{t.At != nil, "at"}, {t.Button != nil, "button"}, {t.Anywhere, "anywhere"}} {
+		if o.set {
+			return c.err(e.Span, "element cannot be combined with %s; it finds the point on the face itself", o.what)
+		}
+	}
+	if strings.TrimSpace(e.Name) == "" {
+		return c.err(e.Span, "an element name is empty")
+	}
+	if len(c.s.Elements) == 0 {
+		return c.err(e.Span, "element needs an elements header saying where the records are")
+	}
+	return nil
+}
+
 // showing checks touch OBJ showing: it searches the whole linkset for the
 // face, so it names no link, face or button of its own.
 // Why: doc/slate-language.md#stimuli
@@ -866,7 +909,7 @@ func (c *checker) showing(t *Touch, same map[string]bool) error {
 	for _, o := range []struct {
 		set  bool
 		what string
-	}{{t.Link != nil, "link"}, {t.Face != nil, "face"}, {t.Button != nil, "button"}, {t.Anywhere, "anywhere"}} {
+	}{{t.Link != nil, "link"}, {t.Face != nil, "face"}, {t.Button != nil, "button"}, {t.Anywhere, "anywhere"}, {t.Element != nil, "element"}} {
 		if o.set {
 			return c.err(sh.Span, "showing cannot be combined with %s; it finds the prim and the face itself", o.what)
 		}

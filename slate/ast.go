@@ -186,6 +186,7 @@ type Script struct {
 	Probes    []Probe
 	LinkMaps  []LinkMapHeader
 	Listens   []Listen
+	Elements  []ElementsHeader
 	Tests     []Test
 	Befores   []Block // Check allows at most one
 	Afters    []Block // Check allows at most one
@@ -505,8 +506,25 @@ type Touch struct {
 	At       *ST
 	Button   *Button
 	Showing  *Showing // touch OBJ showing ...; Check refuses it beside any other target
+	Element  *Element // touch OBJ [link N] [face F] element "NAME"; Check refuses it beside a point or a button
 	Guard    *Span    // if shown, after a button; Check allows it in before each and after each only
 	AsAvatar *Ident   // as NAME: a second avatar touches; nil is the tester
+}
+
+// Element is the refine element "NAME": touch the area a record names.
+// Why: doc/slate-language.md#element-records
+type Element struct {
+	Span Span
+	Name string
+}
+
+// ElementsHeader is one elements header: a record file, or a directory of
+// *.tsv record files, relative to the Slate file.
+// Why: doc/slate-language.md#element-records
+type ElementsHeader struct {
+	Span     Span
+	Path     string
+	PathSpan Span
 }
 
 // Showing is the refine "showing" uuidval ( "at" number number )?: touch

@@ -52,8 +52,8 @@
           </div></li>
           <li><div class="step-body">
             <h3>Keep the record in a plain file</h3>
-            <p>A plain file is one a designer can open, read and correct by hand, without a program of yours. If the colour map is exported wrongly, or a button moved by a pixel, the fix is a line of text. An invented example of the shape, one line for an element (texture id, element name, its corners in U and V, its text):</p>
-            <div class="file"><div class="name">test-textures.tsv · an example, not a format slgo reads</div><pre># texture id               element       u0    v0    u1    v1    text
+            <p>A plain file is one a designer can open, read and correct by hand, without a program of yours. If the colour map is exported wrongly, or a button moved by a pixel, the fix is a line of text. This is the record Slate reads. One line for an element area: the texture id, the element's name, its box as <code>u0 v0 u1 v1</code>, and optionally its text.</p>
+            <div class="file"><div class="name">test-textures.tsv · an invented example, in the format slgo reads</div><pre># texture id               element       u0    v0    u1    v1    text
 1b2b7e57-7e57-c0de-e90f-3d68ad60c7a8  open-button   0.10  0.62  0.45  0.78  Open
 1b2b7e57-7e57-c0de-e90f-3d68ad60c7a8  close-button  0.55  0.62  0.90  0.78  Close
 1b2b7e57-7e57-c0de-e90f-3d68ad60c7a8  status-strip  0.05  0.05  0.95  0.20</pre></div>
@@ -62,6 +62,16 @@
 ff0000      open-button
 00ff00      close-button
 0000ff      status-strip</pre></div>
+            <p>The rules, exactly as Slate reads them:</p>
+            <ul>
+              <li>A line has 6 or 7 fields, separated by any run of spaces or tabs: the texture id, the element name, <code>u0 v0 u1 v1</code>, and the text when there is one. A person's spaces and a tool's tabs read the same.</li>
+              <li><strong>U and V run from 0 to 1 across the whole texture, with the origin at the bottom left</strong>, the way a touch's texture coordinate (<code>llDetectedTouchUV</code>) does, so <code>v0</code> is the lower edge. <code>u0</code> is less than <code>u1</code> and <code>v0</code> is less than <code>v1</code>.</li>
+              <li>The name and the text are one field each. A field that holds a space, a double quote, a backslash or a <code>#</code> is written in double quotes, with <code>\"</code> and <code>\\</code> the only escapes inside: <code>"Left Arrow"</code>. Any other field is one word. The text is for people and tools; Slate does not use it.</li>
+              <li>A line whose first non-blank character is <code>#</code> is a comment; blank lines are ignored. The texture id may be in either case. One file may hold several textures.</li>
+              <li><strong>A name may repeat within a texture.</strong> A texture that carries several versions of one panel, an atlas, has an <code>ok-button</code> area in each version. The face shows a window onto one version, and Slate touches the area of that name that is inside the window.</li>
+              <li>An element's point is the centre of its box, which is inside every shape a template uses, so the record has no shape.</li>
+              <li>The record can be written by hand or by a tool. A line that cannot be read stops the run at setup and names the file and the line.</li>
+            </ul>
           </div></li>
         </ol>
       </section>
@@ -76,10 +86,10 @@ ff0000      open-button
             <tr><td>Finding a label or a figure in a picture</td><td class="what"><code>imgfind</code> finds a word, a pattern, a circle or ring, an arrow and its direction, and an outlined box, and gives each one's place and centre, which is where a click goes. Text is read with the <code>tesseract</code> program; a drawing or a box is read from the pixels and needs nothing installed. Every threshold was measured on one sample image, and the docs say the first thing to doubt on a picture unlike it is the thresholds (<a href="../doc/imgfind.md">doc/imgfind.md</a>). <code>slpic find IMAGE text TEXT</code> asks it from a shell.</td></tr>
             <tr><td>A button touch in Slate</td><td class="what">Uses the two above: the face's picture, then <code>imgfind</code>, then a click at the centre of the match (<a href="testing-recipes.html#buttons">Button text</a>).</td></tr>
             <tr><td>A lookup by texture id</td><td class="what"><code>touch OBJ showing UUID</code> finds the face that shows a texture. That is all: the id finds a face, not an element on it.</td></tr>
-            <tr><td><strong>An element-map lookup</strong></td><td class="what"><strong>Not provided yet.</strong> Slate has no word that takes an element's name, and slgo reads no record keyed by texture id and no colour-keyed map. A touch is <code>at S T</code> on a face, or a button found by reading its picture. An <code>image</code> match (a picture template) and a finder for tiles are in the runner's list of things proposed and not adopted (<a href="../doc/slate-runner.md">doc/slate-runner.md</a>, <em>Open questions</em>).</td></tr>
+            <tr><td><strong>An element-map lookup</strong></td><td class="what">Provided. An <code>elements "PATH"</code> header names a record in the format above, a file or a directory of <code>.tsv</code> files beside the Slate file, and <code>touch hud element "Open"</code> touches the area of that name on the face that shows a recorded texture (<a href="testing-recipes.html#element">Touch an element</a>). Slate maps the area's centre through the face's repeats, offset and rotation, so one name can have an area on each version of an atlas and the face picks one. It refuses a face whose repeat is larger than 1 in size (<code>2</code>, <code>-1.5</code>; <code>-1</code> and <code>-0.5</code> are accepted), a planar face and one with a running texture animation. It reads no colour-keyed map and makes no record; the record is yours, by hand or from a tool (<a href="../doc/slate-language.md">doc/slate-language.md</a>). An <code>image</code> match (a picture template) and a finder for tiles are in the runner's list of things proposed and not adopted (<a href="../doc/slate-runner.md">doc/slate-runner.md</a>, <em>Open questions</em>).</td></tr>
           </tbody>
         </table></div>
-        <p>So until slgo reads such a record, the record is yours to use by hand. Look an element up in it, work out where on the face it is with the face's repeats, offset and rotation, and write that as <code>touch hud face 0 at 0.3 0.7</code>; or use the record to choose the <code>text</code> a button search should look for. The record is still worth keeping: it is what a later slgo, or a test script of your own, would read.</p>
+        <p>So write the record, point the file at it with an <code>elements</code> header, and touch by name; the button search stays for a product whose labels are better read than listed. Both are in the same file, and the record is the more reliable of the two because nothing is read from a picture.</p>
         <p>Before you write a button test, <strong>try the finder on your own test texture</strong>. Write the face pictures out with <code>slpic faces</code>, run <code>slpic find</code> on one for a label, and see whether it finds exactly one. If it does not, the texture is the thing to change (step 1 above), and that is cheaper than a test that is flaky.</p>
       </section>
 

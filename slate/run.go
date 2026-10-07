@@ -238,6 +238,7 @@ type runner struct {
 	itemHdr map[string]*sl.Item // item headers, found at setup (wear.go)
 	cur     *testRun            // the test being run, for its as bindings
 	seconds []*second           // the second avatars, in the order the file declares them
+	elems   *elementMap         // the element records the file's headers name; nil when it has none (elements.go)
 
 	stopAnims func() // gives back the subscription to AvatarAnimation (animation.go)
 
@@ -391,6 +392,7 @@ type setupStep struct {
 // setupSteps is the setup, in order.
 func (r *runner) setupSteps() []setupStep {
 	return []setupStep{
+		{"elements", r.setupElements},
 		{"objects", r.setupObjects},
 		{"items", r.setupItems},
 		{"groups", r.setupGroups},

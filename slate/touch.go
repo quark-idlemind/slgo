@@ -37,6 +37,13 @@ func (s *stepRun) touchStimulus(t *Touch) (*stimulus, error) {
 	if err != nil {
 		return nil, err
 	}
+	if t.Element != nil {
+		st, err := s.elementStimulus(t, b)
+		if err != nil {
+			return nil, err
+		}
+		return withLink(st, resolve), nil
+	}
 	if t.Button != nil {
 		st, err := s.buttonStimulus(t, b)
 		if err != nil {

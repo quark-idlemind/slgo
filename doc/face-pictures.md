@@ -57,6 +57,8 @@ not say, with an error that wraps a sentinel and names the face:
 - `ErrNoTexture`: the face wears none, so there is no picture. A caller
   that wants every textured face skips this one.
 
+`Session.FaceRefusals` asks the same question of every face of an object at once, without fetching a texture, and gives each face's error or nil: it is how Slate's `touch ... element` finds the faces it must refuse ([Element records](slate-language.md#element-records)).
+
 A face with no texture is `ErrNoTexture` before it is asked whether it
 is planar or animated, since nothing is drawn on it either way. A face
 number the object does not have is an error of its own.

@@ -257,7 +257,7 @@ func (p *parser) header() error {
 
 func (p *parser) isHeader() bool {
 	switch p.tok.text {
-	case "timeout", "allow", "object", "avatar", "item", "probe", "linkmap", "listen":
+	case "timeout", "allow", "object", "avatar", "item", "probe", "linkmap", "listen", "elements":
 		return p.tok.kind == kWord
 	default:
 		return false
@@ -284,6 +284,8 @@ func (p *parser) headers() error {
 			err = p.linkMap()
 		case "listen":
 			err = p.listen()
+		case "elements":
+			err = p.elements()
 		}
 		if err != nil {
 			return err
@@ -460,6 +462,36 @@ func (p *parser) linkMap() error {
 		Span: cover(start, p.prev.span),
 		Name: name,
 	})
+	return nil
+}
+
+// elements reads elements "PATH".
+func (p *parser) elements() error {
+	start := p.tok.span
+	if err := p.want("elements"); err != nil {
+		return err
+	}
+	path, sp, err := p.str()
+	if err != nil {
+		return err
+	}
+	p.script.Elements = append(p.script.Elements, ElementsHeader{
+		Span: cover(start, p.prev.span), Path: path, PathSpan: sp,
+	})
+	return nil
+}
+
+// element reads element "NAME", after the word.
+func (p *parser) element(t *Touch) error {
+	start := p.tok.span
+	if err := p.want("element"); err != nil {
+		return err
+	}
+	name, _, err := p.str()
+	if err != nil {
+		return err
+	}
+	t.Element = &Element{Span: cover(start, p.prev.span), Name: name}
 	return nil
 }
 
@@ -648,12 +680,18 @@ func (p *parser) touch() (*Touch, error) {
 		if err := p.refine(t); err != nil {
 			return nil, err
 		}
-	case p.kw("face"), p.kw("button"), p.kw("showing"):
+	case p.kw("face"), p.kw("button"), p.kw("showing"), p.kw("element"):
 		if err := p.refine(t); err != nil {
 			return nil, err
 		}
 	default:
-		return nil, p.unexpected("expected anywhere, link, face, button, or showing")
+		return nil, p.unexpected("expected anywhere, link, face, button, element, or showing")
+	}
+	if p.kw("element") && t.Element == nil {
+		// After a link or a face; Check names a clash with a point or a button.
+		if err := p.element(t); err != nil {
+			return nil, err
+		}
 	}
 	if t.Showing != nil || p.kw("showing") {
 		// showing stands alone; a face, link or button beside it parses so
@@ -744,6 +782,8 @@ func (p *parser) refine(t *Touch) error {
 		return p.faceAt(t)
 	case p.kw("showing"):
 		return p.showing(t)
+	case p.kw("element"):
+		return p.element(t)
 	case p.kw("button"):
 		b, err := p.button()
 		if err != nil {

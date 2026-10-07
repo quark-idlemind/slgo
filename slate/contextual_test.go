@@ -72,7 +72,7 @@ func TestAwkwardPositionsForWords(t *testing.T) {
 		mustCheck(t, src)
 	}
 	// A word that has a meaning in a grammar position still has it there.
-	parseErr(t, "slate 1\nobject a is \"A\"\ntouch a\n", "expected anywhere, link, face, button, or showing")
+	parseErr(t, "slate 1\nobject a is \"A\"\ntouch a\n", "expected anywhere, link, face, button, element, or showing")
 	parseErr(t, "slate 1\nobject a is \"A\"\ntouch\n", "expected a name")
 	parseErr(t, "slate 1\nobject is \"A\"\ntouch a anywhere\n", "expected is")
 }
