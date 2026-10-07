@@ -226,6 +226,10 @@ type Seen struct {
 	// Why: doc/objects.md#link-numbers
 	LinkKnown bool
 
+	// LinkNote is why it is not, when the store can say: see
+	// agent.Object.LinkNote.
+	LinkNote string
+
 	// Text is the floating text above the object.
 	Text string
 
@@ -247,8 +251,36 @@ func (s *Seen) Faces(count int) ([]Face, error) {
 // IsAvatar reports whether this is an avatar rather than a prim.
 func (s *Seen) IsAvatar() bool { return s.PCode == pcodeAvatar }
 
-// IsRoot reports whether this is not linked under anything.
-func (s *Seen) IsRoot() bool { return s.Parent == 0 }
+// IsRootIn reports whether this is the root of its own linkset, given the
+// objects the region holds (all): it has no parent, or its parent is an
+// avatar, which is what a worn object's root has.  The avatar is not a
+// prim of the set.  Use this, and not Parent == 0, for "is this the
+// object a person names, or a part of one"; Parent == 0 alone means
+// "stands in the region", which a worn root does not.
+// Why: doc/objects.md#worn-linksets
+func (s *Seen) IsRootIn(all []*Seen) bool {
+	return s.Parent == 0 || wornUnder(all, s.Parent)
+}
+
+// Roots is those of found that are the root of their own linkset, worn
+// ones included: see IsRootIn.  It reads the region's objects once to
+// tell a worn root from a child.
+func (w *Session) Roots(ctx context.Context, found []*Seen) ([]*Seen, error) {
+	var out []*Seen
+	var all []*Seen
+	for _, s := range found {
+		if s.Parent != 0 && all == nil {
+			var err error
+			if all, err = w.b.Objects(ctx, "", ""); err != nil {
+				return nil, err
+			}
+		}
+		if s.IsRootIn(all) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
 
 const (
 	pcodePrim   = 9
@@ -359,11 +391,11 @@ func (w *Session) Linkset(ctx context.Context, root *Object) ([]*Seen, error) {
 	}
 	// A worn object's root has the avatar for its parent, and is the
 	// root of its own linkset all the same.
-	if top.Parent != 0 && !wornUnder(all, top.Parent) {
+	if !top.IsRootIn(all) {
 		return nil, fmt.Errorf("sl: %s is linked under local id %d, not the root of a linkset", root.ID, top.Parent)
 	}
 	// Whether the order is known is the state of the root's own set,
-	// which each child carries; a worn root's own flag is the avatar's.
+	// which each child carries and a root carries for itself, worn or not.
 	out := []*Seen{top}
 	for _, s := range all {
 		if s.Parent == top.Local && s.PCode != pcodeAvatar {
@@ -375,7 +407,7 @@ func (w *Session) Linkset(ctx context.Context, root *Object) ([]*Seen, error) {
 			}
 		}
 	}
-	if top.Parent == 0 && len(out) == 1 && !top.LinkKnown {
+	if len(out) == 1 && !top.LinkKnown {
 		return nil, fmt.Errorf("%s: %w", root.ID, ErrLinkOrderUnknown)
 	}
 	sort.Slice(out[1:], func(i, j int) bool { return out[1+i].LinkNumber < out[1+j].LinkNumber })

@@ -18,6 +18,7 @@ func wornHUD(t *testing.T, f *fakeBackend) *Seen {
 	box.Object = Object{ID: thePrim, Local: 77}
 	box.PCode = pcodePrim
 	box.Parent = 10
+	box.LinkKnown = true // a lone worn prim: nothing to put in order
 	f.mu.Lock()
 	f.objects = []*Seen{
 		{Object: Object{ID: theOther, Local: 10}, PCode: pcodeAvatar},

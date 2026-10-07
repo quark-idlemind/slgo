@@ -304,12 +304,12 @@ func TestTakingTheHelpFlagOutLeavesTheOthersAlone(t *testing.T) {
 		name string
 		want string
 	}{
-		{"pwd", "pwd"},                                   // help alone
-		{"waiting", "waiting [-a]"},                      // help in a cluster
-		{"login", "login [-f] NAME"},                     // help in a cluster, with parameters
-		{"place", "place [--at X,Y,Z] PATH|UUID"},        // help alone beside a long option
-		{"watch", "watch [-t D] [NAME...]"},              // help alone beside a short one with a value
-		{"objects", "objects [-c] [--owner WHO] [TEXT]"}, // both at once
+		{"pwd", "pwd"},                                           // help alone
+		{"waiting", "waiting [-a]"},                              // help in a cluster
+		{"login", "login [-f] NAME"},                             // help in a cluster, with parameters
+		{"place", "place [--at X,Y,Z] PATH|UUID"},                // help alone beside a long option
+		{"watch", "watch [-t D] [NAME...]"},                      // help alone beside a short one with a value
+		{"objects", "objects [-c] [--how] [--owner WHO] [TEXT]"}, // several at once
 	} {
 		if got := commands[c.name].usage(c.name); got != c.want {
 			t.Errorf("%s: usage is %q, want %q", c.name, got, c.want)

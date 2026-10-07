@@ -138,7 +138,7 @@ func (f *fakeGrid) withPane() {
 	}
 	f.objects = append(f.objects, &sl.Seen{
 		Object: sl.Object{ID: idPane, Local: 301, Name: "Example Panel"}, Owner: testMe, PCode: 9,
-		Parent: 1, AttachPoint: sl.HUDCenter2, Shape: shape,
+		Parent: 1, AttachPoint: sl.HUDCenter2, Shape: shape, LinkKnown: true,
 		Position: msg.Vector3{X: -0.5}, Scale: msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5},
 	})
 }

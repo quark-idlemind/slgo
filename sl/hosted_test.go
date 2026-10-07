@@ -23,6 +23,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -686,6 +687,50 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 	d.fail = errors.New("no such agent")
 	if _, err := h.Objects(context.Background(), "", ""); err == nil {
 		t.Error("Objects answered from a daemon that refused")
+	}
+}
+
+// TestHowObjectsWereDescribedCrossesTheWire: a client that asks gets each
+// object's descriptions by id, and a daemon older than the record, which
+// sends none, gives an empty list for each object, not an error.
+// Why: doc/objects.md#how-an-object-was-described
+func TestHowObjectsWereDescribedCrossesTheWire(t *testing.T) {
+	t.Parallel()
+	h, d := newFakeDaemon(t)
+	at := time.Unix(1_700_000_000, 123_000_000)
+	d.objects = []*pb.ObjectInfo{
+		{Id: thePrim.String(), Local: 77, How: []*pb.ObjectDescription{
+			{Kind: 1, Parent: 3, Seq: 12, Message: 5, Block: 1, Blocks: 4, Refill: true, Listed: true, AtUnixNano: at.UnixNano()},
+			{Kind: 3, Seq: 20, Count: 9, AtUnixNano: at.UnixNano()},
+		}},
+		{Id: theChild.String(), Local: 78},
+	}
+	got, err := h.Descriptions(context.Background())
+	if err != nil {
+		t.Fatalf("Descriptions: %v", err)
+	}
+	want := []Description{
+		{Kind: DescFull, Parent: 3, Seq: 12, Message: 5, Block: 1, Blocks: 4, Refill: true, Listed: true, At: at},
+		{Kind: DescTerse, Seq: 20, Count: 9, At: at},
+	}
+	if !reflect.DeepEqual(got[thePrim], want) {
+		t.Errorf("descriptions %+v, want %+v", got[thePrim], want)
+	}
+	if ds, ok := got[theChild]; !ok || len(ds) != 0 {
+		t.Errorf("an object with none: %v, %v", ds, ok)
+	}
+	d.fail = errors.New("no such agent")
+	if _, err := h.Descriptions(context.Background()); err == nil {
+		t.Error("Descriptions answered from a daemon that refused")
+	}
+}
+
+// A backend that does not keep the record says so.
+func TestABackendWithoutTheRecordSaysSo(t *testing.T) {
+	t.Parallel()
+	w, _ := newFakeSession(t)
+	if _, err := w.Descriptions(context.Background()); !errors.Is(err, ErrNoDescriptions) {
+		t.Errorf("err = %v, want ErrNoDescriptions", err)
 	}
 }
 

@@ -867,7 +867,12 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 		if req.Id != "" && o.ID.String() != req.Id {
 			continue
 		}
+		var how []*pb.ObjectDescription
+		if req.How {
+			how = descriptionsPB(o.Descriptions())
+		}
 		out.Objects = append(out.Objects, &pb.ObjectInfo{
+			How:          how,
 			Id:           o.ID.String(),
 			Local:        o.Local,
 			Parent:       o.Parent,
@@ -889,6 +894,7 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 			SculptId:     uuidOrEmpty(o.Sculpt.ID),
 			LinkNumber:   uint32(o.LinkNumber),
 			LinkKnown:    o.LinkKnown,
+			LinkNote:     o.LinkNote,
 			Light:        lightPB(o.Light),
 			Projector:    projectorPB(o.Projector),
 
@@ -897,6 +903,19 @@ func (s *Server) Objects(ctx context.Context, req *pb.ObjectsRequest) (*pb.Objec
 		})
 	}
 	return out, nil
+}
+
+// descriptionsPB says how an object was described on the wire.
+func descriptionsPB(ds []agent.Description) []*pb.ObjectDescription {
+	out := make([]*pb.ObjectDescription, 0, len(ds))
+	for _, d := range ds {
+		out = append(out, &pb.ObjectDescription{
+			Kind: uint32(d.Kind), Parent: d.Parent, Seq: d.Seq, Message: d.Message,
+			Block: uint32(d.Block), Blocks: uint32(d.Blocks), Count: uint32(d.Count),
+			Refill: d.Refill, Listed: d.Listed, AtUnixNano: d.At.UnixNano(), Circuit: d.Circuit,
+		})
+	}
+	return out
 }
 
 // lightPB and projectorPB say a prim's light and projector on the wire,

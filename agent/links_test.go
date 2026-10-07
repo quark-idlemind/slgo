@@ -182,16 +182,86 @@ func TestTwoAgentsInOneRegionDoNotReorderALinkset(t *testing.T) {
 	expectNumbers(t, shared, []int{1, 2, 3}, linkRoot, linkB, linkA)
 }
 
-func TestAWornLinksetIsNumberedUnderTheAvatar(t *testing.T) {
+// toldAvatar is a full update for a person: this id, local id and parent.
+func toldAvatar(o *Objects, id msg.UUID, local, parent uint32) {
+	o.update(&msg.ObjectUpdate_ObjectData{ID: local, ParentID: parent, FullID: id, PCode: pcodeAvatar},
+		msg.Vector3{}, 0)
+}
+
+func TestAWornRootIsLinkOneWhateverItsParentIs(t *testing.T) {
 	t.Parallel()
 
 	o := newObjects()
-	told(o, linkRoot, 1, 0) // the avatar
-	told(o, linkA, 2, 1)    // the attachment's root
+	toldAvatar(o, linkRoot, 1, 0)
+	told(o, linkA, 2, 1) // the attachment's root: its parent is the avatar
 	told(o, linkB, 3, 2)
 	told(o, linkC, 4, 2)
 
-	expectNumbers(t, o, []int{1, 2, 2, 3}, linkRoot, linkA, linkB, linkC)
+	// The avatar is not a prim of the set: the worn root is 1 and the
+	// children 2 and 3 under it, as a viewer reads Edit Linked.
+	expectNumbers(t, o, []int{0, 1, 2, 3}, linkRoot, linkA, linkB, linkC)
+	expectKnown(t, o, []bool{true, true, true, true}, linkRoot, linkA, linkB, linkC)
+	for _, v := range o.All() {
+		want := map[msg.UUID]int{linkRoot: 0, linkA: 1, linkB: 2, linkC: 3}[v.ID]
+		if v.LinkNumber != want {
+			t.Errorf("All numbers %s %d, want %d", v.ID, v.LinkNumber, want)
+		}
+	}
+	set := o.Linkset(2)
+	if len(set) != 3 || set[0].ID != linkA || set[0].LinkNumber != 1 || set[1].LinkNumber != 2 || set[2].LinkNumber != 3 {
+		t.Errorf("Linkset of the worn root is %v", set)
+	}
+	if v, _ := o.byLocal(2); v.LinkNumber != 1 {
+		t.Errorf("by local id, the worn root is %d, want 1", v.LinkNumber)
+	}
+}
+
+func TestAWornRootWithNoChildrenIsLinkZero(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	toldAvatar(o, linkRoot, 1, 0)
+	told(o, linkA, 2, 1)
+	expectNumbers(t, o, []int{0, 0}, linkRoot, linkA)
+	expectKnown(t, o, []bool{true, true}, linkRoot, linkA)
+}
+
+func TestSeveralWornRootsEachNumberTheirOwnSet(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	toldAvatar(o, linkRoot, 1, 0)
+	told(o, linkA, 2, 1)
+	told(o, linkB, 3, 2)
+	told(o, linkRoot2, 4, 1)
+	told(o, linkC, 5, 4)
+	told(o, linkD, 6, 4)
+	expectNumbers(t, o, []int{1, 2, 1, 2, 3}, linkA, linkB, linkRoot2, linkC, linkD)
+}
+
+// An avatar sitting on a set is a child of it, and what it wears hangs
+// off the avatar: the worn root is not a sitter of the seat, and the
+// seat's own numbers do not change.
+func TestWhatASitterWearsDoesNotJoinTheSeat(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	told(o, linkRoot, 1, 0)        // the seat's root
+	told(o, linkB, 3, 1)           // its second prim
+	toldAvatar(o, linkRoot2, 2, 1) // the sitter
+	told(o, linkA, 4, 2)           // worn: the sitter is its parent
+	told(o, linkC, 5, 4)
+	told(o, linkD, 6, 4)
+
+	expectNumbers(t, o, []int{1, 2, 3, 1, 2, 3}, linkRoot, linkB, linkRoot2, linkA, linkC, linkD)
+	expectKnown(t, o, []bool{true, true, true, true, true, true}, linkRoot, linkB, linkRoot2, linkA, linkC, linkD)
+	var ids []msg.UUID
+	for _, v := range o.Linkset(1) {
+		ids = append(ids, v.ID)
+	}
+	if want := []msg.UUID{linkRoot, linkB, linkRoot2}; !reflect.DeepEqual(ids, want) {
+		t.Errorf("the seat's Linkset is %v, want %v", ids, want)
+	}
 }
 
 func TestFlushForgetsTheLinkOrder(t *testing.T) {
@@ -1073,6 +1143,8 @@ func TestAnAvatarDescribedAlreadySeatedGoesAfterThePrims(t *testing.T) {
 	told(o, linkRoot, 1, 0)
 	told(o, linkA, 2, 1)
 	expectNumbers(t, o, []int{1, 2, 3, 4}, linkRoot, linkB, linkA, sitterOne)
+	// The root came after a child; the set is known all the same, and
+	// the sitter's number needs only the count of the prims.
 	expectKnown(t, o, []bool{true, true, true, true}, linkRoot, linkB, linkA, sitterOne)
 
 	// Two described seated are numbered after the prims, but their order

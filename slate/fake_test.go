@@ -404,7 +404,14 @@ func (f *fakeGrid) numberLinks(all []*sl.Seen) {
 	byLocal := map[uint32]*sl.Seen{}
 	for _, o := range all {
 		byLocal[o.Local] = o
-		if o.Parent != 0 && o.PCode == pcodePrim {
+	}
+	// A worn root has an avatar for its parent and heads its own set.
+	worn := func(o *sl.Seen) bool {
+		par := byLocal[o.Parent]
+		return par != nil && par.PCode != pcodePrim
+	}
+	for _, o := range all {
+		if o.Parent != 0 && o.PCode == pcodePrim && !worn(o) {
 			kids[o.Parent] = append(kids[o.Parent], o)
 		}
 	}
@@ -430,7 +437,7 @@ func (f *fakeGrid) numberLinks(all []*sl.Seen) {
 		}
 		o.LinkKnown = !f.linkUnknown[set]
 		switch {
-		case o.Parent != 0:
+		case o.Parent != 0 && !worn(o):
 			for i, k := range kids[o.Parent] {
 				if k.ID == o.ID {
 					o.LinkNumber = i + 2

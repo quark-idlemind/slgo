@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	unknownOrder = `slate: step 1: the link order of "Example Tip Jar" is not known; a probe, or taking and rezzing it, gives it`
+	unknownOrder = `slate: step 1: the link order of "Example Tip Jar" is not known; bind the prim by its own name instead of link N, give the object a probe (the tester must own it), or take it and rez or wear it again`
 	noLink9      = `slate: step 1: "Example Tip Jar" has no link 9; it has 3 prims`
 )
 
@@ -125,7 +125,7 @@ func TestAWornLinksetWithNoProbeIsResolvedFromTheStore(t *testing.T) {
 	f.unknownLinks(f.objects[3], true)
 	res = play(t, f, hudHdr+"touch hud link 3\n")
 	wantExit(t, res, 1)
-	mustHave(t, res, `slate: step 1: the link order of "Example HUD" is not known; a probe, or taking and rezzing it, gives it`)
+	mustHave(t, res, `slate: step 1: the link order of "Example HUD" is not known; bind the prim by its own name instead of link N, give the object a probe (the tester must own it), or take it and rez or wear it again`)
 }
 
 func TestASetWhoseOrderIsUnknownFailsEachLinkWithTheSentence(t *testing.T) {

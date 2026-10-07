@@ -1379,6 +1379,11 @@ message ObjectsRequest {
 
   // Id, if set, returns just that object.
   string id = 3;
+
+  // How asks for each object's descriptions (ObjectInfo.how), which
+  // are left out otherwise. An older daemon ignores it and says none.
+  // Why: doc/objects.md#how-an-object-was-described
+  bool how = 4;
 }
 
 message ObjectInfo {
@@ -1451,6 +1456,9 @@ message ObjectInfo {
   // while the daemon watched leaves unknown.
   // Why: doc/objects.md#link-numbers
   bool link_known = 21;
+  // Why the order is not known, when the circuits that described the
+  // set disagree or none described it whole.  Empty otherwise.
+  string link_note = 27;
 
   // The point light and the projector of the prim, each present only
   // while the prim has the block: a light switched off has none.
@@ -1467,6 +1475,36 @@ message ObjectInfo {
   // Why: doc/gltf.md
   repeated PrimFaceMaterial render_materials = 24;
   repeated PrimGLTFOverride gltf_overrides = 25;
+
+  // The last few ways the region, or this session, described the object,
+  // oldest first, and the one that listed it under its parent when that
+  // is older than the rest. Only when ObjectsRequest.how is set.
+  // Why: doc/objects.md#how-an-object-was-described
+  repeated ObjectDescription how = 26;
+}
+
+// ObjectDescription is one way an object was described.
+message ObjectDescription {
+  // 1 full, 2 compressed, 3 terse, 4 cached, 5 requested, 6 killed.
+  uint32 kind = 1;
+  // The parent the update carried, zero for none.
+  uint32 parent = 2;
+  // The packet's sequence number, which message the store heard it in,
+  // and the block's place in it and how many blocks the message held.
+  uint32 seq = 3;
+  uint32 message = 4;
+  uint32 block = 5;
+  uint32 blocks = 6;
+  // How many terse updates the entry stands for.
+  uint32 count = 7;
+  // A full or compressed update that followed a cached or requested
+  // notice; and the description that put the object in its parent's list.
+  bool refill = 8;
+  bool listed = 9;
+  int64 at_unix_nano = 10;
+  // The circuit the update came on, a number the store gives each
+  // agent's circuit: sequence numbers compare only within one.
+  uint32 circuit = 11;
 }
 
 // PrimFaceMaterial is the GLTF material id of one face, from the render

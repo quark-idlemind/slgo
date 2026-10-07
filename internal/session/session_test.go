@@ -60,6 +60,8 @@ var (
 	testTrash     = msg.MustParseUUID("aa8f7e57-7e57-c0de-e8da-278417da2fea")
 	testOutfit    = msg.MustParseUUID("01157e57-7e57-c0de-6b79-30555437b9f2")
 	thePrim       = msg.MustParseUUID("89ad7e57-7e57-c0de-08a1-04b25f97cc85")
+	theWearer     = msg.MustParseUUID("024b7e57-7e57-c0de-2d53-376c313eaf3c")
+	theWornChild  = msg.MustParseUUID("67277e57-7e57-c0de-f12f-a1c86757e84e")
 
 	// testRegion names the region the fake is in.  sl sends a local id
 	// found by looking an object up only while the region it was found
@@ -1808,6 +1810,36 @@ func TestRunInAChildPrimIsRefusedRatherThanRedirected(t *testing.T) {
 	_, _, err := RunIn(context.Background(), s, "workbench", false)
 	if err == nil || !strings.Contains(err.Error(), "child prim") {
 		t.Errorf("RunIn = %v, want it to say what was named", err)
+	}
+}
+
+// TestRunInAWornRootIsTheObjectNamedNotAChild: the root of a worn object
+// has the avatar for its parent, and a root is one whose parent is
+// nothing or an avatar.  slrun --object "<a worn object>" was refused as
+// a child prim.
+// Why: doc/objects.md#worn-linksets
+func TestRunInAWornRootIsTheObjectNamedNotAChild(t *testing.T) {
+	t.Parallel()
+	s, f := newFakeSession(t)
+	f.mu.Lock()
+	f.objects = []*sl.Seen{
+		{Object: sl.Object{ID: theWearer, Local: 77}, PCode: 47},
+		{Object: sl.Object{ID: thePrim, Local: 78, Name: "workbench"}, PCode: 9, Parent: 77},
+		{Object: sl.Object{ID: theWornChild, Local: 79, Name: "workbench lid"}, PCode: 9, Parent: 78},
+	}
+	f.mu.Unlock()
+
+	obj, undo, err := RunIn(context.Background(), s, "workbench", false)
+	if err != nil {
+		t.Fatalf("RunIn a worn root: %v", err)
+	}
+	if obj.ID != thePrim || undo != nil {
+		t.Errorf("RunIn = %+v, undo %v, want the worn root and nothing to undo", obj, undo != nil)
+	}
+
+	// A worn object's own child is still a child.
+	if _, _, err = RunIn(context.Background(), s, "workbench lid", false); err == nil || !strings.Contains(err.Error(), "child prim") {
+		t.Errorf("RunIn a child of a worn object = %v, want a child prim", err)
 	}
 }
 

@@ -177,6 +177,28 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 			t.Errorf("link number of local %d is not known", o.GetLocal())
 		}
 	}
+	// How each was described is left out unless asked for, and then is
+	// the kind, the parent and the packet, with the one that listed the
+	// child marked.
+	for _, o := range linked.GetObjects() {
+		if len(o.GetHow()) != 0 {
+			t.Errorf("local %d carries descriptions nobody asked for", o.GetLocal())
+		}
+	}
+	how, err := r.srv.Objects(ctx, &pb.ObjectsRequest{How: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, o := range how.GetObjects() {
+		ds := o.GetHow()
+		if len(ds) != 1 || ds[0].GetKind() != 1 || ds[0].GetSeq() == 0 || ds[0].GetAtUnixNano() == 0 {
+			t.Errorf("local %d described as %v, want one full update", o.GetLocal(), ds)
+			continue
+		}
+		if o.GetLocal() == 4243 && (!ds[0].GetListed() || ds[0].GetParent() != 4242) {
+			t.Errorf("the child's description is %v, want listed under 4242", ds[0])
+		}
+	}
 	// And emptying it, which is the client saying "I have moved, forget
 	// what you were told".
 	flushed, err := r.srv.Flush(ctx, &pb.FlushRequest{})

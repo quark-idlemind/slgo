@@ -400,14 +400,16 @@ the store already held that is linked while it watches goes to the
 front.
 
 - a prim described with a parent it is new to the store under, as when
-  a set is rezzed or first comes into view, is appended: a set
-  described afresh arrives in link order;
+  a set is rezzed or first comes into view, is placed by the packet that
+  listed it (after the children of earlier packets, by sequence number
+  and block): a set described afresh is sent in link order, and not
+  always received in it ([Ordering by the packet](#ordering-by-the-packet));
 - a prim the store already held that an update links to a parent goes
   to the front, as link 2;
 - it is removed when its parent changes or it is killed, and the later
   numbers close up;
 - children of a parent not in the store wait in the same list, in the
-  order they arrived, and are numbered once the parent is here (an
+  order of their packets, and are numbered once the parent is here (an
   orphan has no number, as in the viewer);
 - an update that repeats the parent a prim is already listed under
   changes nothing. The store is shared by every agent in a region, so
@@ -435,9 +437,12 @@ watched, and one store was traced packet by packet:
   two packets. Neither followed the order the `ObjectLink` named, which
   `llGetLinkNumber` in the prims did, every time: the children were
   numbered 2, 3, 4 and up in the order named.
-- A linkset first seen as a whole is numbered exactly. Sets taken into
+- A linkset first seen as a whole is numbered exactly, when its updates
+  are taken in the order the region sent them. Sets taken into
   inventory and rezzed again matched for all 7 prims in every rez, both
-  for a set linked all at once and for one grown one at a time.
+  for a set linked all at once and for one grown one at a time. Taken
+  in the order they arrived, a set was wrong once in a while: see
+  [Ordering by the packet](#ordering-by-the-packet).
 - Two avatars in one region shared one store, and moving a set while
   both watched did not reorder it.
 - Deleting a child prim deletes the whole linkset, so a kill in the
@@ -481,7 +486,9 @@ whichever description arrives first. A root with only sitters is link 1.
 `Session.Linkset` lists prims only, so its invariant holds with
 sitters present.
 
-**Known and unknown.** One update that links several prims the store
+**Known and unknown.** A set is known only when the store ordered it by
+the region's own sending ([When a set is known](#when-a-set-is-known)),
+and every other way a set came to be is unknown. Beside that, one update that links several prims the store
 already held to one parent leaves that set's order unknown
 (`Objects.joinedTogether`), since its blocks are not in link order,
 unless this session sent the link (below). So do the sets of a store
@@ -508,8 +515,11 @@ person links by hand. A program that links one prim at a time faster
 than that gets an unknown set, which is safe; one that wants the order
 should link them all in one `ObjectLink`, which it then knows.
 
-**Known again.** An unknown set becomes known again when every child in
-its list arrives fresh, as after a take and rez. Asking the region to
+**Known again.** An unknown set becomes known again when its root is
+killed and the set is described afresh, as after a take and rez, or a
+worn set taken off and put on again, however many packets it takes: it
+is ordered by them and is known unless a child came as an answer to a
+request (see below). Asking the region to
 describe a set again without taking it did not restore the link order,
 measured on a set linked several at once:
 
@@ -641,11 +651,251 @@ describes the set again, so a number read just after one, or for a
 linkset described partly while it was out of range and trimmed, can be
 wrong or 0 until the rest arrives.
 
-**Worn linksets.** An attachment's parent is the avatar, so the same
-rule numbers a worn linkset: the attachment's root is a child of the
-avatar, and its own children are numbered under it.
+**Worn linksets.** An attachment's parent is the avatar, so the store
+lists the attachment's root under the avatar and its own children under
+it. The avatar is not a prim of the worn set, so a worn root is link 1
+(0 when it has no children) whatever its parent is, and its children are
+2 and up in the order they were listed under it; `Session.Linkset` gives
+them the same way as for any other root. The store used to number the
+worn root as a child of the avatar, 2 plus its place among what the
+avatar wears, and the avatar itself 1 once it wore anything: a worn root
+read as 6 or 9, the number of attachments before it. An avatar is not the
+root of a linkset either, and is 0 unless it sits (then it is a sitter of
+what it sits on, numbered after the prims). A command that asks whether an object is a root or a part of one (`slrun
+--object`, `walk`, the listing of `look`) asks `Seen.IsRootIn` or
+`Session.Roots`, which count a prim under an avatar as a root; `Parent == 0`
+alone means the prim stands in the region, which a worn root does not.
+What an avatar sitting on a
+set wears is numbered the same way, as sets of their own, and does not
+take a place in the seat's numbers.
 
 **Measured.** None of local ids, the store's order or positions gives
 the numbers; they are the linking history, so the order has to be kept
 as updates arrive. The evidence is in
 [doc/slate-runner.md](slate-runner.md#twelfth-round-link-numbers).
+
+## When a set is known
+
+`LinkKnown` is true for a set when the store ordered its children by the
+region's own sending, as one circuit sent them. The rule, as built:
+
+1. **The root was described.** By any kind of update, and an update that
+   answers a request is fine for a root: the root says nothing of the
+   order. A child listed before its root is described waits (it has no
+   number while it is an orphan), and the set is known once the root
+   comes, in the packet of the children, before or after.
+2. **Every child was listed by the region's own sending.** By a full
+   (`ObjectUpdate`) or compressed (`ObjectUpdateCompressed`) update that
+   did not follow an `ObjectUpdateCached` notice for it, nor a
+   `RequestMultipleObjects` this session sent for it, within a minute (a
+   *refill*). A refill gives that circuit no key for the child, so that
+   circuit has not described the set completely, and a set whose every
+   circuit is short of a child that way is unknown. The region
+   answers a request in whatever order the viewer asked: Firestorm asks
+   for the cache misses in the order it found them
+   (`LLViewerRegion::addCacheMiss`, a list appended in turn;
+   `requestCacheMisses`, `llviewerregion.cpp:3033`, `3149`), which is the
+   order the cached notices came in or the cache's own, never the link
+   order, and the answer is taken in the order it arrives. The region's
+   side of that is not in Firestorm's source; what is measured is above
+   under *Known again*: a flush and a `RequestMultipleObjects` asked for
+   in a shuffled order gave the shuffled set back in a wrong order. A
+   store that has had more than 65536 such notices at once stops keeping
+   them and treats every update within a minute as a refill.
+3. **A circuit described it completely, and the circuits agree.** See
+   [Ordering by the packet](#ordering-by-the-packet): each circuit's
+   order is kept apart, and sequence numbers of different circuits are
+   never compared.
+4. **Not mixed with a link that came whole.** The set is known only if
+   nothing linked several prims to it in one update while the store
+   watched, which the region does not send in link order
+   ([Link numbers](#link-numbers)), and it did not come from another
+   agent's store.
+
+There is no condition on how many messages the set came in, and none on
+the sequence numbers between the first child's packet and the last: a
+sequence number is the circuit's, shared by every message, so a gap
+between two of a set's packets is the other messages the region sent
+meanwhile, and is normal. A set that came over three or four packets,
+root first, children in link order across them, is the ordinary login of
+a worn linkset of a dozen prims or more (measured 2026-10-06: a worn HUD
+of that size in three or four consecutive packets, all full updates, root
+first, children in link order across them, at each plain login).
+
+A live link of one prim goes to the front, link 2, and is right whatever
+the set's history, so it leaves a known set known and an unknown set
+unknown; into a parent that is not here, or answered from a request, it
+is unknown. A live link has no key, so it keeps its place at the front,
+whichever circuit's order the rest follow. How it combines with the
+packets' order is under
+[Ordering by the packet](#ordering-by-the-packet). The linking session's
+own record of an `ObjectLink`, and the joining of one whole known set to
+another, are as before.
+
+### Ordering by the packet
+
+The region sends a set's children in link order, in packets of rising
+sequence number, root first. The packets can arrive in another order:
+on 2026-10-06 a worn linkset was described in packet 126 (the root, then
+two children, blocks 2 to 4) and packet 127 (one child, block 1), sent in
+that order and arrived the other way round, 127 a millisecond ahead. The
+store, which listed the children as they arrived, numbered the later
+packet's child link 2 and the two earlier ones 3 and 4; the prims' own
+scripts, asked which link each was, said the earlier two were 2 and 3
+and the later one 4. Two of nine logins that day were reordered, and
+the rest were in order. That packet's root had been described as an
+answer to a request, which is what rule 1 allows.
+
+So the store places each child by the sequence number of the packet that
+listed it and then its block's place in the packet, not by arrival
+(`Objects.orderLocked`), after the children with a smaller one of the same circuit. The
+sequence number is the circuit's, 24 bits wide: the viewer takes a
+difference of more than half of `LL_MAX_OUT_PACKET_ID`, 0x01000000, as a
+wrap (`llcircuit.h:52`, `LLCircuitData::checkPacketInID`,
+`llcircuit.cpp:660`), and the store compares modulo that (`seqBefore`),
+so packet 0 follows packet 0xffffff.
+
+**One ordering per circuit.** The store is shared by every agent in a
+region, and each agent's circuit numbers its packets by itself, so a
+sequence number says something only against another from the same
+circuit, and on a daemon with several avatars in one region every object
+is described on several circuits. Each child keeps, for every circuit
+that described it afresh, that circuit's key (packet sequence, block);
+the keys of two circuits are never compared or merged. Each circuit
+therefore has an ordering of its own of the set's children, by its keys
+(`Objects.orderLocked`, `agent/order.go`).
+
+- The store numbers the set by the circuit that has described the most
+  of its children (the lowest circuit number on a tie). A child only
+  another circuit has described goes after the ones this one has.
+- A circuit has described the set *completely* when it has a key for
+  every child the store holds under the parent, not counting a live link
+  or a listing that came by no packet, which have no key and keep their
+  place. A refill gives no key. The root says nothing of how many
+  children it has, so complete means every child seen so far: a child the
+  region sent to no circuit leaves them all short alike.
+- The set is **known** when at least one circuit has described it
+  completely and every circuit that has agrees on the order; one
+  circuit that saw it in full is enough, and the circuits that saw part
+  of it are not consulted.
+- If two circuits have each described it completely and disagree, the
+  set is unknown, and `slsh objects --how` says which two ("circuits 1
+  and 2 each described every child and disagree on the order") and shows
+  each update's circuit. If no circuit has described all of it, it is
+  unknown too.
+- The keys are bounded. They live on the child and go with it, and a
+  circuit's keys are dropped from every child when its agent leaves the
+  region or logs out (`Objects.Leave`, with the agent's viewpoint): a set
+  that only that circuit described completely is then unknown until
+  another does. A circuit is one agent's handlers, so a reconnect is a
+  new circuit.
+- A set given an order outright (a link this session sent, a whole set
+  joined to another) is neither reordered nor judged by the keys.
+
+How it combines with a live link, which goes to the front without a
+packet key: only the children that have a key are reordered, among the
+places they hold, so a live link stays in front of the sequenced ones
+however late a packet of the original burst arrives, and a child listed
+with no packet (a store a test fills by hand, one taken from another
+agent) has none and keeps its place, which is the arrival order. A set the store marked unknown stays unknown whatever the packets
+say.
+
+**What is claimed of the last child.** The root does not say how many
+children it has, so the store cannot tell the last child from one yet to
+come. It claims this, and no more:
+
+- A child sent later is placed correctly by its sequence, whenever it
+  arrives, and the numbers of the children before it do not change.
+- A packet lost on the way is resent with its original sequence number
+  when it was sent reliably, so sequence order covers loss as well as
+  reordering. Measured 2026-10-06, in the packet trace of one login
+  (`slgod --trace`): every object message from the region came with the
+  reliable flag, 276 `ObjectUpdate` (256 of them also zerocoded), 431
+  `ObjectUpdateCompressed`, 23 `ObjectUpdateCached`, 406
+  `ImprovedTerseObjectUpdate` and 1 `KillObject`. One login is one
+  sample, and a region could choose otherwise for a packet, so this is
+  not a proof; and a retransmission arrives late, which is what the
+  ordering by sequence is for. A child the region sent is therefore not
+  lost for good while the circuit lives. What the root does not say is
+  whether a set is complete: a child the region never sent at all, or
+  sent on a circuit that went away, would leave the later numbers short.
+  Firestorm's handler reads no sequence number (`processObjectUpdate`),
+  and the circuit acknowledges what carries the flag (`message.cpp:598`);
+  the flag is the sender's choice per packet (`message.cpp:1221`).
+- So `LinkKnown` means: ordered by the region's sending, every child
+  seen so far from that sending. It does not say the set is complete.
+  Slate's `link N` says the same in its docs and in the sentence for
+  an unknown order: the number is the store's best reading of the
+  region's order, and only a probe is the script's own count.
+
+**Why this and not less.** The strict rule this replaced (known only
+when every child came in one message, with no gap in the sequence)
+called the ordinary login of a worn HUD unknown every time, which
+refused every link-numbered Slate step on it, and the arrival order it
+replaced was wrong when packets were reordered. The rule was measured for
+a set described to a session logging in with no cache (every prim exact,
+7 of 7, and sets taken and rezzed again) and for the caught login above;
+that a refill is in no useful order is read from the flush and request
+measurement and from how Firestorm asks.
+
+**What a program can do about an unknown set.** Name the prim, not its
+number (`touch` by name or id reaches the prim whatever its number is);
+give the object a probe in a Slate file (`probe NAME`), whose scripts
+report the link numbers the prims have, which is the truth the store
+only estimates; or have the set described again: take it and rez it, or
+take it off and wear it again.
+
+**What Firestorm does.** It numbers a child by its place in its parent's
+child list, appended in the order updates give it a parent
+(`LLViewerObject::addChild`, `llviewerobject.cpp:960`), that is by
+arrival, so it has the weakness above: a viewer that gets a set's packets
+in the wrong order numbers it wrongly. slgo departs from it on the
+measurement of 2026-10-06 (the caught case), and says so rather than
+copying the number. For objects the region says the viewer's cache holds
+(`ObjectUpdateCached`,
+`LLViewerObjectList::processCachedObjectUpdate`,
+`llviewerobjectlist.cpp:766`) it creates them from the cache by scene
+contribution, the larger on-screen area first, ties by pointer
+(`LLVOCacheEntry::CompareVOCacheEntry`, `llvocache.h:77`;
+`LLViewerRegion::createVisibleObjects`, `llviewerregion.cpp:1587`),
+which has nothing to do with link order; the ones it misses are asked
+for in one `RequestMultipleObjects` (`requestCacheMisses`,
+`llviewerregion.cpp:3149`) and arrive when the region sends them. A
+child that precedes its root waits and is attached when the root comes
+(`findOrphans`, `llviewerobjectlist.cpp:2425`), in the order it waited.
+That the viewer would be as wrong is read from the source, not measured.
+
+## How an object was described
+
+Each object keeps the last four ways it was described, dropped with the
+object, and the description that put it in its parent's list as well
+when that has gone out of the last four: at most five entries per
+object however long the session runs. An entry says:
+
+- the kind: `full` (an `ObjectUpdate` block), `compressed`, `terse` (an
+  `ImprovedTerseObjectUpdate` block, which only moves a prim; a run of
+  them is one entry with a count and the last time), `cached` (an
+  `ObjectUpdateCached` block, the region saying it believes the session
+  holds the object), `requested` (a `RequestMultipleObjects` block this
+  session sent), and `killed` (a `KillObject` for the local id before
+  the object that now has it was described; a kill ends the object it
+  names, so its own record goes with it);
+- the parent the update carried, the packet's sequence number and the
+  circuit it came on (a number the store gives each agent's circuit;
+  sequence numbers compare only within one), which
+  message the store heard it in and the block's place in it and how many
+  blocks the message held, and the time;
+- `refill`, for a full or compressed update that followed a cached or
+  requested notice, and `listed`, for the one that fixed the prim's
+  place in its parent's list.
+
+The notices about a local id with no object yet wait for the object, a
+minute at most and at most 65536 of them, and go on its ring when it is
+described. The store is the region's: a region change makes a new store
+and the entries are not carried over, so no region is recorded.
+
+`Seen.How` carries it to a client, filled only when asked (`slsh
+objects --how`), over `ObjectsRequest.how` and `ObjectInfo.how` (new
+fields; an older daemon says none and an older client does not ask).
+`slsh objects --how TEXT` prints, for each prim a search finds, its link
+number, whether it is known, its local id, its parent and its entries.

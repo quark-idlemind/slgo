@@ -165,6 +165,9 @@ type fakeGrid struct {
 
 	presenceErr, objectsErr, regionErr, friendsErr, sendErr, capErr error
 
+	// how is what Descriptions says of each object, by id.
+	how map[msg.UUID][]sl.Description
+
 	// presenceCalls counts how many times the avatar has been asked
 	// where it is, and presenceFailAt is the one to refuse.  A command
 	// that asks twice -- tp waits for the move and then reads the
@@ -1965,6 +1968,21 @@ func (f *fakeGrid) Objects(ctx context.Context, named, id string) ([]*sl.Seen, e
 			continue
 		}
 		out = append(out, o)
+	}
+	return out, nil
+}
+
+// Descriptions is how the fake grid says each object was described: what
+// a test put in how, and nothing for the rest.
+func (f *fakeGrid) Descriptions(ctx context.Context) (map[msg.UUID][]sl.Description, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.objectsErr != nil {
+		return nil, f.objectsErr
+	}
+	out := map[msg.UUID][]sl.Description{}
+	for id, ds := range f.how {
+		out[id] = ds
 	}
 	return out, nil
 }

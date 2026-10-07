@@ -408,6 +408,7 @@ func (h *Hosted) Objects(ctx context.Context, named, id string) ([]*Seen, error)
 			Sculpt:       msg.SculptMark{Kind: msg.SculptKind(o.SculptKind), ID: parseUUIDOrZero(o.SculptId)},
 			LinkNumber:   int(o.LinkNumber),
 			LinkKnown:    o.LinkKnown,
+			LinkNote:     o.LinkNote,
 			Text:         o.Text,
 			Light:        lightFromPB(o.Light),
 			Projector:    projectorFromPB(o.Projector),
