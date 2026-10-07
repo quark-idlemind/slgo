@@ -1502,6 +1502,15 @@ message ObjectInfo {
   // is older than the rest. Only when ObjectsRequest.how is set.
   // Why: doc/objects.md#how-an-object-was-described
   repeated ObjectDescription how = 26;
+
+  // The prim's physical material byte (LSL's PRIM_MATERIAL_*: 0 stone, 1
+  // metal, 2 glass, 3 wood, 4 flesh, 5 plastic, 6 rubber, 7 light), and
+  // whether an update said it: stone is zero, so material 0 with
+  // material_known false means none has.  A client older than the fields
+  // reads every object as not known.
+  // Why: doc/objects.md#the-physical-material
+  uint32 material = 32;
+  bool material_known = 33;
 }
 
 // ObjectDescription is one way an object was described.

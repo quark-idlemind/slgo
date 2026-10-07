@@ -99,8 +99,10 @@ type compressedObject struct {
 	texture  []byte
 	anim     []byte
 
-	// click is the ClickAction byte of the fixed header.
-	click uint8
+	// click is the ClickAction byte of the fixed header, and material
+	// its Material byte.
+	click    uint8
+	material uint8
 
 	// extra is the extra-parameter field as it is laid out, count and
 	// blocks; none writes the count of zero.
@@ -142,7 +144,7 @@ func (c compressedObject) bytes() []byte {
 	w.u8(c.pcode)
 	w.u8(c.state)
 	w.u32(0xdeadbeef) // CRC
-	w.u8(3)           // Material
+	w.u8(c.material)  // Material
 	w.u8(c.click)     // ClickAction
 	w.vec(c.scale)
 	w.vec(c.position)
@@ -748,6 +750,102 @@ func TestACompressedUpdateKeepsTheClickAction(t *testing.T) {
 	o.forgetAppearance(4)
 	if got, _ := o.Get(aPrim); got.Click != 3 || !got.ClickKnown {
 		t.Errorf("click %d known %v after the appearance was forgotten", got.Click, got.ClickKnown)
+	}
+}
+
+// TestAFullUpdateKeepsThePhysicalMaterial: the byte is stored with
+// MaterialKnown, each of LSL's eight, and a zero is stone, which is not
+// the same as a prim nothing has described.  A byte past the eight is
+// kept as it came.
+// Why: doc/objects.md#the-physical-material
+func TestAFullUpdateKeepsThePhysicalMaterial(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	a.SetLook(Look{Far: 128})
+	for b := uint8(0); b <= 9; b++ {
+		feed(t, a, arriving(t, msg.ObjectUpdate_ObjectData{
+			ID: 100, FullID: aPrim, PCode: 9, Material: b,
+			ObjectData: placement(msg.Vector3{}, msg.Quaternion{}),
+		}))
+		got, ok := a.Objects().Get(aPrim)
+		if !ok || got.Material != b || !got.MaterialKnown {
+			t.Errorf("material %d known %v after a full update carrying %d", got.Material, got.MaterialKnown, b)
+		}
+	}
+	if _, ok := a.Objects().Get(someone); ok {
+		t.Errorf("an object nothing described is in the store")
+	}
+}
+
+// TestACompressedUpdateKeepsThePhysicalMaterial: whole, or cut off after
+// its header, the byte in the header is what the object says, and an
+// appearance forgotten does not take it with it.
+// Why: doc/objects.md#the-physical-material
+func TestACompressedUpdateKeepsThePhysicalMaterial(t *testing.T) {
+	t.Parallel()
+
+	o := newObjects()
+	whole := compressedObject{id: aPrim, local: 4, pcode: 9, material: 6, text: someText}
+	o.compressed(decodeCompressed(t, whole), msg.Vector3{}, 0)
+	if got, _ := o.Get(aPrim); got.Material != 6 || !got.MaterialKnown {
+		t.Errorf("material %d known %v after a whole compressed update carrying 6", got.Material, got.MaterialKnown)
+	}
+
+	cut := compressedObject{id: aChild, local: 5, pcode: 9, material: 7, text: someText}.bytes()[:84+5]
+	c, err := msg.DecodeCompressed(cut)
+	if err == nil || c == nil {
+		t.Fatalf("DecodeCompressed of a cut blob = %v, %v, want the header and an error", c, err)
+	}
+	o.unsure(c, msg.Vector3{}, 0)
+	got, _ := o.Get(aChild)
+	if got.Material != 7 || !got.MaterialKnown {
+		t.Errorf("material %d known %v after a cut blob with header byte 7", got.Material, got.MaterialKnown)
+	}
+
+	// A zero is stone, known.
+	o.compressed(decodeCompressed(t, compressedObject{id: aPrim, local: 4, pcode: 9}), msg.Vector3{}, 0)
+	if got, _ := o.Get(aPrim); got.Material != 0 || !got.MaterialKnown {
+		t.Errorf("material %d known %v after a compressed update carrying 0, want stone, known", got.Material, got.MaterialKnown)
+	}
+
+	o.compressed(decodeCompressed(t, compressedObject{id: aPrim, local: 4, pcode: 9, material: 2}), msg.Vector3{}, 0)
+	o.forgetAppearance(4)
+	if got, _ := o.Get(aPrim); got.Material != 2 || !got.MaterialKnown {
+		t.Errorf("material %d known %v after the appearance was forgotten", got.Material, got.MaterialKnown)
+	}
+}
+
+// TestAnUpdateThatSaysNothingOfTheMaterialLeavesItAlone: a terse update
+// moves what is known and does not carry the byte, and one for an object
+// never described makes no entry, so no material is zeroed or invented.
+// Why: doc/objects.md#the-physical-material
+func TestAnUpdateThatSaysNothingOfTheMaterialLeavesItAlone(t *testing.T) {
+	t.Parallel()
+
+	a, _ := offlineSession(t)
+	a.SetLook(Look{Far: 128})
+	feed(t, a, arriving(t, msg.ObjectUpdate_ObjectData{
+		ID: 4242, FullID: aPrim, PCode: 9, Material: 5,
+		ObjectData: placement(msg.Vector3{X: 1}, msg.Quaternion{}),
+	}))
+
+	m := &msg.ImprovedTerseObjectUpdate{}
+	m.ObjectData = []msg.ImprovedTerseObjectUpdate_ObjectData{
+		{Data: terseBlob(4242, msg.Vector3{X: 40, Y: 50, Z: 60})},
+		{Data: terseBlob(9999, msg.Vector3{X: 1, Y: 1, Z: 1})},
+	}
+	feed(t, a, m)
+
+	got, _ := a.Objects().Get(aPrim)
+	if got.Position.X != 40 {
+		t.Fatalf("position %+v: the terse update did not arrive", got.Position)
+	}
+	if got.Material != 5 || !got.MaterialKnown {
+		t.Errorf("material %d known %v after a terse update, want 5, known", got.Material, got.MaterialKnown)
+	}
+	if a.Objects().Count() != 1 {
+		t.Errorf("count = %d, want the one described", a.Objects().Count())
 	}
 }
 

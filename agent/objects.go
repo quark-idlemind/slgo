@@ -89,6 +89,16 @@ type Object struct {
 	Click      uint8
 	ClickKnown bool
 
+	// Material is the physical material byte (LSL's PRIM_MATERIAL_*, 0
+	// stone to 7 light), and MaterialKnown says an update carried it:
+	// stone is zero, so a zero Material with MaterialKnown false means no
+	// update has said.  Full and compressed updates carry it, a compressed
+	// one whose body would not decode too, since it is in the header;
+	// terse updates do not and leave it alone.
+	// Why: doc/objects.md#the-physical-material
+	Material      uint8
+	MaterialKnown bool
+
 	// Sculpt is what the sculpt block of the extra parameters says: the
 	// zero value for a prim that is neither a sculpt nor a mesh.  A
 	// full or compressed update says it afresh, as it does the
@@ -1361,6 +1371,7 @@ func (o *Objects) updateAt(d *msg.ObjectUpdate_ObjectData, camera msg.Vector3, d
 	o.listAndRecordLocked(v, ev)
 	v.Shape = msg.ShapeOfUpdate(d)
 	v.Click, v.ClickKnown = d.ClickAction, true
+	v.Material, v.MaterialKnown = d.Material, true
 	// A block that does not read says nothing, so the last answer stays.
 	if params, err := msg.DecodeExtraParams(d.ExtraParams); err == nil {
 		v.Sculpt = msg.SculptMarkOf(params)
@@ -1482,6 +1493,7 @@ func (o *Objects) compressedAt(c *msg.Compressed, camera msg.Vector3, drawDistan
 	o.listAndRecordLocked(v, ev)
 	v.Scale, v.Position, v.Rotation = c.Scale, c.Position, c.Rotation
 	v.Click, v.ClickKnown = c.Click, true
+	v.Material, v.MaterialKnown = c.Material, true
 	v.Sculpt = msg.SculptMarkOf(c.ExtraParams)
 	v.Light, v.Projector = lightsOf(c.ExtraParams)
 	v.RenderMaterials = msg.RenderMaterialsOf(c.ExtraParams)
@@ -1598,6 +1610,7 @@ func (o *Objects) unsure(c *msg.Compressed, camera msg.Vector3, drawDistance flo
 	// The header decoded, so the click byte is known even though the
 	// body is not.
 	v.Click, v.ClickKnown = c.Click, true
+	v.Material, v.MaterialKnown = c.Material, true
 	if !c.Owner.IsZero() {
 		v.Owner = c.Owner
 	}

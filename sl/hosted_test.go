@@ -705,6 +705,54 @@ func TestObjectsWithoutAReadableIdAreDropped(t *testing.T) {
 	}
 }
 
+// TestThePhysicalMaterialCrossesTheWire: the byte comes with its known
+// flag, so stone, which is zero, is told from a daemon that sent none, and
+// a byte past the eight comes as it was.
+// Why: doc/objects.md#the-physical-material
+func TestThePhysicalMaterialCrossesTheWire(t *testing.T) {
+	t.Parallel()
+	h, d := newFakeDaemon(t)
+	d.objects = []*pb.ObjectInfo{
+		{Id: thePrim.String(), Local: 77, Material: 3, MaterialKnown: true},
+		{Id: theChild.String(), Local: 78, Material: 0, MaterialKnown: true},
+		{Id: theOther.String(), Local: 79, Material: 12, MaterialKnown: true},
+		// An older daemon: neither field.
+		{Id: theDance.String(), Local: 80},
+	}
+	got, err := h.Objects(context.Background(), "", "")
+	if err != nil {
+		t.Fatalf("Objects: %v", err)
+	}
+	want := []struct {
+		local uint32
+		b     uint8
+		known bool
+	}{{77, MaterialWood, true}, {78, MaterialStone, true}, {79, 12, true}, {80, 0, false}}
+	if len(got) != len(want) {
+		t.Fatalf("Objects = %d objects, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		if o := got[i]; o.Local != w.local || o.Material != w.b || o.MaterialKnown != w.known {
+			t.Errorf("object %d: material %d known %v, want %d, %v", w.local, o.Material, o.MaterialKnown, w.b, w.known)
+		}
+	}
+}
+
+// TestADirectObjectCarriesThePhysicalMaterial: the session held without a
+// daemon hands a client the same fields a daemon's reply does.
+// Why: doc/objects.md#the-physical-material
+func TestADirectObjectCarriesThePhysicalMaterial(t *testing.T) {
+	t.Parallel()
+	s := seenFromAgent(&agent.Object{ID: thePrim, Local: 5, Material: MaterialGlass, MaterialKnown: true})
+	if s.Material != MaterialGlass || !s.MaterialKnown {
+		t.Errorf("material %d known %v, want glass, known", s.Material, s.MaterialKnown)
+	}
+	s = seenFromAgent(&agent.Object{ID: thePrim, Local: 5})
+	if s.Material != 0 || s.MaterialKnown {
+		t.Errorf("material %d known %v, want none known", s.Material, s.MaterialKnown)
+	}
+}
+
 // TestHowObjectsWereDescribedCrossesTheWire: a client that asks gets each
 // object's descriptions by id, and a daemon older than the record, which
 // sends none, gives an empty list for each object, not an error.

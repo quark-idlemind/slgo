@@ -1220,6 +1220,16 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 		}
 		_, err := c.reading(e, x.State, x.Any, x.Use, CapClick, same)
 		return err
+	case e.Substance != nil:
+		x := e.Substance
+		if err := c.ref(x.Name, same); err != nil {
+			return err
+		}
+		if err := c.linkN(x.Name, x.Link); err != nil {
+			return err
+		}
+		_, err := c.reading(e, x.State, x.Any, x.Use, CapSubstance, same)
+		return err
 	case e.FloatText != nil:
 		x := e.FloatText
 		if err := c.ref(x.Name, same); err != nil {
@@ -1366,6 +1376,8 @@ func nearWord(e Expect) string {
 		return "texture"
 	case e.Click != nil:
 		return "click"
+	case e.Substance != nil:
+		return "substance"
 	case e.FloatText != nil:
 		return "text"
 	case e.Fullbright != nil:
@@ -1861,6 +1873,8 @@ func asType(e Expect) (CaptureType, bool) {
 		return CapNumber, true
 	case e.Click != nil:
 		return CapClick, true
+	case e.Substance != nil:
+		return CapSubstance, true
 	case e.Fullbright != nil:
 		return CapOnOff, true
 	case e.Colour != nil:

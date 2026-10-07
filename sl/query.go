@@ -152,6 +152,20 @@ const (
 	ClickIgnore    uint8 = 9 // CLICK_ACTION_IGNORE
 )
 
+// The values of Seen.Material, Linden's published LSL PRIM_MATERIAL_*
+// constants (Firestorm's keywords_lsl_default.xml, lllslconstants.h and
+// material_codes.h agree).  Taken from the published list, not measured.
+const (
+	MaterialStone   uint8 = 0 // PRIM_MATERIAL_STONE
+	MaterialMetal   uint8 = 1 // PRIM_MATERIAL_METAL
+	MaterialGlass   uint8 = 2 // PRIM_MATERIAL_GLASS
+	MaterialWood    uint8 = 3 // PRIM_MATERIAL_WOOD
+	MaterialFlesh   uint8 = 4 // PRIM_MATERIAL_FLESH
+	MaterialPlastic uint8 = 5 // PRIM_MATERIAL_PLASTIC
+	MaterialRubber  uint8 = 6 // PRIM_MATERIAL_RUBBER
+	MaterialLight   uint8 = 7 // PRIM_MATERIAL_LIGHT
+)
+
 // Seen is what is known about an object in the region.
 //
 // "In the region" means within the draw distance: the simulator
@@ -185,6 +199,14 @@ type Seen struct {
 	// true means touch.
 	Click      uint8
 	ClickKnown bool
+
+	// Material is the physical material byte (MaterialStone and the
+	// rest, which a script sets with PRIM_MATERIAL); a zero Material with
+	// MaterialKnown false means no update has said, and with true means
+	// stone.  A byte outside the eight is kept as it came.
+	// Why: doc/objects.md#the-physical-material
+	Material      uint8
+	MaterialKnown bool
 
 	// Sculpt marks a sculpt or a mesh, with the texture or asset that
 	// holds its shape; its zero value is a prim that is neither.  It

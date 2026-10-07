@@ -61,6 +61,10 @@ Proto3 omits a zero and a false. An slgod that does not know fields 16 and 17 ma
 
 The hosted and direct tests that compare a `Seen` are updated for the two new fields.
 
+## Physical material
+
+A full `ObjectUpdate` carries a `Material` byte and a compressed update carries one in its fixed header; `PRIM_MATERIAL` sets it. The store keeps it as `agent.Object.Material` with `MaterialKnown`, set by `update`, `compressed` and `unsure` from the same header the click byte is read from, and not touched by `moved` (a terse update has none) or by an appearance forgotten. Stone is 0, so `MaterialKnown` is what says a byte was read. It crosses the process boundary as `ObjectInfo.material = 32` and `material_known = 33`, copied in `internal/server/grpc.go`, `sl/hosted.go` and `sl/direct.go` (`seenFromAgent`), and `sl.Seen` has `Material` and `MaterialKnown`. An older slgod sends neither, so a new client reads `MaterialKnown` false for every prim; unlike the click byte there is no setup describe for it, and an `expect substance` against such an slgod fails at its step with `no update has said the material of NAME; this slate requires the slgod that stores material and material_known` among its notes. What the store keeps is in [the physical material](objects.md#the-physical-material). Unmeasured.
+
 ## ScriptsBlocked
 
 `scriptsBlocked` in `sl/landscripts.go` says why the land will not run scripts in an object. Export it:

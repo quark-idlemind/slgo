@@ -93,6 +93,7 @@ const (
 	kPosition
 	kSize
 	kText      // a prim's floating text
+	kSubstance // a prim's physical material byte (sl.Seen.Material)
 	kAlphaMode // a face's alpha mode, read from its material (sl.Session.AlphaModeOf)
 	kTurn      // a prim's own rotation, said as Euler degrees
 
@@ -257,6 +258,7 @@ type reading struct {
 	rep     [2]float64
 	turns   float64
 	click   uint8
+	sub     uint8      // a prim's physical material byte
 	vec     [3]float64 // a position or a size, each a float32 held whole; for a turn, Euler degrees
 	quat    quat4      // a turn as read; hasQuat is false for a wanted value, which is vec
 	hasQuat bool
@@ -613,6 +615,8 @@ func (k stateKind) equalTol(a, ref *reading, t *tolerance) bool {
 		return a.gmode == b.gmode
 	case kText:
 		return a.str == b.str
+	case kSubstance:
+		return a.sub == b.sub
 	case kButton:
 		if b.atLeast {
 			return a.count >= b.count
@@ -692,6 +696,8 @@ func (k stateKind) capType() CaptureType {
 		return CapVector
 	case kText, kAlphaMode, kGLTFAlphaMode:
 		return CapText
+	case kSubstance:
+		return CapSubstance
 	}
 	return CapClick
 }
@@ -721,6 +727,8 @@ func (k stateKind) text(r *reading) string {
 		return r.label
 	case kText:
 		return fmt.Sprintf("%q", r.str)
+	case kSubstance:
+		return substanceText(r.sub)
 	case kPosition, kSize, kTurn:
 		return g3(r.vec)
 	case kTexture:
@@ -827,6 +835,9 @@ func (k stateKind) show(key readKey, r *reading) string {
 	if k == kText {
 		return fmt.Sprintf("text %s %q", key.name, r.str)
 	}
+	if k == kSubstance {
+		return fmt.Sprintf("substance %s %s", key.name, substanceText(r.sub))
+	}
 	if k == kPosition || k == kSize || k == kTurn {
 		return fmt.Sprintf("%s %s %s", k.word(), key.name, g3(r.vec))
 	}
@@ -861,6 +872,9 @@ func (k stateKind) value(r *reading) capValue {
 	}
 	if k == kText {
 		return capValue{typ: CapText, text: r.str}
+	}
+	if k == kSubstance {
+		return capValue{typ: CapSubstance, sub: r.sub}
 	}
 	if _, f, ok := k.gltfTransformAt(); ok {
 		switch f {
@@ -946,6 +960,8 @@ func (k stateKind) want(v capValue) *reading {
 		r.vec = v.vec
 	case kText:
 		r.str = v.text
+	case kSubstance:
+		r.sub = v.sub
 	case kTexture, kProjector:
 		r.tex = v.id
 	case kNormalMap:
@@ -1132,6 +1148,8 @@ func stateKeyOf(e *Expect) (readKey, stateKind, bool) {
 		return readKey{keyName(x.Name, x.Link), int(x.Face.Value), k}, k, true
 	case e.FloatText != nil:
 		return readKey{keyName(e.FloatText.Name, e.FloatText.Link), primFace, kText}, kText, true
+	case e.Substance != nil:
+		return readKey{keyName(e.Substance.Name, e.Substance.Link), primFace, kSubstance}, kSubstance, true
 	}
 	return readKey{}, 0, false
 }
@@ -1495,6 +1513,13 @@ func (w *watcher) poll(ctx context.Context, force bool) error {
 			rd = gltfReading(k.kind, o, k.face, at)
 		case k.kind == kText:
 			rd = &reading{at: at, str: o.Text}
+		case k.kind == kSubstance:
+			// Stone is zero, so an object no update has described is not
+			// read as stone.
+			if !o.MaterialKnown {
+				continue
+			}
+			rd = &reading{at: at, sub: o.Material}
 		case k.kind == kAlphaMode:
 			rd = w.readMode(ctx, k, o, at)
 			if rd == nil {
@@ -1791,12 +1816,32 @@ func (s *stepRun) stateExpect(x *expState) error {
 		base, link, st = e.GLTF.Name, e.GLTF.Link, e.GLTF.State
 	case e.FloatText != nil:
 		base, link, st = e.FloatText.Name, e.FloatText.Link, e.FloatText.State
+	case e.Substance != nil:
+		base, link, st = e.Substance.Name, e.Substance.Link, e.Substance.State
 	}
 	if err := s.linkKnown(base, link, k.name); err != nil {
 		return err
 	}
 	if link != nil && !s.r.probed(s.r.lookup(base.Text)) {
 		se.why = s.linkWhy(k.name)
+		x.noteFn = se.why
+	}
+	if kind == kSubstance {
+		// Stone is zero on the wire, so a prim no update has described is
+		// not read at all: the sentence says so when no reading came, which
+		// is also what a slgod older than the field looks like.
+		// Why: doc/objects.md#the-physical-material
+		prev, w := se.why, s.t.watch
+		se.why = func() string {
+			note := ""
+			if prev != nil {
+				note = prev()
+			}
+			if len(w.reads[k]) == 0 {
+				note += fmt.Sprintf("; slate: step %d: no update has said the material of %s; this slate requires the slgod that stores material and material_known", s.n, k.name)
+			}
+			return note
+		}
 		x.noteFn = se.why
 	}
 	if kind.isGLTF() {
@@ -1906,12 +1951,15 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		use = e.GLTF.Use
 	case e.FloatText != nil:
 		use = e.FloatText.Value.Capture
+	case e.Substance != nil:
+		use = e.Substance.Use
 	}
 	switch {
 	case e.Texture != nil && e.Texture.Any, e.Offset != nil && e.Offset.Any, e.Repeats != nil && e.Repeats.Any,
 		e.Rot != nil && e.Rot.Any, e.Click != nil && e.Click.Any, e.Fullbright != nil && e.Fullbright.Any,
 		e.Glow != nil && e.Glow.Any, e.Colour != nil && e.Colour.Any, e.Alpha != nil && e.Alpha.Any, e.Material != nil && e.Material.Any, e.Light != nil && e.Light.Any, e.GLTF != nil && e.GLTF.Any,
-		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any, e.Turn != nil && e.Turn.Any, e.FloatText != nil && e.FloatText.Any:
+		e.Position != nil && e.Position.Any, e.Size != nil && e.Size.Any, e.Turn != nil && e.Turn.Any, e.FloatText != nil && e.FloatText.Any,
+		e.Substance != nil && e.Substance.Any:
 		se.any = true
 	case use != nil:
 		v, err := s.captureOrTuple(use, se.kind.capType())
@@ -1940,6 +1988,8 @@ func (s *stepRun) stateWant(e *Expect, se *stateExp) error {
 		se.want.turns = e.Rot.Turns.Value
 	case e.Click != nil:
 		se.want.click = ClickBytes[e.Click.Action]
+	case e.Substance != nil:
+		se.want.sub = SubstanceBytes[e.Substance.Word]
 	case e.Position != nil:
 		se.want.vec = lit3(e.Position)
 	case e.Size != nil:
@@ -2092,7 +2142,7 @@ func (s *stepRun) evalState(ctx context.Context, x *expState, se *stateExp) erro
 		case allFace:
 			what = "face all"
 		case primFace:
-			what = map[stateKind]string{kPosition: "position", kSize: "size", kTurn: "turn", kText: "text"}[se.kind]
+			what = map[stateKind]string{kPosition: "position", kSize: "size", kTurn: "turn", kText: "text", kSubstance: "substance"}[se.kind]
 			if se.kind.isLight() {
 				what = se.kind.word()
 			}
