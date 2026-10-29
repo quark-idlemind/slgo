@@ -37,6 +37,37 @@ func TestSimAttachmentsReadWhatTheAppearanceSaid(t *testing.T) {
 	}
 }
 
+// The shape's sex is one byte of the visual parameters: 0 is female and
+// 255 male, and an appearance too short to have it, or none at all, says
+// nothing.
+func TestSexIsTheShapesMaleSetting(t *testing.T) {
+	params := func(male byte) []byte {
+		p := make([]byte, 253)
+		p[MaleParam] = male
+		return p
+	}
+	for _, c := range []struct {
+		a    *SimAttachments
+		want Sex
+	}{
+		{nil, SexUnknown},
+		{&SimAttachments{}, SexUnknown},
+		{&SimAttachments{VisualParams: params(0)[:MaleParam]}, SexUnknown},
+		{&SimAttachments{VisualParams: params(0)}, SexFemale},
+		{&SimAttachments{VisualParams: params(255)}, SexMale},
+	} {
+		if got := c.a.Sex(); got != c.want {
+			t.Errorf("%+v: %v, want %v", c.a, got, c.want)
+		}
+	}
+
+	m := &msg.AvatarAppearance{VisualParam: make([]msg.AvatarAppearance_VisualParam, 253)}
+	m.VisualParam[MaleParam].ParamValue = 255
+	if got := simAttachmentsFrom(m, time.Now()).Sex(); got != SexMale {
+		t.Errorf("read from an appearance as %v, want male", got)
+	}
+}
+
 func TestOnlyTheEightHUDPointsAreHUDPoints(t *testing.T) {
 	for p := 0; p <= 60; p++ {
 		want := p >= 31 && p <= 38

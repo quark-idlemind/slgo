@@ -849,6 +849,9 @@ func (s *Server) Attachments(ctx context.Context, req *pb.AttachmentsRequest) (*
 			ObjectId: id, Point: uint32(b.AttachmentPoint),
 		})
 	}
+	for _, p := range m.VisualParam {
+		out.VisualParams = append(out.VisualParams, p.ParamValue)
+	}
 	return out, nil
 }
 

@@ -242,3 +242,30 @@ two boxes walked over a border and back (above, measured with the fix
 running and logging nothing for them until they were taken off).  A take-off
 asked for by slgo itself is saved the same way, so its link goes by
 the same path; removing it a second time finds it already gone.
+
+## The shape's sex
+
+An avatar's sex is not a field anywhere. It is one of the shape's
+visual parameters, `male` (id 80 in avatar_lad.xml), and reaches
+everybody in the region in `AvatarAppearance` with the rest of them.
+
+The message carries one byte per parameter and no ids. What it carries
+is avatar_lad.xml's parameters in groups 0 and 3, the ones a viewer
+sends, in id order: 253 of them, and 253 is what arrived. In that order
+id 80 is position 31 and id 198, heel height, is position 77.
+
+Measured on Agni on 2026-10-29, reading the appearance each avatar was
+sent:
+
+    held avatar, female       [31] = 0     [77] = 255
+    Quark Idlemind, male      [31] = 0     [77] = 0
+    an avatar met, male       [31] = 255   [77] = 0
+
+Heel height comes out where the order puts it, and the one avatar whose
+shape was set male reads 255 where the order puts `male`. Quark reading
+0 is the shape's setting and not a misreading: a mesh body covers the
+system body whichever way the shape is set, so the setting is what the
+shape's owner chose, which need not be what the avatar looks like. It
+is still the only thing the grid says, and `Sex` reports it as that, 0
+for female and 255 for male, with nothing at all for an appearance not
+yet heard or too short to hold it.
