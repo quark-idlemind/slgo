@@ -2166,6 +2166,18 @@ N-1), so that another program can send `id_slot` for the ones above and
 the two never spoil each other's cached conversations. Start the server
 with more `-np` to make room; each slot's share of `-c` is its context.
 
+A server started with no model serves several (llama.cpp's router
+mode), and then slbotd has to say which one it means:
+
+    llm-url   = http://127.0.0.1:8080
+    llm-model = Example-8B-Q4_K_M    # as the server's /models lists it
+
+Every request names it, and the server loads it when it needs to.
+Without `llm-model` the chat is refused by the server and the model's
+fingerprint by slbotd, which says to set it. The slots are the ones the
+router gives that model, from its own settings, so give it enough of
+them for `llm-slots`.
+
 ### Answering at the speed of a person
 
 A model answers in a second or two whatever it was asked, and an avatar

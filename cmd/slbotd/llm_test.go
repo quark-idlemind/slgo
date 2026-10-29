@@ -47,6 +47,13 @@ type fakeLLM struct {
 	// dropsSystem makes the template keep only the first system
 	// message, the way some models' templates do.
 	dropsSystem bool
+
+	// router makes it a server of several models, as b11960 answered
+	// when started without one: a POST that names no model is refused,
+	// and a GET /props that names none is answered for the router.
+	// named is the model each request named, in order.
+	router bool
+	named  []string
 }
 
 func newFakeLLM(t *testing.T) *fakeLLM {
@@ -164,7 +171,49 @@ func newFakeLLM(t *testing.T) *fakeLLM {
 		json.NewEncoder(w).Encode(map[string]any{"prompt": out.String()})
 	})
 
-	f.Server = httptest.NewServer(mux)
+	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		router := f.router
+		f.mu.Unlock()
+		if !router {
+			mux.ServeHTTP(w, r)
+			return
+		}
+
+		model := r.URL.Query().Get("model")
+		if r.Method == http.MethodPost {
+			// The router reads a POST's model from its body and
+			// ignores ?model=, so the body is read here and put back.
+			b, _ := io.ReadAll(r.Body)
+			var got struct {
+				Model string `json:"model"`
+			}
+			json.Unmarshal(b, &got)
+			model = got.Model
+			r.Body = io.NopCloser(strings.NewReader(string(b)))
+		}
+		f.mu.Lock()
+		f.named = append(f.named, model)
+		f.mu.Unlock()
+
+		switch {
+		case model == "" && r.Method == http.MethodGet && r.URL.Path == "/props":
+			json.NewEncoder(w).Encode(map[string]any{
+				"role": "router", "max_instances": 2, "models_autoload": true,
+				"model_alias": "llama-server", "model_path": "none",
+				"build_info":                  "b11960-8642541b2",
+				"default_generation_settings": map[string]any{"params": nil, "n_ctx": 0},
+			})
+		case model == "":
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{
+				"code": 400, "type": "invalid_request_error",
+				"message": "model name is missing from the request",
+			}})
+		default:
+			mux.ServeHTTP(w, r)
+		}
+	}))
 	t.Cleanup(f.Close)
 	return f
 }
@@ -278,6 +327,68 @@ func TestARefusalCarriesTheServersOwnWords(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Unable to restore slot") {
 		t.Errorf("err = %v, want the server's own sentence", err)
+	}
+}
+
+// A server of several models refuses a POST that does not name one, so
+// every request this daemon makes names llm-model: the slots and the
+// template as well as the chat.
+func TestAServerOfSeveralModelsIsToldWhichOne(t *testing.T) {
+	f := newFakeLLM(t)
+	f.router = true
+	l := NewLLM(f.URL, "small", 10*time.Second)
+	ctx := context.Background()
+
+	p, err := l.Props(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Model != "/models/small.gguf" || p.Settings.Ctx != 2048 {
+		t.Errorf("props %+v, want the model's own", p)
+	}
+	if _, err := l.Chat(ctx, Ask{Messages: []Message{{Role: "user", Content: "hello"}}}); err != nil {
+		t.Errorf("chat: %v", err)
+	}
+	if _, err := l.SaveSlot(ctx, 1, "example-abc.bin"); err != nil {
+		t.Errorf("save: %v", err)
+	}
+	if _, err := l.RestoreSlot(ctx, 1, "example-abc.bin"); err != nil {
+		t.Errorf("restore: %v", err)
+	}
+	if err := l.EraseSlot(ctx, 1); err != nil {
+		t.Errorf("erase: %v", err)
+	}
+	if _, err := l.Template(ctx, []Message{{Role: "user", Content: "hello"}}); err != nil {
+		t.Errorf("template: %v", err)
+	}
+
+	f.mu.Lock()
+	named := append([]string(nil), f.named...)
+	f.mu.Unlock()
+	if len(named) != 6 {
+		t.Fatalf("%d requests, want 6", len(named))
+	}
+	for i, m := range named {
+		if m != "small" {
+			t.Errorf("request %d named %q, want small", i, m)
+		}
+	}
+}
+
+// Asked without a model, a router answers for itself rather than
+// failing, and a fingerprint of that answer would be the same for every
+// model.  So it is an error, and the error says what to set.
+func TestARouterNotToldWhichModelIsAnError(t *testing.T) {
+	f := newFakeLLM(t)
+	f.router = true
+	l := NewLLM(f.URL, "", 10*time.Second)
+
+	p, err := l.Props(context.Background())
+	if err == nil {
+		t.Fatalf("props %+v from a router with no model, want an error", p)
+	}
+	if !strings.Contains(err.Error(), "llm-model") {
+		t.Errorf("err = %v, want it to name llm-model", err)
 	}
 }
 
