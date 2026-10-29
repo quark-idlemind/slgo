@@ -1900,6 +1900,13 @@ the avatar can be told something about particular people:
 **One file is chosen, not two**: the person's if there is one, the
 default otherwise.
 
+Whatever the backstory, the avatar is also told who is speaking: the
+display name they chose, or their first name if they never chose one,
+and their avatar's sex once it has been seen in the region -- *"You are
+talking with Kit. Kit's avatar is female."* The sex is the shape's
+Male/Female setting, which a mesh body can hide, so a shape left at the
+wrong setting is introduced the wrong way.
+
 ### Including one file in another
 
 A line in a character that is nothing but a relative path *is* the file

@@ -108,6 +108,12 @@ type Conversation struct {
 	With     string `json:"with"`
 	WithName string `json:"with_name"`
 
+	// CallName is what the model is told to call them, and Sex what
+	// their avatar's shape was when it was last seen; both are empty
+	// until known, and kept once known.  See Introduction.
+	CallName string `json:"call_name,omitempty"`
+	Sex      string `json:"sex,omitempty"`
+
 	Started time.Time `json:"started"`
 	Spoke   time.Time `json:"spoke"`
 
@@ -174,6 +180,9 @@ func (c *Conversation) Prompt(backstory, said string, separate bool) []Message {
 	} else {
 		character += "\n\n" + Medium
 	}
+	if who := c.Introduction(); who != "" {
+		character += " " + who
+	}
 
 	memory := ""
 	if c.Summary != "" {
@@ -196,6 +205,40 @@ func (c *Conversation) Prompt(backstory, said string, separate bool) []Message {
 	}
 	out = append(out, Message{Role: "user", Content: said})
 	return out
+}
+
+// Person is what was found out about somebody when they wrote: what to
+// call them, and their avatar's sex when it could be seen.  Either is
+// empty when it is not known, and then what was known before stands.
+type Person struct {
+	CallName string
+	Sex      string
+}
+
+// learn keeps what is known about the person; an empty field leaves
+// what was there.
+func (c *Conversation) learn(p Person) {
+	if p.CallName != "" {
+		c.CallName = p.CallName
+	}
+	if p.Sex != "" {
+		c.Sex = p.Sex
+	}
+}
+
+// Introduction is the sentence that tells the model who it is talking
+// to.  Nothing is said about their avatar unless it has been seen: a
+// guess the model then repeats is worse than nothing.
+// Why: doc/slbotd.md#who-it-is-talking-to
+func (c *Conversation) Introduction() string {
+	if c.CallName == "" {
+		return ""
+	}
+	s := "You are talking with " + c.CallName + "."
+	if c.Sex != "" {
+		s += " " + c.CallName + "'s avatar is " + c.Sex + "."
+	}
+	return s
 }
 
 // Paused is how long this conversation has been quiet, when that is
@@ -711,10 +754,14 @@ func (c *Chatter) load(avatar string, who msg.UUID, name string) *Conversation {
 // the whole turn.  Another client of this session may be writing to the
 // same one -- see hold -- and a turn that read it before that write and
 // saved after would take the remark back out again.
-func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, said string) (string, error) {
+//
+// p is what was found out about the person this time, and is kept with
+// the conversation.
+func (c *Chatter) Reply(ctx context.Context, avatar string, who msg.UUID, name, said string, p Person) (string, error) {
 	release := c.hold(avatar + "-" + who.String())
 	defer release()
 	conv := c.load(avatar, who, name)
+	conv.learn(p)
 
 	props, err := c.ready(ctx)
 	if err != nil {

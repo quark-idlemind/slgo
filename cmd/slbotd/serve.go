@@ -500,6 +500,29 @@ func (b *bot) converse(ctx context.Context, s *sl.Session, im *sl.IM, jobs *sync
 	}()
 }
 
+// WhoIsTimeout bounds finding out who somebody is before answering.
+const WhoIsTimeout = 10 * time.Second
+
+// whoIs is what this session can find out about somebody who wrote:
+// the name to call them by, from the grid, and their avatar's sex, from
+// the appearance the region last sent of them -- which it sends only
+// for avatars in the same region, so for most instant messages it is
+// not known.  Neither one failing stops the answer.
+func whoIs(ctx context.Context, s *sl.Session, id msg.UUID) Person {
+	ask, cancel := context.WithTimeout(ctx, WhoIsTimeout)
+	defer cancel()
+	var p Person
+	if names, err := s.DisplayNames(ask, []msg.UUID{id}); err == nil {
+		p.CallName = names[id].CallName()
+	}
+	if a, err := s.SimAttachments(ask, id); err == nil {
+		if sex := a.Sex(); sex != sl.SexUnknown {
+			p.Sex = sex.String()
+		}
+	}
+	return p
+}
+
 // answer asks the model and says what it said.
 //
 // A failure is logged and nothing is sent.  There is no useful thing to
@@ -514,7 +537,7 @@ func (b *bot) answer(ctx context.Context, s *sl.Session, im *sl.IM, who string) 
 	defer cancel()
 
 	started := time.Now()
-	text, err := b.d.chat.Reply(run, b.name, im.From, im.FromName, im.Text)
+	text, err := b.d.chat.Reply(run, b.name, im.From, im.FromName, im.Text, whoIs(run, s, im.From))
 	if err != nil {
 		b.errf("could not answer %s: %v", who, err)
 		return

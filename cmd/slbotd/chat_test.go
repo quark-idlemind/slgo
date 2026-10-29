@@ -52,6 +52,60 @@ func TestNoBackstoryStillSaysWhereItIs(t *testing.T) {
 	}
 }
 
+// The model is told who it is talking to, and their avatar's sex only
+// once that has been seen: nothing is said rather than a guess.
+func TestThePromptSaysWhoItIsTalkingTo(t *testing.T) {
+	c := &Conversation{Avatar: "example"}
+	if got := c.Prompt("You are Hobb.", "hello", true)[0].Content; strings.Contains(got, "talking with") {
+		t.Errorf("nobody known, and the prompt names somebody: %q", got)
+	}
+
+	c.learn(Person{CallName: "Kit"})
+	got := c.Prompt("You are Hobb.", "hello", true)[0].Content
+	if !strings.Contains(got, "You are talking with Kit.") {
+		t.Errorf("the name is not in the system message: %q", got)
+	}
+	if strings.Contains(got, "avatar is") {
+		t.Errorf("a sex that was never seen is in the prompt: %q", got)
+	}
+
+	c.learn(Person{CallName: "Kit", Sex: "female"})
+	if got := c.Prompt("You are Hobb.", "hello", true)[0].Content; !strings.Contains(got, "Kit's avatar is female.") {
+		t.Errorf("the sex is not in the system message: %q", got)
+	}
+
+	// A later turn that could not see the avatar, or reach the grid,
+	// leaves what was known.
+	c.learn(Person{})
+	if c.CallName != "Kit" || c.Sex != "female" {
+		t.Errorf("an empty look forgot what was known: %+v", c)
+	}
+}
+
+// What is known about the person is written down with the conversation.
+func TestWhoTheyAreSurvivesBeingWrittenDown(t *testing.T) {
+	s, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	who := msg.MustParseUUID("ae1c7e57-7e57-c0de-fc15-e9f703c95de0")
+	c, err := s.Load("example", who, "Example Resident")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c.learn(Person{CallName: "Kit", Sex: "male"})
+	if err := s.Save(c); err != nil {
+		t.Fatal(err)
+	}
+	back, err := s.Load("example", who, "Example Resident")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if back.CallName != "Kit" || back.Sex != "male" {
+		t.Errorf("read back %+v", back)
+	}
+}
+
 // Turns go in pairs, oldest first: half an exchange left at the front
 // is a question nobody answered.
 func TestTrimmingDropsWholeExchanges(t *testing.T) {

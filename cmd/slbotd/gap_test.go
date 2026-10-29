@@ -85,7 +85,7 @@ func TestThePauseIsSentButNotRemembered(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := d.chat.Reply(t.Context(), "example", someone, someoneName, "Hello again."); err != nil {
+	if _, err := d.chat.Reply(t.Context(), "example", someone, someoneName, "Hello again.", Person{}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -127,7 +127,7 @@ func TestAShortPauseSaysNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := d.chat.Reply(t.Context(), "example", someone, someoneName, "Hello again."); err != nil {
+	if _, err := d.chat.Reply(t.Context(), "example", someone, someoneName, "Hello again.", Person{}); err != nil {
 		t.Fatal(err)
 	}
 	asks := f.sawAsks()

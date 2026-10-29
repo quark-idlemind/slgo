@@ -179,7 +179,7 @@ func TestARemarkFromElsewhereIsNotLostToAReplyInFlight(t *testing.T) {
 		done <- struct{}{}
 	}()
 	go func() {
-		d.chat.Reply(t.Context(), "example", testSender, "Trusted Resident", "and now?")
+		d.chat.Reply(t.Context(), "example", testSender, "Trusted Resident", "and now?", Person{})
 		done <- struct{}{}
 	}()
 	<-done
