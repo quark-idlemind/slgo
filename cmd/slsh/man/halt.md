@@ -11,11 +11,11 @@ It says whether there was a walk to end:
 The stop goes either way.  An avatar can be moving for a reason this
 shell did not see -- a walk asked for by another program on the same
 avatar, most often -- and that is the avatar somebody reaching for
-`halt` wants stopped.  The walk it ended says `cancelled (halted)` to
+`halt` wants stopped.  The walk it ended says `canceled (halted)` to
 whoever was waiting for it.
 
 An avatar does not stop dead.  Measured on 2026-09-24, one walking at
-full speed came to rest about a metre on from where it was when the
+full speed came to rest about a meter on from where it was when the
 stop was sent.
 
 ## Examples

@@ -231,11 +231,11 @@ and, a region away and on land this account does not control:
 The position printed is the one the message carried, and not a second
 reading taken to print it.  The difference is real: an avatar that has
 just teleported is still settling, and two readings a second apart were
-eight metres apart when this was written.  What the line says is where
+eight meters apart when this was written.  What the line says is where
 home was set, whether the grid then agreed or refused.
 
 That is also why setting home the moment after arriving somewhere can
-put it a metre or two above where the avatar comes to rest.  Home is
+put it a meter or two above where the avatar comes to rest.  Home is
 set where the avatar is, and just after a teleport that is still
 falling.
 

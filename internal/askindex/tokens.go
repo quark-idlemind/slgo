@@ -26,11 +26,13 @@ package askindex
 //
 // # Stemming
 //
-// Light, and English only: plurals, -ing, -ed, -ment, and a final e.
-// The aim is that "homes", "setting home" and "set my home" meet the
+// Light, and English only: plurals, -ing, -ed, -ment, and a final e,
+// and then a British spelling folded to the American one (spelling.go),
+// so that a question in either spelling finds a page in either.  The
+// aim is that "homes", "setting home" and "set my home" meet the
 // words the pages use, not that every word reaches a dictionary root.
 // A heavier stemmer (Porter's) conflates more, and here that is mostly
-// harm: the vocabulary is small and specific, and "organise" and
+// harm: the vocabulary is small and specific, and "organize" and
 // "organ" meeting would find nothing anybody asked for.  What matters is
 // only that a word comes out the same whichever side it was on, which
 // is true of anything deterministic; a stem that is not a real word --
@@ -160,7 +162,11 @@ func appendWord(out []string, weights map[string]float64, w string, learning boo
 	if len([]rune(w)) < 2 || stopwords[w] {
 		return out
 	}
+	if a, ok := britishWords[w]; ok {
+		w = a
+	}
 	stemmed, weak := stemWeak(w)
+	stemmed = american(stemmed)
 	wt := 1.0
 	switch {
 	case weak:

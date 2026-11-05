@@ -6,16 +6,16 @@ sitting on anything, and which group it is acting as.
     sitting on "a bench" 45557e57-... (local 8360)
     acting as group Example Builders (d8467e57-...)
 
-The position is in the region's own metres, to the metre -- the same
+The position is in the region's own meters, to the meter -- the same
 numbers `tp` and `move` take, and the same numbers `place --at` takes.
 
 ## How exact it is
 
 Exact on arriving in a region and after a teleport.  While the avatar
-walks, x and y stay good to the metre and the height is in steps of
-about four metres.
+walks, x and y stay good to the meter and the height is in steps of
+about four meters.
 
-Above 1020 metres the height stops updating.  The printed Z is then
+Above 1020 meters the height stops updating.  The printed Z is then
 where the avatar was put -- the arrival or the last teleport -- and not
 where it has settled or fallen since.  `landmark --make` is the way to
 read a height up there; x and y stay good the whole time.
@@ -28,7 +28,7 @@ fact.
 
 It belongs on this listing because a seated avatar's position is not
 somewhere it walked to.  A sit picks the avatar up and carries it to
-the seat from as much as ten metres off, so the coordinates on the line
+the seat from as much as ten meters off, so the coordinates on the line
 above are the seat's doing, and this is what explains them.
 
 The answer is the agent's rather than this session's memory: an avatar

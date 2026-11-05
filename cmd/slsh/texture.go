@@ -211,7 +211,7 @@ var filterAdvice = []struct {
 	why    string
 }{
 	{"a photograph", "lanczos", "the default; the best of the slow ones"},
-	{"pixel art, or an icon with hard edges", "nearest", "invents no colours, and any smoothing ruins these"},
+	{"pixel art, or an icon with hard edges", "nearest", "invents no colors, and any smoothing ruins these"},
 	{"a mask, or anything read as data", "nearest", "same reason: a blended value is a wrong value"},
 	{"a diagram, text, or a screenshot", "catmullrom", "sharp, and quicker than lanczos"},
 	{"a picture lanczos leaves haloed", "mitchell", "smooth, with much less ringing at edges"},

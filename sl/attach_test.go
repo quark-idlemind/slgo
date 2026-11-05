@@ -50,13 +50,13 @@ func wornUpdate(id msg.UUID, local uint32, item msg.UUID, point int) *msg.Object
 
 // TestAttachPointsAreNamed: a point is a number on the wire and nothing
 // a person can read, and a program reporting "point 31" instead of "HUD
-// centre 2" is one nobody can follow.
+// center 2" is one nobody can follow.
 func TestAttachPointsAreNamed(t *testing.T) {
 	cases := map[int]string{
 		1:              "chest",
 		2:              "head",
 		30:             "right pec",
-		HUDCenter2:     "HUD centre 2",
+		HUDCenter2:     "HUD center 2",
 		HUDBottomLeft:  "HUD bottom left",
 		HUDBottomRight: "HUD bottom right",
 		55:             "right hind foot",
@@ -218,7 +218,7 @@ func TestTheAttachPointArrivesWithItsNibblesSwapped(t *testing.T) {
 		{0x00, 0},
 		{0x10, 1},  // chest
 		{0x20, 2},  // head
-		{0x32, 35}, // HUD centre 1, measured against the live grid
+		{0x32, 35}, // HUD center 1, measured against the live grid
 		{0xf0, 15},
 		{0x0f, 240},
 	}
@@ -1036,7 +1036,7 @@ func TestAShortenedPointNameSaysWhichItCouldBe(t *testing.T) {
 	}
 
 	_, err := ParseAttachPoint("HUD centre")
-	if want := `"HUD centre" is HUD centre 1 or HUD centre 2`; err == nil || err.Error() != want {
+	if want := `"HUD centre" is HUD center 1 or HUD center 2`; err == nil || err.Error() != want {
 		t.Errorf("the message is %v, want %q", err, want)
 	}
 	_, err = ParseAttachPoint("left")

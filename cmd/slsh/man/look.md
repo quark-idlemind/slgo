@@ -35,7 +35,7 @@ The agent limit, object bonus and terrain limits are asked for each
 time: `look` sends `RequestRegionInfo` and prints what the region
 answers with.  Any avatar may ask; an estate manager is not needed.
 The limit is the one the viewer shows, the single-byte figure.  The
-terrain limits are in metres, like the water beside them; that is read
+terrain limits are in meters, like the water beside them; that is read
 from how the viewer lays them out, not measured.  A region that does
 not answer within three seconds is not an error here: the line
 

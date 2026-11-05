@@ -699,7 +699,7 @@ func filterAskAnswer(a askAnswer) (kept []askSuggestion, rejected []askRejection
 			case !ok:
 				reasons = append(reasons, fmt.Sprintf("%s: no such command", s.Command))
 			case lineOK && labelCmd != lineCmd:
-				reasons = append(reasons, fmt.Sprintf("the suggestion is labelled %s but the line runs %s", s.Command, name))
+				reasons = append(reasons, fmt.Sprintf("the suggestion is labeled %s but the line runs %s", s.Command, name))
 			}
 			if !lineOK && ok {
 				// The line is refused already; the quote is still worth

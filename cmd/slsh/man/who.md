@@ -6,9 +6,9 @@ names who else is in it.
     who
 
 It takes no argument.  Each line is a number, the name, the distance in
-metres and the key.  The distance is a straight line through all three
+meters and the key.  The distance is a straight line through all three
 axes rather than a distance across the ground, so somebody a hundred
-metres overhead is a hundred metres away and not the nearest person in
+meters overhead is a hundred meters away and not the nearest person in
 the room.  This avatar is not in its own listing.  When nobody else is
 in range, it says so.
 

@@ -28,7 +28,7 @@ func TestSimAttachmentsReadWhatTheAppearanceSaid(t *testing.T) {
 		t.Errorf("read as %+v", got)
 	}
 	if len(got.Objects) != 1 || got.Objects[0] != (SimAttachment{Object: body, Point: 40}) {
-		t.Errorf("objects = %+v, want the body on avatar centre", got.Objects)
+		t.Errorf("objects = %+v, want the body on avatar center", got.Objects)
 	}
 
 	// An appearance with no attachment list at all is known and empty.

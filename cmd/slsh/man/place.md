@@ -23,8 +23,8 @@ standing with nothing holding on to it, and says so with the error.
 
 **--at** *X,Y,Z*
 
-Where to put it, in this region.  Without it, a metre east of the
-avatar: the avatar's own position with one metre added to X, near
+Where to put it, in this region.  Without it, a meter east of the
+avatar: the avatar's own position with one meter added to X, near
 enough to hand for something that is about to be looked at.  East and
 not in front -- nothing here asks which way the avatar is facing, so a
 thing put down behind somebody goes down east of them all the same.
@@ -32,7 +32,7 @@ thing put down behind somebody goes down east of them all the same.
 Two or three numbers with commas between them and no spaces.  A pair
 is accepted rather than refused, and the Z that was not given is zero,
 which is the bottom of the region and not the height the avatar is
-standing at.  `rez`'s `--at` is spelt the same and insists on three.
+standing at.  `rez`'s `--at` is spelled the same and insists on three.
 
 ## One object, and only one
 
@@ -60,7 +60,7 @@ from `My Outfits` names a link almost every time.
 
 `place` follows one to the item at the other end, which is what the id
 it sends has to be: the grid has no object for a link's id and answers
-an id it does not recognise with silence rather than with a refusal.
+an id it does not recognize with silence rather than with a refusal.
 
 A link this inventory cannot follow is refused, naming the id it
 looked for.  A link outlives what it pointed at, so an outfit put

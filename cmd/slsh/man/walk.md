@@ -1,6 +1,6 @@
 `walk` walks the avatar in a straight line to a place in this region,
 and waits for it to get there.  The place is two numbers, X and Y, in
-the region's own metres, or a name: somebody nearby, or an object.
+the region's own meters, or a name: somebody nearby, or an object.
 
     walk 128 64
     walk 128 64 25
@@ -15,20 +15,20 @@ takes one: somebody's whole name, in any case, and otherwise the start
 of any part of it; then against objects, by the whole name.  A name
 that fits two people, or two objects, is refused with what it matched
 rather than guessed at.  Walking to a name stops a
-metre and a half short unless `--within` says otherwise, since half a
-metre from somebody's middle is walking into them.
+meter and a half short unless `--within` says otherwise, since half a
+meter from somebody's middle is walking into them.
 
-What comes back is where the avatar came to rest, to the centimetre, and
+What comes back is where the avatar came to rest, to the centimeter, and
 how far that is from where it was sent:
 
     arrived at 84.78, 173.40, 4001.20, 0.08 m from 84.70, 173.40, in 900ms
 
 ## Options
 
-**-w, --within** *METRES*
+**-w, --within** *Meters*
 
 How close is close enough, measured flat.  Without it the walk aims at
-the place itself and counts anything within half a metre as there.
+the place itself and counts anything within half a meter as there.
 Given, it aims a little inside that distance rather than at the place.
 
 **-r, --run**
@@ -66,7 +66,7 @@ and then on.
 end is printed as the command's failure, with where the avatar is:
 
     blocked       it stopped getting closer
-    cancelled     something else ended it; the reason is in brackets
+    canceled      something else ended it; the reason is in brackets
     out of region the place is not in this region, and nothing moved
 
 A walk is never taken across a region border, so a place outside 0 to
@@ -82,9 +82,9 @@ on, which a vehicle or a game can do to whoever is in it:
 A walk holds that control, and the script would be given it and the
 avatar would stand still until the walk called itself blocked.  `where`
 says which controls scripts hold.  One taken while the walk is going
-ends it, cancelled, with the reason below.
+ends it, canceled, with the reason below.
 
-The reasons a walk is cancelled are its own words: `timeout`,
+The reasons a walk is canceled are its own words: `timeout`,
 `superseded` when another walk or a `face` took over, `halted` when
 `halt` stopped it, `left the region`, `seated`, `a viewer took over`,
 `a script took the forward control`, `session ended`, and `overshot` for a walk that came to rest outside
@@ -95,19 +95,19 @@ the distance asked for three times running.
 The walk is steered by the daemon, not by the shell, and it stops the
 avatar the moment the shell stops waiting for it.  `^C` during a walk,
 or the shell exiting, or the connection to the daemon breaking, all
-leave the avatar standing about a metre on from where it was, which is
+leave the avatar standing about a meter on from where it was, which is
 how far it goes after being told to stop.
 
 A second `walk` from another shell on the same avatar takes the first
 one over without stopping in between, and the first one ends
-`cancelled (superseded)`.
+`canceled (superseded)`.
 
 ## How close it gets
 
-Measured on 2026-09-24, on flat ground: walks of six metres came to rest
-one or two centimetres from the place, and runs about ten.  A walk of a
-metre or less is rougher.  The shortest walk there is from a standstill
-is about a metre, so a place half a metre away may be walked past and
+Measured on 2026-09-24, on flat ground: walks of six meters came to rest
+one or two centimeters from the place, and runs about ten.  A walk of a
+meter or less is rougher.  The shortest walk there is from a standstill
+is about a meter, so a place half a meter away may be walked past and
 walked back to.
 
 ## Examples

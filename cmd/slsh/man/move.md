@@ -8,7 +8,7 @@ The object is named by the word the region calls it, and a name with a
 space in it has to be quoted.  A name that several objects answer to is
 refused rather than guessed at, since moving the wrong one is a thing
 somebody then has to find.  The position is three numbers -- X Y Z,
-separated by spaces, in this region's metres.
+separated by spaces, in this region's meters.
 
 A key will not do in place of the name.  `take`, `touch`, `dump` and
 the rest accept a uuid where a name would go; `move` looks its argument
@@ -16,7 +16,7 @@ up as a name and as nothing else.  A uuid typed there is refused with
 `no object named` and the uuid back again, which reads like the thing
 has gone rather than like the form is wrong.  The way past a name
 several objects answer to is the one the refusal itself names -- rename
-one of them -- and not the key every neighbouring command would have
+one of them -- and not the key every neighboring command would have
 taken.
 
 Nothing answers a move: the region reports the new position when it

@@ -11,7 +11,7 @@ border in a couple of seconds.
 
 ## Why it is off unless somebody asks
 
-Each neighbour costs a socket and a share of the traffic, for as long
+Each neighbor costs a socket and a share of the traffic, for as long
 as it is held, and the number of them is however many regions surround
 this one -- up to eight on the open grid.  That is a price worth paying
 for an avatar somebody is walking about with, and a waste for one
@@ -27,7 +27,7 @@ is left as it was.
 ## On, with nothing held, is the ordinary state
 
 Turning them on asks for nothing and opens nothing.  The simulator
-offers a neighbour of its own accord and repeats the offer for as long
+offers a neighbor of its own accord and repeats the offer for as long
 as it goes untaken, so the circuits arrive by themselves; the way to
 see them is to run `neighbors` again.
 
@@ -39,12 +39,12 @@ more forty seconds behind them.  An empty listing in the first few
 seconds is the offer not having come round yet.
 
 Being away from a border is not what empties it.  Standing in the
-exact middle of a 256-metre region, 128 metres from all four edges,
+exact middle of a 256-meter region, 128 meters from all four edges,
 four circuits were held: one across each edge, and none across a
-corner.  Twenty-eight metres in from the west edge and seventy-two
+corner.  Twenty-eight meters in from the west edge and seventy-two
 from the south, the near three came first -- those two edges and the
 corner between them -- and the far two followed.  Height does not
-decide it: that second position was 2001 metres up, and the middle was
+decide it: that second position was 2001 meters up, and the middle was
 measured both at 2001 and at ground level.
 
 The set changes as the avatar moves, and not all at once.  A circuit
@@ -54,7 +54,7 @@ one, so after a teleport the listing can still hold the regions around
 the one left, beside the new region's own as they are offered.  That
 is what makes coming back work: measured on Agni on 2026-09-26, a
 region returned to within about ten seconds of leaving it offered none
-of its neighbours again, and a session that had let them go came back
+of its neighbors again, and a session that had let them go came back
 holding none.  A move closes only the circuit to the region moved
 into, which is where the avatar now stands.  At the limit of eight, a
 circuit to a region that is not beside this one is let go to make room
@@ -71,7 +71,7 @@ simulator, and how many packets have arrived on the circuit.
     Example Shallows                 43648, 43647 203.0.113.28:13006 87 heard
 
 The handle is not in the line, where `regions` prints it, because
-nothing is addressed by a neighbour's handle: a border is walked over
+nothing is addressed by a neighbor's handle: a border is walked over
 rather than typed at.
 
 A name arrives in the region's handshake, so a line that says
@@ -84,7 +84,7 @@ the simulator's mood rather than the circuit's health.  The count is
 what says a circuit is alive; the name only says the simulator
 introduced itself.
 
-The count is what the neighbour has said, counted and dropped.  Nothing
+The count is what the neighbor has said, counted and dropped.  Nothing
 this shell can ask about lives in another region: what is over the
 border is not in `objects`, not in `who` and not in the object cache.
 The count is there to say the circuit is alive.

@@ -385,7 +385,7 @@ func parseCoord(s string) (coord, error) {
 		}
 		f, err := strconv.ParseFloat(rest, 32)
 		if err != nil {
-			return coord{}, fmt.Errorf("%q is not a number of metres to move by", s)
+			return coord{}, fmt.Errorf("%q is not a number of meters to move by", s)
 		}
 		return coord{v: float32(f), rel: true}, nil
 	}

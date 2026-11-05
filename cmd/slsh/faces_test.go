@@ -36,7 +36,7 @@ func TestFaceLabelGathersRuns(t *testing.T) {
 // the line.
 func TestDescribeFaceSaysOnlyWhatWasDone(t *testing.T) {
 	plain := describeFace(sl.PlainFaces(1)[0])
-	want := "texture none  colour 255,255,255  alpha 255  repeats 1,1"
+	want := "texture none  color 255,255,255  alpha 255  repeats 1,1"
 	if plain != want {
 		t.Errorf("a plain face reads as\n\t%q\nwant\n\t%q", plain, want)
 	}
@@ -58,7 +58,7 @@ func TestDescribeFaceSaysOnlyWhatWasDone(t *testing.T) {
 	got := describeFace(f)
 	for _, part := range []string{
 		"texture 90397e57-7e57-c0de-de82-ae6404acf598",
-		"colour 255,80,80", "alpha 200", "repeats 4,2",
+		"color 255,80,80", "alpha 200", "repeats 4,2",
 		"offset 0.25,-0.5", "fullbright", "shiny high", "glow 100",
 	} {
 		if !strings.Contains(got, part) {

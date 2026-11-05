@@ -69,7 +69,7 @@ type walkFlags struct {
 
 // faceFlags is what face was asked for.
 type faceFlags struct {
-	Yaw  string `getopt:"--yaw=DEGREES -y  a heading instead: anticlockwise from east, so 90 is north"`
+	Yaw  string `getopt:"--yaw=DEGREES -y  a heading instead: counterclockwise from east, so 90 is north"`
 	Help bool   `getopt:"--help -h         show what this command takes"`
 }
 
@@ -139,7 +139,7 @@ func endLine(p sl.MoveProgress, what string) string {
 		return fmt.Sprintf("blocked at %s, %.2f m short of %s: no closer for %s",
 			at, p.Remaining, what, p.SinceProgress.Round(100*time.Millisecond))
 	case sl.Cancelled:
-		return fmt.Sprintf("cancelled (%s) at %s, %.2f m from %s, after %s", p.Reason, at, p.Remaining, what, took)
+		return fmt.Sprintf("canceled (%s) at %s, %.2f m from %s, after %s", p.Reason, at, p.Remaining, what, took)
 	case sl.OutOfRegion, sl.Refused:
 		return p.Reason
 	}

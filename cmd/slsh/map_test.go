@@ -597,7 +597,7 @@ func TestMapRefusesWhatItCannotDraw(t *testing.T) {
 		{"map --rows 1", "--rows wants 2 to 64"},
 		{"map --rows 400", "--rows wants 2 to 64"},
 		{"map --region --span 100", "--region covers the region"},
-		{"map --span 1", "--span is metres across"},
+		{"map --span 1", "--span is meters across"},
 		{"map somewhere", "takes no argument"},
 	} {
 		if got := x.do(t, c.line); !strings.Contains(got, c.want) {

@@ -751,7 +751,7 @@ it. All three used to print as three numbers.
       6bdc7e57-…  Tanagera Design       228, 66, 30
         d7987e57-…  HearthEmbers          offset -29.2, 6.5, 8.1
     Perrick Hobb
-      ec247e57-…  HUD control           worn on HUD centre 2
+      ec247e57-…  HUD control           worn on HUD center 2
 
 Three levels: who owns it, what they own -- standing here or worn --
 and the prims inside each. A region is mostly one person's things at a
@@ -1935,8 +1935,8 @@ faces once and send them with `SetFaces` when making several changes.
     faces, err := w.Faces(ctx, o)
 
     a sign, 6 faces
-      faces 0-1,3-5  texture none  colour 255,255,255  alpha 255  repeats 1,1
-      face 2         texture 89556747-…  colour 255,80,80  alpha 200  repeats 4,2  offset 0.25,-0.5  fullbright  shiny high  glow 100
+      faces 0-1,3-5  texture none  color 255,255,255  alpha 255  repeats 1,1
+      face 2         texture 89556747-…  color 255,80,80  alpha 200  repeats 4,2  offset 0.25,-0.5  fullbright  shiny high  glow 100
 
 Given nothing to change, `texture` says what is there instead. Faces
 that look alike are printed once under all their numbers, because that

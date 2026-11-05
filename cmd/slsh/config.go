@@ -10,7 +10,7 @@ package main
 //	map_rows          = 16
 //	map_span          = 64
 //	map_ratio         = 7:3
-//	map_friend_colour = green
+//	map_friend_color = green
 //
 //	viewer_app     = Firestorm-OpenSim
 //	viewer_grid    = slgod
@@ -370,7 +370,7 @@ var settings = []setting{{
 	},
 }, {
 	name:  "map_span",
-	about: "how much ground the close picture covers, in metres",
+	about: "how much ground the close picture covers, in meters",
 	show:  func(c *Config) string { return strconv.Itoa(c.MapSpan) },
 	parse: func(c *Config, v string) error {
 		n, err := settingNumber(v, 2)
@@ -397,7 +397,7 @@ var settings = []setting{{
 	},
 }, {
 	name:  "map_level",
-	about: "how far above or below you still counts as level, in metres",
+	about: "how far above or below you still counts as level, in meters",
 	show:  func(c *Config) string { return strconv.Itoa(c.MapLevel) },
 	parse: func(c *Config, v string) error {
 		n, err := settingNumber(v, 1)
@@ -408,8 +408,9 @@ var settings = []setting{{
 		return nil
 	},
 }, {
-	name:  "map_friend_colour",
-	about: "the colour a friend is drawn in, by name; \"man map\" names them",
+	name:  "map_friend_color",
+	also:  []string{"map_friend_colour"},
+	about: "the color a friend is drawn in, by name; \"man map\" names them",
 	show:  func(c *Config) string { return c.MapFriendColour },
 	parse: func(c *Config, v string) error {
 		name, err := ParseColour(v)

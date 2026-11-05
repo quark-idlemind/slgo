@@ -55,7 +55,7 @@ import (
 
 // The shape and scale of a picture nobody has said anything about.
 // Every one of these is a setting -- map_rows, map_span, map_ratio,
-// map_level, map_friend_colour -- and these are what an empty
+// map_level, map_friend_color -- and these are what an empty
 // configuration file leaves them at.  See config.go.
 //
 // mapDefaultRows is a size that fits any terminal: 16 rows at the
@@ -149,7 +149,7 @@ const mapColourOff = "\x1b[0m"
 func ParseColour(s string) (string, error) {
 	name := strings.ToLower(strings.Join(strings.Fields(s), " "))
 	if _, ok := mapColours[name]; !ok {
-		return "", fmt.Errorf("no colour called %q; there is %s", s, colourNames())
+		return "", fmt.Errorf("no color called %q; there is %s", s, colourNames())
 	}
 	return name, nil
 }
@@ -196,7 +196,7 @@ func (hl mapHighlight) paint(s string) string {
 }
 
 // friendColour is the name of the colour a friend is drawn in:
-// whatever map_friend_colour says.
+// whatever map_friend_color says.
 //
 // A Config that never went through LoadConfig -- a test's, mostly --
 // names no colour at all, and the default is a better answer than a
@@ -262,12 +262,12 @@ func cmdMap(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		// whole of the scale; somebody who typed both meant one of them
 		// and should be told which one this would have thrown away.
 		return usageError("map",
-			"--region covers the region, which is 256 metres; --span is for the picture around the avatar")
+			"--region covers the region, which is 256 meters; --span is for the picture around the avatar")
 	case o.Span == 0:
 		span = firstSet(sh.cfg.MapSpan, mapDefaultSpan)
 	case o.Span < 2:
 		return usageError("map",
-			"--span is metres across, and less than 2 is narrower than the avatar in the middle of it")
+			"--span is meters across, and less than 2 is narrower than the avatar in the middle of it")
 	default:
 		span = o.Span
 	}

@@ -89,17 +89,17 @@ var attachPointNames = map[int]attachPointName{
 	29: {"left pec", "Left Pec"},
 	30: {"right pec", "Right Pec"},
 
-	HUDCenter2:     {"HUD centre 2", "Center 2"},
+	HUDCenter2:     {"HUD center 2", "Center 2"},
 	HUDTopRight:    {"HUD top right", "Top Right"},
 	HUDTop:         {"HUD top", "Top"},
 	HUDTopLeft:     {"HUD top left", "Top Left"},
-	HUDCenter1:     {"HUD centre 1", "Center"},
+	HUDCenter1:     {"HUD center 1", "Center"},
 	HUDBottomLeft:  {"HUD bottom left", "Bottom Left"},
 	HUDBottom:      {"HUD bottom", "Bottom"},
 	HUDBottomRight: {"HUD bottom right", "Bottom Right"},
 
 	39: {"neck", "Neck"},
-	40: {"avatar centre", "Avatar Center"},
+	40: {"avatar center", "Avatar Center"},
 	41: {"left ring finger", "Left Ring Finger"},
 	42: {"right ring finger", "Right Ring Finger"},
 	43: {"tail base", "Tail Base"},
@@ -132,10 +132,9 @@ func AttachPointName(point int) string {
 // above is understood here without anybody remembering to add it twice,
 // and that goes for the viewer's name as much as for ours.
 //
-// The keys are folded to lower case, and "center" is accepted for
-// "centre" as well, because the viewer spells the HUD points the
-// American way and a person reading them off its menu should not be told
-// there is no such point.  Accepting the viewer's whole name for a point
+// The keys are folded to lower case, and "centre" is accepted for
+// "center" as well, so that the British spelling is not told there is
+// no such point.  Accepting the viewer's whole name for a point
 // -- "Skull" for "head", "Top" for "HUD top" -- is the same courtesy
 // carried the rest of the way.
 //
@@ -153,7 +152,7 @@ var attachPointsByName = func() map[string]int {
 			panic(fmt.Sprintf("sl: attachment point name %q is both %d and %d", n, was, point))
 		}
 		m[n] = point
-		if alt := strings.ReplaceAll(n, "centre", "center"); alt != n {
+		if alt := strings.ReplaceAll(n, "center", "centre"); alt != n {
 			if was, ok := m[alt]; ok && was != point {
 				panic(fmt.Sprintf("sl: attachment point name %q is both %d and %d", alt, was, point))
 			}
@@ -185,8 +184,8 @@ func AttachPointNamed(name string) (int, bool) {
 var ErrNoAttachPoint = errors.New("sl: not an attachment point")
 
 // AttachPointStartError is a name that is not a point's whole name but
-// begins the names of one or more: "HUD centre" begins "HUD centre 1"
-// and "HUD centre 2", and "left" begins a dozen.
+// begins the names of one or more: "HUD center" begins "HUD center 1"
+// and "HUD center 2", and "left" begins a dozen.
 type AttachPointStartError struct {
 	Name   string // as the person typed it
 	Points []int  // the points it begins, by the name printed
@@ -210,10 +209,10 @@ func (e *AttachPointStartError) Error() string {
 }
 
 // attachWords is a point's name as the words it is matched by: folded
-// to lower case, spaces collapsed, and "center" spelt as the table spells
-// it.
+// to lower case, spaces collapsed, and "centre" spelled as the table
+// spells it.
 func attachWords(name string) []string {
-	return strings.Fields(strings.ReplaceAll(strings.ToLower(name), "center", "centre"))
+	return strings.Fields(strings.ReplaceAll(strings.ToLower(name), "centre", "center"))
 }
 
 // ParseAttachPoint is AttachPointNamed that says why it found nothing.
@@ -247,8 +246,8 @@ func ParseAttachPoint(name string) (int, error) {
 	if len(points) == 0 {
 		return 0, ErrNoAttachPoint
 	}
-	// By the name printed, so that "HUD centre 1" comes before "HUD
-	// centre 2" though the viewer numbers them the other way round.
+	// By the name printed, so that "HUD center 1" comes before "HUD
+	// center 2" though the viewer numbers them the other way round.
 	slices.SortFunc(points, func(a, b int) int {
 		return strings.Compare(AttachPointName(a), AttachPointName(b))
 	})

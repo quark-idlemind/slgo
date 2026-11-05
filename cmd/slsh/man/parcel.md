@@ -6,7 +6,7 @@ a script or a stream has stopped working for no reason the region
 explains.
 
 With a point it describes any parcel in this region rather than the one
-underfoot.  The avatar does not move.  The point is metres from the
+underfoot.  The avatar does not move.  The point is meters from the
 region's south-west corner, the same numbers `where` prints, 0 to 256
 each way:
 
@@ -67,7 +67,7 @@ parcels were cut into.
 Linden's protected land is drawn as ground: a blank for the roads and
 waterways, and a `.` for the rez zones inside them.  A `?` is a part of
 the overlay that never arrived.  Each other parcel is a letter, in a
-colour: the colour is what tells two parcels apart at a glance, and the
+color: the color is what tells two parcels apart at a glance, and the
 letter is what tells them apart at all when the picture is written to a
 file or `NO_COLOR` is set.
 

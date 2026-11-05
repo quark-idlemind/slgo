@@ -222,7 +222,7 @@ func TestSetRefusesAValueAndChangesNothing(t *testing.T) {
 	for _, c := range []struct{ line, want string }{
 		{"set map_ratio sideways", "map_ratio: want height:width"},
 		{"set map_rows 400", "map_rows: 400 is more than"},
-		{"set map_friend_colour puce", "map_friend_colour: no colour called"},
+		{"set map_friend_color puce", "map_friend_color: no color called"},
 		{"set escape enter", "escape: \"enter\" would leave no way"},
 	} {
 		before := x.cfg
@@ -265,16 +265,16 @@ func TestASettingThatCannotBeWrittenIsNotAppliedEither(t *testing.T) {
 // TestSetNamesTheSettingsWhenItIsGivenOneThatIsNot.
 //
 // The commonest way to type a name that is not there is a near miss --
-// map_colour for map_friend_colour -- and the answer to that is the
+// map_color for map_friend_color -- and the answer to that is the
 // list, not "try set".
 func TestSetNamesTheSettingsWhenItIsGivenOneThatIsNot(t *testing.T) {
 	x := newSettingShell(t)
-	got := x.do(t, "set map_colour green")
+	got := x.do(t, "set map_color green")
 
 	if !strings.Contains(got, "no setting called") {
 		t.Errorf("set should refuse a name that is not a setting:\n%s", got)
 	}
-	if !strings.Contains(got, "map_friend_colour") {
+	if !strings.Contains(got, "map_friend_color") {
 		t.Errorf("the refusal should name the settings there are:\n%s", got)
 	}
 }
@@ -311,10 +311,16 @@ func TestTheFriendColourSetByNameReachesThePicture(t *testing.T) {
 		t.Errorf("a friend should be green until somebody says otherwise:\n%q", got)
 	}
 
-	x.do(t, "set map_friend_colour bright cyan")
+	x.do(t, "set map_friend_color bright cyan")
 	got := x.do(t, "map")
 	if !strings.Contains(got, mapColours["bright cyan"]) {
 		t.Errorf("the friend should now be bright cyan:\n%q", got)
+	}
+
+	// The British spelling of the name is the same setting.
+	x.do(t, "set map_friend_colour yellow")
+	if got := x.do(t, "map"); !strings.Contains(got, mapColours["yellow"]) {
+		t.Errorf("set map_friend_colour should set the same color:\n%q", got)
 	}
 	if strings.Contains(got, mapColours["green"]) {
 		t.Errorf("nothing should still be green:\n%q", got)

@@ -713,7 +713,7 @@ func noSuchLandmark(all, kept, trashed []sl.Entry, name string) error {
 		return fmt.Errorf("no landmark in inventory has the id %s, as either "+
 			"of its two ids; a uuid that is not something this avatar holds is refused "+
 			"rather than sent, because the grid answers a landmark id it does not "+
-			"recognise with silence and never with an error", id)
+			"recognize with silence and never with an error", id)
 	}
 	if err := nearLandmarks(kept, name); err != nil {
 		return err

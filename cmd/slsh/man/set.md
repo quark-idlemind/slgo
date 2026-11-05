@@ -182,7 +182,7 @@ row.
     set map_span
     set map_ratio 2:1
     set map_ratio auto
-    set map_friend_colour bright cyan
+    set map_friend_color bright cyan
 
 The last of these cannot take until the next slsh, and says so:
 

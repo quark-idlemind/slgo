@@ -260,6 +260,16 @@ not write a measurement that was not taken, do not compose a transcript
 out of two real ones, and do not tidy the grid's own words. If
 something was inferred rather than measured, the sentence says so.
 
+## Spelling is American
+
+Prose, names and output are spelled the American way: color, center,
+meter, canceled, recognize.  The British spellings already in the tree
+are accidental, not a house style to follow.  A name somebody types that
+is spelled the British way is renamed to the American spelling and keeps
+the British one as an alias, as `neighbors` keeps `neighbours`, and
+`how` and `ask` match either spelling (`internal/askindex/spelling.go`).
+What the grid, a viewer or Linden wrote is quoted as they wrote it.
+
 ## Comments are short, and the reasons live in doc/
 
 A comment says what the code does, where that is not plain from the

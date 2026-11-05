@@ -724,13 +724,13 @@ deletes things.
 ## Naming an attachment point
 
 `wear --at POINT` takes a point by number or by name, and a name is a
-whole name: either the one slsh prints (`HUD centre 1`) or the viewer's
-own (`Skull`), in any case and with `center` for `centre`.  A name that
+whole name: either the one slsh prints (`HUD center 1`) or the viewer's
+own (`Skull`), in any case and with `centre` for `center`.  A name that
 is only the start of some, taken word by word, is refused with the
-points it could be, in the order of their names (so `HUD centre 1` comes
-before `HUD centre 2`, though the viewer numbers them the other way):
+points it could be, in the order of their names (so `HUD center 1` comes
+before `HUD center 2`, though the viewer numbers them the other way):
 
-    wear: --at: "HUD centre" is HUD centre 1 or HUD centre 2; say which, or give its number
+    wear: --at: "HUD center" is HUD center 1 or HUD center 2; say which, or give its number
 
 and `left` lists everything that begins with the word.  A start that
 only one point has (`left ring`) is refused too, naming that point and

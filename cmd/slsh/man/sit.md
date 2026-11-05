@@ -12,12 +12,12 @@ sitting on, and where that left it.
 This is the part to know before anything else.  A sit is not a request
 to sit on something already within reach: the simulator picks the
 avatar up and puts it on the seat, over whatever is in the way, from
-several metres off.  A box seven metres away seats as readily as one
-half a metre away.  Eleven metres is refused.  A near thing is sat on
+several meters off.  A box seven meters away seats as readily as one
+half a meter away.  Eleven meters is refused.  A near thing is sat on
 and a far one is refused in words.
 
 Standing up afterwards does not undo the journey.  The avatar seated on
-that box seven metres away is left about six metres from where it had
+that box seven meters away is left about six meters from where it had
 been standing.  That is why a second line says where the avatar now is,
 in the words `where` and `tp` use:
 

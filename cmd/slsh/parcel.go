@@ -130,10 +130,10 @@ func cmdParcel(ctx context.Context, sh *Shell, out io.Writer, args []string) err
 func parcelPoint(s string) (x, y float32, err error) {
 	f := strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' })
 	if len(f) != 2 {
-		return 0, 0, usageError("parcel", "a point is X,Y in metres from the region's south west corner")
+		return 0, 0, usageError("parcel", "a point is X,Y in meters from the region's south west corner")
 	}
 	if _, err := fmt.Sscanf(f[0]+" "+f[1], "%g %g", &x, &y); err != nil {
-		return 0, 0, usageError("parcel", "a point is X,Y in metres from the region's south west corner")
+		return 0, 0, usageError("parcel", "a point is X,Y in meters from the region's south west corner")
 	}
 	if x < 0 || y < 0 || x >= 256 || y >= 256 {
 		return 0, 0, usageError("parcel", "a point is inside the region: 0 to 256 each way")
@@ -627,7 +627,7 @@ func parcelMap(ctx context.Context, sh *Shell, out io.Writer, rows int, colour b
 		writeOwn(out, "  "+line.String()+"\n")
 	}
 
-	fmt.Fprintf(out, "\n%.0f metres across, %d parcels%s\n",
+	fmt.Fprintf(out, "\n%.0f meters across, %d parcels%s\n",
 		g.width(), len(named), protectedNote(named))
 	for i, n := range named {
 		if !drawn[i] {

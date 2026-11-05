@@ -17,7 +17,7 @@ func TestWearBindsANameThatTheSameStepUses(t *testing.T) {
 expect attached hud on "HUD centre 2" within 2s
 `)
 	wantExit(t, res, 0)
-	mustHave(t, res, "attached hud HUD centre 2", "pass step 1")
+	mustHave(t, res, "attached hud HUD center 2", "pass step 1")
 	w := sentOf[*msg.RezSingleAttachmentFromInv](f)
 	if len(w) != 1 || w[0].ObjectData.ItemID != idWornHat || w[0].ObjectData.AttachmentPt != sl.HUDCenter2|sl.AttachAdd {
 		t.Errorf("sent %+v", w)
@@ -146,7 +146,7 @@ func TestTheStimulusDetailsSayWhatWasWornAndTakenOff(t *testing.T) {
 expect attached hud on "chest" within 300ms
 `)
 	wantExit(t, res, 1)
-	mustHave(t, res, `wore "Example Hat" on HUD centre 2 as hud`, "last reading: attached hud HUD centre 2")
+	mustHave(t, res, `wore "Example Hat" on HUD center 2 as hud`, "last reading: attached hud HUD center 2")
 
 	f = newGrid(t)
 	f.withWearing(t)

@@ -53,7 +53,7 @@ func cmdSet(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	if !ok {
 		// The names rather than "try set", because the commonest way to
 		// arrive here is a near miss -- map_colour for
-		// map_friend_colour -- and the answer is one line away.
+		// map_friend_color -- and the answer is one line away.
 		return fmt.Errorf("no setting called %q; there is %s",
 			args[0], strings.Join(settingNames(), ", "))
 	}

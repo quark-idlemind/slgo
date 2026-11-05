@@ -91,7 +91,7 @@ var inventoryCommands = map[string]*command{
 		params:   "PATH DEST",
 		flags:    func() any { return new(mvOptions) },
 		brief:    "move into a folder, or rename if DEST is a plain name; folders too",
-		keywords: "move rename folder item organise organize relocate inventory",
+		keywords: "move rename folder item organize relocate inventory",
 		man:      "mv",
 		run:      cmdMv,
 	},

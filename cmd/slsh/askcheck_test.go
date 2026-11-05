@@ -196,8 +196,8 @@ func TestCheckCommandLineChecksWordsFromTheShellsLists(t *testing.T) {
 		{"wear --at POINT PATH", ""},
 		{"wear --at elbow PATH", `wear: --at: "elbow" is not an attachment point`},
 		{"wear --at 900 PATH", "wear: --at: 900 is not an attachment point"},
-		{`wear --at "HUD centre" PATH`, `wear: --at: "HUD centre" is HUD centre 1 or HUD centre 2; say which, or give its number`},
-		{`wear --at "hud center" PATH`, `is HUD centre 1 or HUD centre 2; say which, or give its number`},
+		{`wear --at "HUD centre" PATH`, `wear: --at: "HUD centre" is HUD center 1 or HUD center 2; say which, or give its number`},
+		{`wear --at "hud center" PATH`, `is HUD center 1 or HUD center 2; say which, or give its number`},
 		{`wear --at left PATH`, `"left" is left ear, left eye, left foot`},
 		{`wear --at "left ring" PATH`, `did you mean "left ring finger"`},
 		{`wear --at "HUD centre 1" PATH`, ""},
@@ -490,7 +490,7 @@ func TestFilterAskAnswerKeepsOnlyWhatChecks(t *testing.T) {
 		{"landmark --sethome", []string{"landmark: unknown option: --sethome"}},
 		{"sethome", []string{"sethome: no such command; try help", "sethome: no such command"}},
 		{"landmark --home", []string{"not in landmark's"}},
-		{"landmark --home", []string{"labelled tp but the line runs landmark"}},
+		{"landmark --home", []string{"labeled tp but the line runs landmark"}},
 	}
 	if len(rejected) != len(want) {
 		t.Fatalf("rejected %d, want %d: %+v", len(rejected), len(want), rejected)

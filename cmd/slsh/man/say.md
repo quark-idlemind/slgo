@@ -37,7 +37,7 @@ dialog reply, so a script listening there hears whoever types to it.
 
 The reach is chat's reach either way.  A negative channel is a private
 word rather than a region-wide one: heard nearby, not heard a hundred
-metres up.
+meters up.
 
 ## Examples
 

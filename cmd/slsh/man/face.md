@@ -1,6 +1,6 @@
 `face` turns the avatar toward a place, somebody or something, without
 moving it.  The place is two numbers, X and Y, in the region's own
-metres; a name is taken the way `walk` takes one, people first and then
+meters; a name is taken the way `walk` takes one, people first and then
 objects.
 
     face 128 64
@@ -9,7 +9,7 @@ objects.
     face --yaw 90
 
 What it prints is the heading the avatar was given, in degrees
-anticlockwise from east and as the nearest point of the compass:
+counterclockwise from east and as the nearest point of the compass:
 
     facing 90° N
 
@@ -21,17 +21,17 @@ lasts until a walk or another `face` changes it.
 
 **-y, --yaw** *DEGREES*
 
-Turn to a heading rather than toward something: degrees anticlockwise
+Turn to a heading rather than toward something: degrees counterclockwise
 from east, so 0 is east, 90 north, 180 west and -90 south.
 
 ## What else it does
 
-A walk under way is ended by it, as `cancelled (superseded)`, and the
+A walk under way is ended by it, as `canceled (superseded)`, and the
 avatar is stopped, since a heading set under a walk would be undone a
 tenth of a second later.
 
-Turning on the spot can shuffle the avatar a few centimetres; measured
-on 2026-09-24, a turn moved it about a tenth of a metre.
+Turning on the spot can shuffle the avatar a few centimeters; measured
+on 2026-09-24, a turn moved it about a tenth of a meter.
 
 A sitting avatar is refused, and so is one somebody is driving from a
 viewer.  The place the avatar is standing on has no direction and is

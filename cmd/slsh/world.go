@@ -24,7 +24,7 @@ var neighbors = &command{
 	params:   "[on|off]",
 	flags:    func() any { return new(helpOnly) },
 	brief:    "the circuits held to the regions around this one, which walking over a border needs",
-	keywords: "neighbours border crossing adjacent regions circuits walk cross region edge sim",
+	keywords: "border crossing adjacent regions circuits walk cross region edge sim",
 	man:      "neighbors",
 	run:      cmdNeighbors,
 }
@@ -63,7 +63,7 @@ var worldCommands = map[string]*command{
 		params:   "[NAME]",
 		flags:    func() any { return new(landmarkOptions) },
 		brief:    "the landmarks in inventory, where one goes, going there, and going home or setting it",
-		keywords: "home set home go home landmarks places favourite bookmark location teleport saved place create make",
+		keywords: "home set home go home landmarks places favorite bookmark location teleport saved place create make",
 		man:      "landmark",
 		run:      cmdLandmark,
 	},

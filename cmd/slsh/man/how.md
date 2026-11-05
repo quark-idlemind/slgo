@@ -46,7 +46,7 @@ What the model says is then checked before any of it is printed:
   parsed the way the shell would parse it when typed;
 - where a command takes a word from a list slsh keeps -- a setting's
   name for `set`, a rating for `maturity`, a group for `help` -- the
-  word must be on that list, or be the capitalised placeholder the
+  word must be on that list, or be the capitalized placeholder the
   usage line writes, like NAME;
 - the quotation must be found, word for word, in that command's man
   page, usage line or description.

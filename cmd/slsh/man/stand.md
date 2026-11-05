@@ -18,7 +18,7 @@ seconds.
 
 The second line is the position, in the words `where` and `tp` use.
 Standing up does not undo the journey the sit made.  An avatar seated
-on a box seven metres away is left about six metres from where it had
+on a box seven meters away is left about six meters from where it had
 been standing.  This line is where the avatar is now, and not where it
 was before any of it began.
 

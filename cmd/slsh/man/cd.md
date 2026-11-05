@@ -27,7 +27,7 @@ id beside the path for the commands that do take one.
 
 A name is matched exactly, in the case it has, as every path through
 inventory is.  The grid keeps `Notecards` and `notecards` as two
-names, and so does this prompt.  A name spelt a way nothing is spelt
+names, and so does this prompt.  A name spelled a way nothing is spelled
 is refused, and the refusal names what differs from it only in case:
 
     cd notecards
