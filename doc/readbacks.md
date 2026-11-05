@@ -53,8 +53,8 @@ AIS will not move an item. A `PATCH` of an item with a new
 
     Cannot change parent_id.  Use MOVE method.
 
-The probe of inventory names read that off the grid (the README,
-"Inventory names, and paths that survive them").
+The probe of inventory names read that off the grid
+([overview.md](overview.md#inventory-names-and-paths-that-survive-them)).
 
 The viewer moves with the UDP messages. Firestorm sends
 `MoveInventoryItem` from `LLViewerInventoryItem::updateParentOnServer`

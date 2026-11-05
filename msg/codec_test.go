@@ -209,7 +209,7 @@ func TestWireSizes(t *testing.T) {
 // Flags is the one to watch.  The viewer adds it straight after State
 // (send_agent_update, llviewermessage.cpp:4371-4372), and the template,
 // which is what decides, puts it last; see "Where the wire format came
-// from" in README.md.  The widths are TestWireSizes'.
+// from" in doc/overview.md.  The widths are TestWireSizes'.
 func TestAgentUpdateIsLaidOutAsTheTemplateSays(t *testing.T) {
 	var m AgentUpdate
 	a := &m.AgentData

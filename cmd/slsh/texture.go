@@ -142,7 +142,7 @@ func cmdGet(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 // safeName turns an inventory name into a filename.
 //
 // Inventory names may hold very nearly any printable character -- see
-// the README -- so a name used as a path can escape the directory it
+// doc/overview.md -- so a name used as a path can escape the directory it
 // was meant for.  Only the separators are a danger, and replacing them
 // keeps a name recognisable where sanitising to alphanumerics would
 // not.

@@ -76,7 +76,7 @@
 
           <li><div class="step-body">
             <h3>Make sure sl-host is not installed</h3>
-            <p>The README's shortcut, <code>go install ./cmd/...</code>, installs every program here, and <code>sl-host</code> is one of them. Once sl-host is on your <code>PATH</code>, slsh stops assuming slgod is on this machine and asks sl-host instead. With no rules file for sl-host to read, every slsh then stops at once with:</p>
+            <p>The shortcut <code>go install ./cmd/...</code> installs every program here, and <code>sl-host</code> is one of them. Once sl-host is on your <code>PATH</code>, slsh stops assuming slgod is on this machine and asks sl-host instead. With no rules file for sl-host to read, every slsh then stops at once with:</p>
             <div class="term"><pre><span class="o">slsh: cannot find the host slgod is on: sl-host failed: exit status 2: sl-host: cannot read ~/.config/sl-host
 	--addr HOST:PORT overrides</span></pre></div>
             <p>Check, and remove it if it is there:</p>
