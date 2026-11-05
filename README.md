@@ -251,7 +251,7 @@ with the code, the code is right.
 
 ## Stability
 
-slgo is at 0.8, so things can still change. From 1.0 on, `sl`, `agent`,
+slgo is at 0.9, so things can still change. From 1.0 on, `sl`, `agent`,
 `msg`, `llsd`, `client` and the two `proto` packages will follow the
 usual Go rules, and code that builds against one 1.x release will keep
 building against later ones. There are a few exceptions:
