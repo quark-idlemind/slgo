@@ -17,7 +17,7 @@ package main
 //   - The push.  Whatever held the session when the avatar arrived was
 //     told what it landed on.  That is what the command falls back to
 //     when asking gets no answer.
-//   - The overlay.  Four packets on arrival say who owns every 4 metre
+//   - The overlay.  Four packets on arrival say who owns every 4 meter
 //     square of the region, with no names at all -- and cannot be asked
 //     for again, so the session that heard them is the only source.
 //     --region and --map read it.
@@ -431,7 +431,7 @@ func overlayPieces(o *agent.Overlay) ([]piece, []int) {
 	at := func(x, y int) byte { return sq[y*edge+x] }
 
 	// label is which piece each square ended up in, so that a picture
-	// can colour the ground by parcel rather than by ownership.  A
+	// can color the ground by parcel rather than by ownership.  A
 	// square in a quarter that never arrived stays -1.
 	label := make([]int, len(sq))
 	for i := range label {
@@ -493,20 +493,20 @@ func overlayPieces(o *agent.Overlay) ([]piece, []int) {
 }
 
 // parcelMarks are the characters a parcel can be drawn as, and
-// parcelInks the colours they can be drawn in.
+// parcelInks the colors they can be drawn in.
 //
-// Letters, because the mark has to survive the colour being gone: a
+// Letters, because the mark has to survive the color being gone: a
 // picture down a pipe, in a test, or on a terminal somebody has set
 // NO_COLOR on has nothing but the shape left, and a picture that was
-// only ever telling parcels apart by colour would then be a wash of one
-// character.  Colour is what makes them easy to tell apart at a glance;
+// only ever telling parcels apart by color would then be a wash of one
+// character.  Color is what makes them easy to tell apart at a glance;
 // the letter is what makes them possible to tell apart at all.
 //
-// Colour is the foreground of the letter and never a block behind it,
-// and the eight-and-bright names rather than a 256-colour index, as in
+// Color is the foreground of the letter and never a block behind it,
+// and the eight-and-bright names rather than a 256-color index, as in
 // mapColours.  Black and white are left out of the rotation: one of
 // them is invisible on each kind of paper.
-// Why: doc/slsh.md#the-colours-a-map-is-drawn-in
+// Why: doc/slsh.md#the-colors-a-map-is-drawn-in
 const parcelMarks = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 var parcelInks = []string{
@@ -515,8 +515,8 @@ var parcelInks = []string{
 	"bright magenta", "bright cyan", "bright red",
 }
 
-// parcelDraw is how one parcel is drawn: a mark, and the colour it is
-// painted in where there is colour.
+// parcelDraw is how one parcel is drawn: a mark, and the color it is
+// painted in where there is color.
 type parcelDraw struct {
 	mark byte
 	ink  string
@@ -524,14 +524,14 @@ type parcelDraw struct {
 
 // parcelDraws decides a mark for each parcel.
 //
-// The letters and the colours turn over at different rates -- 52 and 12
+// The letters and the colors turn over at different rates -- 52 and 12
 // -- so two parcels are drawn alike only after 156 of them, where a
-// region holds dozens.  Neighbouring parcels differ in both.
+// region holds dozens.  Neighboring parcels differ in both.
 //
 // Linden's protected land is the exception, and it is drawn as ground
 // rather than as a parcel: blank for the roads and waterways a region
 // is laid out around, and "." for the rez zones inside them, so that
-// the loudest marks are left for the homes.  It is recognised by its
+// the loudest marks are left for the homes.  It is recognized by its
 // name, not by its owner.
 // Why: doc/slsh.md#protected-land-drawn-as-ground
 func parcelDraws(named []namedPiece) []parcelDraw {
@@ -572,7 +572,7 @@ func protectedLand(name string) (protected, rez bool) {
 // parcel is which is what a map of parcels is for, and not who owns it.
 // Why: doc/slsh.md#drawing-parcels-rather-than-ownership
 //
-// Whether there is colour is decided by the caller and not discovered
+// Whether there is color is decided by the caller and not discovered
 // here, for the reason mapHighlight gives: a picture that reached for
 // the terminal half way down would be a different picture depending on
 // who ran it.
@@ -600,7 +600,7 @@ func parcelMap(ctx context.Context, sh *Shell, out io.Writer, rows int, colour b
 	for row := 0; row < g.rows; row++ {
 		var line strings.Builder
 		for col := 0; col < g.cols(); col++ {
-			// The cell, in region metres.  North is up, so the top row
+			// The cell, in region meters.  North is up, so the top row
 			// is the far edge.
 			x0 := float32(col) * g.perCol()
 			y1 := g.span - float32(row)*g.perRow()
@@ -622,7 +622,7 @@ func parcelMap(ctx context.Context, sh *Shell, out io.Writer, rows int, colour b
 				line.WriteByte(d.mark)
 			}
 		}
-		// Marks and their colours and nothing else, so the shell's own
+		// Marks and their colors and nothing else, so the shell's own
 		// writing.  See writeOwn.
 		writeOwn(out, "  "+line.String()+"\n")
 	}
@@ -647,7 +647,7 @@ func parcelMap(ctx context.Context, sh *Shell, out io.Writer, rows int, colour b
 		}
 		if colour {
 			// A parcel's name is whatever its owner typed, and here it
-			// shares a line with the colour of its mark, so it is made
+			// shares a line with the color of its mark, so it is made
 			// visible now and the line goes out by writeOwn rather than
 			// through Print.
 			name = visible(name)

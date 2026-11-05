@@ -833,7 +833,7 @@ func TestARefusalArrivesInOnePieceWithSomethingElsePrinting(t *testing.T) {
 // that was never going to come.
 func TestOneObjectIsOnePlaceAndJobsCannotConjureMore(t *testing.T) {
 	reset(t)
-	// Nothing is dialled: the refusal is decided before anything
+	// Nothing is dialed: the refusal is decided before anything
 	// connects, which is also why this can be tested at all.
 	opts := session.Options{Addr: "127.0.0.1:1", Channel: "slrun"}
 	flags.Jobs = 4
@@ -852,7 +852,7 @@ func TestOneObjectIsOnePlaceAndJobsCannotConjureMore(t *testing.T) {
 }
 
 // TestMoreJobsThanTheNamedAvatarHasIsRefused: an avatar named is an
-// avatar honoured exactly, so its pool is the ceiling and it is known
+// avatar honored exactly, so its pool is the ceiling and it is known
 // without asking anybody.  Past the end of it there is nothing to round
 // down to that would not be a speed-up somebody counted on and did not
 // get, so it is refused, with the number and the way to more: leaving

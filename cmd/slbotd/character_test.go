@@ -181,7 +181,7 @@ func TestAnAbsolutePathIsNotAnInclude(t *testing.T) {
 	}
 }
 
-// The name is matched however somebody spelt the filename, because a
+// The name is matched however somebody spelled the filename, because a
 // directory of these is typed into by hand and a space in a filename is
 // tiresome enough to be worth avoiding.
 func TestAPersonsCharacterIsFoundHoweverTheNameIsSpelt(t *testing.T) {

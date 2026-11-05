@@ -37,7 +37,7 @@ func sculptData(tex UUID, kind uint8) []byte {
 	return append(append([]byte(nil), tex[:]...), kind)
 }
 
-// lightData is the light block: three colour bytes, an intensity byte
+// lightData is the light block: three color bytes, an intensity byte
 // and three floats.
 func lightData(r, g, b, intensity uint8, radius, cutoff, falloff float32) []byte {
 	out := []byte{r, g, b, intensity}
@@ -127,8 +127,8 @@ func TestDecodeExtraParamsTruncated(t *testing.T) {
 	}
 }
 
-// TestLightOf splits the four bytes that colour and intensity share:
-// three for the colour and one for how bright, scaled so 255 is full.
+// TestLightOf splits the four bytes that color and intensity share:
+// three for the color and one for how bright, scaled so 255 is full.
 func TestLightOf(t *testing.T) {
 	blob := params(param(ExtraLight, lightData(255, 128, 0, 255, 10, 0.5, 0.75)))
 	got, err := DecodeExtraParams(blob)

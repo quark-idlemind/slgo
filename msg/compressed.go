@@ -67,10 +67,10 @@ type Compressed struct {
 	Tree *uint8
 
 	// Text is the floating text above an object, and TextColor its
-	// colour as the four bytes arrived: red, green, blue, and the alpha
+	// color as the four bytes arrived: red, green, blue, and the alpha
 	// subtracted from 255, which the simulator sends that way so that
 	// opaque text, the usual kind, zero encodes
-	// (llviewerobject.cpp:1532-1533 and 1872).  TextRGBA is the colour
+	// (llviewerobject.cpp:1532-1533 and 1872).  TextRGBA is the color
 	// with the alpha the right way up.
 	Text      string
 	TextColor [4]uint8
@@ -124,11 +124,11 @@ type PrimShape struct {
 	ProfileHollow    uint16
 }
 
-// TextRGBA is the floating text's colour with the alpha the right way
+// TextRGBA is the floating text's color with the alpha the right way
 // up.  TextColor holds it as sent, with the alpha flipped.
 func (c *Compressed) TextRGBA() [4]byte { return textRGBA(c.TextColor) }
 
-// TextRGBA is the floating text's colour with the alpha the right way
+// TextRGBA is the floating text's color with the alpha the right way
 // up.  TextColor holds the bytes as sent, and the simulator sends the
 // alpha subtracted from 255, in this message as in the compressed one
 // (llviewerobject.cpp:1532-1533).
@@ -318,7 +318,7 @@ func (r *blobReader) vec3() Vector3 {
 }
 
 // quat reads the three float wire form; the fourth component is
-// recovered by normalising and is not sent.
+// recovered by normalizing and is not sent.
 func (r *blobReader) quat() Quaternion {
 	return Quaternion{X: r.f32(), Y: r.f32(), Z: r.f32()}
 }

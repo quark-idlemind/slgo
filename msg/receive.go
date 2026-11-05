@@ -31,11 +31,11 @@ type PacketSource interface {
 //
 //	Message != nil                 it decoded
 //	Err != nil                     it did not
-//	Message == nil && Err == nil    it carried only acknowledgements
+//	Message == nil && Err == nil    it carried only acknowledgments
 //
 // A packet that did not decode carries its message's bytes in Body when
 // its message number could be read: an unknown number, or a body that
-// would not decode.  One whose acknowledgements, zero coding or number
+// would not decode.  One whose acknowledgments, zero coding or number
 // were bad has none.
 //
 // Acks is filled in whether or not the message decoded, so a packet
@@ -150,7 +150,7 @@ func KeepBody() ReceiverOption {
 // one that was never sent it.  A dropped packet is going to be dropped
 // either way once the consumer is far enough behind; the question is
 // only whether anybody finds out.  Blocking also stalls
-// acknowledgements behind the slow consumer, so the simulator resends
+// acknowledgments behind the slow consumer, so the simulator resends
 // what it has already sent and the pile-up grows.
 //
 // Choose deliberately, and prefer this one with a buffer big enough that
@@ -226,7 +226,7 @@ func (r *Receiver) Stats() Stats {
 	}
 }
 
-// Run reads until ctx is cancelled or the connection fails, then closes
+// Run reads until ctx is canceled or the connection fails, then closes
 // the channel.  Call it as a goroutine:
 //
 //	recv := NewReceiver(conn)
@@ -235,12 +235,12 @@ func (r *Receiver) Stats() Stats {
 //
 // Cancellation unblocks a read in progress if the connection supports
 // SetReadDeadline, which *net.UDPConn does.  Otherwise close the
-// connection to stop it.  A cancelled Run returns nil.
+// connection to stop it.  A canceled Run returns nil.
 //
 // A Receiver is used once.  Run closes C as it returns, so calling it a
 // second time panics.  While it runs it owns the connection's read
-// deadline: cancelling sets one in the past and nothing clears it, so a
-// connection read from again after a cancelled Run has to have its
+// deadline: canceling sets one in the past and nothing clears it, so a
+// connection read from again after a canceled Run has to have its
 // deadline cleared first.
 func (r *Receiver) Run(ctx context.Context) error {
 	defer close(r.ch)
@@ -338,7 +338,7 @@ func (r *Receiver) parse(b []byte, addr net.Addr, at time.Time) *Packet {
 	p.Header = h
 	body := b[n:]
 
-	// Acknowledgements ride on the tail and are never zero coded,
+	// Acknowledgments ride on the tail and are never zero coded,
 	// so they come off first.
 	if h.HasAcks() {
 		rest, acks, err := SplitAcks(body)
@@ -362,7 +362,7 @@ func (r *Receiver) parse(b []byte, addr net.Addr, at time.Time) *Packet {
 		body = expanded
 	}
 
-	// A packet can legitimately carry nothing but acknowledgements.
+	// A packet can legitimately carry nothing but acknowledgments.
 	if len(body) == 0 {
 		return p
 	}

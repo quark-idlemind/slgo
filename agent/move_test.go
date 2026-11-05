@@ -116,7 +116,7 @@ func twoRegions(t *testing.T, opts Options) (*Agent, *fakeRegion, *fakeRegion) {
 	from := newRegion(t, "the region left", msg.MustParseUUID("12b57e57-7e57-c0de-efe3-b327af5dfe62"))
 	to := newRegion(t, "the region arrived at", msg.MustParseUUID("1c117e57-7e57-c0de-da64-e42aeda52a0a"))
 
-	// Two neighbouring grid squares, and an avatar standing at a
+	// Two neighboring grid squares, and an avatar standing at a
 	// different spot in each.  Every one of those is something a move
 	// has to carry across, and two regions that agreed about them would
 	// hide a move that carried none of them.
@@ -307,7 +307,7 @@ func TestASimulatorThatNeverCompletesTheMovementEndsTheSession(t *testing.T) {
 
 // TestAMoveThatFailsClosesTheSocketItDialled: a failed move ends the
 // session, and slgod replaces a session that ended without closing it.
-// The move closes the connection it replaced itself; the one it dialled
+// The move closes the connection it replaced itself; the one it dialed
 // is closed by the session ending.
 func TestAMoveThatFailsClosesTheSocketItDialled(t *testing.T) {
 	t.Parallel()
@@ -412,7 +412,7 @@ func TestASessionThatHasEndedIsNotMoved(t *testing.T) {
 }
 
 // TestAMovePollsTheNewRegionsQueueAndClosesTheOld: the queue is one long
-// poll keeping an acknowledgement sequence, and both halves of it are
+// poll keeping an acknowledgment sequence, and both halves of it are
 // per region.
 func TestAMovePollsTheNewRegionsQueueAndClosesTheOld(t *testing.T) {
 	events := make(chan string, 8)
@@ -1120,7 +1120,7 @@ func TestWaitCapsFailsWhenTheMoveEndedTheSession(t *testing.T) {
 
 // TestAMoveToTheSimulatorAlreadyOnIsRefused: a finish or a crossing that
 // names the simulator this circuit is on, with no handle to say so, is
-// not a move.  Nothing is dialled and the session stays where it is.
+// not a move.  Nothing is dialed and the session stays where it is.
 // Why: doc/history/teleport.md#a-move-to-the-simulator-already-on
 func TestAMoveToTheSimulatorAlreadyOnIsRefused(t *testing.T) {
 	a, from, to := twoRegions(t, Options{})

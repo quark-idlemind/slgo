@@ -31,7 +31,7 @@ const terrainLimit = 256 << 10
 // RegionHandshakeReply produced not one further patch in thirty seconds
 // of watching.  A viewer handed a session that has been up for hours
 // would therefore have no ground under it, which is not a subtle failure
-// but the grey void itself.
+// but the gray void itself.
 //
 // The bodies are kept as they came, because a viewer wants the
 // simulator's own bytes rather than anything this package might make of
@@ -44,9 +44,9 @@ type Terrain struct {
 	bytes   int
 	dropped int
 
-	// heights is the ground at each whole metre, row by row from the
+	// heights is the ground at each whole meter, row by row from the
 	// south west, allocated with the first land; have says which 16
-	// metre patches of it have arrived.
+	// meter patches of it have arrived.
 	heights []float32
 	have    [groundPatches * groundPatches]bool
 }
@@ -63,7 +63,7 @@ type Patch struct {
 
 // note keeps one LayerData body if it is land.
 //
-// Weather is skipped, and that is not an optimisation: wind is sent for
+// Weather is skipped, and that is not an optimization: wind is sent for
 // as long as the session lives, so recording it would grow without bound
 // and would drown the land it is mixed in with.
 func (t *Terrain) note(m *msg.LayerData) {

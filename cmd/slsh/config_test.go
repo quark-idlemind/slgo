@@ -300,7 +300,7 @@ func TestAValueASettingWillNotTakeIsRefusedByName(t *testing.T) {
 		}
 	}
 
-	// A refused value leaves the colour it names in the message, since
+	// A refused value leaves the color it names in the message, since
 	// the answer to "puce" is the list of what there is.
 	writeConfig(t, "map_friend_colour = puce\n")
 	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "green") {

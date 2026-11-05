@@ -40,7 +40,7 @@ func (a *asked) of(name string) int {
 
 // onLand plays the simulator for one parcel and one prim, and the
 // daemon for the ground.  The prim is thePrim, local 77, a 0.5 m cube
-// of this avatar's with its centre at z.
+// of this avatar's with its center at z.
 func onLand(t *testing.T, f *fakeBackend, l land, z float32) *asked {
 	t.Helper()
 	a := &asked{n: map[string]int{}}
@@ -174,7 +174,7 @@ func TestTheLandRunsItsOwnersScriptsAndItsGroups(t *testing.T) {
 	for _, c := range []struct {
 		what    string
 		l       land
-		z       float32 // the prim's centre
+		z       float32 // the prim's center
 		blocked bool
 		family  bool // whether the object had to be asked about
 	}{
@@ -284,7 +284,7 @@ func TestAChildPrimIsPlacedInItsRootsFrame(t *testing.T) {
 	w.ScriptsBlocked(context.Background(), &Object{ID: thePrim})
 
 	// Turned three eighths of a turn in all, a unit square spans the
-	// square root of two each way, about its centre at 100, 62.
+	// square root of two each way, about its center at 100, 62.
 	h := float32(math.Sqrt2 / 2)
 	want := [4]float32{100 - h, 62 - h, 100 + h, 62 + h}
 	for i := range rect {

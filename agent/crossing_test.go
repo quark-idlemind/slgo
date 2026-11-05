@@ -99,7 +99,7 @@ func TestACrossedRegionNobodyCanReadIsNotActedOn(t *testing.T) {
 	a, from, to := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
 
 	// A three byte SimIP is the one worth naming: an address built from
-	// three of the four bytes would be somewhere, and dialled it would
+	// three of the four bytes would be somewhere, and dialed it would
 	// look like a simulator that never answered.
 	short := crossedRegionTo(to)
 	short["RegionData"].([]any)[0].(map[string]any)["SimIP"] = []byte{127, 0, 0}
@@ -192,7 +192,7 @@ func TestTheCrossingIsReadFromTheBytesTheGridSent(t *testing.T) {
 		t.Errorf("address = %s, want 203.0.113.10:13009", got)
 	}
 	// The same address EnableSimulator had been offering for this
-	// neighbour all along, which is what makes a child circuit the thing
+	// neighbor all along, which is what makes a child circuit the thing
 	// a crossing walks into rather than a second dial.
 	if handle != 47990384028712960 {
 		t.Errorf("handle = %d, want 47990384028712960", handle)

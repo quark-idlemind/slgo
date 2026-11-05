@@ -87,8 +87,8 @@ func (t *testRun) orderedHolds() []*hold {
 }
 
 // describeHeld is a held dialog for the failure block, its object's name
-// labelled as an object's.
-// Why: doc/im-senders.md#labelling-a-sender
+// labeled as an object's.
+// Why: doc/im-senders.md#labeling-a-sender
 func describeHeld(d sl.Dialog) string {
 	from := sl.SenderObject.Label(strconv.Quote(d.ObjectName))
 	if d.IsTextBox() {

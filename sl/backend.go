@@ -241,7 +241,7 @@ type Backend interface {
 	Land(ctx context.Context) (*Land, error)
 
 	// Ground is the height of the land in the region the avatar is in:
-	// the highest it comes in a rectangle, in metres from the region's
+	// the highest it comes in a rectangle, in meters from the region's
 	// south west corner, which for a point is the height there.  Known
 	// is false where the land under it has not all arrived.
 	//

@@ -5,9 +5,9 @@ import "testing"
 // A terse update captured from the test region, for a boat known to be at
 // roughly <65.8, 220.8, 20.0>.  Forty-four bytes, not an avatar.
 //
-// This is here because the position was first decoded as quantised
+// This is here because the position was first decoded as quantized
 // sixteen bit values, the way everything after it is, and the result
-// was plausible nonsense: in range, stable, and about 130 metres from
+// was plausible nonsense: in range, stable, and about 130 meters from
 // where the object actually was.  Keeping a real blob whose answer is
 // known independently is what catches that.
 var terseBoat = []byte{
@@ -145,7 +145,7 @@ func placeFloats(pos Vector3, rot Quaternion) []byte {
 	return w.b
 }
 
-// quant16 is the sixteen bit quantisation the narrow forms use: a
+// quant16 is the sixteen bit quantization the narrow forms use: a
 // fraction of the span between lo and hi.
 func quant16(v, lo, hi float32) uint16 {
 	return uint16((v - lo) / (hi - lo) * 65535)
@@ -192,7 +192,7 @@ func TestDecodePlacement(t *testing.T) {
 		b    []byte
 		// How far a position and a rotation may be out.  The sixteen
 		// bit form's coarsest axis is Z, one part in 65535 of 4352
-		// metres, which is a little under seven centimetres.
+		// meters, which is a little under seven centimeters.
 		pos, rot float32
 	}{
 		{"floats", placeFloats(pos, rot), 0.001, 0.00001},
@@ -259,7 +259,7 @@ func TestAWiderFloatBlobIsReadForItsFirstSixtyBytes(t *testing.T) {
 // only W says which was sent.  Reading three and recovering W as
 // positive turns a -q into the mirror image of q.
 func TestASixteenBitRotationSentNegatedIsTheSameRotation(t *testing.T) {
-	// A quarter turn anticlockwise about the vertical, (0, 0, sin 45,
+	// A quarter turn counterclockwise about the vertical, (0, 0, sin 45,
 	// cos 45), sent as its negative.
 	s := float32(0.70710677)
 	b := place16(Vector3{128, 128, 25}, 0, 0, -s, -s)
@@ -282,9 +282,9 @@ func TestASixteenBitRotationSentNegatedIsTheSameRotation(t *testing.T) {
 }
 
 // TestASixteenBitHeightRunsTo4096Metres: the thirty-two byte
-// form's Z runs from a region's width below the ground to 4096 metres,
+// form's Z runs from a region's width below the ground to 4096 meters,
 // the viewer's range (llviewerobject.cpp:1651), and not over the span X
-// and Y use.  Over theirs, anything above 384 metres could not be said.
+// and Y use.  Over theirs, anything above 384 meters could not be said.
 func TestASixteenBitHeightRunsTo4096Metres(t *testing.T) {
 	quantum := float32(placeZHi-placeZLo) / 65535
 	for _, z := range []float32{4000, 25.75, -200} {
@@ -376,7 +376,7 @@ func TestDecodeTerseAvatarTruncated(t *testing.T) {
 // north read as facing south on some walks, because W was thrown away
 // and recovered as positive, which for a -q is the mirror image.
 func TestATerseRotationSentNegatedIsTheSameRotation(t *testing.T) {
-	// A quarter turn anticlockwise about the vertical, facing north:
+	// A quarter turn counterclockwise about the vertical, facing north:
 	// (0, 0, sin 45, cos 45), sent as its negative.
 	s := float32(0.70710677)
 	w := &blobWriter{}

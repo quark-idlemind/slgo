@@ -11,9 +11,9 @@ package scripttest_test
 //
 // There are two ways to reach the backend and most of these tests are
 // run BOTH ways, by bothWays below.  Pipe is a real connection --
-// in-process and needing no network, but the messages are marshalled and
+// in-process and needing no network, but the messages are marshaled and
 // the streams are streams, so a caller going away is the server's
-// context being cancelled rather than a method returning early.  Direct
+// context being canceled rather than a method returning early.  Direct
 // is the same server with nothing under it, which is what the callers
 // that run scripts by the hundred thousand use.  The two are meant to be
 // indistinguishable from the caller's side, and a test that passes one
@@ -313,7 +313,7 @@ func TestABackendThatIsUpButNotReadyRefusesToRunAndSaysWhy(t *testing.T) {
 // come from.  It is a benchmark of the TRANSPORT and not of anything
 // this backend does: the script is the smallest one the model
 // understands, so what is being timed is a lease's worth of bookkeeping
-// and five messages either marshalled and handed between goroutines or
+// and five messages either marshaled and handed between goroutines or
 // not.
 func BenchmarkARunReachedEachWay(b *testing.B) {
 	for _, r := range []reach{overAPipe, inProcess} {

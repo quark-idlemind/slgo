@@ -52,7 +52,7 @@ package main
 // never by a copy of its list, which would be free to disagree the day
 // a setting is added.
 //
-// A capitalised placeholder the usage line itself uses -- "set NAME
+// A capitalized placeholder the usage line itself uses -- "set NAME
 // VALUE", "maturity RATING", "--at=POINT" -- passes, because that is
 // what the prompt asks a model to write where a person fills something
 // in.  One the usage line does not use, like YOUR_DISPLAY_NAME, is an
@@ -203,7 +203,7 @@ func checkOperands(name string, c *command, opts any, operands []string) error {
 // a person fills in: NAME, VALUE, L$FEE's FEE.
 var askPlaceholderWord = regexp.MustCompile(`[A-Z][A-Z0-9_]*`)
 
-// askPlaceholders is every capitalised word in a usage line.  Only
+// askPlaceholders is every capitalized word in a usage line.  Only
 // whole words count: the D in "--dry-run" is not in capitals and is
 // not a placeholder, and nothing in lower case ever is.
 func askPlaceholders(usage string) map[string]bool {
@@ -422,7 +422,7 @@ func checkNoFlagAfterOperands(name string, c *command, args, rest []string) erro
 // such as a JSON value for set.  No example line in any man page has
 // brackets or a bar in it (TestEveryManPageExampleIsTakenByTheChecker).
 //
-// The shell's own capitalised placeholders, NAME and PATH alone, pass
+// The shell's own capitalized placeholders, NAME and PATH alone, pass
 // here as they do everywhere else.
 func checkNoUsageSyntax(name string, c *command, args []string, quoted []bool) error {
 	usage := c.usage(name)

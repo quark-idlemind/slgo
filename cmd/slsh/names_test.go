@@ -75,8 +75,8 @@ func TestEveryCommandRefusesANameThatMeansSeveral(t *testing.T) {
 // TestAnExactNameIsFoundBesideACaseVariant.
 //
 // The grid keeps "readme" and "README" as two names, so each is the one
-// spelt that way: neither is a second meaning of the other, and neither
-// is refused for the other being there.  A name spelt a third way is
+// spelled that way: neither is a second meaning of the other, and neither
+// is refused for the other being there.  A name spelled a third way is
 // nothing, and the refusal offers what is there.
 func TestAnExactNameIsFoundBesideACaseVariant(t *testing.T) {
 	x := newTestShell(t)
@@ -94,7 +94,7 @@ func TestAnExactNameIsFoundBesideACaseVariant(t *testing.T) {
 		}
 	}
 
-	// A write goes to the one spelt that way.
+	// A write goes to the one spelled that way.
 	note := serveItemWrite(t, x, "UpdateNotecardAgentInventory", savedOK)
 	if got := x.do(t, "save "+aFile(t, "notes.txt", "one\n")+" README"); !strings.Contains(got, "README: 4 bytes written") {
 		t.Errorf("save to README printed %q", got)

@@ -95,7 +95,7 @@ func TestTheBumpByteHoldsThreeThings(t *testing.T) {
 	}
 }
 
-// TestAnOpaqueWhiteFaceIsFourZeros.  The colour travels inverted, so
+// TestAnOpaqueWhiteFaceIsFourZeros.  The color travels inverted, so
 // the commonest face in Second Life is the one that costs nothing --
 // and an encoder that forgot the inversion would make every untouched
 // prim black and transparent.
@@ -105,7 +105,7 @@ func TestAnOpaqueWhiteFaceIsFourZeros(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	colour := b[17:21] // 16 bytes of texture, a zero, then the colour
+	colour := b[17:21] // 16 bytes of texture, a zero, then the color
 	for i, c := range colour {
 		if c != 0 {
 			t.Errorf("opaque white encoded as %v, byte %d is %d", colour, i, c)
@@ -164,7 +164,7 @@ func TestOffsetsAndRotationAreQuantised(t *testing.T) {
 // only way to see the change is to ask for the object to be described
 // again.
 //
-// The session's own store is modelled too, since that is where the lag
+// The session's own store is modeled too, since that is where the lag
 // lives: the appearance held there is dropped when the change goes out
 // -- agent.Objects.sent does that on the daemon -- and filled in again
 // when the region answers a request.
@@ -269,7 +269,7 @@ func TestFacesAsksNothingWhenItAlreadyKnows(t *testing.T) {
 // TestTwoChangesInARowCompose, which is the whole point of forgetting
 // an appearance that has been replaced.
 //
-// Measured on a live region before any of this: colouring every face
+// Measured on a live region before any of this: coloring every face
 // and then one face alone left the other five as they had been before
 // the first change, because the second read the appearance from before
 // it.

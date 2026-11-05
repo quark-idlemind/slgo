@@ -71,7 +71,7 @@ type Decision struct {
 }
 
 // Check decides whether a MoneyTransferRequest may go out, and records
-// it against the daily total when it may.  It is serialised, so that two
+// it against the daily total when it may.  It is serialized, so that two
 // payments at once cannot both fit under a limit only one of them fits
 // under.
 func (g *Gate) Check(ctx context.Context, w World, m *msg.MoneyTransferRequest) Decision {

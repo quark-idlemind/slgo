@@ -145,7 +145,7 @@ func (r *rewritten) Error() string { return r.text }
 func (r *rewritten) Unwrap() error { return r.err }
 
 // Text cuts every capability URL out of s, for text that came from
-// elsewhere and may have one anywhere in it.  A URL is recognised by its
+// elsewhere and may have one anywhere in it.  A URL is recognized by its
 // scheme, and runs to the next space or quote.
 func Text(s string) string {
 	if full.Load() {

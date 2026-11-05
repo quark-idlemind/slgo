@@ -135,7 +135,7 @@ func (w *Session) placedInWorld(ctx context.Context, o *Object) (*placed, bool) 
 }
 
 // bounds is the box around the prim, square to the region, in region
-// metres, and its bottom.  For an unrotated prim it is the prim.
+// meters, and its bottom.  For an unrotated prim it is the prim.
 func (p *placed) bounds() (west, south, east, north, bottom float32) {
 	ex := p.rot.Rotate(msg.Vector3{X: 1})
 	ey := p.rot.Rotate(msg.Vector3{Y: 1})

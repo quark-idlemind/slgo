@@ -290,7 +290,7 @@ func TestAskingForCompileOnlyWhereItIsNotHonouredIsAnError(t *testing.T) {
 // The base a benchmark carries from one run to the next used to live in
 // the OBJECT, written by the cnt=0 script into its linkset data and
 // divided against by the cnt>0 ones -- and a test here held the backend
-// to modelling that.  The script says one number now and the arithmetic
+// to modeling that.  The script says one number now and the arithmetic
 // happens in the program, so there is no per-object memory to keep and
 // nothing left for that test to hold anybody to.
 
@@ -354,7 +354,7 @@ func TestARunWithNoTargetTakesOneAndGivesItBack(t *testing.T) {
 // the backend has to notice rather than go on delivering to nobody.
 //
 // On the wire only, and this one is worth being exact about.  What is
-// being cancelled is a run that is STILL GOING, in reaction to an event
+// being canceled is a run that is STILL GOING, in reaction to an event
 // already heard, and the in-process client hands a run's events back
 // when the run has finished.  The same test through Direct would cancel
 // a run that was already over, notice that no more events came, and pass
@@ -382,14 +382,14 @@ func TestCancellingTheCallStopsTheRun(t *testing.T) {
 			break
 		}
 	}
-	// The object it was using has to come back, or a cancelled run would
+	// The object it was using has to come back, or a canceled run would
 	// cost the pool a group.
 	eventually(t, "the object coming back", func() bool { return held(t, c) == 0 })
 }
 
 // ------------------------------------------------ an instrument that lies
 
-// said reads a number the harness labelled out of a transcript, which is
+// said reads a number the harness labeled out of a transcript, which is
 // the only way a caller gets a reading at all: the script says it.
 func said(t *testing.T, tr *transcript, label string) int {
 	t.Helper()
@@ -470,7 +470,7 @@ func TestTheSameScriptCanBeReadTwiceAndAnswerDifferently(t *testing.T) {
 
 // TestNoiseDoesNotMoveTheCompilersRefusal: the hook stands in for
 // llGetUsedMemory misreporting a script that ran, and the compiler's
-// limit is a judgement about the source made before anything runs.  If
+// limit is a judgment about the source made before anything runs.  If
 // noise moved the refusal too, a caller backing off from a refusal would
 // be backing off from the very thing it is supposed to treat as noise --
 // and its copy count would then depend on it.

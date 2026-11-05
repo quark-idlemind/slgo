@@ -93,7 +93,7 @@ func TestRepeatingTilesAboutTheMiddle(t *testing.T) {
 	if got.Bounds().Dx() != 4 || got.Bounds().Dy() != 1 {
 		t.Fatalf("size %v, want 4x1", got.Bounds())
 	}
-	// Two copies, centred, so the row starts on the texture's right half.
+	// Two copies, centered, so the row starts on the texture's right half.
 	want := []uint8{2, 1, 2, 1}
 	for x, r := range want {
 		if got.NRGBAAt(x, 0).R != r {

@@ -15,24 +15,24 @@ cube; 56 were rezzed and deleted.
 
 - 12 were asked for at about 4,002 m, and 12 just above the ground, at
   about 43.6 m to 45.9 m. Each came back with X and Y as asked and Z
-  exactly 0.25 higher, to the millimetre the probe printed.
+  exactly 0.25 higher, to the millimeter the probe printed.
 - 8 more, 4 near 4,004 m and 4 near 45 m, were asked for with X, Y and
   Z given to seven decimals, and compared bit for bit. X and Y came
   back as the float32 of the values asked for, and Z as
   float32(the Z asked for) + 0.25, added in float32. So the simulator
   keeps a requested point as the float32 it was sent as, and puts the
-  prim's **bottom** on it, not its centre. The only loss is float32's
+  prim's **bottom** on it, not its center. The only loss is float32's
   own spacing: about 0.24 mm near 4,004 m.
 - 24 were asked for under the ground, 12 about 43 m under it and 12 at
   z = -3.17. X and Y came back as asked, and each was raised until its
   bottom rested on the ground. Both depths gave the same height at each
   point, and on that gentle slope it was the ground under the box's
-  centre.
+  center.
 - The first report of every new prim was a full `ObjectUpdate`
   carrying its position in full floats (the 60-byte form), and it was
   already the position the prim settled at.
 
-## How a rez is recognised
+## How a rez is recognized
 
 `findOurs` takes a prim as the one just made when it is a root prim,
 was not in the region before the rez, is owned by this avatar, and
@@ -41,7 +41,7 @@ stands where the measurements above say it will:
 1. X and Y equal to what was asked for, within 1 mm.
 2. Z at or above the Z asked for, less 1 mm.
 3. Among several that pass, the one whose Z is closest to the Z asked
-   for plus half the Z scale sent, which is where the centre of an
+   for plus half the Z scale sent, which is where the center of an
    unrotated prim was measured to be. A nearer one whose owner is not
    yet known is asked about and waited for, not passed over.
 
@@ -49,10 +49,10 @@ What is inferred rather than measured:
 
 - The 1 mm. Positions came back exact, so any allowance would do; 1 mm
   is more than the spacing of float32 values anywhere below 8,192 m,
-  which is about half a millimetre just under it. That is arithmetic.
+  which is about half a millimeter just under it. That is arithmetic.
 - That Z never comes back lower than it was asked for. Every offset
   measured was upward; nothing was measured going down.
-- Where a rotated prim's centre ends up. Nothing rotated was measured,
+- Where a rotated prim's center ends up. Nothing rotated was measured,
   so the expected height is used only to choose between prims that
   both pass the first two rules, and never to turn one away.
 
@@ -73,7 +73,7 @@ for their own use, the object `slrun` runs in and the one
 returning the error.  `RezFromInventory` hands one back too, and
 `slsh`'s `place` deletes it into the trash in the same way.
 
-Recognising a rez by novelty alone went wrong twice before this. It
+Recognizing a rez by novelty alone went wrong twice before this. It
 reported an object that had just been taken, whose entry lingered until
 its `KillObject` was processed (4efc3c1, in `RezFromInventory`, which
 has matched by position since). And it returned the avatar, which is

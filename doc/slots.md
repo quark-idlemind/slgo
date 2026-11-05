@@ -166,7 +166,7 @@ host, with no bound on its wait, waited for ever. Both were found by
 reading the code. The first fix had a request naming a logged-out avatar
 wait for it, on the belief that such an avatar was often reconnecting;
 a reconnecting session is never stopped, and a stopped one does not come
-back on its own, so it is refused instead. The behaviour above was built
+back on its own, so it is refused instead. The behavior above was built
 then and has not been watched on the grid; the tests in `internal/server/slots_test.go` check it
 against a fake login server and simulator, and
 `internal/slots/slots_test.go` checks the pool's half.
@@ -211,7 +211,7 @@ standing between two callers.
 
 The objects after the first are made by COPYING it rather than by
 building each (`session.EnsureAutoItems`). There are two reasons, and the
-first is not an optimisation.
+first is not an optimization.
 
 An avatar may not be allowed to rez. A parcel grants "create objects" to
 a group, and an avatar in no group is refused — with a message blaming
@@ -256,8 +256,8 @@ the item. So the objects are small and are moved, not spread:
 
 - Parked is off the screen, at local `<0, 1, -1>` with no rotation. The
   HUD frame has +Y to the left and +Z up (`sl/hud.go`, `project`), and
-  from Bottom Left the screen lies at -Y and +Z, so this is a metre to
-  the left of the corner and a metre below it. The region clamps an
+  from Bottom Left the screen lies at -Y and +Z, so this is a meter to
+  the left of the corner and a meter below it. The region clamps an
   attachment to 3.5 m from its point; this is well inside that.
 - `auto show` tiles them along the bottom of the screen: slot *i* at
   `<0, -0.025 - 0.05 i, 0.025>`, so twenty-four make one row 1.2 m long.
@@ -275,7 +275,7 @@ pair that is not must degrade rather than fail. `Slots.per_agent` is how:
 a client says how many places per avatar it can wear (`session.AutoPool`,
 24 now), and the daemon grants none numbered past that. Both directions
 are held by tests, not run against an old binary; the old side's
-behaviour is read from its code.
+behavior is read from its code.
 
 - **An old client, a new `slgod`.** The client from before the field
   sends no `per_agent`, which is zero, and the daemon reads zero as 12

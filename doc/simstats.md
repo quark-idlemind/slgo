@@ -74,9 +74,9 @@ circuit with `slsh watch`:
 - **Every two seconds.**  Twenty reports in forty seconds, spaced 2.00
   to 2.03 s apart.  So a minute holds thirty reports, and the shell's
   five second average is of two or three of them.
-- **`RegionX` and `RegionY` are grid squares, not metres.**  They are
+- **`RegionX` and `RegionY` are grid squares, not meters.**  They are
   the numbers `msg.RegionHandle` takes, four digits long, where the
-  region's corner in metres is 256 times that.  With this tree's daemon
+  region's corner in meters is 256 times that.  With this tree's daemon
   the reports were kept, which they would not be if the square worked
   out from them did not match the avatar's region handle.
 - **Both flag fields held the same value**, and the `RegionInfo` block
@@ -136,7 +136,7 @@ arrives unasked, and whether `MaxAgents32` ever differs from
   two floaters.
 - **`update` starts from nothing** and reads the name, both estate ids,
   `SimAccess`, the U8 `MaxAgents`, the object bonus, billable factor,
-  water height, terrain limits, price per metre, the redirect grid and
+  water height, terrain limits, price per meter, the redirect grid and
   the estate sun.  `HardMaxAgents` comes from `RegionInfo2`; the
   viewer's default of 100 stands when it is not read.  The flags are
   `RegionFlagsExtended` when a `RegionInfo3` block is present and the

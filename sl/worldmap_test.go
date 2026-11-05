@@ -248,7 +248,7 @@ func TestAnAnswerWithNoEndToItIsNotAnAnswer(t *testing.T) {
 // answer to it.
 //
 // The end marker is the half that cannot be told apart, and is not
-// tested here because there is nothing to test: it is recognised by its
+// tested here because there is nothing to test: it is recognized by its
 // shape, which is the same shape whoever asked.  See the head of
 // worldmap.go.
 func TestAnotherClientsAnswerIsNotThisOnes(t *testing.T) {

@@ -74,7 +74,7 @@ func TestParcelAtAsksAndIsAnswered(t *testing.T) {
 	if r == nil {
 		t.Fatal("no ParcelPropertiesRequest was sent")
 	}
-	// Snapped to the 4 metre grid the overlay is drawn on: a rectangle
+	// Snapped to the 4 meter grid the overlay is drawn on: a rectangle
 	// inside one square asks about one parcel.
 	if r.ParcelData.West != 28 || r.ParcelData.South != 72 ||
 		r.ParcelData.East != 32 || r.ParcelData.North != 76 {
@@ -104,7 +104,7 @@ func TestTwoAsksDoNotTakeEachOthersAnswers(t *testing.T) {
 	// time, which is the whole point of the test -- so a slice appended
 	// to from inside it is written from two places at once, and read
 	// from a third.  It was, and "go test ./sl/ -race" failed on it
-	// every run.  A channel is the synchronisation as well as the
+	// every run.  A channel is the synchronization as well as the
 	// carrier: sending happens before receiving, so the ids are safe to
 	// read by the time they are read.
 	//

@@ -57,7 +57,7 @@ const maxRepeat = 1 + 1e-6
 
 // findElement is the whole of an element step before the touch: the faces
 // of the prim whose texture has a record, the refusals, the areas of that
-// name whose centres are inside the face, and the one to click.
+// name whose centers are inside the face, and the one to click.
 func (s *stepRun) findElement(ctx context.Context, b *binding, t *Touch, name string) (elementHit, error) {
 	var none elementHit
 	o, oname := &b.seen.Object, b.seen.Name
@@ -171,11 +171,11 @@ func ambiguous(prim, name string, hits []elementHit) string {
 	return fmt.Sprintf("element %q is showing in %d places on %q face %d; the record has the name more than once inside the face's window", name, len(hits), prim, faces[0])
 }
 
-// visibleAt is where an area's centre is on a face, when it is on the
+// visibleAt is where an area's center is on a face, when it is on the
 // face. The record's U and V are mapped to the face's S and T by
 // Face.TextureToSurface, the viewer's mapping undone as a touch's is. A
 // texture repeats beyond 0 to 1, so a window that hangs over an edge shows
-// the centre one texture over too, and the shifts -1, 0 and 1 are tried.
+// the center one texture over too, and the shifts -1, 0 and 1 are tried.
 func visibleAt(f sl.Face, a area) ([2]float64, bool) {
 	cu, cv := a.centre()
 	for _, du := range []float64{0, -1, 1} {

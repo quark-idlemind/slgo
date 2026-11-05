@@ -230,7 +230,7 @@ func avatarAt(id msg.UUID, x, y, z float32) *Seen {
 func TestNearbyIsEverybodyButUs(t *testing.T) {
 	w, f := newFakeSession(t)
 
-	// The avatar is at 128,128,25; these are 3, 4 and 4 metres off.
+	// The avatar is at 128,128,25; these are 3, 4 and 4 meters off.
 	far := avatarAt(somebodyElse, 128, 132, 25)
 	near := avatarAt(somebody, 128, 128, 28)
 	alsoFar := avatarAt(nemo, 132, 128, 25)
@@ -277,9 +277,9 @@ func TestNearbyIsEverybodyButUs(t *testing.T) {
 // are.
 //
 // A distance is what "who" prints and it is the wrong thing to draw
-// with: twenty metres says nothing about which way, and the position it
+// with: twenty meters says nothing about which way, and the position it
 // was worked out from cannot be got back out of it.  It is the region's
-// own metres, so that a caller can draw the region as well as the
+// own meters, so that a caller can draw the region as well as the
 // ground around this avatar.
 func TestNearbyKeepsWhereEverybodyIsStanding(t *testing.T) {
 	w, f := newFakeSession(t)
@@ -656,8 +656,8 @@ func TestNearbyPlacesSeatedPeople(t *testing.T) {
 	w, f := newFakeSession(t)
 
 	// A root at 130,128,25 turned a quarter about Z, with the seat a
-	// metre along its own X -- which the quarter turn makes a metre
-	// along the region's Y -- and somebody sitting half a metre above
+	// meter along its own X -- which the quarter turn makes a meter
+	// along the region's Y -- and somebody sitting half a meter above
 	// the seat.
 	root := &Seen{Object: Object{ID: unnamed, Local: 20}, PCode: pcodePrim,
 		Position: msg.Vector3{X: 130, Y: 128, Z: 25}, Rotation: msg.Quaternion{Z: 0.70710677}}

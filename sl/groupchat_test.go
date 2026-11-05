@@ -378,7 +378,7 @@ func TestAGroupMessageSaysWhichGroupAndWhoSpoke(t *testing.T) {
 }
 
 // TestAGroupMessageSignedByTheGridIsTheGrids: a speaker whose name is the
-// grid's own is labelled so and not as a person.
+// grid's own is labeled so and not as a person.
 func TestAGroupMessageSignedByTheGridIsTheGrids(t *testing.T) {
 	w, f := newFakeSession(t)
 	subs := w.GroupChats(8)

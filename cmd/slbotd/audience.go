@@ -19,7 +19,7 @@ import (
 
 // Anyone is the entry in the configuration that means exactly that.
 //
-// Spelt as a word nobody is called rather than as an empty list, so
+// Spelled as a word nobody is called rather than as an empty list, so
 // that "this avatar talks to everybody" is something somebody WROTE
 // and not something that happened because a line was missing.
 const Anyone = "*"

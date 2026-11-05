@@ -1014,9 +1014,9 @@ func (w *Session) scriptRunning(object, item msg.UUID, running bool) {
 }
 
 // await polls a condition until it holds, the deadline passes, or the
-// context is cancelled.
+// context is canceled.
 //
-// Polling rather than signalling is deliberate.  What is being waited
+// Polling rather than signaling is deliberate.  What is being waited
 // for usually arrives as several messages that have to agree with each
 // other -- an object update and a properties reply, say -- and a
 // predicate over the accumulated state says that plainly where a
@@ -1065,17 +1065,17 @@ func (w *Session) await(ctx context.Context, timeout time.Duration, what string,
 // ctx.Err(), and the deadline passing returns ErrTimeout naming what
 // was waited for.  A read that fails is asked again, and a timeout
 // whose last read failed says why.  A read that holds is believed even
-// if ctx was cancelled meanwhile, since the thing did happen.
+// if ctx was canceled meanwhile, since the thing did happen.
 //
 // The mistake it prevents is the loop of read, check the deadline,
-// time.Sleep, go round, ignoring the read's error.  A cancelled read
+// time.Sleep, go round, ignoring the read's error.  A canceled read
 // fails at once, or, like Direct's Presence, never looks at ctx, so that
 // loop sleeps on to its own deadline and then reports a timeout, which
 // is neither true nor quick.  So ctx is checked here after every read,
 // not left to the read.  TestNothingInThisPackageSleeps refuses the
 // loop.
 //
-// await is its neighbour, for what the session has already been told.
+// await is its neighbor, for what the session has already been told.
 func poll(ctx context.Context, timeout, every time.Duration, what string,
 	read func(context.Context) (bool, error)) error {
 	deadline := time.Now().Add(timeout)

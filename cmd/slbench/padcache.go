@@ -12,7 +12,7 @@ package main
 // answer.  Rendering the base for two different --code values gives
 // byte-for-byte the same script.
 //
-// Finding it costs a search of several rounds.  Recognising it costs a
+// Finding it costs a search of several rounds.  Recognizing it costs a
 // hash, and confirming it costs two readings in one round.
 //
 // # What the key is

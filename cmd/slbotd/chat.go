@@ -7,7 +7,7 @@ package main
 //
 // The conversation is TEXT, on disk, and that is the record.  The kv
 // cache is an accelerator and nothing else: it is welded to one model,
-// one quantisation, one context size and one server build, and the
+// one quantization, one context size and one server build, and the
 // server checks none of that before loading one -- so a state file is
 // something to be grateful for when it works and to throw away without
 // ceremony when it does not.  Everything here is arranged around that
@@ -53,7 +53,7 @@ package main
 //
 // The backstory is not part of any of this and cannot be lost to it.
 // It is read from its file on every single turn and is always the first
-// message; only Turns are ever summarised, and Summarise is never given
+// message; only Turns are ever summarized, and Summarise is never given
 // the character.  That is structural rather than careful: there is no
 // path through this file on which the two meet.
 
@@ -147,7 +147,7 @@ type Conversation struct {
 
 	// Tokens is what the server counted the last prompt at.  Measured
 	// rather than estimated, and it is what decides when to compact: a
-	// budget checked against a guess at the tokeniser is a budget that
+	// budget checked against a guess at the tokenizer is a budget that
 	// is wrong in whichever direction the guess leans.
 	Tokens int `json:"tokens,omitempty"`
 }
@@ -272,7 +272,7 @@ func (c *Conversation) Paused(floor time.Duration, now time.Time) (time.Duration
 //
 // It is also sent and not STORED: Prompt is given this and Add is
 // given what the person actually wrote, so the hint never enters the
-// record, never reaches the summariser, and cannot come back later as
+// record, never reaches the summarizer, and cannot come back later as
 // something they said.
 //
 // "It has been X" rather than "X have passed", because X is sometimes
@@ -336,7 +336,7 @@ func (c *Conversation) Recent(now time.Time, rest time.Duration) int {
 // "Should", because the only exact count available is of the prompt
 // that was just sent, and that one is already over.  The tokens per
 // character of THAT prompt is what the estimate is scaled by, so it is
-// this model's own tokeniser on this conversation's own text rather
+// this model's own tokenizer on this conversation's own text rather
 // than a rule of thumb about English -- which is as close as anything
 // can get without another round trip.
 //
@@ -508,7 +508,7 @@ type slotPool struct {
 	// freed is closed and replaced whenever a slot is given back, which
 	// is how a waiter is woken.  A channel rather than a sync.Cond so
 	// that waiting can be given up on when the daemon is stopping;
-	// sync.Cond has no way to be cancelled.
+	// sync.Cond has no way to be canceled.
 	freed chan struct{}
 }
 
@@ -615,7 +615,7 @@ type Chatter struct {
 	props    *Props
 	separate *bool // whether a second system message survives the template
 
-	// held serialises everything that writes one conversation, by key.
+	// held serializes everything that writes one conversation, by key.
 	//
 	// There are two writers now and there did not used to be: a reply
 	// being composed, and a line this avatar said through ANOTHER
@@ -928,16 +928,16 @@ func (c *Chatter) Model(ctx context.Context) (*Props, error) { return c.ready(ct
 // remember rather than to talk.
 //
 // Deliberately not in character.  This is the one call that is not the
-// avatar speaking, and a dockhand asked to summarise a conversation
+// avatar speaking, and a dockhand asked to summarize a conversation
 // writes a dockhand's remark about it rather than a note anybody can
 // use.  So the backstory does not reach here at all -- which is also
 // why an avatar's character cannot be lost to compaction: there is no
 // path through this file on which the two meet.
 //
-// Three labelled lines, because a note asked for in prose summarised
-// nothing and lost the person's name, and a labelled one keeps it and
+// Three labeled lines, because a note asked for in prose summarized
+// nothing and lost the person's name, and a labeled one keeps it and
 // survives being folded again.
-// Why: doc/slbotd.md#why-the-note-is-three-labelled-lines
+// Why: doc/slbotd.md#why-the-note-is-three-labeled-lines
 //
 // The fields are what somebody means when they say an avatar remembers
 // them: who they are, what has been talked about, and what was agreed.
@@ -1018,10 +1018,10 @@ func (c *Chatter) compact(ctx context.Context, conv *Conversation, slot int) {
 		conv.Avatar, len(fold), conv.WithName, len(conv.Summary))
 }
 
-// summaryPrompt is the conversation as something to be summarised
+// summaryPrompt is the conversation as something to be summarized
 // rather than continued.
 //
-// The turns are rendered INTO one message with who said what spelt out,
+// The turns are rendered INTO one message with who said what spelled out,
 // rather than handed over as turns.  Given real turns the model answers
 // the last one -- it is a chat model and that is what a chat model does
 // -- and what comes back is the next remark in the conversation instead

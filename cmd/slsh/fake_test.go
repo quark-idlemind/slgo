@@ -2292,7 +2292,7 @@ type fakeDaemon struct {
 	hosts   []*pb.HostRequest
 	logouts []*pb.LogoutRequest
 
-	// auth answers the login handshake, for a daemon that is dialled
+	// auth answers the login handshake, for a daemon that is dialed
 	// rather than handed a connection, and relay is what to push down
 	// the stream once one is open.  ended hears each stream that ends,
 	// which is a client letting go of its session.

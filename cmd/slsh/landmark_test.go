@@ -320,7 +320,7 @@ func TestLandmarkRefusesANameThatMeansSeveral(t *testing.T) {
 	x.grid.mu.Unlock()
 
 	// Refused for reading as well as for going: the two forms differ by
-	// five characters and a rule learnt from the harmless one is the
+	// five characters and a rule learned from the harmless one is the
 	// rule somebody will expect from the other.
 	for _, line := range []string{"landmark Thrushmoor", "landmark --go Thrushmoor"} {
 		got := x.do(t, line)
@@ -650,7 +650,7 @@ func TestLandmarkRefusesTwoVerbsAtOnce(t *testing.T) {
 // deleted landmarks in it -- qi's had two of seven, and one of them
 // made a live landmark ambiguous with its own corpse.  A deleted
 // landmark still has a name, an asset and a working teleport, so
-// nothing but leaving it out keeps --go from travelling to one.
+// nothing but leaving it out keeps --go from traveling to one.
 func TestATrashedLandmarkIsNotOne(t *testing.T) {
 	x := newTestShell(t)
 	withLandmarks(x)
@@ -1076,7 +1076,7 @@ func TestLandmarkSetHomeHasNoWaitOfItsOwn(t *testing.T) {
 // The line and the message have to agree.  A shell that read the
 // position a second time to print it would print whatever the avatar
 // had drifted to since, and an avatar that has just teleported is still
-// settling: eight metres separated two reads a second apart when this
+// settling: eight meters separated two reads a second apart when this
 // was met on Agni.  So the fake moves the avatar the moment the request
 // goes out, and the line still says where home was set.
 func TestLandmarkSetHomePrintsThePositionThatWentOut(t *testing.T) {

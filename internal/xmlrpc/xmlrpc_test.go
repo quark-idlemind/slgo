@@ -4,7 +4,7 @@ package xmlrpc
 // that it is hard to upset.
 //
 // The C client's parser called err(1, "Unexpected value type got %s") on
-// anything it did not recognise, so the day Linden Lab added an <int>
+// anything it did not recognize, so the day Linden Lab added an <int>
 // field to the login response the program stopped starting.  A login
 // server is not something this side gets to negotiate with: it will grow
 // fields, and it has sent numbers as strings, and it will one day send a

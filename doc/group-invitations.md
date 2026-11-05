@@ -38,7 +38,7 @@ sender.
 
 ## Nothing carries the group's name
 
-Nothing carries the group's NAME. The name a person recognises the
+Nothing carries the group's NAME. The name a person recognizes the
 group by, if it appears at all, is inside the text the simulator
 composed; the viewer puts that text into its dialog and shows nothing
 else beside it (`args["MESSAGE"] = message`, `llimprocessing.cpp:1529`,

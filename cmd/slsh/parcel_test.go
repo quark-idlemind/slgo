@@ -189,7 +189,7 @@ func TestParcelRegionNamesWhatTheOverlayCanOnlyShape(t *testing.T) {
 	if !strings.Contains(got, "group") || !strings.Contains(got, "public") {
 		t.Errorf("each piece should say who holds it:\n%s", got)
 	}
-	// 128 by 256 metres each.
+	// 128 by 256 meters each.
 	if !strings.Contains(got, "32768 m²") {
 		t.Errorf("a half of a region is 32768 m²:\n%s", got)
 	}
@@ -367,8 +367,8 @@ func TestARezZoneIsADot(t *testing.T) {
 }
 
 // TestTheMapPaintsOnlyWhereThereIsColour: the mark has to survive the
-// colour being gone -- a picture down a pipe or under NO_COLOR has
-// nothing but the shape left, and one that told parcels apart by colour
+// color being gone -- a picture down a pipe or under NO_COLOR has
+// nothing but the shape left, and one that told parcels apart by color
 // alone would then be a wash of one character.
 func TestTheMapPaintsOnlyWhereThereIsColour(t *testing.T) {
 	x := newTestShell(t)
@@ -400,8 +400,8 @@ func TestTheMapPaintsOnlyWhereThereIsColour(t *testing.T) {
 // TestAParcelsNameIsShownRatherThanObeyedBesideItsColour.
 //
 // The key under the picture puts a parcel's name, which is whatever its
-// owner typed, on one line with the colour of its mark.  That line goes
-// to the terminal round Print so that the colour stays a colour, so the
+// owner typed, on one line with the color of its mark.  That line goes
+// to the terminal round Print so that the color stays a color, so the
 // name has to have been made visible on the way into it.
 //
 // The name here carries U+009B, the one-character spelling of ESC [ on
@@ -438,7 +438,7 @@ func TestAParcelsNameIsShownRatherThanObeyedBesideItsColour(t *testing.T) {
 	if !strings.Contains(got, "The WestM-^[2J Half") {
 		t.Errorf("the parcel should be named as text:\n%q", got)
 	}
-	// And the colour is still there beside it.
+	// And the color is still there beside it.
 	if !strings.Contains(got, mapColourOff) {
 		t.Errorf("the key lost its colour:\n%q", got)
 	}

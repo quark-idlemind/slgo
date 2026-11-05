@@ -11,7 +11,7 @@ import (
 type Handler func(*Packet)
 
 // Dispatcher reads a Receiver's channel, routes each packet to its
-// handler, and does the acknowledgement bookkeeping in between.
+// handler, and does the acknowledgment bookkeeping in between.
 //
 // Handlers run in their own goroutine, throttled by a counting
 // semaphore: at most the number given to WithConcurrency are in flight,
@@ -75,7 +75,7 @@ type DispatchStats struct {
 	Unhandled  uint64 // decoded, but nothing registered for it
 	Errors     uint64 // packets the receiver could not decode
 	AckOnly    uint64
-	AcksSeen   uint64 // acknowledgements of ours the peer sent back
+	AcksSeen   uint64 // acknowledgments of ours the peer sent back
 	Relayed    uint64 // offered to the relay hook, duplicates already removed
 	Gated      uint64 // refused by the gate before anything looked at them
 }
@@ -93,9 +93,9 @@ func WithConcurrency(n int) DispatcherOption {
 	}
 }
 
-// WithSender wires the acknowledgement bookkeeping: every inbound
-// acknowledgement is confirmed so it stops being retransmitted, and
-// every reliable packet is queued for acknowledgement.
+// WithSender wires the acknowledgment bookkeeping: every inbound
+// acknowledgment is confirmed so it stops being retransmitted, and
+// every reliable packet is queued for acknowledgment.
 func WithSender(s *Sender) DispatcherOption {
 	return func(d *Dispatcher) { d.sender = s }
 }
@@ -143,7 +143,7 @@ func WithTap(fn Handler) DispatcherOption {
 
 // WithGate decides whether a packet is dispatched at all.  fn runs on
 // the dispatch goroutine for every packet, before the tap, before
-// acknowledgement bookkeeping and before routing; returning false drops
+// acknowledgment bookkeeping and before routing; returning false drops
 // the packet as though it had never arrived.
 //
 // Before the bookkeeping is the point of it.  A gate that ran later
@@ -174,7 +174,7 @@ func WithGate(fn func(*Packet) bool) DispatcherOption {
 //
 // It is offered decoded messages only.  A packet that would not decode
 // is not something to pass on, and one carrying nothing but
-// acknowledgements has nothing to pass on: reliability is terminated at
+// acknowledgments has nothing to pass on: reliability is terminated at
 // each end of a relay rather than forwarded, so both sides number their
 // own packets and neither ever sees the other's sequence numbers.  For
 // the same reason a PacketAck the bookkeeping has already consumed is
@@ -270,7 +270,7 @@ func (d *Dispatcher) Unhandled() map[ID]uint64 {
 	return out
 }
 
-// Run consumes in until it closes or ctx is cancelled, then waits for
+// Run consumes in until it closes or ctx is canceled, then waits for
 // every handler still running before returning.
 func (d *Dispatcher) Run(ctx context.Context, in <-chan *Packet) error {
 	if ctx == nil {
@@ -302,14 +302,14 @@ func (d *Dispatcher) one(ctx context.Context, p *Packet) {
 		d.tap(p)
 	}
 
-	// Acknowledgement bookkeeping comes before routing and happens for
+	// Acknowledgment bookkeeping comes before routing and happens for
 	// every packet the gate lets through, including duplicates and ones
 	// that failed to decode.
 	// A duplicate arrived precisely because our previous
-	// acknowledgement did not get through, so it needs another.
+	// acknowledgment did not get through, so it needs another.
 	consumed := false
 	if d.sender != nil {
-		// Acknowledgements reach us two ways.  Some ride on the
+		// Acknowledgments reach us two ways.  Some ride on the
 		// tail of another packet, and those are in p.Acks.  The
 		// rest arrive as a PacketAck message in their own
 		// datagram, which is how a simulator sends most of them

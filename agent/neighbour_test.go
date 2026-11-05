@@ -20,7 +20,7 @@ import (
 //
 // It is the ordinary fakeSim, which answers UseCircuitCode with a
 // RegionHandshake -- and that, plus the pings, is the whole of what stage
-// 0 of doc/history/neighbours.md found a real neighbour needs from us.
+// 0 of doc/history/neighbours.md found a real neighbor needs from us.
 // What it must not be given is an event queue or a seed: a child has
 // neither, and a test that handed it one would be exercising the region
 // the avatar is in.
@@ -33,13 +33,13 @@ func aNeighbour(t *testing.T, name string, x, y uint32) (*fakeSim, uint64) {
 	return sim, msg.RegionHandle(x, y)
 }
 
-// enableSimulator is the body a simulator offers a neighbour in, in the
+// enableSimulator is the body a simulator offers a neighbor in, in the
 // shapes stage 0 of doc/history/neighbours.md read: a SimulatorInfo block
 // with the handle as LLSD binary, the address as four binary bytes in
 // network order and the port as a plain integer.
 //
 // Built rather than captured.  Stage 0's probe read every field of the
-// 57 offers it saw this way and dialled what came out of them, so the
+// 57 offers it saw this way and dialed what came out of them, so the
 // shapes are measured; no body was kept byte for byte, which is why
 // this is not the fixture agniTeleportFinish is.
 func enableSimulator(handle uint64, addr *net.UDPAddr) map[string]any {
@@ -78,7 +78,7 @@ func (l *logLines) saying(what string) []string {
 }
 
 // neighbourly is a session that takes offers up, in the first of two
-// regions, with a neighbour beside it that has not been offered yet.
+// regions, with a neighbor beside it that has not been offered yet.
 func neighbourly(t *testing.T) (*Agent, *fakeRegion, *fakeRegion, *fakeSim, uint64) {
 	t.Helper()
 	a, from, to := twoRegions(t, Options{
@@ -91,7 +91,7 @@ func neighbourly(t *testing.T) (*Agent, *fakeRegion, *fakeRegion, *fakeSim, uint
 
 // TestWithNeighboursOffAnOfferOpensNothingAndSendsNothing: off by
 // default, and off has to cost the grid nothing.  So the offer is made
-// both ways it can arrive and the neighbour hears nothing, no circuit is
+// both ways it can arrive and the neighbor hears nothing, no circuit is
 // recorded, and the goroutine count comes back to where it started.
 //
 // It used to assert one thing more -- that EnableSimulator reached the
@@ -100,8 +100,8 @@ func neighbourly(t *testing.T) (*Agent, *fakeRegion, *fakeRegion, *fakeSim, uint
 // turn over: a handler cannot be withdrawn once registered, so the one
 // in followNeighbours is registered either way and returns on its first
 // line when the flag is down.  What the test was really protecting is
-// all still here and is the half anybody cares about: with neighbours
-// off, no socket is opened and nothing is said to a neighbour.
+// all still here and is the half anybody cares about: with neighbors
+// off, no socket is opened and nothing is said to a neighbor.
 func TestWithNeighboursOffAnOfferOpensNothingAndSendsNothing(t *testing.T) {
 	a, from, _ := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
 	sim, handle := aNeighbour(t, "Pelmar Mill", 43647, 43648)
@@ -210,7 +210,7 @@ func TestNeighboursTurnedOffDropWhatIsHeldAndTakeNoMore(t *testing.T) {
 	from.eq.push("EnableSimulator", enableSimulator(handle, sim.addr()))
 	// The handshake's reply is the last thing the child sends.  Sent
 	// before the turning off and read by the simulator after it, it
-	// would count below as talking to the neighbour after being turned
+	// would count below as talking to the neighbor after being turned
 	// off, so the turning off waits until the simulator has read it.
 	sim.waitSeen(t, "RegionHandshakeReply", 5*time.Second)
 	waitFor(t, "the neighbour to be listed", func() bool { return len(a.Neighbours()) == 1 })
@@ -261,7 +261,7 @@ func TestNeighboursTurnedOffAndOnAgainOpenAFreshCircuit(t *testing.T) {
 	waitFor(t, "the circuit to open again", func() bool { return len(a.Neighbours()) == 1 })
 
 	// And then for the dial itself, which is a separate moment.  The
-	// neighbour is listed when the circuit is created and the datagram
+	// neighbor is listed when the circuit is created and the datagram
 	// that opens it goes out afterwards, so counting what the simulator
 	// has seen the instant the list changes is a race -- one this test
 	// won for years and then started losing when unrelated work shifted
@@ -320,7 +320,7 @@ func TestAnOfferTakenUpOpensACircuitToTheAddressItNames(t *testing.T) {
 		return a.Neighbours()[0].Heard > 0
 	})
 
-	// Nothing that belongs to the avatar is said to a neighbour.  This
+	// Nothing that belongs to the avatar is said to a neighbor.  This
 	// is the line between a child and a root, and it is one message.
 	if sim.got()[0] != "UseCircuitCode" {
 		t.Errorf("the circuit opened with %q: %v", sim.got()[0], sim.got())
@@ -398,7 +398,7 @@ func TestAChildAnswersThePings(t *testing.T) {
 // TestASecondOfferForANeighbourAlreadyHeldOpensNothingNew: the simulator
 // repeats an offer for as long as it goes untaken -- 57 times in 200
 // seconds, naming four regions -- so the repeats arrive whatever we do,
-// and a second circuit to a neighbour would give it two sets of sequence
+// and a second circuit to a neighbor would give it two sets of sequence
 // numbers under one circuit code.  A repeat is an offer at the address
 // already held, to a child still heard from; see
 // TestAReOfferAtAnotherAddressReplacesTheChild for the other kind.
@@ -428,7 +428,7 @@ func TestASecondOfferForANeighbourAlreadyHeldOpensNothingNew(t *testing.T) {
 }
 
 // TestAnOfferForTheRegionTheAvatarIsInIsNotTakenUp: a handle that agrees
-// with this session's own is not a neighbour, and a circuit to it would
+// with this session's own is not a neighbor, and a circuit to it would
 // be a second one to the simulator already on the other end of the
 // root's.  It is also how a stale offer reads after the avatar has
 // crossed into the region that made it.
@@ -450,7 +450,7 @@ func TestAnOfferForTheRegionTheAvatarIsInIsNotTakenUp(t *testing.T) {
 // TestAnOfferOvertakenByAMoveIntoItsRegionIsNotKept: the check on the
 // handle is made before the lock, and the avatar can move into the
 // offered region, and the move close the child to it, while the offer
-// waits for the lock.  What was dialled is closed rather than listed.
+// waits for the lock.  What was dialed is closed rather than listed.
 func TestAnOfferOvertakenByAMoveIntoItsRegionIsNotKept(t *testing.T) {
 	a, _, _, sim, handle := neighbourly(t)
 
@@ -494,7 +494,7 @@ func TestAnOfferOnTheCircuitIsTakenUpToo(t *testing.T) {
 }
 
 // TestAnOfferWithNoUsableAddressIsNotDialled: the message is the only
-// place a neighbour's address is ever named, so one this cannot read
+// place a neighbor's address is ever named, so one this cannot read
 // leaves nothing to do.  What it must not do is dial three quarters of
 // an address, which would look exactly like a simulator that never
 // answered.
@@ -624,7 +624,7 @@ func TestTheCapClosesWhatIsNoLongerANeighbourFirst(t *testing.T) {
 		t.Fatalf("%d circuits held after the teleport, want the ring kept", len(got))
 	}
 
-	// The new region offers its own west neighbour.
+	// The new region offers its own west neighbor.
 	west, westAt := aNeighbour(t, "the new region's west", x-3, y)
 	to.eq.push("EnableSimulator", enableSimulator(westAt, west.addr()))
 	west.waitSeen(t, "UseCircuitCode", 5*time.Second)
@@ -684,7 +684,7 @@ func childConn(t *testing.T, a *Agent, handle uint64) *net.UDPConn {
 // TestATeleportKeepsTheChildren: a child is kept until its simulator
 // lets it go, as a viewer keeps one.  Measured on Agni, a region the
 // avatar came back to within seconds of leaving offered none of its
-// neighbours again, so a session that let them go on every move came
+// neighbors again, so a session that let them go on every move came
 // back holding none.  The teleport here lands far from the region left,
 // so the child is no longer beside the avatar, and is kept anyway.
 func TestATeleportKeepsTheChildren(t *testing.T) {
@@ -866,7 +866,7 @@ func TestADisableSimulatorOnTheRootIsSaidAndEndsNothing(t *testing.T) {
 // already held, naming another address, is the region's simulator
 // somewhere else, and the viewer replaces its entry for it
 // (LLWorld::addRegion).  The old circuit is closed and the new address
-// dialled.
+// dialed.
 func TestAReOfferAtAnotherAddressReplacesTheChild(t *testing.T) {
 	var said logLines
 	a, from, _ := twoRegions(t, Options{
@@ -909,9 +909,9 @@ func TestAReOfferAtAnotherAddressReplacesTheChild(t *testing.T) {
 //
 // By hand, but silent in fact too: the simulator stops writing to the
 // child, and everything it wrote is heard, before the child is made to
-// look as if it had heard nothing for that long.  An acknowledgement of
+// look as if it had heard nothing for that long.  An acknowledgment of
 // the RegionHandshakeReply still on its way made it heard from again,
-// and the offer a repeat that dialled nothing.
+// and the offer a repeat that dialed nothing.
 func TestAReOfferOfASilentChildReplacesIt(t *testing.T) {
 	var said logLines
 	a, from, _ := twoRegions(t, Options{
@@ -953,7 +953,7 @@ func TestAReOfferOfASilentChildReplacesIt(t *testing.T) {
 // without a DisableSimulator sends nothing more, and the viewer drops a
 // circuit that has been silent for its circuit timeout.  The child here
 // hears its handshake and then nothing, is closed by its watchdog, and
-// the next offer of the region is dialled.
+// the next offer of the region is dialed.
 func TestASilentChildIsDroppedAndOfferedAfresh(t *testing.T) {
 	var said logLines
 	a, from, _ := twoRegions(t, Options{
@@ -988,7 +988,7 @@ func TestASilentChildIsDroppedAndOfferedAfresh(t *testing.T) {
 }
 
 // TestAdjacentIsAnEdgeOrACorner: the cap goes by it, so a region two
-// squares off, or the region itself, is not a neighbour.
+// squares off, or the region itself, is not a neighbor.
 func TestAdjacentIsAnEdgeOrACorner(t *testing.T) {
 	here := msg.RegionHandle(43648, 43648)
 	for _, c := range []struct {
@@ -1013,7 +1013,7 @@ func TestAdjacentIsAnEdgeOrACorner(t *testing.T) {
 
 // TestClosingTheSessionClosesTheChildrenAndLeavesNoGoroutineBehind: a
 // child is four goroutines and a socket, so getting this wrong leaks
-// them per neighbour rather than failing.  Close closes done, cancels
+// them per neighbor rather than failing.  Close closes done, cancels
 // and then waits on the group they are in -- which is also why opening
 // one has to be as careful about a session that is ending as moveTo is.
 func TestClosingTheSessionClosesTheChildrenAndLeavesNoGoroutineBehind(t *testing.T) {
@@ -1041,7 +1041,7 @@ func TestClosingTheSessionClosesTheChildrenAndLeavesNoGoroutineBehind(t *testing
 // TestAKickGivesBackEverySocketWithoutAClose: slgod keeps a kicked
 // session so that it can say why it ended, and nothing calls Close on
 // it.  So the session's own end closes its sockets, the root circuit's
-// and each neighbour's, and a Close made later still returns as one
+// and each neighbor's, and a Close made later still returns as one
 // does.
 func TestAKickGivesBackEverySocketWithoutAClose(t *testing.T) {
 	a, from, _, sim, handle := neighbourly(t)
@@ -1133,7 +1133,7 @@ func TestTheOfferIsReadInTheShapesTheGridSends(t *testing.T) {
 	}
 
 	// And the addresses that are not ones.  Three of four bytes is the
-	// one worth naming: dialled, it would be somewhere, and would look
+	// one worth naming: dialed, it would be somewhere, and would look
 	// like a simulator that never answered.
 	for _, bad := range []struct {
 		ip   []byte

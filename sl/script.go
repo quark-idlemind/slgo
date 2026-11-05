@@ -281,7 +281,7 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 	// install rather than after it succeeds, because an install that
 	// failed on the way back may still have started the script.  On a
 	// context of its own: an interrupted run is the one that most needs
-	// this, and its context is already cancelled.  A stop that fails is
+	// this, and its context is already canceled.  A stop that fails is
 	// a warning on the result, or joined to the error when there is no
 	// result to carry it.
 	if !s.KeepRunning && !s.NotRunning {
@@ -383,7 +383,7 @@ func (w *Session) Run(ctx context.Context, s Script) (res *Result, err error) {
 
 // dropScriptCopy deletes the inventory copy of a script whose run failed
 // while putting it in its object.  On a context of its own, since a run
-// that failed because its caller gave up has a cancelled one.
+// that failed because its caller gave up has a canceled one.
 func (w *Session) dropScriptCopy(ctx context.Context, it *Item, name string) error {
 	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()

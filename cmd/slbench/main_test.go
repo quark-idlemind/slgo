@@ -15,7 +15,7 @@ import (
 )
 
 // A backend hands back EVERYTHING a script says, so this program strips the
-// RESULT: marker and skips anything that is not a labelled measurement.
+// RESULT: marker and skips anything that is not a labeled measurement.
 func TestResultPayload(t *testing.T) {
 	for _, tc := range []struct {
 		in   string
@@ -112,7 +112,7 @@ func TestAVariablesTypeComesFromItsFirstLetter(t *testing.T) {
 // TestOnlyLabelledMeasurementsAreAbsorbed: the runner hands back every
 // line the script said, and the script says a good deal that is not a
 // measurement -- so anything without a RESULT: label, and anything
-// labelled with a word this does not know, must leave the readings alone.
+// labeled with a word this does not know, must leave the readings alone.
 func TestOnlyLabelledMeasurementsAreAbsorbed(t *testing.T) {
 	t.Parallel()
 	var r Results

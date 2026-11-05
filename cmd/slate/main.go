@@ -23,7 +23,7 @@
 // needs one, and only a declared one may be given; a profile is never
 // guessed from what slgod holds, because the avatars a daemon holds for
 // others are the owner's to allow, one at a time. A second avatar is
-// dialled as the tester is and closed with it. No message of slate names a
+// dialed as the tester is and closed with it. No message of slate names a
 // profile: only the binding.
 //
 // --screen WxH and --hud-zoom Z describe the world view a drag on the
@@ -46,7 +46,7 @@
 // -make-bridge makes the item "slate bridge" in the Objects folder of the
 // avatar's inventory, which a file with a probe or a listen wears during a
 // run. It needs build rights where the avatar stands, once per account: it
-// rezzes a prim one metre away, names it and takes it. It prints
+// rezzes a prim one meter away, names it and takes it. It prints
 //
 //	slate: make-bridge: "slate bridge" is in the Objects folder
 //
@@ -62,13 +62,13 @@
 //
 //	0  every test passed (or the bridge item is in the Objects folder)
 //	1  a test failed
-//	2  the file did not parse or failed a check; nothing was dialled
+//	2  the file did not parse or failed a check; nothing was dialed
 //	3  setup failed (the dial, an --avatar that does not match the file's
 //	   avatar headers, is the tester's own or is not held, an object
 //	   lookup, a probe, the bridge, or -make-bridge failing)
 //	4  slate was used wrongly: an unknown flag, no FILE or more than one,
 //	   a file that cannot be read, an --avatar that is not NAME=PROFILE, or
-//	   a -run that does not compile or matches no test; nothing was dialled
+//	   a -run that does not compile or matches no test; nothing was dialed
 package main
 
 import (
@@ -294,7 +294,7 @@ func parseAvatars(raw []string) ([]avatarFlag, error) {
 }
 
 // matchAvatars checks the --avatar flags against the file's avatar headers
-// before anything is dialled: each declared avatar is given once, and only
+// before anything is dialed: each declared avatar is given once, and only
 // declared ones are. A message names the binding and never the profile.
 // Why: doc/slate-runner.md#second-avatars
 func matchAvatars(s *slate.Script, given []avatarFlag, agent string) error {
@@ -327,8 +327,8 @@ func matchAvatars(s *slate.Script, given []avatarFlag, agent string) error {
 	return nil
 }
 
-// dialAvatars dials a session for each second avatar, as it dialled the
-// tester's, and returns them by binding together with any that were dialled
+// dialAvatars dials a session for each second avatar, as it dialed the
+// tester's, and returns them by binding together with any that were dialed
 // before an error, for the caller to close. A profile the daemon does not
 // hold, or the tester's own, is an error that names the binding.
 func dialAvatars(ctx context.Context, addr string, tester *sl.Session, given []avatarFlag, dial dialer) (map[string]*sl.Session, error) {

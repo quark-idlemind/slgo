@@ -35,7 +35,7 @@ var ErrAnimatedFace = errors.New("sl: the face has a texture animation, so one s
 // would pass it is drawn smaller and is still the whole face.
 //
 // A quarter turn (Rotation 8192) takes A B / C D to B D / A C, and a
-// 20 by 10 texture to 10 by 20. A repeat of 2 lays two copies, centred.
+// 20 by 10 texture to 10 by 20. A repeat of 2 lays two copies, centered.
 // Why: doc/face-pictures.md#the-mapping
 func (f Face) Picture(tex image.Image) (*image.NRGBA, error) {
 	if tex == nil || tex.Bounds().Empty() {

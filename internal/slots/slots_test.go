@@ -879,7 +879,7 @@ func TestASlotRemovedWhileNobodyHasItGoesAtOnce(t *testing.T) {
 // hook.  For an object that a script ran in, tidying is stopping that
 // script from talking -- and a slot handed on before it has stopped is a
 // caller reading somebody else's output as its own, which is measured
-// behaviour and not a worry: chat carries the object a line came from
+// behavior and not a worry: chat carries the object a line came from
 // and never the script's name.
 func TestASlotIsNotHandedOnUntilItHasBeenTidied(t *testing.T) {
 	p, _ := stopped(t)

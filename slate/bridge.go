@@ -388,7 +388,7 @@ func (r *runner) probeName(pp *probePrim) string {
 
 // fwdWho is who a forwarded line is from: the script's name for a bound
 // prim, the tester, else the name the bridge heard, which is the displayed
-// name of an avatar or any name at all for an object, and so labelled as an
+// name of an avatar or any name at all for an object, and so labeled as an
 // object's.
 func (r *runner) fwdWho(m wireMessage) string {
 	switch {

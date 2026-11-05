@@ -217,7 +217,7 @@ and takes the first of these in `~/.config/slgod/` that exists:
     secret.HOST                 secret.192.0.2.20
     secret                      the shared secret
 
-The host is as dialled, lowercased and without brackets, and an IPv6
+The host is as dialed, lowercased and without brackets, and an IPv6
 address has its colons turned into dots, since a colon is not safe in a
 file name everywhere: `[2001:db8::20]:7807` is `secret.2001.db8..20.7807`.
 So `localhost:7808` and `127.0.0.1:7808` are two files, even through the
@@ -252,7 +252,7 @@ and nothing checks that the connection really is loopback.
                                         a second daemon with its own directory
 
 Each argument names a profile. The sessions stay up until the process is
-signalled; clients attach and detach freely without the grid noticing.
+signaled; clients attach and detach freely without the grid noticing.
 
 ### Starting it twice
 
@@ -338,7 +338,7 @@ It cannot tell whether it is home already: nothing in the protocol
 answers "where is home", and the daemon has never been told. What it
 does instead is ask to go there once, a few seconds after the session
 comes up, and read the answer. An avatar that is already home is
-either moved a metre or two by the grid or told it cannot be teleported
+either moved a meter or two by the grid or told it cannot be teleported
 closer to where it already is; both mean home, and the log says
 
     qi: home, after one attempt
@@ -406,7 +406,7 @@ another viewer takes the session or `slgod` restarts.
 
 Profiles that say anything else are left alone. `start = last` means
 where the avatar was, and dragging that avatar home would be the daemon
-overruling the profile rather than honouring it.
+overruling the profile rather than honoring it.
 
 ### Where an avatar was sitting
 
@@ -608,7 +608,7 @@ dialog behind it. The certificate covers loopback and whatever address
 `-viewer` names; move the daemon to a different address and it is
 replaced, which is said in the log, and every viewer has to be told
 again. Bound to every address, it covers loopback alone, and the log
-says so at each start: a viewer dialling any other address of the
+says so at each start: a viewer dialing any other address of the
 machine refuses it. `-viewer-cert` and `-viewer-key` take your own pair instead, from
 a real authority or anywhere else.
 
@@ -737,7 +737,7 @@ the record then says. Nothing is dropped on a timer, when the avatar
 changes region, or when slgod re-establishes the session: the viewer
 puts no expiry on any of the five, carries a group invitation across a
 logout, and answers each by quoting the id it came with rather than
-anything of the session's. That the grid still honours such an answer
+anything of the session's. That the grid still honors such an answer
 from a re-established session is inferred, from its delivering these
 kinds at login out of offline storage, rather than watched. The record
 is in memory, so an offer made while slgod itself was down is not in
@@ -801,7 +801,7 @@ included. From then on it is what the relay to the viewer was offered,
 with what became of it -- forwarded, absorbed, dropped, or held while no
 viewer is joined -- and a retransmission of something already handled,
 which the relay is not offered again, is recorded as a retransmission.
-A packet carrying nothing but acknowledgements, a `PacketAck`, and one
+A packet carrying nothing but acknowledgments, a `PacketAck`, and one
 that would not decode are not offered to the relay either, and with a
 viewer logged in they are not recorded.
 
@@ -881,7 +881,7 @@ half a minute unless `-t` says otherwise, and `-t` needs a unit -- `-t
 | `-start WHERE` | override every profile's start location |
 | `-viewer ADDR` | serve viewer logins here, so a real viewer can be handed a session; always TLS |
 | `-viewer-cert FILE`, `-viewer-key FILE` | serve that endpoint with your own certificate rather than the kept self-signed one |
-| `-neighbors` (or `-neighbours`) | hold a circuit to each neighbouring region, so an avatar can walk over a border; a profile's own `neighbors` setting wins over it |
+| `-neighbors` (or `-neighbours`) | hold a circuit to each neighboring region, so an avatar can walk over a border; a profile's own `neighbors` setting wins over it |
 | `-log FILE` | append the log to this file, mode 600, rather than standard error; its directory is made 700, and refused if others can open it |
 | `-log-secrets` | for debugging: log session ids, circuit codes and capability URLs whole. The log then holds every session's credentials |
 | `-trace FILE` | write a packet trace, mode 600 |
@@ -987,7 +987,7 @@ Measured on the grid, four scripts that each sleep three seconds:
 **17.5 seconds one at a time and 5.2 seconds four at once.** Six of them
 take 9.1 seconds -- four, then the other two as objects come free, since
 an object takes the next script the moment it is free rather than
-waiting for its neighbours.
+waiting for its neighbors.
 
 They finish in whatever order they finish in and the lines are
 interleaved, which is what the tag in front of every line is for. The
@@ -1333,7 +1333,7 @@ once. `Padding` is described below.
 script it sends.
 
 **`--extra` should be a multiple of 4.** Code is 4-aligned, so
-individual copies quantise around their real cost -- measured, copies of
+individual copies quantize around their real cost -- measured, copies of
 `llSin(1.0);` cost 48, 48, 48, 44 repeating, which is four copies of 47.
 Only a multiple of four averages that out. `--extra 1` is the cheapest
 measurement there is and it reported 48 for that construct and 348 for
@@ -1343,7 +1343,7 @@ withheld.
 
 There used to be a second mode, which put up to 512 copies in one script
 and fitted a line through two counts. It existed to beat the
-quantisation by dividing it down, and exact boundaries removed the
+quantization by dividing it down, and exact boundaries removed the
 reason: both approaches report 47 for `llSin(1.0);`, and this one does
 it in 14 seconds against 53. Installing 128 copies took 5.07s, 256 took
 12.70s, and 512 was refused outright.
@@ -1838,7 +1838,7 @@ obeyed and never answered, whatever it says it is. It carries whatever
 name the object was given and its owner's id, so an object named after
 somebody trusted, or one a trusted person owns, would pass on either.
 The log says `ignored an instant message from [Object] ...`, and any
-other name in the log that is not a person's is labelled `[Object]`,
+other name in the log that is not a person's is labeled `[Object]`,
 `[Group]` or `[Grid]` the same way. What the grid puts in those two
 fields was measured, and is in [im-senders.md](im-senders.md).
 
@@ -1944,7 +1944,7 @@ includes itself, directly or round a ring, is an error and is said
 rather than quietly truncated, as is an include of a file that is not
 there.
 
-**What this costs.** The old behaviour added the default to a person's
+**What this costs.** The old behavior added the default to a person's
 file automatically. Nothing does that now, so a person's file that
 forgets `./default.txt` makes that avatar nobody in particular for that
 person, quietly. That is the price of the file deciding.
@@ -1999,7 +1999,7 @@ reasons. Everything before the last message is the cached prefix, and a
 sentence up there that changes every turn would throw away the whole
 conversation's kv cache on every single reply. And it is *sent* rather
 than *stored* — what goes into the record is what the person actually
-wrote, so the hint never reaches the summariser and cannot come back
+wrote, so the hint never reaches the summarizer and cannot come back
 later as something they said.
 
 The hint alone does nothing at all: measured against a 3B, the elapsed
@@ -2021,7 +2021,7 @@ and a better model is the fix for the rest of it.
 The conversation is kept as **text**, under `chat-dir` (by default
 `~/.local/state/slbotd`), one file per avatar per person. That is the
 record. The kv cache is an accelerator and is treated as disposable,
-because it is welded to one model, one quantisation, one context size
+because it is welded to one model, one quantization, one context size
 and one server build — and **the server does not check any of that
 before loading one.** A state saved under one model and restored under
 another loads cleanly and answers nonsense. So `slbotd` records a
@@ -2082,7 +2082,7 @@ few exchanges.
 
 **The backstory is not part of any of this and cannot be lost to it.**
 It is read from its file on every turn and is always the first message;
-only turns are ever summarised, and the summariser is never given the
+only turns are ever summarized, and the summarizer is never given the
 character at all — there is no path through the code on which the two
 meet. That is structural rather than careful.
 
@@ -2099,22 +2099,22 @@ and asked "remind me what I asked you to hold?", the avatar answered
 "Three coils, Quark." That answer came from the note and from nothing
 else, which is the whole of what this is for.
 
-### Why the note is three labelled lines
+### Why the note is three labeled lines
 
 Because asking in prose does not work, at any size worth running, and
 that was measured rather than guessed. The first version of the
 instruction said *"write a brief note, in the third person, of what has
 passed between them"*. Against a 0.5B it produced fragments of the
 transcript separated by rules; against a 3B it copied the exchange back
-**verbatim**. Neither summarised anything, and both lost the name the
+**verbatim**. Neither summarized anything, and both lost the name the
 person had given — the single most useful fact in the conversation.
 
-Three labelled lines with a rule for the empty case worked on the 3B
+Three labeled lines with a rule for the empty case worked on the 3B
 first time. They also survive being folded again, which is the property
 the whole thing rests on: given that note plus four more turns, the
 next fold kept the name, the trade and the promise, and added the new
 topics to the middle line. A prose note has nothing to hold on to and
-drifts; a labelled one has three places to put things and keeps them.
+drifts; a labeled one has three places to put things and keeps them.
 
 The fields are what somebody means when they say an avatar remembers
 them: who they are, what has been talked about, and what was agreed.
@@ -2212,7 +2212,7 @@ viewer does.
 
 **Held, not delayed.** The model's own seconds count towards it,
 measured from when the remark *arrived* rather than from when the
-answer came back — so a reply the model laboured over goes out at once,
+answer came back — so a reply the model labored over goes out at once,
 and a slow machine does not cost you twice.
 
     read-cps = 23.0          # the default for every avatar

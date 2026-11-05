@@ -68,7 +68,7 @@ Live, 32 of one construct cost 11008 bytes and 16 cost 5516, which is
 model without drift could never fire; copy mode has since gone, and
 nothing in this repository sets `Drift` now.
 
-`Collide` is there because the live behaviour has two size limits rather
+`Collide` is there because the live behavior has two size limits rather
 than one: above `Collide` the script compiles and then runs out of
 memory, above `Limit` the compiler will not take it at all. Measured on
 Agni 2026-08-03, 256 copies of the reference shape compiled and then
@@ -135,13 +135,13 @@ than left implicit: with a seam there, the model is a script.v1 backend
 like any other, started in the same process, and an offline benchmark
 runs the same code a live one does.
 
-It was a real connection at first -- `scripttest.Pipe`, marshalling and
+It was a real connection at first -- `scripttest.Pipe`, marshaling and
 all -- on the argument that the model should exercise slbench's
 `script.go` rather than stand in for it. It still does: what
 `openScript`, `runIn`, `sift` and `absorbResults` do is unchanged,
 because what they are written against is `scriptv1.RunnerClient` and
 that is an interface. What the connection was buying on top of that was
-the transport's own behaviour, which is worth testing exactly once and
+the transport's own behavior, which is worth testing exactly once and
 is tested here against `Pipe`, and what it cost was 100 microseconds a
 run against 5 through `Direct`. A live run costs 1 to 30 seconds and
 would not care; a `--test` sweep of a hundred thousand of them cares a

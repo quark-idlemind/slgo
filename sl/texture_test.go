@@ -114,7 +114,7 @@ func TestDecodeTextureEntryException(t *testing.T) {
 	// Texture: default A, then face 2 alone set to B.  0x04 is the
 	// third bit, so face 2.
 	b := teBytes(t, texA+" 04 "+texB+" 00 "+
-		// colour, scales, offsets, rotation, bump, media, glow: a
+		// color, scales, offsets, rotation, bump, media, glow: a
 		// default and nothing else.
 		"00000000 00 "+
 		"0000803f 00 "+
@@ -288,7 +288,7 @@ func TestDecodingRefusesWhatItCannotFinish(t *testing.T) {
 
 	// The default of a later section missing, which is where an older
 	// simulator's blob genuinely ends -- but this one stops in the
-	// colour, which is not optional.
+	// color, which is not optional.
 	short := teBytes(t, `
 		89556747 24cb43ed 920b47ca ed15465f
 		00

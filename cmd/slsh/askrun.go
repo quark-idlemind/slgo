@@ -37,7 +37,7 @@ package main
 // ask whether it does what was asked; that was tried, and it cut the
 // questions answered right by half or more.  What guards against a real
 // command offered for something it does not do is the model's own
-// found, asked for first (askSchema), and honoured: suggestions written
+// found, asked for first (askSchema), and honored: suggestions written
 // beside found=false are dropped (askToCheck).
 // Why: doc/slsh.md#no-second-opinion-on-a-suggestion
 

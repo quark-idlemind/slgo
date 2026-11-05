@@ -191,7 +191,7 @@ func cmdPlace(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 
 // dropRezzed deletes a prim a command rezzed and is not handing back,
 // into the trash as a viewer's delete goes.  On a context of its own,
-// bounded, since a command given up on has a cancelled one.
+// bounded, since a command given up on has a canceled one.
 func dropRezzed(ctx context.Context, s *sl.Session, o *sl.Object) error {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
@@ -202,10 +202,10 @@ func dropRezzed(ctx context.Context, s *sl.Session, o *sl.Object) error {
 	return err
 }
 
-// beside is a metre EAST of the avatar, near enough to reach and clear
+// beside is a meter EAST of the avatar, near enough to reach and clear
 // of the avatar itself.
 //
-// Not a metre in front, which is what this said until somebody measured
+// Not a meter in front, which is what this said until somebody measured
 // it: the rotation is never consulted, so where the thing appears has
 // nothing to do with which way the avatar is facing.
 func beside(at msg.Vector3) msg.Vector3 {

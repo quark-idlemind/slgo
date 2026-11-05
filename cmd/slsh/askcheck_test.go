@@ -116,7 +116,7 @@ func TestCheckCommandLineRefusesWhatTheShellRefuses(t *testing.T) {
 
 // Operands and flag values that come from a list the shell keeps are
 // checked against that list, by the code the command uses; the
-// capitalised placeholders its usage line writes pass as they are.
+// capitalized placeholders its usage line writes pass as they are.
 // Every wrong word here is invented.
 func TestCheckCommandLineChecksWordsFromTheShellsLists(t *testing.T) {
 	for _, c := range []struct {
@@ -291,7 +291,7 @@ func TestCheckCommandLineRefusesUsageSyntax(t *testing.T) {
 	}
 }
 
-// The placeholders are the usage line's own capitalised words, and
+// The placeholders are the usage line's own capitalized words, and
 // nothing else.
 func TestAskPlaceholdersAreTheUsageLines(t *testing.T) {
 	ph := askPlaceholders(commands["set"].usage("set"))
@@ -471,7 +471,7 @@ func TestFilterAskAnswerKeepsOnlyWhatChecks(t *testing.T) {
 		{Command: "sethome", CommandLine: "sethome", Quote: "sets home to where you are standing"},
 		// A real line with an invented quote.
 		{Command: "landmark", CommandLine: "landmark --home", Quote: "teleports you to your home location instantly"},
-		// A line that runs one command, labelled as another.
+		// A line that runs one command, labeled as another.
 		{Command: "tp", CommandLine: "landmark --home", Quote: "tp home is the same trip said the short way"},
 		// The good one again, wrapped the way models wrap it.
 		{Command: "landmark", CommandLine: "`$ landmark  --set-home`", Quote: good.Quote},

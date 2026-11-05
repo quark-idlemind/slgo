@@ -274,7 +274,7 @@ func TestViewerJoinsAnExistingSession(t *testing.T) {
 	}
 }
 
-// TestMovementCompleteCarriesTheRealPosition: the answer is synthesised,
+// TestMovementCompleteCarriesTheRealPosition: the answer is synthesized,
 // so its contents come from the session rather than from the message
 // that prompted it.  A viewer told the wrong place puts the avatar
 // somewhere it is not and renders the wrong part of the region.
@@ -729,7 +729,7 @@ func heardFromViewer(c *Census, name string) uint64 {
 // movement request.  The peer was still noticed, because the tap that
 // notices it runs ahead of the duplicate check, so the daemon logged a
 // viewer appearing and then said nothing more while the viewer sat at
-// STATE_AGENT_WAIT looking at a grey world.
+// STATE_AGENT_WAIT looking at a gray world.
 //
 // TestAViewerThatComesBackOnANewPortIsAnswered was supposed to cover
 // this and did not, for a reason worth writing down: it passed in 4.50
@@ -815,7 +815,7 @@ func TestTheLastViewersLogoutReplyIsNotDeliveredToTheNextOne(t *testing.T) {
 // side of the same fix: forgetting a departed viewer's sequence numbers
 // must not amount to turning duplicate suppression off.
 //
-// A viewer resends anything reliable whose acknowledgement went missing,
+// A viewer resends anything reliable whose acknowledgment went missing,
 // which is ordinary and frequent.  Acted on twice, one
 // CompleteAgentMovement becomes two region replays and two
 // AgentMovementCompletes -- and, for everything that is forwarded rather
@@ -1235,7 +1235,7 @@ func TestAViewerIsToldWhenTheAvatarIsTeleportedFromSomewhereElse(t *testing.T) {
 // these are withheld from the event queue, which is where the template
 // says they go, and both would hand a viewer a simulator to open its
 // own circuit to if a grid ever sent them here instead.  Absorbing them
-// costs nothing: a viewer that is not offered neighbours draws this
+// costs nothing: a viewer that is not offered neighbors draws this
 // region and no other either way.
 func TestANeighboursAddressOnTheCircuitDoesNotReachTheViewer(t *testing.T) {
 	sim, _, c, v, census := handedOver(t)
@@ -1310,7 +1310,7 @@ func TestAStrangerDoesNotTakeTheCircuit(t *testing.T) {
 // TestAStrangersMessagesAreNotForwardedToTheGrid is the worse half.
 //
 // The default branch of fromViewer re-sends anything it does not
-// recognise to the simulator on the session's own circuit, as the
+// recognize to the simulator on the session's own circuit, as the
 // avatar.  A sender who never logged in could therefore chat, rez, pay
 // and give inventory by addressing the port.
 func TestAStrangersMessagesAreNotForwardedToTheGrid(t *testing.T) {
@@ -1453,7 +1453,7 @@ func TestAWrongClaimIsLoggedWithoutTheSessionsIds(t *testing.T) {
 }
 
 // TestARefusedDatagramIsNotAcknowledged: the gate runs ahead of the
-// acknowledgement bookkeeping on purpose.  A refusal that still
+// acknowledgment bookkeeping on purpose.  A refusal that still
 // acknowledged the packet would be holding up its end of a conversation
 // with somebody it exists to refuse -- and the stranger's piggybacked
 // acks would confirm the circuit's own sends, telling it a viewer had

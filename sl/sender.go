@@ -7,7 +7,7 @@ package sl
 // something came from puts an object, a group or the grid's own name
 // behind a label saying so, and prints only a person's name bare: the
 // kind is Sender, and Label is the one way to print a name with it.
-// Why: doc/im-senders.md#labelling-a-sender
+// Why: doc/im-senders.md#labeling-a-sender
 
 import "github.com/quark-idlemind/slgo/msg"
 
@@ -28,7 +28,7 @@ const SystemName = "Second Life"
 
 // Label is name as a line should print it: a person's as it is, and
 // anything else with its kind in front, as in "[Object] a lamp".  A
-// conference is named by whoever started it, so it is labelled as a
+// conference is named by whoever started it, so it is labeled as a
 // group is.
 func (k Sender) Label(name string) string {
 	switch k {

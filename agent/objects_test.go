@@ -71,7 +71,7 @@ func terseBlob(local uint32, pos msg.Vector3) []byte {
 		w.u16(32767)
 	}
 	// Rotation runs from minus one to one, all four components, and
-	// is kept normalised with W made positive.
+	// is kept normalized with W made positive.
 	w.u16(65535)  // X, the top of the range
 	w.u16(0)      // Y, the bottom
 	w.u16(65535)  // Z
@@ -157,7 +157,7 @@ func (c compressedObject) bytes() []byte {
 	}
 	if c.text != "" {
 		w.cstr(c.text)
-		w.u8(255) // the colour it is drawn in
+		w.u8(255) // the color it is drawn in
 		w.u8(255)
 		w.u8(255)
 		w.u8(0)
@@ -266,7 +266,7 @@ func TestAFullUpdateIsRememberedFromItsBytes(t *testing.T) {
 // TestTheSixteenBitPlacementFormIsAcceptedToo: the placement blob comes
 // in several widths and the width is the only thing that says which.  An
 // avatar's is sixteen bytes longer than a prim's because it starts with
-// a collision plane, and the thirty-two byte form is integers quantised
+// a collision plane, and the thirty-two byte form is integers quantized
 // over ranges rather than floats -- so zero is the bottom of each range
 // and not the origin.
 func TestTheSixteenBitPlacementFormIsAcceptedToo(t *testing.T) {
@@ -337,7 +337,7 @@ func TestPlacementWidthsAreCounted(t *testing.T) {
 }
 
 // TestAnUnreadablePlacementStillNamesTheObject: a blob of a width
-// nothing recognises is not a reason to lose the object.  What it is
+// nothing recognizes is not a reason to lose the object.  What it is
 // and where it hangs are still known; only where it is is not.
 func TestAnUnreadablePlacementStillNamesTheObject(t *testing.T) {
 	t.Parallel()
@@ -536,7 +536,7 @@ func TestAnUpdateBeyondTheDrawDistanceIsPutOnNotice(t *testing.T) {
 
 // TestAChildIsJudgedByWhereItsRootIs: a child's position is relative to
 // its root, so judging it by its own coordinates would throw away
-// everything linked to a prim more than a few metres from the origin.
+// everything linked to a prim more than a few meters from the origin.
 func TestAChildIsJudgedByWhereItsRootIs(t *testing.T) {
 	t.Parallel()
 
@@ -1335,14 +1335,14 @@ func TestAParentNothingDescribedIsAskedFor(t *testing.T) {
 
 // TestAPersonIsNeverDroppedForDistance: a region names each avatar once
 // and a standing one says nothing afterwards, so an avatar refused for
-// range is refused permanently -- three metres away and invisible.
+// range is refused permanently -- three meters away and invisible.
 func TestAPersonIsNeverDroppedForDistance(t *testing.T) {
 	t.Parallel()
 
 	a, _ := offlineSession(t)
 	a.SetLook(Look{Center: msg.Vector3{X: 30, Y: 70, Z: 24}, Far: 128})
 
-	// Somebody on a skybox two kilometres up, described while this
+	// Somebody on a skybox two kilometers up, described while this
 	// session stands on the ground.
 	feed(t, a, arriving(t,
 		msg.ObjectUpdate_ObjectData{ID: 1, FullID: aPrim, PCode: pcodeAvatar,
@@ -1441,7 +1441,7 @@ func TestNamesAndOwnersComeOnlyFromAsking(t *testing.T) {
 
 // TestTrimForgetsWhatIsOutOfSight: the simulator says when an object has
 // been destroyed but says nothing at all when one is merely left behind,
-// and an object sitting still is never mentioned again either.  Ageing
+// and an object sitting still is never mentioned again either.  Aging
 // would throw away the quiet ones and keep the distant ones, which is
 // exactly backwards, so distance is what decides.
 func TestTrimForgetsWhatIsOutOfSight(t *testing.T) {

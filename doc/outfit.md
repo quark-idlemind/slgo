@@ -176,7 +176,7 @@ every message:
   for it and no `SaveAssetIntoInventory`. It was not described on
   arrival, and was described again under a new local id about 0.2 s
   after `TeleportFinish`. The link must stay, and is not touched.
-- A walk over a border and back, with neighbour circuits open, wearing
+- A walk over a border and back, with neighbor circuits open, wearing
   one box on the chest and one on a HUD point: no `KillObject` for
   either and no `SaveAssetIntoInventory`, either way. The new region
   described both under new local ids about 0.1 s after

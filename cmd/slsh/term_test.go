@@ -292,7 +292,7 @@ func TestDecodeSkipsWhatItDoesNotKnow(t *testing.T) {
 //
 // This is the bug the cell-size query walked into.  The decoder read
 // ESC, the bracket and ONE more byte, and gave up on anything it did
-// not recognise -- which left the rest of the sequence in the stream to
+// not recognize -- which left the rest of the sequence in the stream to
 // be delivered as ordinary keys.  A terminal reporting its cell size
 // typed ";18;10t" at the prompt, and a paste in bracketed mode typed
 // "00~", neither of which anybody had pressed.
@@ -304,7 +304,7 @@ func TestDecodeSwallowsTheWholeOfASequenceItDoesNotKnow(t *testing.T) {
 		"\x1b[6;18;10ta",      // a report of the cell size
 		"\x1b[200~a",          // the start of a bracketed paste
 		"\x1b[?1049ha",        // switching to the alternate screen
-		"\x1b[38;2;90;90;9ma", // a colour
+		"\x1b[38;2;90;90;9ma", // a color
 		"\x1b[Za",             // a back tab, which this editor has no use for
 	} {
 		got := feed(t, []byte(in))

@@ -13,7 +13,7 @@ package sl
 // the simulator itself believes, it arrives whether or not the
 // AvatarSitResponse did, and this package already keeps parents for
 // everything else it hears about.  A sit also MOVES the avatar, up to
-// about ten metres, so a caller that knew where the avatar was should
+// about ten meters, so a caller that knew where the avatar was should
 // treat that as stale.
 //
 // A refusal is an AlertMessage, in about a tenth of a second, and
@@ -125,7 +125,7 @@ func (s Seat) String() string {
 //
 // Returning means the simulator has reparented this avatar onto the
 // seat, which is its own word that the sit took, and that the avatar has
-// been MOVED to it -- possibly several metres, so anything a caller
+// been MOVED to it -- possibly several meters, so anything a caller
 // remembered about where it was standing is now wrong.  ErrSitRefused
 // means the simulator said no and carries what it said.  ErrTimeout
 // means neither happened, which is a third thing and not a refusal: the

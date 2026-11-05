@@ -5,7 +5,7 @@ package main
 // These are the shell's way into sl.Session.Move, Face and Halt, which
 // are there for programs that drive an avatar round a region; the shell
 // has them so that a person can see what a walk does before writing one
-// of those, and so that an avatar can be put a few metres to one side
+// of those, and so that an avatar can be put a few meters to one side
 // without a teleport.
 //
 // A walk is steered by whoever holds the circuit -- slgod, for a shell
@@ -75,13 +75,13 @@ type faceFlags struct {
 
 // nameWithin is how close a walk to somebody or something gets unless
 // told otherwise.  A person or an object is where its middle is, and
-// half a metre from somebody's middle is walking into them.
+// half a meter from somebody's middle is walking into them.
 const nameWithin = 1.5
 
 // cmdWalk walks the avatar and waits for it to get there.
 //
-// The end is printed with the position to the centimetre rather than in
-// the whole metres where prints, because how close a walk got is the
+// The end is printed with the position to the centimeter rather than in
+// the whole meters where prints, because how close a walk got is the
 // question it answers; the position is the simulator's own figure for
 // this avatar and is good to that.  An end that is not an arrival is
 // the command's failure, so that a script can tell.
@@ -146,7 +146,7 @@ func endLine(p sl.MoveProgress, what string) string {
 	return fmt.Sprintf("%s at %s", p.State, at)
 }
 
-// heading is a yaw as a person reads one: degrees anticlockwise from
+// heading is a yaw as a person reads one: degrees counterclockwise from
 // east, and the nearest compass point.
 func heading(yaw float32) string {
 	deg := float64(yaw) * 180 / math.Pi

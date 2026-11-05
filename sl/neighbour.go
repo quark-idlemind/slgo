@@ -26,7 +26,7 @@ type Neighbours struct {
 	// measured on 2026-08-23 the first circuit took between twenty and
 	// sixty seconds, and the set went on growing for a minute after
 	// that.  Being in the middle of a region does not empty it -- the
-	// middle of a 256-metre one is offered all four edges.
+	// middle of a 256-meter one is offered all four edges.
 	On bool
 
 	// Held is one entry per circuit, in grid handle order.  A circuit
@@ -54,7 +54,7 @@ type Neighbour struct {
 	Handshook bool
 
 	// Heard is how many packets have arrived on the circuit.  A
-	// neighbour describes itself fully and unprompted -- 59
+	// neighbor describes itself fully and unprompted -- 59
 	// ObjectUpdate and 51 LayerData in thirty seconds, measured -- so
 	// a circuit that is alive counts up without being asked.
 	Heard uint64

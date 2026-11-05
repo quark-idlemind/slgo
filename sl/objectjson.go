@@ -14,7 +14,7 @@ package sl
 // The simulator describes a world it invents; this describes one that
 // already exists, so a few fields carry what the grid knows and the
 // simulator has no use for. They are all optional and the simulator
-// ignores what it does not recognise:
+// ignores what it does not recognize:
 //
 //	prim.localid    the prim's local id in its region, which is not
 //	                stable and is what most messages take
@@ -393,7 +393,7 @@ func quat(f []float32) msg.Quaternion {
 	q := msg.Quaternion{X: f[0], Y: f[1], Z: f[2]}
 	if f[3] < 0 {
 		// The wire form assumes a non-negative W and recovers it by
-		// normalising, so a rotation given with a negative one is the
+		// normalizing, so a rotation given with a negative one is the
 		// same rotation with every component negated.
 		q = msg.Quaternion{X: -f[0], Y: -f[1], Z: -f[2]}
 	}

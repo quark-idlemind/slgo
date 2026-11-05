@@ -86,7 +86,7 @@ type Ask struct {
 	// rather than left to the server, because a conversation that
 	// lands in a different slot each turn is a conversation whose kv
 	// cache is somewhere else each turn.  Measured: id_slot is
-	// honoured by the OpenAI-compatible endpoint, which is the whole
+	// honored by the OpenAI-compatible endpoint, which is the whole
 	// reason this daemon can pin one.
 	Slot int
 
@@ -101,7 +101,7 @@ type Said struct {
 	// Prompt is how many tokens the whole conversation came to and
 	// Cached how many of them the server did not have to process
 	// again.  Both are read rather than estimated: compaction in
-	// chat.go is driven by what the tokeniser actually counted, which
+	// chat.go is driven by what the tokenizer actually counted, which
 	// is the difference between a budget and a guess at one.
 	Prompt int
 	Cached int
@@ -242,7 +242,7 @@ func (l *LLM) Props(ctx context.Context) (*Props, error) {
 // Fingerprint is everything a saved kv cache depends on.
 //
 // A state file is welded to the model that made it, to how that model
-// was quantised, to the size of a slot's context and to the build of
+// was quantized, to the size of a slot's context and to the build of
 // the server -- and the server checks none of it, so a state from
 // another model can restore cleanly and be nonsense.  This is what
 // stands in for the check it does not do: a conversation records the
@@ -301,7 +301,7 @@ func (l *LLM) do(ctx context.Context, method, path string, body, out any) error 
 }
 
 // oneLine pulls the message out of an error body, or gives back enough
-// of the body to recognise it by.
+// of the body to recognize it by.
 func oneLine(b []byte) string {
 	var e struct {
 		Error struct {

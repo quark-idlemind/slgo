@@ -35,7 +35,7 @@ rotation eight -- all four components -- and angular velocity six. X
 and Y run from half a region below to half a region above it, Z from
 `MIN_HEIGHT` to `MAX_HEIGHT` (1305-1306, 1651): a region's width below
 zero (`llworld.h:125`), and on Second Life `SL_MAX_OBJECT_Z`, 4096
-metres (`llworld.cpp:207`, `llmath/xform.h:38`). Reading the source,
+meters (`llworld.cpp:207`, `llmath/xform.h:38`). Reading the source,
 nothing reaches it: that case is only taken with no data packer, the
 one call with none is the one `ObjectUpdate` makes as `OUT_FULL`, and
 an `ImprovedTerseObjectUpdate` comes with a packer
@@ -58,7 +58,7 @@ There is no sixteen byte layout anywhere in the viewer. The comment at
   the same, with the viewer's sixteen bit layout and ranges from the
   unreached case above, and to count every width so that traffic
   shows whether they occur (see below). The fourth rotation component
-  is kept and normalised the way `DecodeTerse` keeps it. In terse
+  is kept and normalized the way `DecodeTerse` keeps it. In terse
   updates the simulator was measured not to keep W positive; in this
   form nothing has been measured, and it is read the same way because
   the viewer's reader keeps all four.
@@ -66,7 +66,7 @@ There is no sixteen byte layout anywhere in the viewer. The comment at
 
 Before 2026-09-26 the 32 byte form's rotation dropped W and recovered it
 as positive, which reads a -q as the mirror image of q; its Z ran over
--128 to 384 metres, the span X and Y use, so nothing above 384 metres
+-128 to 384 meters, the span X and Y use, so nothing above 384 meters
 could be said in it; a 16 byte width was read in a layout nothing
 here or in the viewer describes; and 124 and 140 were not read at all.
 
@@ -90,8 +90,8 @@ here, is ever sent.
 
 The layout was read off real blobs rather than assumed, and the
 assumption was wrong: the position is three plain floats, not the
-quantised pair of bytes per axis that everything after it uses.
-Decoding it as quantised gave positions that looked like positions --
+quantized pair of bytes per axis that everything after it uses.
+Decoding it as quantized gave positions that looked like positions --
 in range, stable, changing plausibly -- while being nowhere near where
 the objects actually were, which is the kind of wrong that does not
 announce itself.
@@ -105,5 +105,5 @@ they came and recovering W as positive -- which is what `msg.Quaternion`
 does -- turns a -q into the mirror image of q: a yaw of plus a quarter
 turn read as minus one. Measured on Agni, 2026-09-24: an avatar walking
 north read as facing south on some walks and not on others.
-`PackQuaternion` normalises and puts the sign where `Quaternion` expects
+`PackQuaternion` normalizes and puts the sign where `Quaternion` expects
 it.

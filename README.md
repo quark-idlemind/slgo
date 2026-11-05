@@ -72,7 +72,7 @@ and quitting logs you out. slgod holds the login for you. slsh attaches
 to it straight away, and when you quit, the avatar stays where it is.
 
 slgod needs a profile for each avatar and a shared secret, which it and
-its clients use to recognise each other:
+its clients use to recognize each other:
 
 ```
 $ go install ./cmd/slgod ./cmd/slhash
@@ -291,7 +291,7 @@ each commit. Changes go in by pull request.
 - Walking across a region border works when `neighbours` is on, but
   there's a pause. slgo connects to the new region from scratch instead
   of reusing the connection it already has open to it.
-- Nothing from neighbouring regions is kept, so you can't see objects
+- Nothing from neighboring regions is kept, so you can't see objects
   or terrain across a border.
 - `UploadAsset` accepts sounds, animations and meshes, but so far
   nothing here uploads anything except textures.
@@ -303,7 +303,7 @@ which isn't part of this repository. Most of the Go was written by AI
 coding agents, with a lot of direction from me. slrun and slbench are
 based on Go programs I wrote in 2026.
 
-## Licence
+## License
 
 Apache 2.0. The full text is in [LICENSE](LICENSE).
 

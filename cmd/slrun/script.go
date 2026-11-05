@@ -15,7 +15,7 @@ package main
 // The contract deliberately says nothing about rezzing or about naming an
 // object: a script runs inside one, the backend supplies it, and how it
 // came to exist is the backend's business.  So --object cannot be
-// honoured here and is refused rather than quietly ignored -- a person
+// honored here and is refused rather than quietly ignored -- a person
 // who named an object meant that object.
 //
 // What is left is the two ways the contract offers of saying where:
@@ -70,7 +70,7 @@ type remote struct {
 	// backend takes somewhere, runs, and gives it back.
 	targets []string
 
-	// shut is what closing has to undo, innermost first.  Cancelling the
+	// shut is what closing has to undo, innermost first.  Canceling the
 	// lease is how the object goes back, and so is dying -- which is the
 	// point of its being a stream at all.
 	shut []func()

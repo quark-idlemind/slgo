@@ -73,7 +73,7 @@ message is.
    not answered at all (`llimview.cpp:602-606`, 613-620).
 5. **It waits for the answer up to 30 seconds** (`SESSION_INITIALIZATION_TIMEOUT`,
    `llimview.cpp:113`, `945-946`), and text typed meanwhile is queued
-   and sent when the session is initialised (`fsfloaterim.cpp:620-630`).
+   and sent when the session is initialized (`fsfloaterim.cpp:620-630`).
 6. **The answer arrives on the event queue**: `ChatterBoxSessionStartReply`
    (`llimview.cpp:4852-4928`), the same event a group's start is answered
    with, with `temp_session_id` the id the start was made with and
@@ -304,7 +304,7 @@ to be one, or when the avatar's group list is not empty and does not
 have it.  With an empty list -- which is "not told yet" as well as "none"
 -- a dialog 17 and an `instantmessage` invitation are taken to be a
 group's, as before, and an `immediate` invitation to be a conference's,
-since that shape is only a conference's.  A conference is labelled
+since that shape is only a conference's.  A conference is labeled
 `[Conference] NAME` by `SenderConference` and never bare: the name is the
 grid's, and whatever the inviter chose.
 

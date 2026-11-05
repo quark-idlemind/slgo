@@ -616,7 +616,7 @@ func wornFrom(worn []*sl.Attached, item msg.UUID) (*sl.Attached, bool) {
 //
 // A path is allowed and only its last name is used.  Two items of one
 // name in two folders are told apart by where they sit, and nothing
-// about a worn object says which folder its item came from, so honouring
+// about a worn object says which folder its item came from, so honoring
 // the rest of the path would mean walking inventory to answer a question
 // the answer cannot settle.  The name is its item's, picked out through
 // sl.PickNamedFunc: exactly, in the case it has, and a name that is worn

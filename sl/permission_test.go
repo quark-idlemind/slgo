@@ -299,7 +299,7 @@ func TestDroppedIsZeroForSomethingNeverSubscribed(t *testing.T) {
 
 // TestAScriptQuestionOffTheWireReachesWhoeverIsListening: the request
 // arrives as an ordinary message on the relay, so the reader has to
-// recognise it -- a subscription that only ever saw hand-built requests
+// recognize it -- a subscription that only ever saw hand-built requests
 // would pass while nothing real reached it.
 func TestAScriptQuestionOffTheWireReachesWhoeverIsListening(t *testing.T) {
 	w, f := newFakeSession(t)

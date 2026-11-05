@@ -713,7 +713,7 @@ func (sh *Shell) stdout() io.Writer { return &termWriter{t: sh.term, log: sh.log
 // type and not about the pointer: stdout() hands out a fresh
 // termWriter every time it is called, so there is nothing to compare
 // with, and a redirection -- "map > listing" -- hands the command an
-// *os.File instead.  Colour in a file is not colour, it is rubbish in
+// *os.File instead.  Color in a file is not color, it is rubbish in
 // the middle of the text, and the file is usually on its way back
 // through ". listing".
 //
@@ -722,8 +722,8 @@ func (sh *Shell) stdout() io.Writer { return &termWriter{t: sh.term, log: sh.log
 // reads a pipe; all three are Plain, and all three are output on its
 // way to whatever ran slsh rather than to somebody looking at it.
 //
-// NO_COLOR is honoured as the convention has it, which has exactly one
-// rule: any value at all, "0" included, means no colour.
+// NO_COLOR is honored as the convention has it, which has exactly one
+// rule: any value at all, "0" included, means no color.
 func (sh *Shell) colour(out io.Writer) bool {
 	if _, ok := out.(*termWriter); !ok {
 		return false
@@ -794,18 +794,18 @@ func (w *termWriter) say(line string) {
 }
 
 // writeOwn is the way a command writes a line with the shell's own
-// escape sequences in it -- a colour -- without Print showing them as
+// escape sequences in it -- a color -- without Print showing them as
 // ^[[32m.
 //
 // s is taken to be safe as it stands.  Whatever in it came from the
 // grid has to have been through visible already, where s was composed,
-// because nothing here can tell that part from the colour round it.
+// because nothing here can tell that part from the color round it.
 // That is why this is a function of its own, to be called by name,
 // rather than a Write that knows better: every call is a place that
 // has to be read to be trusted, and there are few of them.
 //
 // A writer that is not the terminal -- a file, a test's buffer -- is
-// written to as it would have been anyway.  Whether s has colour in it
+// written to as it would have been anyway.  Whether s has color in it
 // is Shell.colour's business, and it says no to any writer but the
 // terminal.
 func writeOwn(out io.Writer, s string) {

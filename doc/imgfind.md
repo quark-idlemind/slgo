@@ -3,7 +3,7 @@
 `imgfind` answers the questions a test asks of a screenshot: where is
 this label, where is this arrow, where is the outlined button. It reads
 an image, or a PNG, JPEG or GIF file, and gives back each match with its
-top-left, its size and its centre, which is the point a click would use.
+top-left, its size and its center, which is the point a click would use.
 It imports nothing from slgo. The picture a face of an object shows is
 built by `sl` ([What a face shows](face-pictures.md)), so the same
 questions can be asked of a texture. `cmd/slpic` is its command. This is
@@ -90,7 +90,7 @@ passes therefore run together, each with a 90 second timeout:
   between them.
 
 Readings of one place are one word when they overlap a member of that
-cluster: intersection over union at least 0.3, or one centre inside the
+cluster: intersection over union at least 0.3, or one center inside the
 other box. The overlap is against a member and not the cluster's
 bounding box, so a loose box cannot bridge two labels. A token is kept
 when every rune is a letter or a digit, which drops a punctuated
@@ -101,7 +101,7 @@ are about 50 px and button labels about 25. A shorter word takes the
 reading of highest confidence of at least 40, and when none reaches 40
 the stroke pass is kept.
 
-Words whose vertical centres lie within `max(10, half the taller
+Words whose vertical centers lie within `max(10, half the taller
 height)` are one line. A gap of at most three quarters of the taller
 height joins them with a space. The two words of a title joined on the
 sample (a gap of about 21 px at a height of about 50), and labels in
@@ -145,7 +145,7 @@ vertical ratio is greater and at least 1.6, more ink on the top is a
 edges sit near 0.56 to 0.58, a ratio of about 0.95, and the circle's
 own component is skipped by id.
 
-A mark whose centre is within 0.7 of a circle's radius is that
+A mark whose center is within 0.7 of a circle's radius is that
 button's arrow and may be 24 px on a side. Any other arrow must be at
 least 70 px on its short side: at 40, the letters of a word drawn at
 scale 8 (about 40 by 48) were reported as arrows. The aspect must lie
@@ -228,7 +228,7 @@ error. A planar face or one whose texture is animating is an error,
 except with `-raw`. `find` runs `FindFile`; a request that matches
 nothing prints nothing and the command succeeds. Each match is one
 tab-separated line: the kind, the query, the contents, the top-left,
-the width, the height and the centre, with the query and the contents
+the width, the height and the center, with the query and the contents
 quoted.
 
 `-addr` is where slgod is, and `$SLGO_ADDR` is the same answer when the
@@ -239,8 +239,8 @@ uses `localhost:7807`.
 
 ## Tried and not used
 
-Asking a local vision model for a box and a centre was looked at. `Item`
-carries a box and a centre for that reason, but `Find` calls no
+Asking a local vision model for a box and a center was looked at. `Item`
+carries a box and a center for that reason, but `Find` calls no
 model and the package adds no module requirement. The macOS Vision
 framework was tried for reading text and failed on the sample with an
 image reader error, so the fallback, tesseract, ran; the package goes

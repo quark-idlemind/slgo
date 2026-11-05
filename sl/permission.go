@@ -13,7 +13,7 @@ package sl
 // sends.  And the field is a mask rather than a yes, so a request for
 // three things can be answered with one of them -- a viewer never does
 // that, because its dialog has one accept button, but the protocol has
-// always allowed it and the simulator honours it.
+// always allowed it and the simulator honors it.
 //
 // Nothing here grants anything on its own.  Some of these bits hand
 // over real authority -- PermissionDebit spends money, PermissionTeleport

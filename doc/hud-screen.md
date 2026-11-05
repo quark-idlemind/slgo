@@ -27,10 +27,10 @@ screen at 2x, so pixels are backing pixels.
 ## The world view
 
 **Measured.** The world view is the window's content area less the
-viewer's menu bar. The navigation, favourites and chat bars are drawn
+viewer's menu bar. The navigation, favorites and chat bars are drawn
 over it and do not shrink it, and neither did a side toolbar. A window
 of 1920 by 1080 points gave a world view of 3840 by 2050 pixels. Its
-height is one metre of HUD at any width: a 0.5 m box was 1024 by 1026
+height is one meter of HUD at any width: a 0.5 m box was 1024 by 1026
 pixels there, 666 square in a 2560 by 1332 world view, and 944 square
 in a 2000 by 1888 one.
 
@@ -62,7 +62,7 @@ is at
     x = W/2 - Y * H * zoom        y = H/2 - Z * H * zoom
 
 from the world view's top left. +Y is to the left and +Z up. Moving a
-prim along X changes nothing on the screen. The centres of a box worn on
+prim along X changes nothing on the screen. The centers of a box worn on
 all eight points, at three window shapes, were within 2.4 pixels of
 this.
 
@@ -75,7 +75,7 @@ turned 90 degrees about X, 513 above it; with the child alone turned 30
 degrees about Z, its faces 3 and 4 side by side, 256 and 444 pixels
 wide, and its middle where it was.
 
-The metre measured 2048 pixels in a world view 2050 tall, within 2
+The meter measured 2048 pixels in a world view 2050 tall, within 2
 pixels of the rule; the measurements below use 2050.
 
 ## Which faces show
@@ -159,7 +159,7 @@ transparent prim in front takes the click.
 The position is in the HUD's own frame, whose origin is the middle of
 the world view, whatever point the prim is worn on: the viewer casts
 the click from `LLViewerWindow::mousePointHUD`, which measures from the
-world view's centre in units of its height (divided by the HUD zoom),
+world view's center in units of its height (divided by the HUD zoom),
 and sends where the ray meets the prim as the grab's
 `SurfaceInfo.Position` (`LLViewerWindow::cursorIntersect`,
 llviewerwindow.cpp:5535-5606; `LLPickInfo::getSurfaceInfo`; the grab in
@@ -167,7 +167,7 @@ lltoolgrab.cpp:909-914; Firestorm 885631b93a). The wiki says the same
 of `llDetectedTouchPos`: on a HUD, "relative to the center of the screen
 rather than the attachment point".
 
-**Measured.** The middle of face 4 of a 0.5 m box half a metre in front
+**Measured.** The middle of face 4 of a 0.5 m box half a meter in front
 of Center 2 read -0.75, 0, 0. That reading was on Center 2, which is the
 middle of the screen, so it could not tell the two frames apart, and
 `Pick` sent the position from the attachment point until 2026-10-03.
@@ -175,7 +175,7 @@ Then a 0.1 x 0.4 x 0.2 box was clicked in Firestorm on both Center 2 and
 Top Left, and through `DragOnScreen` on both. On Center 2 the two
 agreed to a pixel. On Top Left, near the box's lower-right corner, the
 viewer read -0.05, 0.74524, 0.40556 -- the point, half the aspect
-across and half a metre up, plus the place on the box -- where `Pick`
+across and half a meter up, plus the place on the box -- where `Pick`
 sent -0.05, -0.192, -0.096. It sends the viewer's now.
 
 A script that moves or resizes a HUD by the change in the position,

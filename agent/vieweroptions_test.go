@@ -16,7 +16,7 @@ import (
 // not, so a block left out comes back missing rather than wrong, and a
 // viewer given the result fails somewhere else entirely.  The capture is
 // the only thing that knows, so a newer viewer asking for more should
-// fail here rather than in a grey screen months later.
+// fail here rather than in a gray screen months later.
 func TestViewerOptionsMatchTheCapture(t *testing.T) {
 	f, err := os.Open("testdata/firestorm-login.xml")
 	if err != nil {

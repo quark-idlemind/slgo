@@ -116,7 +116,7 @@ func (w *Session) Parcel(ctx context.Context, timeout time.Duration) (*agent.Par
 	return w.ParcelAt(ctx, p.Position.X, p.Position.Y, timeout)
 }
 
-// ParcelAt is the parcel covering a point in this region, in metres
+// ParcelAt is the parcel covering a point in this region, in meters
 // from its south west corner.
 //
 // The point may be anywhere in the region; the avatar does not have to
@@ -127,7 +127,7 @@ func (w *Session) Parcel(ctx context.Context, timeout time.Duration) (*agent.Par
 func (w *Session) ParcelAt(ctx context.Context, x, y float32, timeout time.Duration) (*agent.Parcel, error) {
 	seq := nextParcelSeq()
 
-	// The viewer snaps a hover to the 4 metre grid the overlay is
+	// The viewer snaps a hover to the 4 meter grid the overlay is
 	// drawn on, and so does this: a rectangle inside one square asks
 	// about one parcel, where a wider one would ask about whatever
 	// several of them have in common.

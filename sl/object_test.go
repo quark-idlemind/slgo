@@ -80,7 +80,7 @@ func TestRezMakesOnePrimAndConfirmsWeOwnIt(t *testing.T) {
 	if add.ObjectData.RayStart != at || add.ObjectData.RayEnd != at {
 		t.Errorf("rezzed at %+v, want %+v", add.ObjectData.RayStart, at)
 	}
-	// No scale asked for means half a metre cubed, not a prim of no
+	// No scale asked for means half a meter cubed, not a prim of no
 	// size at all.
 	if got := add.ObjectData.Scale; got != (msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}) {
 		t.Errorf("scale = %+v", got)
@@ -229,15 +229,15 @@ func TestSetNameNeedsBothMessagesToGoOut(t *testing.T) {
 	})
 }
 
-// TestSetNameStopsWhenTheCallerGivesUp: a caller that has cancelled its
+// TestSetNameStopsWhenTheCallerGivesUp: a caller that has canceled its
 // context wants the call to end, and SetName is a twenty second loop --
 // the longest wait in this file -- so it is the one call where being
 // held past a cancellation is most obvious.
 //
-// It used not to stop.  The context reached await, which honours it,
+// It used not to stop.  The context reached await, which honors it,
 // but the error await came back with was discarded: the loop saw only
 // that the name had not arrived and went round again.  With a
-// cancelled context await returns at once, so the loop spun flat out
+// canceled context await returns at once, so the loop spun flat out
 // for the full twenty seconds, asking the simulator every time round,
 // and then reported a timeout rather than the cancellation.
 func TestSetNameStopsWhenTheCallerGivesUp(t *testing.T) {

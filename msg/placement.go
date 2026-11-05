@@ -78,8 +78,8 @@ func placeQuat(b []byte) Quaternion {
 // u16f reads a sixteen bit fraction of lo..hi as the viewer's U16_to_F32
 // does (llmath/llquantize.h:72-85), including its one adjustment: a
 // value within one step of zero is exactly zero.  Zero falls between two
-// steps of a span centred on it, so without that a thing at rest reads
-// as moving a few millimetres a second.
+// steps of a span centered on it, so without that a thing at rest reads
+// as moving a few millimeters a second.
 func u16f(b []byte, lo, hi float32) float32 {
 	span := hi - lo
 	v := lo + span*(float32(binary.LittleEndian.Uint16(b))/65535)
@@ -178,7 +178,7 @@ func DecodeTerse(b []byte) (*Terse, error) {
 	// All four components are sent, and the simulator does not keep W
 	// positive: keeping X, Y and Z and recovering W as positive, as
 	// Quaternion does, would read a -q as the mirror image of q.
-	// PackQuaternion normalises and puts the sign where Quaternion
+	// PackQuaternion normalizes and puts the sign where Quaternion
 	// expects it.
 	// Why: doc/placement.md#its-rotations-sign
 	t.Rotation = PackQuaternion(

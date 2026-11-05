@@ -5,7 +5,7 @@
 // restarts, and nothing else:
 //
 //   - the UDP circuit, its sequence numbers, retransmission queue,
-//     acknowledgements, zero coding and duplicate window
+//     acknowledgments, zero coding and duplicate window
 //   - answering StartPingCheck and RegionHandshake, without which the
 //     simulator drops the circuit
 //   - the login exchange and the capability URLs it produces
@@ -67,7 +67,7 @@ type Server struct {
 	loginFor LoginFor
 
 	// seats is where a session's seat is remembered across a login;
-	// see seat.go.  Nil remembers nothing, which is the old behaviour.
+	// see seat.go.  Nil remembers nothing, which is the old behavior.
 	seats Seats
 
 	// payLedger is where each profile's record of what it has paid is
@@ -89,7 +89,7 @@ type Server struct {
 	regions *agent.Cache
 
 	// ctx is the daemon's own lifetime.  A session started on request
-	// outlives the request: cancelling the call that asked for it must
+	// outlives the request: canceling the call that asked for it must
 	// not take the avatar back out of the world.
 	ctx context.Context
 
@@ -917,7 +917,7 @@ func (h *Hosted) ClientCount() int {
 	return len(h.clients)
 }
 
-// Serve accepts clients on ln until ctx is cancelled.
+// Serve accepts clients on ln until ctx is canceled.
 func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 	// Keepalive, which is what makes a lock safe to hold.
 	//

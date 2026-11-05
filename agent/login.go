@@ -117,7 +117,7 @@ type Login struct {
 
 	// Platform is "mac", "win" or "lnx", and the two that follow
 	// describe the operating system: a dotted version, and the name
-	// a human would recognise -- "15.7.7" and "macOS 15.7.7".  All
+	// a human would recognize -- "15.7.7" and "macOS 15.7.7".  All
 	// three default to the host this is running on, since claiming
 	// one system in Platform and another in PlatformString is a
 	// worse answer than claiming nothing.
@@ -174,7 +174,7 @@ type Account struct {
 	RegionY uint32
 
 	// Raw is the whole decoded response, so nothing that is not
-	// modelled above is lost.
+	// modeled above is lost.
 	Raw map[string]any
 }
 
@@ -223,7 +223,7 @@ type LoginError struct {
 //
 // The default here is the opposite of Retryable's, and deliberately.  A
 // kick is a statement about a session that WAS alive, so the safe
-// reading of one nobody recognises is that somebody meant it.  A login
+// reading of one nobody recognizes is that somebody meant it.  A login
 // failure is usually a failure to reach, so the safe reading of an
 // unfamiliar one is that it may clear.
 func RetryableLogin(err error) bool {

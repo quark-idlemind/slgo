@@ -6,7 +6,7 @@ package sl
 // function with its arguments, return type, energy and sleep, every
 // constant with its type and value, every event with its arguments,
 // and the types and control keywords.  It is what the built-in editor
-// colours and completes from, and it comes from the machine that will
+// colors and completes from, and it comes from the machine that will
 // run the script rather than from a wiki page somebody edited.
 //
 // For anything checking a compiler against Second Life, that makes it
@@ -103,7 +103,7 @@ type Syntax struct {
 	Types    map[string]string
 	Controls map[string]string
 
-	// Raw is the decoded document, for anything not modelled above.
+	// Raw is the decoded document, for anything not modeled above.
 	Raw map[string]any
 }
 

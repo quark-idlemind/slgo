@@ -417,7 +417,7 @@ func TestASitOnAnObjectBorrowsNothing(t *testing.T) {
 // to a person.  The name and the id come from the object cache, and the
 // parent is preferred over the animation wherever both are there --
 // furniture that plays its own pose runs no animation this package
-// recognises, so the animation is the weaker witness for an object sit.
+// recognizes, so the animation is the weaker witness for an object sit.
 func TestTheSeatIsNamedFromWhatTheRegionHasDescribed(t *testing.T) {
 	w, f := newFakeSession(t)
 	f.objects = []*Seen{{Object: Object{ID: theCouch, Local: couchLocal, Name: "a bench"}}}

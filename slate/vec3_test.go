@@ -1,7 +1,7 @@
 package slate
 
 // The position and size readings: a prim's Seen.Position and Seen.Scale,
-// compared within a millimetre on each axis.
+// compared within a millimeter on each axis.
 // Why: doc/slate-runner.md#position-and-size
 
 import (
@@ -122,7 +122,7 @@ expect position sign changes within 1s
 expect no size sign changes within 300ms
 `)
 	wantExit(t, res, 0)
-	// A move of half a millimetre is not a change; two are.
+	// A move of half a millimeter is not a change; two are.
 	f = newGrid(t)
 	f.change(signLocal, withScale(1, 1, 1))
 	f.whenSaid("go", func() { f.changeAfter(t, 30*time.Millisecond, signLocal, withScale(1.0005, 1, 1)) })

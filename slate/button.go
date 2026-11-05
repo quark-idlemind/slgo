@@ -1,7 +1,7 @@
 package slate
 
 // touch OBJ button: a picture match on every face of the prim, then one
-// click at the match's centre.
+// click at the match's center.
 // Why: doc/slate-runner.md#buttons
 
 import (
@@ -149,7 +149,7 @@ func (c runCfg) finder() finder {
 }
 
 // searchPicture is the one search both a touch and a button reading make:
-// the centre of every tuple of the parts on one picture, and how many items
+// the center of every tuple of the parts on one picture, and how many items
 // each part found.
 func searchPicture(find finder, pic image.Image, parts []Part) ([]imgfind.Point, []int, error) {
 	reqs := make([]*imgfind.Request, len(parts))
@@ -332,7 +332,7 @@ func missing(parts []Part, found []int, textured bool, name string) string {
 	return fmt.Sprintf("every button part matched on %q, and no items of all the parts overlap", name)
 }
 
-// listHits is each match's face and centre.
+// listHits is each match's face and center.
 func listHits(hits []buttonHit) string {
 	var w strings.Builder
 	for i, h := range hits {
@@ -345,7 +345,7 @@ func listHits(hits []buttonHit) string {
 	return w.String()
 }
 
-// intersections is the centre of every tuple, one item from each group,
+// intersections is the center of every tuple, one item from each group,
 // whose rectangles share an area: the first group's items in the outer
 // loop and the later groups' inside it, each in finder order.
 func intersections(groups [][]*imgfind.Item) []imgfind.Point {

@@ -23,7 +23,7 @@ var _ pb.GridServer = (*Server)(nil)
 // streamDepth is how far a client may fall behind before frames are
 // dropped.  Dropping is deliberate: a slow client must not be able to
 // stall the circuit that feeds it, and a lost relay costs nothing on
-// the grid because the acknowledgement does not wait on the relay.
+// the grid because the acknowledgment does not wait on the relay.
 const streamDepth = 1024
 
 // controlDepth is how many answers to its requests -- for a lock or for
@@ -217,12 +217,12 @@ func jam() error {
 //
 // It runs as the dispatcher's tap, on the agent's dispatch goroutine,
 // and does no work beyond choosing recipients and handing over.  The
-// dispatcher queues the acknowledgement once the tap returns, whatever
+// dispatcher queues the acknowledgment once the tap returns, whatever
 // the tap did, which is what makes "no client attached" mean
 // "acknowledged and dropped".
 func (h *Hosted) relay(p *msg.Packet) {
 	if p.Message == nil && p.Body == nil {
-		return // acknowledgements only
+		return // acknowledgments only
 	}
 
 	// Before the fan-out, and before the early return below: an
@@ -629,7 +629,7 @@ func sendMessage(ctx context.Context, h *Hosted, c *Client, sentBy string, m *pb
 // And TeleportRequest, a position in a region named by its id, which
 // the viewer circuit passes on when that region is this one.
 //
-// Sitting is not here.  A sit moves the avatar up to ten metres and is
+// Sitting is not here.  A sit moves the avatar up to ten meters and is
 // not somebody saying where it should be; treating it as one would stop
 // the daemon getting an avatar home because it sat on a chair on the
 // way.

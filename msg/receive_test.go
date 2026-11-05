@@ -11,7 +11,7 @@ import (
 )
 
 // fakeConn serves a fixed list of datagrams and then blocks until its
-// read deadline is set in the past, which is how Run is cancelled.
+// read deadline is set in the past, which is how Run is canceled.
 type fakeConn struct {
 	mu       sync.Mutex
 	pkts     [][]byte

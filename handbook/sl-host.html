@@ -96,7 +96,7 @@
         <p>On the client machine, from the source checkout:</p>
         <div class="term" data-where="laptop"><pre><span class="p">$ </span>go install ./cmd/sl-host
 <span class="p">$ </span>which sl-host</pre></div>
-        <p>If <code>which</code> does not find it, run <code>rehash</code> in csh or zsh, or <code>hash -r</code> in sh or bash, and ask again. The clients find it through <code>PATH</code>, so the Go bin directory (usually <code>~/go/bin</code>) has to be on it. A client started by a service manager sees that service's <code>PATH</code>, which may not include your shell's; that is general service-manager behaviour, not something sl-host checks. Then write the rules file, below, before you run a client.</p>
+        <p>If <code>which</code> does not find it, run <code>rehash</code> in csh or zsh, or <code>hash -r</code> in sh or bash, and ask again. The clients find it through <code>PATH</code>, so the Go bin directory (usually <code>~/go/bin</code>) has to be on it. A client started by a service manager sees that service's <code>PATH</code>, which may not include your shell's; that is general service-manager behavior, not something sl-host checks. Then write the rules file, below, before you run a client.</p>
       </section>
 
       <section id="rules">

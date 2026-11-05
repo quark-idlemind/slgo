@@ -18,7 +18,7 @@ import (
 )
 
 // picture is a gradient with a transparent hole, which is what most
-// textures in Second Life are: colour with an alpha channel that
+// textures in Second Life are: color with an alpha channel that
 // matters.
 func picture(w, h int) *image.NRGBA {
 	m := image.NewNRGBA(image.Rect(0, 0, w, h))

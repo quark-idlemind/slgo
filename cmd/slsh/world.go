@@ -82,7 +82,7 @@ var worldCommands = map[string]*command{
 		man:      "regions",
 		run:      cmdRegions,
 	},
-	// "neighbours" is the same command spelt the other way.
+	// "neighbors" is the same command spelled the other way.
 	"neighbors":  neighbors,
 	"neighbours": neighbors,
 	"caps": {
@@ -143,7 +143,7 @@ func cmdWhere(ctx context.Context, sh *Shell, out io.Writer, args []string) erro
 	//
 	// It belongs here because a seated avatar's position is not a
 	// place it walked to: a sit picks the avatar up and puts it on the
-	// seat from as much as ten metres away, so the coordinates above
+	// seat from as much as ten meters away, so the coordinates above
 	// are the seat's doing and the line saying so is what explains
 	// them.  The same shape "sit" prints, since it is the same fact.
 	//
@@ -333,7 +333,7 @@ func printRegions(out io.Writer, found []sl.MapRegion) {
 // around it, and turns them on and off.
 //
 // It is the one command here that costs the daemon something lasting:
-// on is a socket and a share of the traffic per neighbouring region --
+// on is a socket and a share of the traffic per neighboring region --
 // four around Pelmar Reach, up to eight anywhere -- held for as long as it
 // is on.  That is why it is off unless somebody says so, and why the
 // state is printed after a change rather than the change being silent.
@@ -383,14 +383,14 @@ func cmdNeighbors(ctx context.Context, sh *Shell, out io.Writer, args []string) 
 // should not have to read a second layout to learn the same kind of
 // fact.  The name and the square come first because they are what says
 // WHICH region; the handle is left out entirely, where regions prints
-// it, because nothing is addressed by a neighbour's handle -- a border
+// it, because nothing is addressed by a neighbor's handle -- a border
 // is walked over rather than typed at.
 //
 // On with nothing held is said as "not yet" rather than as not being
 // near a border: an avatar in the middle of a region is offered its
 // edges too, and the first circuit is slow to come.  See
 // man/neighbors.md.
-// Why: doc/slsh.md#neighbours-on-and-no-circuit-yet
+// Why: doc/slsh.md#neighbors-on-and-no-circuit-yet
 func printNeighbors(out io.Writer, n *sl.Neighbours) {
 	switch {
 	case !n.On:
@@ -412,7 +412,7 @@ func printNeighbors(out io.Writer, n *sl.Neighbours) {
 			// without one has none to print.  No handshake, even
 			// twice running, is not an offer that came to nothing;
 			// Heard is what says the circuit is alive.
-			// Why: doc/slsh.md#a-neighbour-with-no-handshake
+			// Why: doc/slsh.md#a-neighbor-with-no-handshake
 			name = "(no handshake yet)"
 		case name == "":
 			name = "(unnamed)"
@@ -1044,11 +1044,11 @@ func rootOf(o *sl.Seen, byLocal map[uint32]*sl.Seen) *sl.Seen {
 	return nil
 }
 
-// offsetOf writes an offset to a tenth of a metre.
+// offsetOf writes an offset to a tenth of a meter.
 //
-// A region coordinate is worth a whole metre and no more, but an offset
+// A region coordinate is worth a whole meter and no more, but an offset
 // of a tenth is a real difference between one prim and the next, and
-// rounding those to metres printed a linkset as a column of zeros.
+// rounding those to meters printed a linkset as a column of zeros.
 func offsetOf(v msg.Vector3) string {
 	return tenth(v.X) + ", " + tenth(v.Y) + ", " + tenth(v.Z)
 }

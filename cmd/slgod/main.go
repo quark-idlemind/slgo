@@ -3,7 +3,7 @@
 //	slgod -listen :7807 example builder
 //
 // Each argument names a profile under ~/.config/slgo.  The connections
-// stay up until the process is signalled; clients attach and detach
+// stay up until the process is signaled; clients attach and detach
 // freely without the grid noticing.
 //
 // slgod's own settings -- the machine identity it presents to the login

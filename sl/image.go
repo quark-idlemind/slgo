@@ -31,7 +31,7 @@ import (
 // LosslessArea is the size below which a texture is stored losslessly.
 //
 // It is the viewer's LL_IMAGE_REZ_LOSSLESS_CUTOFF squared: a small
-// texture is usually a button or a bit of interface where the artefacts
+// texture is usually a button or a bit of interface where the artifacts
 // show and the bytes saved are few.
 //
 // The value is not promised and may change in any release: refer to it by name.

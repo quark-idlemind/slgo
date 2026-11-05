@@ -193,7 +193,7 @@ func (s Shape) Pack() (msg.PrimShape, error) {
 
 // UnpackShape is the inverse of Pack.
 //
-// An unrecognised pair of curves is reported as a shape with an empty
+// An unrecognized pair of curves is reported as a shape with an empty
 // Type rather than as an error: a mesh or a sculpt is described by
 // these fields too, and refusing to describe one at all would be worse
 // than describing it as something without a name.

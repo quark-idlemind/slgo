@@ -66,7 +66,7 @@ itself.
 whole of an escape sequence, however little of it is understood.
 Reading to the end matters as much for the sequences nothing in slsh
 answers to as for the ones it does.  The decoder used to stop at the
-third byte and give up on anything it did not recognise, which left
+third byte and give up on anything it did not recognize, which left
 the REST of the sequence in the stream to be decoded as ordinary keys:
 a report of the cell size, ESC [ 6 ; 18 ; 10 t, typed ";18;10t" at the
 prompt, and a bracketed paste typed "00~".
@@ -224,7 +224,7 @@ command.  On the eval (2026-09-23, qwen3.5:4b and qwen3.5:2b) it cut
 the questions answered right by half or more, so it is not there.
 
 What guards against such a suggestion is the model's own `found`,
-asked for first (`askSchema`), and honoured: suggestions written
+asked for first (`askSchema`), and honored: suggestions written
 beside `found=false` are dropped (`askToCheck`).
 
 ### Where the prompt's rules came from
@@ -326,7 +326,7 @@ kinds: `-mlx`, `-nvfp4` and `-mxfp8` are MLX, `-q4_K_M` and `-q8_0` are
 GGUF.  Which build the default tag gives depends on the platform; it was
 measured on a Mac only, and nothing is claimed here about Linux.
 
-`askWhyNoModel` recognises the refusal -- status 501 and a body that
+`askWhyNoModel` recognizes the refusal -- status 501 and a body that
 names structured output -- and says to use a GGUF build, naming the
 configured model, with the server's own words after it.  Any other 501
 and every other error is worded as before.  There is no set-up check for
@@ -543,7 +543,7 @@ word in circulation, and the word being a poor description of the act
 is the whole reason for the rename.
 
 "place" is the half worth being careful about, because it did not
-disappear -- it changed meaning, and both meanings are spelt the same
+disappear -- it changed meaning, and both meanings are spelled the same
 way.  See the argument count in `cmdPlace` for what that costs and what
 is done about it.
 
@@ -630,7 +630,7 @@ sentence long.
 ### What unlink does with a root, and with a child
 
 The whole of it comes apart when given a root, and just that prim
-leaves when given a child. That is the viewer's pair of behaviours --
+leaves when given a child. That is the viewer's pair of behaviors --
 clicking an object selects the linkset and Unlink frees all of it,
 while Edit Linked Parts selects one prim and Unlink frees only that --
 and it falls out of what a delink message is: the local ids in it are
@@ -771,7 +771,7 @@ detach.  A wrong replace is invisible and costs whatever was there.
 Between two defaults, the one to have is the one whose mistake can be
 seen.
 
-`--replace` is the old behaviour, kept because putting a thing where
+`--replace` is the old behavior, kept because putting a thing where
 another thing is really is sometimes what is meant -- and it now names
 what it displaced instead of leaving that to be found out.
 
@@ -938,14 +938,14 @@ the first is still under way.
 ## Where tp lands when no position is given
 
 A teleport with no position lands in the middle of the region
-(`tpMiddle`), which is 256 metres square, because that is where a
+(`tpMiddle`), which is 256 meters square, because that is where a
 viewer puts an avatar that typed a name into the world map and said
 nothing about where in it.
 
 The height is left at zero rather than guessed at, and zero is not
 arbitrary: measured on Agni, the avatar arrives at whichever is higher
 of the height asked for and the ground under the point, plus about a
-metre -- 30 came back as 31, 60 as 61, and 0 as the ground. So zero is
+meter -- 30 came back as 31, 60 as 61, and 0 as the ground. So zero is
 how a client asks for ground level without knowing where the ground
 is, and there is no cheap way to ask that about a region this session
 has never been to.
@@ -1064,16 +1064,16 @@ from the outside. One rule: a landmark is something you have.
 `sit` was the first thing in the shell that moved the avatar without a
 teleport, and it moves it a long way.  A sit is not a walk: the
 simulator picks the avatar up and puts it on the seat, over whatever is
-in the way, from as much as ten metres off -- measured on Agni, a box
-seven metres away seated the avatar as readily as one half a metre
-away, and standing up afterwards left it six metres from where it had
+in the way, from as much as ten meters off -- measured on Agni, a box
+seven meters away seated the avatar as readily as one half a meter
+away, and standing up afterwards left it six meters from where it had
 been standing.  So what `sit` and `stand` print is not only what they
 did but where that left the avatar, in the same words `where` and `tp`
 say it, and the position line is the answer rather than decoration.
 
 For `stand` it is more surprising: standing does not undo the journey
 the sit made.  Measured, an avatar that walked -- was carried -- seven
-metres to a box was left six metres from where it started when it stood
+meters to a box was left six meters from where it started when it stood
 up again, so the line `stand` prints is where the avatar now is and not
 where it was before any of this began.
 
@@ -1122,19 +1122,19 @@ journey a minute later, so the first half is measured.  The second half
 -- a grant lower than the request -- is not: neither account this has
 run against was capped.
 
-## Neighbours on, and no circuit yet
+## Neighbors on, and no circuit yet
 
 `neighbors` with the circuits on and none held is a state worth
 spelling out, and it is not what it was once documented as.  It was
 said to mean "not near a border", on the belief that a simulator offers
 nothing to an avatar in the middle of a region; measured on 2026-08-23,
-the middle of a 256-metre region is offered all four edges.  What an
+the middle of a 256-meter region is offered all four edges.  What an
 empty listing means is almost always "not yet": the first circuit took
 between twenty and sixty seconds from turning them on, and the set went
 on growing for a minute after that.  See
 [cmd/slsh/man/neighbors.md](../cmd/slsh/man/neighbors.md).
 
-## A neighbour with no handshake
+## A neighbor with no handshake
 
 `neighbors` prints "(no handshake yet)" for a circuit without a
 handshake, since the name arrives in the handshake and there is none to
@@ -1144,13 +1144,13 @@ sent no handshake through four openings each while their packet counts
 climbed, and the same three had answered on an earlier day.  Heard is
 what says the circuit is alive.
 
-## The colours a map is drawn in
+## The colors a map is drawn in
 
-`map` picks a friend out of the picture in a colour, and `parcel --map`
-draws its parcels in them; the colours are named, in `mapColours`.
+`map` picks a friend out of the picture in a color, and `parcel --map`
+draws its parcels in them; the colors are named, in `mapColours`.
 
 A name and not an escape sequence.  Nobody should have to write
-"\x1b[32m" into a configuration file to choose a colour, and a name is
+"\x1b[32m" into a configuration file to choose a color, and a name is
 the thing that can be checked: a misspelled name is refused where it
 was typed, where an escape sequence somebody got wrong would be written
 into the middle of the picture and arrive as rubbish among the marks.
@@ -1158,17 +1158,17 @@ It is also the only spelling that survives being read back: `set`
 prints what the file would take, and an escape printed to a terminal is
 invisible.
 
-The colours are the eight a terminal has had since it was a terminal,
+The colors are the eight a terminal has had since it was a terminal,
 and the bright half of each for the terminals that have them, written
-"bright green".  Nothing is a 256-colour index or an RGB triple: those
-are not colours every terminal has, and one that has them draws the
+"bright green".  Nothing is a 256-color index or an RGB triple: those
+are not colors every terminal has, and one that has them draws the
 eight by their own scheme anyway, which is what makes green mean green
 on somebody's own screen rather than a particular green.
 
-The foreground and not a block of colour behind the mark.  A background
+The foreground and not a block of color behind the mark.  A background
 commits to one terminal's idea of paper -- a green slab is the only
 thing the eye sees on a dark terminal, and dark text on it is hard to
-read on a light one -- while coloured ink over whatever paper is
+read on a light one -- while colored ink over whatever paper is
 already there is legible on both, and leaves the mark itself readable
 as the mark it is: an "o", a "^" and a count all still say what they
 said.
@@ -1239,7 +1239,7 @@ These commands search at all because the person they are for is so
 often not here.  Somebody invited into a group is quite often being
 invited because they are somewhere else, and a name nothing here had
 heard of used to be refused with advice to run `lookup` and type the
-number it printed -- which is a thing that has to be learnt, for a line
+number it printed -- which is a thing that has to be learned, for a line
 that plainly said who was meant.  The search costs one round trip a
 run, made only on a line that was about to fail.
 
@@ -1258,8 +1258,8 @@ being kept out.
 
 A bare word is never a whole name here, even where it is somebody's
 username exactly.  The last run searched is the first word of the line,
-whatever was meant by it, so for "im Lorn Harbour hello" with nobody
-called Lorn Harbour, taking a username of "lorn" would send "Harbour
+whatever was meant by it, so for "im Lorn Harbor hello" with nobody
+called Lorn Harbor, taking a username of "lorn" would send "Harbor
 hello" to whoever holds it -- and a first name on its own is the kind
 of word that somebody has probably registered.  The listing shows that
 person's whole name, which is what to type.
@@ -1439,7 +1439,7 @@ that appears to do nothing is otherwise unreadable.
 `viewerDefaults` names the OpenSim build of Firestorm, and not the one
 most people already have installed. This is the trap. A Firestorm
 built for Second Life CANNOT be pointed at a private grid at all. That
-flavour compiles LLGridManager from llviewernetwork.cpp, whose
+flavor compiles LLGridManager from llviewernetwork.cpp, whose
 grid-file block -- the one that would read the viewer's own
 grids.user.xml -- is compiled out (llviewernetwork.cpp:149-201,
 "#if 0 <FS:AW disabled for meeting havok sublicense requirements/>"),
@@ -1454,7 +1454,7 @@ util.agni.lindenlab.com" -- an Agni login screen, with nothing on it to
 suggest why. Somebody who reaches for the viewer they already have gets
 exactly that, which is why the default names the other one.
 
-The OpenSim flavour compiles fsgridhandler.cpp instead, which does read
+The OpenSim flavor compiles fsgridhandler.cpp instead, which does read
 grids.user.xml, and on the machine this was written on it is at
 ~/Applications/Firestorm-OpenSim.app. "open -a Firestorm-OpenSim"
 resolves it by name; both the bare name and the full path were tried
@@ -1523,6 +1523,6 @@ before the viewer has a window, a port or a session, and a process is
 the only thing it has by then. The pattern is the bundle path rather
 than the process name because the process is called plain "Firestorm"
 whichever build it came from -- which is also why it must follow the
-app setting, since the two flavours are told apart only by their
+app setting, since the two flavors are told apart only by their
 bundles. sl-restart reaps orphans with the same shape of pattern
 (pkill -f "Firestorm-Releasex64.app/Contents").

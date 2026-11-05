@@ -12,7 +12,7 @@ import (
 
 const sayFar = hdr + "say \"go\" on 0\nexpect say \"hi\" on public from object sign within 300ms\n"
 
-// moveSign puts the sign x metres east of the standing tester.
+// moveSign puts the sign x meters east of the standing tester.
 func (f *fakeGrid) moveSign(x float32) {
 	at(f.objects[0], 128+x, 128, 22)
 }

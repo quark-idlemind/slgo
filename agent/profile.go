@@ -30,7 +30,7 @@ import (
 //	pay_to     = Example Resident
 //
 // Not every key is part of the login request.  "group" is which group
-// this avatar acts as and "neighbors" (or "neighbours") is whether it
+// this avatar acts as and "neighbors" (or "neighbors") is whether it
 // holds a circuit to the regions around it: properties of the avatar
 // rather than of any one login, which is why they live here with the
 // credentials.  A profile that says nothing about neighbors leaves the

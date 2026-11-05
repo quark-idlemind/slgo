@@ -20,7 +20,7 @@ import (
 // Failures are counted by the address a connection came from -- the
 // server's view of it, never anything the caller said -- and not by
 // connection.  A count per connection is defeated by hanging up and
-// dialling again, which costs nothing.  An address is not free to
+// dialing again, which costs nothing.  An address is not free to
 // change in the same way, but a caller with many of them (an IPv6
 // block is millions) can still spread its guesses out, so every
 // failure is also counted daemon-wide, at a tenth of the weight: the

@@ -37,7 +37,7 @@ import (
 //   - Limit is where the model refuses the script, standing in for the
 //     compiler refusing one that is too large.
 //
-// Collide is the other of the two size limits the live behaviour has:
+// Collide is the other of the two size limits the live behavior has:
 // above Collide the script compiles and then runs out of memory, above
 // Limit the compiler will not take it at all.  A caller that treats the
 // two differently -- slbench's backend reports one as a compile error
@@ -61,7 +61,7 @@ type Memory struct {
 
 	// Anchor is where the staircase starts and Block is the step.  They
 	// are fields rather than constants so a caller can model a different
-	// quantisation, but nothing depends on the values: Anchor only has
+	// quantization, but nothing depends on the values: Anchor only has
 	// to be larger than any pad it is asked about.
 	Anchor int
 	Block  int
@@ -91,7 +91,7 @@ func (m Memory) filled() Memory {
 	return m
 }
 
-// used is what cnt copies cost before quantising: the first copy
+// used is what cnt copies cost before quantizing: the first copy
 // outright, the marginal cost for each one after it, and the drift.
 func (m Memory) used(cnt int) int {
 	if cnt <= 0 {
@@ -187,7 +187,7 @@ func (m Memory) transcript(cnt, pad, mem int, done string) []string {
 //
 // It is a regexp over the source and not a compiler: it finds a single
 // string literal argument and nothing else, so a script that builds its
-// output by concatenation says nothing here.  That is the judgement
+// output by concatenation says nothing here.  That is the judgment
 // call.  Anything better is an LSL front end, which is what the
 // simulator backend is for; what this has to cover is a test script
 // written to print three lines and then say DONE, and for that a literal

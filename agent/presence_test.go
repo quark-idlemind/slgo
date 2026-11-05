@@ -178,7 +178,7 @@ func TestPresenceIsHandedOverAndComesBack(t *testing.T) {
 	}
 
 	// A short lease, because what is under test is it running out
-	// rather than it being cancelled: the deadline only ever moves
+	// rather than it being canceled: the deadline only ever moves
 	// forward, so a past time cannot cut a live lease short.
 	a.DeferPresence(time.Now().Add(30 * time.Millisecond))
 	if !a.presenceDeferred() {

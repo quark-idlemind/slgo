@@ -311,7 +311,7 @@ func scanNames(t *testing.T, name, text string) (string, bool) {
 }
 
 // strange is a name that is on nobody's list: it is made of letters that
-// no name here uses, so it is refused wherever a name is recognised.
+// no name here uses, so it is refused wherever a name is recognized.
 const strange = "Zxqvl Wmbrt"
 
 // TestAnUnlistedNameIsRefusedWhereANameIsRecognised is the table of places
@@ -409,7 +409,7 @@ func TestNamesAreMatchedLoosely(t *testing.T) {
 }
 
 func TestProseIsNotRead(t *testing.T) {
-	// A name in a sentence looks like any capitalised words, so it is left
+	// A name in a sentence looks like any capitalized words, so it is left
 	// to the person reading; so is a protocol message's name.
 	for _, line := range []string{
 		strange + " wandered in and said hello.",
@@ -644,7 +644,7 @@ func TestScanImagesPassesWhatGoWrites(t *testing.T) {
 }
 
 // TestScanImagesRefusesMetadata: each kind a screenshot, a photograph or an
-// editor adds is named, in whichever format, and an image is recognised
+// editor adds is named, in whichever format, and an image is recognized
 // by its content whatever it is called.
 // Why: doc/identities.md#images
 func TestScanImagesRefusesMetadata(t *testing.T) {

@@ -11,7 +11,7 @@ happening.
 ## Before Trim
 
 The store did not always forget what it had heard. Measured before
-`Trim` was written: raising the draw distance from 128 to 256 metres
+`Trim` was written: raising the draw distance from 128 to 256 meters
 took the count from 195 to 217, and dropping it to 32 left it at 193 --
 the store kept everything the far view had brought in. Those numbers
 are what it did then, and are written down because they turn up
@@ -40,7 +40,7 @@ nothing afterwards, so one dropped for distance is dropped for good.
 Measured on Agni. Quark logged in at ground level while two others
 stood on a skybox 1977m up; each session threw the others away as out
 of range at that moment, and after Quark teleported up to join them,
-all three were within six metres and none could see any of the others.
+all three were within six meters and none could see any of the others.
 Logging in already beside them worked perfectly, which is what made it
 look like a viewer problem.
 
@@ -112,16 +112,16 @@ until its own first tick, up to `trimInterval` later. One of them
 trimming in that window, from a camera somewhere else, threw away
 everything around the newcomer, its own attachments included, and the
 region describes each object once. Measured on Agni: an avatar logged
-in last of four, the other three thousands of metres above it, came up
+in last of four, the other three thousands of meters above it, came up
 with every attachment the simulator had restored missing from the
 store for good -- and only what was put on after its first tick was
 ever described.
 
 ## A saturated height
 
-A `CoarseLocationUpdate` height is one byte of four metre steps, so it
+A `CoarseLocationUpdate` height is one byte of four meter steps, so it
 stops at 1020, and 255 means "higher than this can say". Taking it
-literally put the camera a kilometre below an avatar on a skybox, and
+literally put the camera a kilometer below an avatar on a skybox, and
 everything the region then described was judged against a place the
 avatar was not -- the objects around it, and the other avatars standing
 beside it, arrived already out of range and were dropped. Nothing
@@ -148,10 +148,10 @@ packet, and one packet is what the count showed.
 
 `ObjectImage` replaces every face of an object at once, and the region
 does not describe the result. Measured on a live region, on a box of
-six faces: every face coloured red, and forty seconds later the reading
+six faces: every face colored red, and forty seconds later the reading
 had not moved -- it still described the box as it had been before the
 red. Worse, the next change starts from that reading, since a client
-must send every face and so reads the appearance first: colouring every
+must send every face and so reads the appearance first: coloring every
 face blue and then face 0 white left face 0 white and the other five
 back at the red they had been before the blue. So the store forgets an
 appearance it has seen changed, rather than keeping one it knows is

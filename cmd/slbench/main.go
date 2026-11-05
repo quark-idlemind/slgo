@@ -47,7 +47,7 @@
 // terminal too.
 //
 // Every flag that takes LSL takes the name of a file holding it instead,
-// spelt as a path: "/x.lsl", "./x.lsl" or "../x.lsl".  That is --code,
+// spelled as a path: "/x.lsl", "./x.lsl" or "../x.lsl".  That is --code,
 // --statement, --states, --preamble and --postamble.  See lslOrPath for why
 // it is the prefix that decides and not anything about what LSL looks like.
 //
@@ -127,7 +127,7 @@ var flags = struct {
 	Parts: 8,
 
 	// Eight further copies.  Code is 4-aligned, so individual copies
-	// quantise around their real cost and only a multiple of four
+	// quantize around their real cost and only a multiple of four
 	// averages it out; four is the smallest that does and eight is the
 	// smallest that is not obviously the smallest -- it halves whatever
 	// the offset is on top of that, and costs nothing in rounds.
@@ -1091,7 +1091,7 @@ Measure somewhere else, or find the padding by leaving --ipad off.
 // expressiblePadding reports whether the filler can emit exactly pad bytes --
 // and exactly pad+1 as well, since that is where the runs are taken.
 //
-// It is not a judgement about whether pad names a boundary; that is the
+// It is not a judgment about whether pad names a boundary; that is the
 // caller's to assert, and checkIPad is what verifies it.  This
 // is the one thing slbench does know better than the caller: whether it can
 // carry out the instruction at all.
@@ -1192,7 +1192,7 @@ func oneMode(b backend, r *Results) (size, padding, headroom int, marginal float
 		marginalOK = true
 	}
 
-	// What the two labelled lines report, said outright rather than left
+	// What the two labeled lines report, said outright rather than left
 	// to whichever run happened to write r last.  They now mean what they
 	// have always been called: the base script's memory, and the one-copy
 	// script's.
@@ -1446,7 +1446,7 @@ func main() {
 			if flags.Extra%4 != 0 {
 				// Code is 4-aligned, so a copy whose true cost is
 				// not a multiple of 4 is charged a little more or
-				// less than its neighbours -- measured, copies of
+				// less than its neighbors -- measured, copies of
 				// llSin(1.0); cost 48, 48, 48, 44 repeating, which
 				// is four copies of 47.  A multiple of four copies
 				// averages that out; anything else divides the

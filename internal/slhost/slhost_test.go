@@ -163,7 +163,7 @@ func TestSayingNothingIsReported(t *testing.T) {
 // TestOnlyTheFirstWordIsTheHost: a misconfigured sl-host that prints a
 // whole line of explanation, or a second address after the first, still
 // has an address at the front of it, and joining a port to the rest
-// would produce something that cannot be dialled at all.
+// would produce something that cannot be dialed at all.
 func TestOnlyTheFirstWordIsTheHost(t *testing.T) {
 	fakeSLHost(t, `printf 'lab.local extra words\nsecond.host\n'`)
 

@@ -232,7 +232,7 @@ func (sh *Shell) entriesAt(ctx context.Context, path string) ([]sl.Entry, error)
 //
 // Each entry's Path is its own name and nothing more, so that the
 // caller can put the folder in front of it and get the same shape it
-// gets from listing a folder.  The id form is normalised to that too,
+// gets from listing a folder.  The id form is normalized to that too,
 // since what it finds carries a path from wherever it was found.
 func (sh *Shell) entriesIn(ctx context.Context, path string) ([]string, []sl.Entry, error) {
 	if id, err := msg.ParseUUID(strings.TrimSpace(path)); err == nil {

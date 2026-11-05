@@ -1,6 +1,6 @@
 # Which packets are duplicates
 
-A reliable packet whose acknowledgement goes missing arrives again, and
+A reliable packet whose acknowledgment goes missing arrives again, and
 a message acted on twice is a chat line heard twice or a movement
 replayed.  So the dispatcher drops a retransmission of a packet it has
 already handled (`msg.Dispatcher`, `duplicate` in `msg/dispatch.go`).

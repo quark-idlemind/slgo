@@ -402,7 +402,7 @@ func TestTheDaemonHostsWhatItWasNamedAndServesIt(t *testing.T) {
 		t.Errorf("the daemon did not say which group it settled on:\n%s", d.log.String())
 	}
 
-	// Authentication is on unless it is turned off, so a client dialling
+	// Authentication is on unless it is turned off, so a client dialing
 	// it does the real handshake against the secret on disk.
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()

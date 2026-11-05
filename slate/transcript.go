@@ -79,7 +79,7 @@ func (r *runner) secondNamed(id msg.UUID) string {
 
 // chatText is the transcript line of a heard line: how, who and what.
 // A name that is not a bound prim's is the displayed name, and an object's
-// is labelled as one, since anything can be called anything.
+// is labeled as one, since anything can be called anything.
 func (r *runner) chatText(l sl.Line) string {
 	how := sl.ChatTypeName(l.Type)
 	if isPublic(l.Type) {

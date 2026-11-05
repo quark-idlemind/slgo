@@ -29,7 +29,7 @@ import (
 // export it.
 const pcodeAvatar = 47
 
-// TestWhereIsTheRegionAndThePosition, and says so in metres rather than
+// TestWhereIsTheRegionAndThePosition, and says so in meters rather than
 // in whatever the simulator counts in.
 func TestWhereIsTheRegionAndThePosition(t *testing.T) {
 	x := newTestShell(t)
@@ -895,7 +895,7 @@ func TestNeighboursListsWhatIsHeldTheWayRegionsDoes(t *testing.T) {
 				Handle: msg.RegionHandle(43646, 43648), Addr: "203.0.113.11:13032",
 				Name: "Pelmar Mill", Handshook: true, Heard: 412,
 			},
-			// One that was dialled and has sent no handshake yet,
+			// One that was dialed and has sent no handshake yet,
 			// which is not the same as an offer that came to nothing.
 			{Handle: msg.RegionHandle(43648, 43647), Addr: "203.0.113.12:13011"},
 		},
@@ -921,7 +921,7 @@ func TestNeighboursListsWhatIsHeldTheWayRegionsDoes(t *testing.T) {
 		t.Errorf("an unanswered circuit reads %q", lines[2])
 	}
 	// The handle is deliberately not in the line: nothing is addressed
-	// by a neighbour's, and regions is where a number is wanted.
+	// by a neighbor's, and regions is where a number is wanted.
 	if strings.Contains(got, "47991483540340736") {
 		t.Errorf("the listing carries a handle nobody can use:\n%s", got)
 	}
@@ -933,7 +933,7 @@ func TestNeighboursListsWhatIsHeldTheWayRegionsDoes(t *testing.T) {
 // and reads as two circuits instead of one.
 //
 // The row is checked at its widest ordinary size rather than at the
-// size of any particular neighbour: a name that fills its column, and
+// size of any particular neighbor: a name that fills its column, and
 // an address of a dotted quad and a five-digit simulator port.  Nothing
 // here is truncated -- a name or an address longer than its column pads
 // out rather than being cut, and the line grows -- so what this holds
@@ -968,7 +968,7 @@ func TestANeighbourRowFitsAnEightyColumnTerminal(t *testing.T) {
 }
 
 // TestNeighboursTurnsThemOnAndOffAndSaysWhatItGot: the change costs the
-// daemon a socket per neighbouring region for as long as it is on, so it
+// daemon a socket per neighboring region for as long as it is on, so it
 // is worth being sure the word reached the session and that the answer
 // describes what is held afterwards rather than before.
 func TestNeighboursTurnsThemOnAndOffAndSaysWhatItGot(t *testing.T) {

@@ -85,7 +85,7 @@ type Touch struct {
 	Normal   msg.Vector3
 	Binormal msg.Vector3
 
-	// Offset is the grab offset, from the object's centre.  It is what
+	// Offset is the grab offset, from the object's center.  It is what
 	// llDetectedGrab reports during a drag, and it is the only field
 	// that means anything different while the touch is held.
 	Offset msg.Vector3
@@ -125,7 +125,7 @@ func (t Touch) updateSurface() msg.ObjectGrabUpdate_SurfaceInfo {
 	}
 }
 
-// middle is the centre of a face, where a touch that names neither
+// middle is the center of a face, where a touch that names neither
 // coordinate lands.
 var middle = msg.Vector3{X: 0.5, Y: 0.5}
 
@@ -579,7 +579,7 @@ func (w *Session) hold(ctx context.Context, at Touch, d, every time.Duration, ti
 //
 // Everything continuous is interpolated; the face is not, since there
 // is nothing between face 2 and face 3.  It takes the face it is
-// travelling FROM until it arrives, which is what a finger sliding off
+// traveling FROM until it arrives, which is what a finger sliding off
 // one face onto another does.
 func between(a, b Touch, t float32) Touch {
 	return Touch{

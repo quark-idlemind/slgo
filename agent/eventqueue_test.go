@@ -325,7 +325,7 @@ func TestTheQueueIsWhereGroupMembershipArrives(t *testing.T) {
 // can hold several events, and a move followed from one of them is over
 // before the next is looked at.  Those behind it were said by the region
 // left, so its parcel must not become the one underfoot in the region
-// arrived at, nor its neighbours be dialled from there.  The avatar's own
+// arrived at, nor its neighbors be dialed from there.  The avatar's own
 // news is kept, and a client is told all of it, as before: a parcel or a
 // script's state may be the answer to something it asked.
 func TestWhatFollowsAMoveInTheSameBodyIsTheRegionLefts(t *testing.T) {

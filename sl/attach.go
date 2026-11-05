@@ -37,9 +37,9 @@ type attachPointName struct {
 // same point (avatar_lad.xml, <attachment_point ... name="...">).  Body
 // points run to 30 and the HUD points carry on from there.
 //
-// Twenty-one of the fifty-five names differ by more than case and the
-// spelling of centre, in three ways, and none of the three is a slip to
-// be tidied back into the viewer's spelling:
+// Twenty-one of the fifty-five names differ by more than case, in three
+// ways, and none of the three is a slip to be tidied back into the
+// viewer's spelling:
 //
 //   - abbreviations written out.  "R Upper Arm" is "right upper arm"
 //     here, "L Forearm" is "left lower arm", "Left Eyeball" is "left
@@ -132,7 +132,7 @@ func AttachPointName(point int) string {
 // above is understood here without anybody remembering to add it twice,
 // and that goes for the viewer's name as much as for ours.
 //
-// The keys are folded to lower case, and "centre" is accepted for
+// The keys are folded to lower case, and "center" is accepted for
 // "center" as well, so that the British spelling is not told there is
 // no such point.  Accepting the viewer's whole name for a point
 // -- "Skull" for "head", "Top" for "HUD top" -- is the same courtesy
@@ -209,7 +209,7 @@ func (e *AttachPointStartError) Error() string {
 }
 
 // attachWords is a point's name as the words it is matched by: folded
-// to lower case, spaces collapsed, and "centre" spelled as the table
+// to lower case, spaces collapsed, and "center" spelled as the table
 // spells it.
 func attachWords(name string) []string {
 	return strings.Fields(strings.ReplaceAll(strings.ToLower(name), "centre", "center"))
@@ -265,7 +265,7 @@ type Attached struct {
 	Point  int
 
 	// Scale is the size the region last described the object as, in
-	// metres.  WornObjects and WornFromItem fill it; an attachment
+	// meters.  WornObjects and WornFromItem fill it; an attachment
 	// reported as it went on does not carry one, and it is zero.
 	Scale msg.Vector3
 }
@@ -283,7 +283,7 @@ func attachPoint(state uint8) int {
 //
 // This is the only thing tying a worn object back to the inventory
 // item it came from.  The object gets a fresh id every time it is
-// attached, so it cannot be recognised by that.
+// attached, so it cannot be recognized by that.
 func attachItem(nv []byte) (msg.UUID, bool) {
 	for _, line := range strings.Split(trimNul(nv), "\n") {
 		f := strings.Fields(line)
@@ -371,7 +371,7 @@ func (w *Session) Wear(ctx context.Context, it *Item, point int, timeout time.Du
 // time.
 //
 // Forgetting what was known about this item first is the part worth
-// naming: the confirmation is recognised by the item it came from, so
+// naming: the confirmation is recognized by the item it came from, so
 // a stale entry from a previous wearing would otherwise be mistaken
 // for the answer to this one.
 func (w *Session) AskToWear(ctx context.Context, it *Item, point int) error {
@@ -565,7 +565,7 @@ func (w *Session) EnsureAttached(ctx context.Context, folder msg.UUID, name stri
 // dropRezzed deletes a prim that a failed call rezzed and will not hand
 // back, into the trash as a viewer's delete goes.  On a context of its
 // own, since a call that failed because its caller gave up has a
-// cancelled one.
+// canceled one.
 func (w *Session) dropRezzed(ctx context.Context, o *Object) error {
 	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()

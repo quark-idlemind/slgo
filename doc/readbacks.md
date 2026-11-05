@@ -2,7 +2,7 @@
 
 Most of what `sl` sends to change something is a UDP message that
 nothing answers. A reliable packet is acknowledged, and the
-acknowledgement says only that the packet arrived, not that the
+acknowledgment says only that the packet arrived, not that the
 simulator did what it asked. So a call in `sl` that sends one of these
 looks afterwards for what it asked for, and is an error if it never
 shows. This page says where each one looks, and why there.
@@ -78,7 +78,7 @@ The fifteen seconds is not a measurement. How long a move takes to
 show over AIS has not been measured; fifteen seconds is the bound
 `SetItem` already used for the same kind of read. It is the default of
 `sl.Options.MoveTimeout`, and the bounds on permission changes and
-deletes below are its neighbours there: a test that proves one runs
+deletes below are its neighbors there: a test that proves one runs
 out sets it short with `Session.SetOptions`, rather than waiting.
 
 ### Moving an object in the region

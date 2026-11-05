@@ -88,7 +88,7 @@ func TestAWalkSaysWhereItCameToRest(t *testing.T) {
 	}
 }
 
-// TestAWalkToAnObjectStopsShortOfIt: half a metre from something's
+// TestAWalkToAnObjectStopsShortOfIt: half a meter from something's
 // middle is walking into it.
 func TestAWalkToAnObjectStopsShortOfIt(t *testing.T) {
 	x, asked := walkingShell(t)

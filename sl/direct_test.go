@@ -108,7 +108,7 @@ func TestTheTapEncodesWhatArrivedDecoded(t *testing.T) {
 	}
 }
 
-// TestTheTapDropsWhatCarriesNothing: an acknowledgement is a packet with
+// TestTheTapDropsWhatCarriesNothing: an acknowledgment is a packet with
 // no message and no body, and relaying one would put an entry on every
 // client's channel saying nothing at all.
 func TestTheTapDropsWhatCarriesNothing(t *testing.T) {
@@ -399,7 +399,7 @@ func TestADirectSessionEndsWhenTheAgentDoes(t *testing.T) {
 // that grants building to the other.
 func TestSettlingTheActiveGroupPicksNothingWhenThereIsAChoice(t *testing.T) {
 	d := aDirectSession(t)
-	// Nothing has told this agent about any groups, and a cancelled
+	// Nothing has told this agent about any groups, and a canceled
 	// context is what stops the wait being the whole ten seconds.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

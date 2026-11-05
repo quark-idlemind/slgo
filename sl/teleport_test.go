@@ -279,7 +279,7 @@ func TestATeleportTheGridRefusedSaysBothOfTheThingsItSaid(t *testing.T) {
 		}
 	}
 	// And the grid square asked about, since a program teleporting on a
-	// handle has nothing else to recognise it by.
+	// handle has nothing else to recognize it by.
 	if !strings.Contains(err.Error(), "(995, 997)") {
 		t.Errorf("the refusal %q does not say where it was about", err)
 	}
@@ -396,7 +396,7 @@ func TestATeleportTheDaemonDidNotFollowIsNotArrival(t *testing.T) {
 }
 
 // TestATeleportToTheRegionAlreadyInIsALocalOne: there is one region and
-// one simulator either way, so dialling a second circuit to the
+// one simulator either way, so dialing a second circuit to the
 // simulator on the other end of this one would be a relog to where we
 // are standing.
 func TestATeleportToTheRegionAlreadyInIsALocalOne(t *testing.T) {

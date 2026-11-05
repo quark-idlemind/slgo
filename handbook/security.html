@@ -182,7 +182,7 @@
           <li>On the slgod machine, name the file with <code>-secret FILE</code>, or put it in the <code>-config</code> directory as <code>secret</code>. slgod logs <code>secret: PATH</code> when it starts, so you can see which one it took.</li>
           <li>On each client machine, keep a copy as <code>~/.config/slgod/secret.HOST.PORT</code>, named after the address that client dials. Clients look for that file first, then <code>secret.HOST</code>, then the shared secret. The full rules are in <a href="reference.html#secret-order">the reference</a>.</li>
         </ul>
-        <p>The costs: every extra secret is one more file on each client to copy and to rotate. The file name follows the address as dialled, so a client that reaches the same slgod another way (a different tunnel port, <code>localhost</code> instead of <code>127.0.0.1</code>, a new server address) needs the file under the new name. Without it the client falls back to the shared secret and is refused (<a href="troubleshooting.html#f-secret-by-address">what that looks like</a>).</p>
+        <p>The costs: every extra secret is one more file on each client to copy and to rotate. The file name follows the address as dialed, so a client that reaches the same slgod another way (a different tunnel port, <code>localhost</code> instead of <code>127.0.0.1</code>, a new server address) needs the file under the new name. Without it the client falls back to the shared secret and is refused (<a href="troubleshooting.html#f-secret-by-address">what that looks like</a>).</p>
       </section>
 
       <section id="secret">

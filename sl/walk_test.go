@@ -4,7 +4,7 @@ package sl
 //
 // The walk itself is the daemon's and is tested there and in the agent;
 // what is here is the translation, which is where a field read off its
-// neighbour would hide: every figure in a report crosses the wire and
+// neighbor would hide: every figure in a report crosses the wire and
 // comes back as this package's own type, and a refusal comes back as the
 // same error a direct session would have given.
 

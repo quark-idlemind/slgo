@@ -113,7 +113,7 @@ func MaturityName(rating string) string {
 // The answer is the point of the call.  What comes back is the
 // preference now in force, which is the lower of what was asked for and
 // what the account is permitted -- so a caller that asked for Adult and
-// was given Moderate has learnt the account's ceiling, and that ceiling
+// was given Moderate has learned the account's ceiling, and that ceiling
 // is not something this or any other client can raise.  See the head of
 // this file.
 //

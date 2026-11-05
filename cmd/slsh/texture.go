@@ -144,7 +144,7 @@ func cmdGet(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 // Inventory names may hold very nearly any printable character -- see
 // doc/overview.md -- so a name used as a path can escape the directory it
 // was meant for.  Only the separators are a danger, and replacing them
-// keeps a name recognisable where sanitising to alphanumerics would
+// keeps a name recognisable where sanitizing to alphanumerics would
 // not.
 func safeName(s string) string {
 	s = strings.Map(func(r rune) rune {

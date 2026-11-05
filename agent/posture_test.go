@@ -350,7 +350,7 @@ func TestTheAnimationListIsCopiedOut(t *testing.T) {
 }
 
 // TestASeatedAvatarIsWhereItsSeatIs: sitting moves an avatar several
-// metres and the coarse update saying so is seconds behind -- measured
+// meters and the coarse update saying so is seconds behind -- measured
 // on Agni, about ten of them.  The exact answer is in hand the whole
 // time, because the update that seats an avatar gives its position as an
 // offset from the seat rather than as a place in the region.
@@ -365,7 +365,7 @@ func TestASeatedAvatarIsWhereItsSeatIs(t *testing.T) {
 		Scale:      msg.Vector3{X: 1, Y: 1, Z: 1},
 		ObjectData: placement(msg.Vector3{X: 30, Y: 72, Z: 2000}, msg.Quaternion{}),
 	})
-	// The offset a measured sit produced, on a seat a couple of metres
+	// The offset a measured sit produced, on a seat a couple of meters
 	// from where the avatar had been standing.
 	on := arriving(t, msg.ObjectUpdate_ObjectData{
 		ID:         meLocally,

@@ -84,7 +84,7 @@ func (r *runner) sendIn(p place, src string) (results, info []string, err error)
 	ctx := context.Background()
 	if r.Timeout > 0 {
 		// Room for sl to report its own overrun rather than having the
-		// call cancelled out from under it.
+		// call canceled out from under it.
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, r.Timeout+30*time.Second)
 		defer cancel()

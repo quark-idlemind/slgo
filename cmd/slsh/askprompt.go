@@ -29,7 +29,7 @@ package main
 //
 // About three thousand tokens of prompt, counted as four characters to
 // a token.  That ratio is the usual rule of thumb for English and not a
-// measurement of any tokeniser; the server's own count comes back with
+// measurement of any tokenizer; the server's own count comes back with
 // every reply (llm.Reply.PromptTokens), and that is the number to
 // correct this one by.  The budget is small because the models this is
 // for are small, and small models are generally reported to use a long
@@ -251,7 +251,7 @@ func askFit(question string, in []askCandidate, budget int) []askCandidate {
 //
 // command is an enum of the names shown, which is the one check that
 // can be made before the model speaks rather than after: a server that
-// honours the schema cannot produce a command outside the list at all.
+// honors the schema cannot produce a command outside the list at all.
 // command_line cannot be constrained the same way -- its flags and
 // operands are free text as far as a schema goes -- which is why
 // checkCommandLine exists.
@@ -438,7 +438,7 @@ func parseAskReply(text string) (askAnswer, error) {
 		beforeFence = s[:i]
 		rest := s[i+3:]
 		if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
-			rest = rest[nl+1:] // past "json" or whatever the fence was labelled
+			rest = rest[nl+1:] // past "json" or whatever the fence was labeled
 		}
 		if j := strings.Index(rest, "```"); j >= 0 {
 			rest = rest[:j]
@@ -514,7 +514,7 @@ func parseAskObject(s, whole string) (askAnswer, error) {
 	return a, nil
 }
 
-// askExcerptOf is enough of a reply to recognise it by in an error.
+// askExcerptOf is enough of a reply to recognize it by in an error.
 func askExcerptOf(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	if r := []rune(s); len(r) > 160 {

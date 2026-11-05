@@ -9,7 +9,7 @@ package agent
 // session is holding down, walks the avatar's entry in the object store
 // the way the simulator's terse updates would, and does it a quarter of
 // a second late, because a real avatar does -- measured on Agni, one
-// walking at 3.2 metres a second went on for about 0.28 seconds after
+// walking at 3.2 meters a second went on for about 0.28 seconds after
 // being let go of (see stopLead).  A fake that stopped dead would test a
 // walk that never overshoots, which is not the walk that has to work.
 //

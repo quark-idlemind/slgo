@@ -1130,7 +1130,7 @@ func (c *Conn) Control(ctx context.Context, flags uint32) error {
 //
 // The walk is the server's and not this side's: it steers ten times a
 // second from where the avatar actually is, and it stops the avatar the
-// moment this call's stream ends.  So cancelling ctx is how a walk is
+// moment this call's stream ends.  So canceling ctx is how a walk is
 // abandoned, and what a program that exits in the middle of one does
 // without having to think about it.  See the rpc in slgo.proto.
 //

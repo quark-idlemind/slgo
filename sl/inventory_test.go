@@ -1597,7 +1597,7 @@ func TestOnlyTheHalfThatWritesNothingIsAskedAgain(t *testing.T) {
 }
 
 // TestGivingUpWhileWaitingToAskAgain: the pause before a second ask is a
-// pause a cancelled command must not sit through.
+// pause a canceled command must not sit through.
 func TestGivingUpWhileWaitingToAskAgain(t *testing.T) {
 	s, f := newFakeSession(t)
 	describeAttempts(t, f, "UpdateScriptAgent", 99)

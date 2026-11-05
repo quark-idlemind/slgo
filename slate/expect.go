@@ -20,7 +20,7 @@ import (
 	"github.com/quark-idlemind/slgo/sl"
 )
 
-// The kinds of event this file and its neighbours add. They are numbered
+// The kinds of event this file and its neighbors add. They are numbered
 // well above the heard kinds so that two of them added side by side cannot
 // share a value.
 const (
@@ -56,7 +56,7 @@ func (c runCfg) invEvery() time.Duration    { return orDefault(c.inv, defaultInv
 func never(*event) bool                     { return false }
 func (c runCfg) describeFor() time.Duration { return c.clickWait() }
 
-// Tolerances of a comparison. The offset one is the quantisation of the
+// Tolerances of a comparison. The offset one is the quantization of the
 // setter, the rotation one is two steps of 1/32768 of a turn.
 // Why: doc/slate-runner.md#offset-repeats-rotation
 const (
@@ -65,7 +65,7 @@ const (
 	rotTol     = 2.0 / 32768
 )
 
-// vecTol is the tolerance of a position and a size, in metres on each
+// vecTol is the tolerance of a position and a size, in meters on each
 // axis, and the 1e-9 is for the float arithmetic.
 // Why: doc/slate-runner.md#position-and-size
 const vecTol = 0.001 + 1e-9
@@ -372,7 +372,7 @@ func vec3(v msg.Vector3) [3]float64 {
 
 // tolerance is a file's near: an amount in the reading's own unit, or a
 // percentage of the wanted component. It only widens a comparison: the
-// kind's own tolerance, the quantisation of what it reads, is the least
+// kind's own tolerance, the quantization of what it reads, is the least
 // there is.
 // Why: doc/slate-language.md#tolerances
 type tolerance struct {
@@ -417,7 +417,7 @@ func (g gap) worse(o gap, byDiff bool) gap {
 func (g gap) ok() bool { return g.diff <= g.allowed }
 
 // floor is the least a numeric kind is compared within, which is the
-// quantisation of what it reads, and false for the kinds that are not
+// quantization of what it reads, and false for the kinds that are not
 // numbers.
 func (k stateKind) floor() (float64, bool) {
 	switch k {

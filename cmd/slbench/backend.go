@@ -104,7 +104,7 @@ func sift(lines []spoken, wantInfo bool) (results, info []string) {
 // running it.
 //
 // Errors is the compiler's own words, with its own line and column, and
-// is empty when OK is true.  It is not normalised or reworded here: a
+// is empty when OK is true.  It is not normalized or reworded here: a
 // compiler message is evidence, and the only useful form of evidence is
 // the verbatim one.
 type compilation struct {

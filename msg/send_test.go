@@ -132,7 +132,7 @@ func TestSendSequenceIncrements(t *testing.T) {
 }
 
 // TestAcksRideAlong is the point of the two channel design: an
-// acknowledgement waiting when a message goes out travels on its tail
+// acknowledgment waiting when a message goes out travels on its tail
 // rather than in a datagram of its own.
 func TestAcksRideAlong(t *testing.T) {
 	c := newCapture()
@@ -172,7 +172,7 @@ func TestAcksRideAlong(t *testing.T) {
 }
 
 // TestAcksFlushAlone: with nothing else going out, waiting
-// acknowledgements are sent as a batched PacketAck rather than waiting
+// acknowledgments are sent as a batched PacketAck rather than waiting
 // forever.
 func TestAcksFlushAlone(t *testing.T) {
 	c := newCapture()
@@ -198,7 +198,7 @@ func TestAcksFlushAlone(t *testing.T) {
 		t.Fatalf("sent %T, want *PacketAck", got)
 	}
 	// All four batched into one datagram, unlike the C client's one
-	// message per acknowledgement.
+	// message per acknowledgment.
 	if len(ack.Packets) != 4 {
 		t.Fatalf("PacketAck carries %d, want 4", len(ack.Packets))
 	}
@@ -471,7 +471,7 @@ func TestSendWithoutAContext(t *testing.T) {
 }
 
 // TestSendGivesUpWhenTheCallerDoes: with the queue full and nothing
-// draining it, a caller that has been cancelled must not be left
+// draining it, a caller that has been canceled must not be left
 // holding a message forever.
 func TestSendGivesUpWhenTheCallerDoes(t *testing.T) {
 	// No Run goroutine, so nothing ever takes the message.
@@ -551,12 +551,12 @@ func TestUnencodableMessageIsDropped(t *testing.T) {
 }
 
 // TestAcksOnlyRideWhatTheyFitIn.  A datagram over the path's limit gets
-// fragmented or dropped, so acknowledgements are attached only while
+// fragmented or dropped, so acknowledgments are attached only while
 // there is room under it, and a message that is already at or over the
 // limit carries none rather than being made worse.  The message itself
 // is never split: what the caller asked to send goes as it stands.
 func TestAcksOnlyRideWhatTheyFitIn(t *testing.T) {
-	// Chosen so that exactly two acknowledgements fit: the body is
+	// Chosen so that exactly two acknowledgments fit: the body is
 	// 1180 bytes and the room for them is what is left under
 	// MaxDatagram after the header, the message number and the count.
 	fits := chatOfBodySize(t, 1180)
@@ -624,7 +624,7 @@ func chatOfBodySize(t *testing.T, n int) *ChatFromViewer {
 	return m
 }
 
-// TestTheFlushTimerIsDisarmedByAMessage: acknowledgements that rode out
+// TestTheFlushTimerIsDisarmedByAMessage: acknowledgments that rode out
 // on a message are gone, and a flush left armed behind them would send
 // a PacketAck with nothing in it.
 func TestTheFlushTimerIsDisarmedByAMessage(t *testing.T) {
@@ -637,7 +637,7 @@ func TestTheFlushTimerIsDisarmedByAMessage(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- s.Run(ctx) }()
 
-	// The acknowledgement arms the flush.
+	// The acknowledgment arms the flush.
 	s.QueueAck(11)
 	time.Sleep(5 * time.Millisecond)
 
@@ -650,7 +650,7 @@ func TestTheFlushTimerIsDisarmedByAMessage(t *testing.T) {
 	time.Sleep(40 * time.Millisecond)
 	close(g.release)
 
-	// Nothing further should go out: the acknowledgement is spent.
+	// Nothing further should go out: the acknowledgment is spent.
 	time.Sleep(50 * time.Millisecond)
 	if n := g.writes.Load(); n != 1 {
 		t.Errorf("%d datagrams went out, want 1 -- the flush fired on an empty queue", n)

@@ -38,7 +38,7 @@ type Object struct {
 	Position msg.Vector3
 	Rotation msg.Quaternion
 
-	// Velocity is how fast it was last said to be moving, in metres a
+	// Velocity is how fast it was last said to be moving, in meters a
 	// second, and Moved is when that was said -- which is also when
 	// Position was.  Only the terse updates carry it here, and they are
 	// sent for what moves, so it is zero for anything that has only ever
@@ -1194,9 +1194,9 @@ const orphanGrace = time.Minute
 //
 // This is what keeps the cache honest, and age would not do it.  The
 // simulator says when an object has been destroyed, so nothing that
-// still exists needs ageing out -- but it says nothing at all when one
+// still exists needs aging out -- but it says nothing at all when one
 // is merely left behind, and an object sitting still is never
-// mentioned again either.  Ageing would throw away the quiet ones and
+// mentioned again either.  Aging would throw away the quiet ones and
 // keep the distant ones, which is exactly backwards.  Distance is the
 // thing actually being asked about, and both positions are known.
 //
@@ -1316,7 +1316,7 @@ func dist2(a, b msg.Vector3) float32 {
 // arrives, and never again -- and a standing avatar sends nothing at
 // all afterwards, not even the terse position updates that would give
 // a re-request something to fire on.  So an avatar refused for
-// distance is refused permanently: it can be three metres away, on the
+// distance is refused permanently: it can be three meters away, on the
 // same platform, in conversation, and the session will not know it is
 // there.
 //

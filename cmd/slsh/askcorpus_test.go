@@ -81,7 +81,7 @@ func TestEveryCommandHasKeywords(t *testing.T) {
 func TestCommandNamesAreSearchable(t *testing.T) {
 	for _, n := range commandNames() {
 		if strings.Trim(n, "abcdefghijklmnopqrstuvwxyz") != "" {
-			continue // ".", which no question will say, and "How", which is how capitalised
+			continue // ".", which no question will say, and "How", which is how capitalized
 		}
 		if n == howName {
 			// The one name that is meant to be dropped.  Every question

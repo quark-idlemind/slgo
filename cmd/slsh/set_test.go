@@ -325,7 +325,7 @@ func TestTheFriendColourSetByNameReachesThePicture(t *testing.T) {
 	if strings.Contains(got, mapColours["green"]) {
 		t.Errorf("nothing should still be green:\n%q", got)
 	}
-	// The legend says the colour it is showing, in that colour, since
+	// The legend says the color it is showing, in that color, since
 	// the name is what has to be typed to change it again.
 	if want := mapColours["bright cyan"] + "bright cyan" + mapColourOff; !strings.Contains(got, want) {
 		t.Errorf("the legend should name the colour it is using:\n%q", got)

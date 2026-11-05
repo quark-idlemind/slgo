@@ -46,7 +46,7 @@ func TestWearingSomethingReportsWhereItLanded(t *testing.T) {
 // share one field, so what "add, wherever the object itself says" looks
 // like on the wire is 0x80 alone and nothing else -- and the old default,
 // which sent 0, is what took auto 11 off an occupied HUD point on Agni
-// without anybody saying so.  --replace is that behaviour, kept and
+// without anybody saying so.  --replace is that behavior, kept and
 // named, and it must still send the point bare or it would not replace.
 //
 // Asserted here rather than in the test above because the two forms are
@@ -344,7 +344,7 @@ func TestWearingTheSameItemTwiceIsRefused(t *testing.T) {
 
 // TestAnAttachmentPointThatIsNotOneIsRefused.
 //
-// Guessing would be the worst answer available: an unrecognised name
+// Guessing would be the worst answer available: an unrecognized name
 // falling back to the default would put the thing somewhere the person
 // did not ask for and report success, and finding it again means
 // hunting through "worn" to take it off.  A number too big for the

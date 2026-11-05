@@ -112,7 +112,7 @@ var groups = []group{
 		//
 		// sit and stand are here beside tp and touch rather than in a
 		// group of their own: a sit MOVES the avatar, up to about ten
-		// metres, so the question it answers is tp's -- how do I get
+		// meters, so the question it answers is tp's -- how do I get
 		// this avatar over there -- and the thing it names is touch's.
 		// "unsit" is stand under another name and is not listed, since
 		// a listing that showed one command twice would say nothing

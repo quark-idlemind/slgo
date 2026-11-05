@@ -104,7 +104,7 @@ func TestNoViewerEndpointIsAnAnswerAndNotABlank(t *testing.T) {
 // took the handover both times.  It is written out here rather than
 // assembled from the settings, because what is being protected is the
 // command and not the templating: --loginuri in place of --grid, or the
-// Second Life flavour of Firestorm in place of the OpenSim one, both
+// Second Life flavor of Firestorm in place of the OpenSim one, both
 // end at an Agni login screen with nothing to say why.
 func TestTheLaunchCommandIsTheOneThatWorkedLive(t *testing.T) {
 	var cfg Config
@@ -355,7 +355,7 @@ func TestSplitCommandGroupsWithQuotesAndNothingElse(t *testing.T) {
 }
 
 // TestViewerDefaultsNameTheViewerThatCanReachAPrivateGrid: the
-// Firestorm most people already have -- the Second Life flavour, at
+// Firestorm most people already have -- the Second Life flavor, at
 // /Applications/Firestorm-Releasex64.app -- cannot be pointed at slgod
 // at all.  It compiles the grid manager whose grid-file block is
 // disabled (llviewernetwork.cpp:149-201), so it never reads

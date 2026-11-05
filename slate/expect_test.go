@@ -80,7 +80,7 @@ func TestChangesIsJudgedByTheTolerance(t *testing.T) {
 		}()
 	}
 
-	// One step of the setter's quantisation is less than 2/32767.
+	// One step of the setter's quantization is less than 2/32767.
 	f := newGrid(t)
 	setup(f)
 	f.whenSaid("go", func() {

@@ -25,7 +25,7 @@ package session
 // be standing in different regions, and a program running a dozen
 // separate scripts does not care.  So there are two doors --
 // UseAutoAnywhere, which puts everything on one avatar, and
-// UseAutoSpread, which does not care -- and a named avatar is honoured
+// UseAutoSpread, which does not care -- and a named avatar is honored
 // exactly by both.  slrun and slbench both go through UseAutoSpread.
 
 import (
@@ -47,7 +47,7 @@ import (
 // A variable because it is the one place here that dials in the middle
 // of an operation -- a grant may name an avatar this caller has no
 // session for -- and a test that had to stand up a daemon to reach the
-// three lines after it would be testing the dialling.
+// three lines after it would be testing the dialing.
 var dialFor = Connect
 
 // autoTimeout is how long a grant is asked for.
@@ -268,7 +268,7 @@ func grantOn(ctx context.Context, o Options, asked *sl.Session, g granter, n int
 //
 // It is for work that is simply WIDE: a program with twelve scripts to
 // run at once wants twelve objects and does not care whose they are.  A
-// named avatar is honoured exactly and is one avatar.
+// named avatar is honored exactly and is one avatar.
 //
 // Each Auto has its own session, which the caller closes when it is done
 // with it; see Release for the sessions that closes first.

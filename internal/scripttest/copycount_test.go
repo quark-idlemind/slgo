@@ -75,7 +75,7 @@ type bench struct {
 	target string
 
 	// cache stops the same script being sent twice, which is what makes
-	// the run count below a real cost and not an artefact.
+	// the run count below a real cost and not an artifact.
 	cache map[[2]int]results
 	runs  int
 }
@@ -259,7 +259,7 @@ func (b *bench) copyCount(pad, max int) (cnt int, size float64) {
 		cnt = blockSize
 	default:
 		// How many copies fit in what a script has, rounded down to a
-		// power of two.  The half-block term is the quantisation the
+		// power of two.  The half-block term is the quantization the
 		// probe's own reading carries: without it the estimate is
 		// systematically high and the shrink below pays for it.
 		maxMem := 62*1024 - base
@@ -303,8 +303,8 @@ func TestACopyCountSearchRunsThroughTheBackendAndLandsWhereTheModelSays(t *testi
 	}
 
 	// What the reading can resolve.  Size is a difference of two
-	// quantised readings over the count, so it carries blockSize/cnt of
-	// quantisation; and it is the AVERAGE cost of a copy, which is the
+	// quantized readings over the count, so it carries blockSize/cnt of
+	// quantization; and it is the AVERAGE cost of a copy, which is the
 	// marginal cost plus what the first copy paid once, spread over the
 	// count.  Anything inside that band is the right answer, and a
 	// tighter claim would be a claim about the instrument.

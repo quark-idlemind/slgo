@@ -742,7 +742,7 @@ func TestEnsureAttachedMakesOneWhenThereIsNone(t *testing.T) {
 
 	rezAndName(t, f, thePrim, 77, "workbench")
 
-	// The prim is rezzed a metre and a half away, which is well within
+	// The prim is rezzed a meter and a half away, which is well within
 	// anything that would be described.
 	add := waitSent[*msg.ObjectAdd](t, f)
 	if got := add.ObjectData.RayStart; got.X != 129.5 || got.Z != 25.5 {

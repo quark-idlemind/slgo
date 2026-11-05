@@ -39,7 +39,7 @@ import (
 // The move runs inline on the polling goroutine for the reasons set out
 // on noteTeleportFinish, which apply here word for word: the region left
 // behind stops being relayed to clients while the avatar arrives
-// elsewhere, the poll being cancelled is the caller's own, and two moves
+// elsewhere, the poll being canceled is the caller's own, and two moves
 // cannot interleave.
 func (a *Agent) noteCrossedRegion(body any) {
 	a.crossTo(crossingDestination(body))
@@ -100,7 +100,7 @@ func (a *Agent) followCrossings() {
 		// The circuit road needs none of the LLSD guesswork: the
 		// generated types decode IPADDR as four bytes in network order
 		// and IPPORT as a port, so what is left to refuse is an address
-		// that names nowhere.  Dialled, a zero of either is this
+		// that names nowhere.  Dialed, a zero of either is this
 		// machine or a port nothing listens on, and the move that
 		// failed there would end the session.
 		if r.SimIP == (msg.IPAddr{}) || r.SimPort == 0 {
@@ -150,7 +150,7 @@ func (a *Agent) crossTo(addr *net.UDPAddr, seed string, handle uint64) {
 
 	// The session's context rather than anything belonging to the
 	// goroutine that brought the message, which for the queue road is
-	// about to be cancelled by this very move.  The error goes nowhere
+	// about to be canceled by this very move.  The error goes nowhere
 	// because there is nobody to return it to: nothing asked for this,
 	// and moveTo has already ended the session for the failures that
 	// leave it pointed at a simulator the avatar has left.

@@ -63,7 +63,7 @@ type Agent struct {
 	// terms as the one before it.
 	opts Options
 
-	// runCtx is the session's own lifetime, cancelled by cancel.  A
+	// runCtx is the session's own lifetime, canceled by cancel.  A
 	// move spawns against it, so that what it starts ends when the
 	// session does rather than when the move returns.
 	runCtx context.Context
@@ -234,7 +234,7 @@ type Agent struct {
 	// yet, by grid handle; refused are the offers turned down for
 	// being past MaxNeighbours -- kept only so that one is logged
 	// once per stay in a region rather than every time it is offered
-	// again.  Both are nil while neighbours are off; see neighbour.go.
+	// again.  Both are nil while neighbors are off; see neighbour.go.
 	// openNeighbour reads the handle under neighMu, so mu may be
 	// taken inside neighMu and never neighMu inside mu.
 	neighMu    sync.Mutex
@@ -435,7 +435,7 @@ type Options struct {
 	// Off by default.  Off, no offer is read and no socket is opened,
 	// so a session that does not ask for this behaves as it did
 	// before any of it existed.  It costs a socket and a share of the
-	// traffic per neighbour -- four regions surround Pelmar Reach and
+	// traffic per neighbor -- four regions surround Pelmar Reach and
 	// eight can surround one anywhere -- which a daemon acting only
 	// where its avatar stands should not be made to pay.
 	Neighbours bool
@@ -543,7 +543,7 @@ func Connect(ctx context.Context, acct *Account, opts Options) (*Agent, error) {
 	// the next; anything slow in one of them stops the socket being read.
 	// Blocking there does not save the packet -- the kernel discards it
 	// instead, once its own buffer fills -- it only makes the loss
-	// invisible, and stalls this session's acknowledgements behind the
+	// invisible, and stalls this session's acknowledgments behind the
 	// same slow handler, so the simulator resends what it already sent.
 	//
 	// The caller's own options come after these, so anything it feels
@@ -739,7 +739,7 @@ func (a *Agent) spawn(fn func() error) {
 	// at all.  It narrows the window rather than closing it -- see
 	// moveTo, which refuses outright -- and what is left is a goroutine
 	// spawned into a session that is shutting down, which returns at
-	// once because everything it waits on is already cancelled.
+	// once because everything it waits on is already canceled.
 	select {
 	case <-a.done:
 		return
@@ -828,7 +828,7 @@ func (a *Agent) register() {
 	//
 	// This, and not the login response, is where the membership list
 	// comes from: login answers only what its options ask for, and
-	// "groups" is not among the ones this server honours -- so asking
+	// "groups" is not among the ones this server honors -- so asking
 	// there gets a missing field, which reads exactly like belonging to
 	// none. The simulator volunteers the real list moments after the
 	// handshake and again whenever it changes -- on the event queue,
@@ -959,14 +959,14 @@ func (a *Agent) register() {
 	}, msg.Inline())
 
 	// coarseTooHigh is the height byte at its ceiling.  A coarse
-	// location counts four metres to the step, so 255 is 1020 and is
+	// location counts four meters to the step, so 255 is 1020 and is
 	// also everything above it.
 	const coarseTooHigh = 255
 
 	// CoarseLocationUpdate is the only thing that keeps arriving as an
 	// avatar walks, so it is what stops the camera drifting away from
 	// one that moved without teleporting.  It is coarse -- whole
-	// metres, and four of them vertically -- which is ample for
+	// meters, and four of them vertically -- which is ample for
 	// deciding what is nearby.
 	a.Disp.MustHandle("CoarseLocationUpdate", func(p *msg.Packet) {
 		m := p.Message.(*msg.CoarseLocationUpdate)
@@ -976,10 +976,10 @@ func (a *Agent) register() {
 		}
 		l := m.Location[i]
 
-		// The height is one byte of four metre steps, so it stops at
+		// The height is one byte of four meter steps, so it stops at
 		// 1020 and says nothing at all about an avatar above that: 255
 		// means "higher than this can say", not "at 1020".  Taking it
-		// literally would put the camera a kilometre below an avatar on
+		// literally would put the camera a kilometer below an avatar on
 		// a skybox, and everything the region then describes would be
 		// judged against a place the avatar is not: the objects around
 		// it would arrive already out of range, and nothing describes
@@ -1162,7 +1162,7 @@ func (a *Agent) sendUseCircuitCode(ctx context.Context) error {
 // being opened.
 //
 // Its whole content is this session's three ids, which is why the same
-// one serves the region the avatar is in and every neighbour of it: see
+// one serves the region the avatar is in and every neighbor of it: see
 // openNeighbour, the other caller, and note that what makes a circuit
 // the root is CompleteAgentMovement rather than anything here.
 func (a *Agent) useCircuitCode() *msg.UseCircuitCode {
@@ -1287,13 +1287,13 @@ func (a *Agent) RegionName() string {
 //
 // Ordinarily that is what the simulator last said outright --
 // AgentMovementComplete when the avatar arrived, and
-// CoarseLocationUpdate as it moves, which is whole metres and arrives
+// CoarseLocationUpdate as it moves, which is whole meters and arrives
 // every few seconds.
 //
 // A seated avatar is the exception, and it is worth the special case.
-// Sitting on something MOVES the avatar, up to about ten metres, and the
+// Sitting on something MOVES the avatar, up to about ten meters, and the
 // coarse update saying where it ended up can be seconds behind: measured
-// on Agni, a sit that carried the avatar three metres still read as the
+// on Agni, a sit that carried the avatar three meters still read as the
 // old position for about ten seconds afterwards.  Meanwhile the exact
 // answer is already in hand, because the update that seats an avatar
 // carries its position as an offset from the seat -- so a seated
@@ -1302,7 +1302,7 @@ func (a *Agent) RegionName() string {
 //
 // It falls back to the coarse answer whenever the seat cannot be
 // resolved, which is the ordinary case for a seat nothing has described:
-// stale by a few metres beats a confident zero.
+// stale by a few meters beats a confident zero.
 func (a *Agent) Position() msg.Vector3 {
 	a.mu.RLock()
 	at := a.position

@@ -306,7 +306,7 @@ func TestAddNeverBlocks(t *testing.T) {
 }
 
 // TestNeighbourRegionsAreNotOfferedToTheViewer: the event carries a
-// neighbouring simulator's UDP address and seed capability, and a
+// neighboring simulator's UDP address and seed capability, and a
 // viewer given it opens a direct connection there using this session's
 // credentials -- to a simulator that has never heard of slgod.
 func TestNeighbourRegionsAreNotOfferedToTheViewer(t *testing.T) {
@@ -402,7 +402,7 @@ func TestEventsAreCopied(t *testing.T) {
 // TestANeighbouringSimulatorsAddressIsNeverGivenToAViewer: the hole
 // that was open for as long as this front end had existed, and the one
 // that needed nothing to happen to reach it -- an ordinary region
-// introduces its neighbours several times a minute.
+// introduces its neighbors several times a minute.
 //
 // EnableSimulator carries a handle, an IP and a port and no capability,
 // and a capability is not what opening a circuit takes: UseCircuitCode

@@ -1,7 +1,7 @@
 package slate
 
 // near: a tolerance a state expectation states, wider than the one the
-// reading's quantisation gives it.
+// reading's quantization gives it.
 // Why: doc/slate-language.md#tolerances
 
 import (
@@ -74,7 +74,7 @@ func TestNearIsRefusedWhereNothingIsNumeric(t *testing.T) {
 	checkErr(t, h+"expect position a is 1 2 3 near -0.5\n", "near -0.5 is not above 0")
 	checkErr(t, h+"expect position a is 1 2 3 near 0 percent\n", "near 0 is not above 0")
 	checkErr(t, h+"expect position a is 1 2 3 near 100.5 percent\n", "near 100.5 percent is above 100")
-	mustCheck(t, h+"expect position a is 1 2 3 near 150\n") // 150 m is a number of metres, not a percentage
+	mustCheck(t, h+"expect position a is 1 2 3 near 150\n") // 150 m is a number of meters, not a percentage
 }
 
 // The edge of each numeric kind, compared directly: a component at the
@@ -123,8 +123,8 @@ func TestNearTheEdgeOfEachKind(t *testing.T) {
 			t.Errorf("%s: %v, want %v", c.name, got, c.want)
 		}
 	}
-	// Never tighter than the reading is quantised: 1e-6 on a position still
-	// allows a millimetre, and a percentage of a zero component leaves the floor.
+	// Never tighter than the reading is quantized: 1e-6 on a position still
+	// allows a millimeter, and a percentage of a zero component leaves the floor.
 	tiny := &tolerance{amount: 1e-6}
 	if !kPosition.equalTol(&reading{vec: [3]float64{0.0009, 0, 0}}, &reading{}, tiny) {
 		t.Error("a tolerance below a millimetre made a position tighter than it is read")
@@ -151,7 +151,7 @@ func TestPositionNearMatchesAndFailsAtTheEdge(t *testing.T) {
 	mustHave(t, res,
 		"unmatched position sign is 10.006 20 30 near 0.005 within 150ms (tolerance 0.005)",
 		"; the nearest reading was 0.006 off, and at most 0.005 is allowed: position sign 10 20 30")
-	// Without it the same expectation is the millimetre one.
+	// Without it the same expectation is the millimeter one.
 	wantExit(t, play(t, f, hdr+"say \"go\" on 0\nexpect position sign is 10.004 20 30 within 150ms\n"), 1)
 	// A matching reading says how far off it was.
 	res = play(t, f, hdr+"say \"go\" on 0\nexpect position sign is 10.004 20 30 near 0.005 within 300ms\nexpect position sign is 10 20 30 near 0.005 within 300ms\n")
@@ -160,7 +160,7 @@ func TestPositionNearMatchesAndFailsAtTheEdge(t *testing.T) {
 }
 
 // The motivating case: dragged on the screen and dragged back lands a few
-// millimetres from where it was, and resized and resized back a little off.
+// millimeters from where it was, and resized and resized back a little off.
 func TestADraggedAndDraggedBackObjectComesBackWithinNear(t *testing.T) {
 	f := newGrid(t)
 	wornSign(f)
@@ -230,7 +230,7 @@ func TestNearChangesNeedsAReadingOutsideTheTolerance(t *testing.T) {
 }
 
 func TestNearIsOnTheNegativeFormsToo(t *testing.T) {
-	// 4 mm is no change within 5 mm, and is one within the default millimetre.
+	// 4 mm is no change within 5 mm, and is one within the default millimeter.
 	moved := func() *fakeGrid {
 		f := newGrid(t)
 		f.change(signLocal, withPos(1, 1, 1))

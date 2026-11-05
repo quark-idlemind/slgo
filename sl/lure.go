@@ -374,7 +374,7 @@ func (w *Session) OfferTeleport(ctx context.Context, to msg.UUID, note string) e
 	// Terminated, like every other string this tree puts on the wire.
 	// Without the NUL the simulator reads the last byte as the
 	// terminator and the note arrives one character short -- measured,
-	// with a position of 4004 metres arriving as 400.
+	// with a position of 4004 meters arriving as 400.
 	m.Info.Message = append([]byte(text), 0)
 	m.TargetData = []msg.StartLure_TargetData{{TargetID: to}}
 	return w.Send(ctx, m)
@@ -382,7 +382,7 @@ func (w *Session) OfferTeleport(ctx context.Context, to msg.UUID, note string) e
 
 // slurl is where this avatar is, in the form a viewer writes into a
 // teleport offer: the grid's map URL, the region escaped, and the
-// position rounded to whole metres (llslurl.cpp, getSLURLString).
+// position rounded to whole meters (llslurl.cpp, getSLURLString).
 //
 // Empty when the position cannot be read.  It is decoration on an
 // offer that works without it.

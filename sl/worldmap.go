@@ -17,7 +17,7 @@ package sl
 //     among however many others begin with it.  The list is handed over
 //     whole: choosing a row would be choosing for whoever typed the name.
 //   - It ends with a block that is not a region -- X=0, Y=0, Access=255
-//     -- recognised here by that shape, as the viewer recognises it.  A
+//     -- recognized here by that shape, as the viewer recognizes it.  A
 //     name that matches nothing comes back as that block alone, which is
 //     how the grid says there is no such region.
 //   - One answer can be several packets, so blocks accumulate until that
@@ -41,7 +41,7 @@ package sl
 // Half of that is fixable and is fixed here.  The search is by prefix,
 // so a block whose name does not begin with the name THIS call asked
 // about is not an answer to this question, and is dropped.  That is the
-// search's own behaviour rather than a guess about it, and it keeps
+// search's own behavior rather than a guess about it, and it keeps
 // another query's regions out of this one's list entirely.
 //
 // The other half is not fixable and is worth knowing before trusting a

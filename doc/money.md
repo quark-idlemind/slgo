@@ -303,7 +303,7 @@ Ruled out: `ObjectSaleInfo`, `ParcelPropertiesUpdate`, `UpdateInventoryItem`,
 price, but it is the price of something this avatar sells or an item
 described, and nothing is spent by sending it. `DirLandQuery` has a price
 to search by. `RegionInfo` and `GodUpdateRegionInfo` carry the estate's
-land price per metre. `TestEveryMessageThatCarriesAPriceIsCheckedOrListed`
+land price per meter. `TestEveryMessageThatCarriesAPriceIsCheckedOrListed`
 in `internal/pay` walks the whole template so that a message added to it
 with a field that looks like L$ is either checked or listed there with
 why.
@@ -372,7 +372,7 @@ dispatch goroutine then. So a `Log` written after the return raced the
 read, under `-race`, and a reply that came first found none to write to.
 The log is now given to the session when it is made -- `Server.SetLog`,
 called before the first login, or `SetBase` -- and the avatar's own id
-with it, so that the reply is recognised as this avatar's before the
+with it, so that the reply is recognized as this avatar's before the
 session says which avatar it is. `TestASessionLogsFromTheFirstMessageItHears`
 sends a `MoneyBalanceReply` the moment the avatar arrives and fails
 for a log assigned afterwards. Nothing in slgod assigns `Hosted.Log`
@@ -388,7 +388,7 @@ next line of a script is not an answer to a question it never saw, and
 a script that meant to pay says so on the line that pays.
 
 A payment made to this avatar is printed as a line, like an instant
-message, with the payer labelled as `Sender.Label` labels anybody.
+message, with the payer labeled as `Sender.Label` labels anybody.
 
 Accepting a group invitation (`answer`, `accept`) is a purchase to the
 rules, and is refused under a profile that does not say `pay = on`,

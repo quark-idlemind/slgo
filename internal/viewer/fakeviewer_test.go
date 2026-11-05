@@ -74,7 +74,7 @@ func (v *fakeViewer) run() {
 			}
 		}
 		if len(body) == 0 {
-			continue // nothing but acknowledgements
+			continue // nothing but acknowledgments
 		}
 		m, err := msg.DecodeBody(body)
 		if err != nil {
@@ -344,7 +344,7 @@ func TestEndpointAcknowledgesTheViewer(t *testing.T) {
 	v.connect(7)
 	waitRecorded(t, census, "CompleteAgentMovement", FromViewer, 5*time.Second)
 
-	// PacketAck is how the acknowledgements come back when there is
+	// PacketAck is how the acknowledgments come back when there is
 	// no other traffic to carry them.
 	v.waitSeen(t, "PacketAck", 5*time.Second)
 }
