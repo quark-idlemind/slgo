@@ -175,12 +175,12 @@ func TestCheckCommandLineChecksWordsFromTheShellsLists(t *testing.T) {
 		{"man sethome", `man: no command called "sethome"`},
 		{"man landmark tp", "man: one command at a time"},
 
-		// neighbours: on or off, read off its own parameters.
-		{"neighbours", ""},
-		{"neighbours on", ""},
-		{"neighbours OFF", ""},
-		{"neighbours yes", `neighbours: "yes" is neither on nor off`},
-		{"neighbours on off", "neighbours: one word at most"},
+		// neighbors: on or off, read off its own parameters.
+		{"neighbors", ""},
+		{"neighbors on", ""},
+		{"neighbors OFF", ""},
+		{"neighbors yes", `neighbors: "yes" is neither on nor off`},
+		{"neighbors on off", "neighbors: one word at most"},
 
 		// put: the roundings and the filters, by put's own method.
 		{"put --round up photo.png", ""},
@@ -254,7 +254,7 @@ func TestCheckCommandLineRefusesUsageSyntax(t *testing.T) {
 		{"say TEXT ...]", `say: "...]" is the usage line's [...]`},
 
 		// Alternatives: the usage line's own, or with its placeholder in.
-		{"neighbours on|off", `neighbours: "on|off" is the usage line's A|B`},
+		{"neighbors on|off", `neighbors: "on|off" is the usage line's A|B`},
 		{"wear PATH|UUID", `wear: "PATH|UUID" is the usage line's A|B`},
 		{"take --into Objects Example|UUID", `take: "Example|UUID" is the usage line's A|B`},
 

@@ -129,7 +129,7 @@ credentials anyone else can:
     password        = $1$<the md5 of the password>
     start           = last
     group           = Example Builders
-    neighbours      = yes
+    neighbors       = yes
     viewer_password = $1$<a second one, for handing sessions to a viewer>
 
 The file name is the profile name: the one above as `~/.config/slgo/example`
@@ -141,11 +141,11 @@ is the profile `example`, which is what `slgod example` and
 at login time leaves the avatar somewhere else entirely; see "When home
 is down" below. `group` is
 the group to act as, which decides more than it looks like -- see "The
-group an avatar acts as" below. `neighbours` is whether this avatar
+group an avatar acts as" below. `neighbors` (or `neighbours`) is whether this avatar
 holds a circuit to the regions beside it, which is what walking over a
 border needs and what a benchmark has no use for; it wins over `slgod
--neighbours`, which is what profiles that say nothing get, and `slsh
-neighbours` turns it over on a session that is already up.
+-neighbors`, which is what profiles that say nothing get, and `slsh
+neighbors` turns it over on a session that is already up.
 `viewer_password` is what makes a session handable to a real viewer, and
 is described with `-viewer`. `pay`, `pay_max`, `pay_daily` and `pay_to`
 are what this avatar's programs may pay or buy, and from whom; both are
@@ -881,7 +881,7 @@ half a minute unless `-t` says otherwise, and `-t` needs a unit -- `-t
 | `-start WHERE` | override every profile's start location |
 | `-viewer ADDR` | serve viewer logins here, so a real viewer can be handed a session; always TLS |
 | `-viewer-cert FILE`, `-viewer-key FILE` | serve that endpoint with your own certificate rather than the kept self-signed one |
-| `-neighbours` | hold a circuit to each neighbouring region, so an avatar can walk over a border; a profile's own `neighbours` setting wins over it |
+| `-neighbors` (or `-neighbours`) | hold a circuit to each neighbouring region, so an avatar can walk over a border; a profile's own `neighbors` setting wins over it |
 | `-log FILE` | append the log to this file, mode 600, rather than standard error; its directory is made 700, and refused if others can open it |
 | `-log-secrets` | for debugging: log session ids, circuit codes and capability URLs whole. The log then holds every session's credentials |
 | `-trace FILE` | write a packet trace, mode 600 |

@@ -218,7 +218,7 @@ somebody else is `lure`.
 
 See also: `regions` for finding out what a name matches and where it is,
 `where` for the position this is given in, `look` for what the region
-underfoot says about itself, `neighbours` for walking over a border
+underfoot says about itself, `neighbors` for walking over a border
 into the next region rather than teleporting across the grid, `move`
 for shifting an object rather than the avatar, `landmark` for a place
 said by name in inventory and for setting where home is, and `answer`

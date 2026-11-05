@@ -69,7 +69,7 @@
             <tr><td><code>-v</code></td><td>off</td><td class="what">Also log every grid message slgod has no handler for.</td></tr>
             <tr><td><code>-start WHERE</code></td><td>—</td><td class="what">Override every profile's <code>start</code>: <code>last</code>, <code>home</code> or a region name.</td></tr>
             <tr><td><code>-group G</code>, <code>-group PROFILE=G</code></td><td>—</td><td class="what">Group to act as, by name or uuid, overriding the profile. Repeatable.</td></tr>
-            <tr><td><code>-neighbours</code></td><td>off</td><td class="what">Hold neighbouring regions' circuits for profiles that do not say, for smoother border crossings.</td></tr>
+            <tr><td><code>-neighbors</code> (<code>-neighbours</code>)</td><td>off</td><td class="what">Hold neighbouring regions' circuits for profiles that do not say, for smoother border crossings.</td></tr>
             <tr><td><code>-viewer ADDR</code></td><td>—</td><td class="what">Serve viewer logins over HTTPS here, so a real viewer can take a session over. Must include a port, e.g. <code>127.0.0.1:9000</code>.</td></tr>
             <tr><td><code>-viewer-cert FILE</code>, <code>-viewer-key FILE</code></td><td>self-signed, in <code>~/.config/slgod</code></td><td class="what">Your own certificate for <code>-viewer</code>. Give both, and only with <code>-viewer</code>.</td></tr>
             <tr><td><code>-no-auth</code></td><td>off</td><td class="what">No TLS and no secret. None of the shipped clients can connect to it. Do not use it.</td></tr>
@@ -330,7 +330,7 @@ last            = Resident
 password        = $1$&lt;the md5 of the password&gt;
 start           = last
 group           = Example Builders
-neighbours      = yes</pre></div>
+neighbors       = yes</pre></div>
         <div class="tablewrap"><table>
           <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
           <tbody>
@@ -338,7 +338,7 @@ neighbours      = yes</pre></div>
             <tr><td><code>password</code> (<code>passwd</code>)</td><td class="what">Required. <code>$1$</code> plus the md5 of the password (make it with <code>slhash</code>), or plain text. Either is enough to log the account in.</td></tr>
             <tr><td><code>start</code></td><td class="what"><code>last</code>, <code>home</code> or a region name.</td></tr>
             <tr><td><code>group</code></td><td class="what">Group to act as, by name or uuid.</td></tr>
-            <tr><td><code>neighbours</code> (<code>neighbors</code>)</td><td class="what"><code>yes</code>/<code>no</code>. Hold neighbouring regions' circuits.</td></tr>
+            <tr><td><code>neighbors</code> (<code>neighbours</code>)</td><td class="what"><code>yes</code>/<code>no</code>. Hold neighbouring regions' circuits.</td></tr>
             <tr><td><code>viewer_password</code></td><td class="what">The password a real viewer must give to take this session over through <code>-viewer</code>. Without it, the session cannot be handed over.</td></tr>
             <tr id="pay"><td><code>pay</code></td><td class="what"><code>on</code>/<code>off</code>. Whether programs may pay or buy with L$ as this avatar. Off unless present. slgod checks every payment and purchase a client sends -- objects, land, group joins and invitations, classifieds; a session held with <code>--direct</code> checks its own. A viewer attached through slgod is not checked.</td></tr>
             <tr><td><code>pay_max</code></td><td class="what">The most one payment or purchase may be, in L$. 10 when not given.</td></tr>

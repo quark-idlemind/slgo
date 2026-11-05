@@ -74,12 +74,13 @@ func main() {
 				" kept in slgod's config directory")
 		viewerKey = flag.String("viewer-key", "",
 			"PEM private key for -viewer-cert")
-		neighbours = flag.Bool("neighbours", false,
+		neighbors = flag.Bool("neighbors", false,
 			"hold a circuit to each neighbouring region, so the avatar can walk over a border;"+
-				" a profile's own neighbours setting wins over this")
+				" a profile's own neighbors setting wins over this")
 		group groupFlag
 		ver   = flag.Bool("version", false, "say which build this is, and exit")
 	)
+	flag.BoolVar(neighbors, "neighbours", false, "the same as -neighbors")
 	flag.Var(&group, "group",
 		"group to act as, by name or uuid, or PROFILE=GROUP; overrides the profile's own")
 	flag.Usage = func() {
@@ -340,8 +341,8 @@ func main() {
 			// acts where its avatar stands does not.  Who
 			// decides is holdNeighbours; either way it can
 			// be turned over afterwards, see
-			// agent.SetNeighbours and slsh's neighbours.
-			Neighbours: holdNeighbours(login, *neighbours),
+			// agent.SetNeighbours and slsh's neighbors.
+			Neighbours: holdNeighbours(login, *neighbors),
 			// So that a child circuit opening and closing is
 			// visible.  A client can list what is held now,
 			// but only as it stands: one that opened and
@@ -619,7 +620,7 @@ func main() {
 // holdNeighbours decides whether one session starts out holding
 // circuits to the regions around it.
 //
-// The profile wins where it has an opinion, and -neighbours is what the
+// The profile wins where it has an opinion, and -neighbors is what the
 // rest get.  That order and not the other one: the flag is the daemon
 // speaking for every avatar it holds, and the profile is one avatar
 // saying what it is for -- so a daemon started with the flag for the
@@ -629,10 +630,10 @@ func main() {
 //
 // -group goes the other way and is not an inconsistency: it can name
 // the profile it is for, so overruling one avatar there costs nobody
-// else anything, where a -neighbours that won would be paid for by
+// else anything, where a -neighbors that won would be paid for by
 // every session the daemon holds.
 //
-// Neither is the last word.  slsh's neighbours turns them over on a
+// Neither is the last word.  slsh's neighbors turns them over on a
 // session that is already up, which is the point of the whole thing;
 // this is only where it starts.
 func holdNeighbours(l agent.Login, flag bool) bool {

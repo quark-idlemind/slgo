@@ -43,7 +43,7 @@ package main
 //
 // Some operands are not names of things in the world but words from a
 // list the shell itself keeps: set's setting names, maturity's ratings,
-// help's groups, man's commands, neighbours' on and off, and the values
+// help's groups, man's commands, neighbors' on and off, and the values
 // of put's --round and --filter, wear's --at and perms' letters.  Those
 // ARE checked, because a model will write "set display_name ..." with
 // every appearance of confidence, and the shell's answer to it is a
@@ -175,14 +175,14 @@ type askOperandRule func(opts any, operands []string, placeholder func(string) b
 // askOperandRules is every command with such a list, by name.  See the
 // head of this file for why each is checked by the command's own code.
 var askOperandRules = map[string]askOperandRule{
-	"set":        askCheckSet,
-	"maturity":   askCheckMaturity,
-	"help":       askCheckHelp,
-	"man":        askCheckMan,
-	"neighbours": askCheckNeighbours,
-	"put":        askCheckPut,
-	"wear":       askCheckWear,
-	"perms":      askCheckPerms,
+	"set":       askCheckSet,
+	"maturity":  askCheckMaturity,
+	"help":      askCheckHelp,
+	"man":       askCheckMan,
+	"neighbors": askCheckNeighbors,
+	"put":       askCheckPut,
+	"wear":      askCheckWear,
+	"perms":     askCheckPerms,
 }
 
 // checkOperands runs c's rule, if it has one, under whichever name the
@@ -295,11 +295,11 @@ func askCheckMan(_ any, operands []string, placeholder func(string) bool) error 
 	return nil
 }
 
-// askCheckNeighbours is neighbours [on|off].  The words are read off the
+// askCheckNeighbors is neighbors [on|off].  The words are read off the
 // command's own parameters, which name them, rather than written out
 // again here; the command compares them without regard to case.
-func askCheckNeighbours(_ any, operands []string, _ func(string) bool) error {
-	words := strings.Split(strings.Trim(commands["neighbours"].params, "[]"), "|")
+func askCheckNeighbors(_ any, operands []string, _ func(string) bool) error {
+	words := strings.Split(strings.Trim(commands["neighbors"].params, "[]"), "|")
 	switch len(operands) {
 	case 0:
 		return nil

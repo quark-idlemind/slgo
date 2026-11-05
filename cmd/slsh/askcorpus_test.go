@@ -222,7 +222,7 @@ var askQuestions = []askQuestion{
 	{"do I save an object as a json file", "dump", 3},
 	{"do I build an object from a json file", "rez", 3},
 	{"do I change my maturity rating to adult", "maturity", 3},
-	{"do I walk across the border into the next region", "neighbours", 3},
+	{"do I walk across the border into the next region", "neighbors", 3},
 	{"do I open a real viewer on this avatar", "viewer", 3},
 	{"do I find what is waiting for me to answer", "waiting", 3},
 	{"do I walk over to that spot", "walk", 3},

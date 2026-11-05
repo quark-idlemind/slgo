@@ -19,6 +19,16 @@ import (
 	"github.com/quark-idlemind/slgo/sl"
 )
 
+// neighbors is held in a variable so that both spellings can share it.
+var neighbors = &command{
+	params:   "[on|off]",
+	flags:    func() any { return new(helpOnly) },
+	brief:    "the circuits held to the regions around this one, which walking over a border needs",
+	keywords: "neighbours border crossing adjacent regions circuits walk cross region edge sim",
+	man:      "neighbors",
+	run:      cmdNeighbors,
+}
+
 var worldCommands = map[string]*command{
 	"where": {
 		flags:    func() any { return new(helpOnly) },
@@ -72,14 +82,9 @@ var worldCommands = map[string]*command{
 		man:      "regions",
 		run:      cmdRegions,
 	},
-	"neighbours": {
-		params:   "[on|off]",
-		flags:    func() any { return new(helpOnly) },
-		brief:    "the circuits held to the regions around this one, which walking over a border needs",
-		keywords: "neighbors border crossing adjacent regions circuits walk cross region edge sim",
-		man:      "neighbours",
-		run:      cmdNeighbours,
-	},
+	// "neighbours" is the same command spelt the other way.
+	"neighbors":  neighbors,
+	"neighbours": neighbors,
 	"caps": {
 		params:   "[TEXT]",
 		flags:    func() any { return new(helpOnly) },
@@ -324,7 +329,7 @@ func printRegions(out io.Writer, found []sl.MapRegion) {
 	}
 }
 
-// cmdNeighbours says what circuits this session holds to the regions
+// cmdNeighbors says what circuits this session holds to the regions
 // around it, and turns them on and off.
 //
 // It is the one command here that costs the daemon something lasting:
@@ -333,17 +338,17 @@ func printRegions(out io.Writer, found []sl.MapRegion) {
 // is on.  That is why it is off unless somebody says so, and why the
 // state is printed after a change rather than the change being silent.
 //
-// The argument is a word and not a flag.  "neighbours on" reads as the
-// sentence somebody means, where "neighbours --set" would be a flag
+// The argument is a word and not a flag.  "neighbors on" reads as the
+// sentence somebody means, where "neighbors --set" would be a flag
 // whose value is the whole of the command.
-func cmdNeighbours(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
+func cmdNeighbors(ctx context.Context, sh *Shell, out io.Writer, args []string) error {
 	var o helpOnly
-	args, done, err := subOptions("neighbours", &o, out, args)
+	args, done, err := subOptions("neighbors", &o, out, args)
 	if err != nil || done {
 		return err
 	}
 	if len(args) > 1 {
-		return usageError("neighbours")
+		return usageError("neighbors")
 	}
 
 	var n *sl.Neighbours
@@ -358,7 +363,7 @@ func cmdNeighbours(ctx context.Context, sh *Shell, out io.Writer, args []string)
 		case "off":
 			n, err = sh.s.SetNeighbours(ctx, false)
 		default:
-			return usageError("neighbours",
+			return usageError("neighbors",
 				fmt.Sprintf("%q is neither on nor off", args[0]))
 		}
 	} else {
@@ -367,11 +372,11 @@ func cmdNeighbours(ctx context.Context, sh *Shell, out io.Writer, args []string)
 	if err != nil {
 		return err
 	}
-	printNeighbours(out, n)
+	printNeighbors(out, n)
 	return nil
 }
 
-// printNeighbours writes the state and then a circuit to a line.
+// printNeighbors writes the state and then a circuit to a line.
 //
 // It follows printRegions' shape, for the reason printRegions is shared
 // with tp: these are regions, and somebody who has just run regions
@@ -384,19 +389,19 @@ func cmdNeighbours(ctx context.Context, sh *Shell, out io.Writer, args []string)
 // On with nothing held is said as "not yet" rather than as not being
 // near a border: an avatar in the middle of a region is offered its
 // edges too, and the first circuit is slow to come.  See
-// man/neighbours.md.
+// man/neighbors.md.
 // Why: doc/slsh.md#neighbours-on-and-no-circuit-yet
-func printNeighbours(out io.Writer, n *sl.Neighbours) {
+func printNeighbors(out io.Writer, n *sl.Neighbours) {
 	switch {
 	case !n.On:
-		fmt.Fprintln(out, "neighbours are off; this avatar cannot walk over a border")
+		fmt.Fprintln(out, "neighbors are off; this avatar cannot walk over a border")
 		return
 	case len(n.Held) == 0:
-		fmt.Fprintln(out, "neighbours are on; no circuit is open yet, "+
+		fmt.Fprintln(out, "neighbors are on; no circuit is open yet, "+
 			"and the first offer can take a minute to come round")
 		return
 	}
-	fmt.Fprintf(out, "neighbours are on, %d %s held\n",
+	fmt.Fprintf(out, "neighbors are on, %d %s held\n",
 		len(n.Held), plural(len(n.Held), "circuit", "circuits"))
 	for _, c := range n.Held {
 		x, y := msg.GridCoords(c.Handle)
@@ -420,7 +425,7 @@ func printNeighbours(out io.Writer, n *sl.Neighbours) {
 		// so the rare long one grows the line instead of losing an
 		// address.  The row is then 72 to 75 columns, which still has
 		// room for the four spaces man puts in front of the copy of it
-		// in neighbours.md.
+		// in neighbors.md.
 		fmt.Fprintf(out, "%-32s %5d, %-5d %-18s %d heard\n", name, x, y, c.Addr, c.Heard)
 	}
 }

@@ -339,7 +339,7 @@ options          = inventory-root, buddy-list , , login-flags
 
 // TestAProfileSaysWhetherThisAvatarHoldsItsNeighbours: three answers
 // and not two.  A profile that says nothing leaves the decision to
-// whoever starts the session -- slgod's -neighbours flag -- and one that
+// whoever starts the session -- slgod's -neighbors flag -- and one that
 // says either overrules it, so "absent" cannot be spelled the same way
 // as "no".
 func TestAProfileSaysWhetherThisAvatarHoldsItsNeighbours(t *testing.T) {
@@ -360,17 +360,17 @@ func TestAProfileSaysWhetherThisAvatarHoldsItsNeighbours(t *testing.T) {
 		{"zero", "0", false},
 	} {
 		writeProfile(t, dir, c.name,
-			"first=A\nlast=B\npassword=x\nneighbours = "+c.value+"\n", 0o600)
+			"first=A\nlast=B\npassword=x\nneighbors = "+c.value+"\n", 0o600)
 		l, err := LoadProfile(c.name)
 		if err != nil {
 			t.Fatalf("%q: %v", c.value, err)
 		}
 		if l.Neighbours == nil {
-			t.Errorf("neighbours = %q was not read at all", c.value)
+			t.Errorf("neighbors = %q was not read at all", c.value)
 			continue
 		}
 		if *l.Neighbours != c.want {
-			t.Errorf("neighbours = %q gave %v, want %v", c.value, *l.Neighbours, c.want)
+			t.Errorf("neighbors = %q gave %v, want %v", c.value, *l.Neighbours, c.want)
 		}
 	}
 
@@ -384,17 +384,17 @@ func TestAProfileSaysWhetherThisAvatarHoldsItsNeighbours(t *testing.T) {
 		t.Errorf("a profile that says nothing gave %v", *l.Neighbours)
 	}
 
-	// The American spelling, since it is a word with two of them and a
+	// The British spelling, since it is a word with two of them and a
 	// profile that used the other one would otherwise be an unknown
 	// setting.
-	writeProfile(t, dir, "spelled", "first=A\nlast=B\npassword=x\nneighbors = yes\n", 0o600)
+	writeProfile(t, dir, "spelled", "first=A\nlast=B\npassword=x\nneighbours = yes\n", 0o600)
 	if l, err := LoadProfile("spelled"); err != nil || l.Neighbours == nil || !*l.Neighbours {
-		t.Errorf("neighbors = yes gave %v, %v", l.Neighbours, err)
+		t.Errorf("neighbours = yes gave %v, %v", l.Neighbours, err)
 	}
 
 	// And a value that is neither, which has asked for something and
 	// must not be answered with the default in silence.
-	writeProfile(t, dir, "vague", "first=A\nlast=B\npassword=x\nneighbours = sometimes\n", 0o600)
+	writeProfile(t, dir, "vague", "first=A\nlast=B\npassword=x\nneighbors = sometimes\n", 0o600)
 	if _, err := LoadProfile("vague"); err == nil ||
 		!strings.Contains(err.Error(), "line 4") ||
 		!strings.Contains(err.Error(), "yes or no") {
@@ -434,6 +434,20 @@ func TestANeighboursSettingSurvivesBeingSavedAndReadBack(t *testing.T) {
 			t.Errorf("%s: saved %v, read back nothing", c.name, *c.set)
 		case c.set != nil && *got.Neighbours != *c.set:
 			t.Errorf("%s: saved %v, read back %v", c.name, *c.set, *got.Neighbours)
+		}
+		if c.set == nil {
+			continue
+		}
+		path, err := ProfilePath(c.name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains("\n"+string(body), "\nneighbors") {
+			t.Errorf("%s: saved without a neighbors line:\n%s", c.name, body)
 		}
 	}
 }

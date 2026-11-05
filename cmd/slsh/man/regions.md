@@ -70,5 +70,5 @@ map has no field for.
 
 See also: `look` for what the region underfoot says about itself,
 `where` for the position inside it, `tp` for going to one of these, and
-`neighbours` for the regions this one touches, which are the ones the
+`neighbors` for the regions this one touches, which are the ones the
 avatar can walk into.

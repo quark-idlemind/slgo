@@ -544,10 +544,10 @@ Credentials live one file per account under a private directory:
     password = $1$<the md5 of the password>
     start    = last
     group    = Builders
-    neighbours= yes
+    neighbors = yes
 
 Not every key is part of the login request. `group` is which group the
-avatar acts as once it is up, `neighbours` is whether to hold the child
+avatar acts as once it is up, `neighbors` is whether to hold the child
 circuits a border crossing needs, and `viewer_password` is what a real
 viewer must type to be handed this session -- deliberately not the
 account password, since nothing on the grid has ever seen it. `url`,
@@ -1083,7 +1083,7 @@ on the grid's map by the start of its name. `sit` sits on a thing or on
 the ground and `stand` gets up from either. `parcel` is the land under
 the avatar, drawn or listed, and `landmark` lists the landmarks in
 inventory, says where one goes, makes one and goes to one.
-`neighbours` says which circuits are held to the regions around this
+`neighbors` says which circuits are held to the regions around this
 one -- which is what walking over a border needs, and is off unless
 asked for.
 
@@ -2178,8 +2178,8 @@ Walking over a border works, but only with `neighbours` on. A simulator
 will not hand an avatar over to a client holding no child circuit to the
 region it is walking into, which is why the border used to be a wall: an
 avatar walked to Pelmar Reach's west edge, stopped dead at x=0 and stayed
-there. Hold the circuits -- `slsh neighbours on`, `slgod -neighbours`,
-`neighbours = yes` in a profile -- and the same walk was in Pelmar Mill
+there. Hold the circuits -- `slsh neighbors on`, `slgod -neighbors`,
+`neighbors = yes` in a profile -- and the same walk was in Pelmar Mill
 four and a half seconds after the key went down, with the region change
 reaching a client on the way. Off by default, because it costs a socket
 and a share of the traffic per surrounding region and a daemon acting

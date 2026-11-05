@@ -1124,7 +1124,7 @@ run against was capped.
 
 ## Neighbours on, and no circuit yet
 
-`neighbours` with the circuits on and none held is a state worth
+`neighbors` with the circuits on and none held is a state worth
 spelling out, and it is not what it was once documented as.  It was
 said to mean "not near a border", on the belief that a simulator offers
 nothing to an avatar in the middle of a region; measured on 2026-08-23,
@@ -1132,11 +1132,11 @@ the middle of a 256-metre region is offered all four edges.  What an
 empty listing means is almost always "not yet": the first circuit took
 between twenty and sixty seconds from turning them on, and the set went
 on growing for a minute after that.  See
-[cmd/slsh/man/neighbours.md](../cmd/slsh/man/neighbours.md).
+[cmd/slsh/man/neighbors.md](../cmd/slsh/man/neighbors.md).
 
 ## A neighbour with no handshake
 
-`neighbours` prints "(no handshake yet)" for a circuit without a
+`neighbors` prints "(no handshake yet)" for a circuit without a
 handshake, since the name arrives in the handshake and there is none to
 print.  Seeing it twice running does NOT mean the offer came to
 nothing: on 2026-08-23 three of the five simulators around one region

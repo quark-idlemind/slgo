@@ -76,7 +76,7 @@ type Login struct {
 	// answer cannot be the process's.
 	//
 	// A pointer because absent and false are different answers: unset
-	// leaves it to whoever starts the session -- slgod's -neighbours
+	// leaves it to whoever starts the session -- slgod's -neighbors
 	// flag -- and set wins over that either way.  Nothing in this
 	// package acts on it; see cmd/slgod, and agent.Options.Neighbours
 	// for what it becomes.
