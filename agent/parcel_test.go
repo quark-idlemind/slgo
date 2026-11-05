@@ -193,7 +193,7 @@ func overlayPacket4(seq int, fill byte) *msg.ParcelOverlay {
 }
 
 // TestTheOverlayAssembles: four packets of 1024 bytes are a 64 by 64
-// grid of 4 metre squares, and the whole point of it is that it
+// grid of 4 meter squares, and the whole point of it is that it
 // describes the region's layout without a request per parcel.
 func TestTheOverlayAssembles(t *testing.T) {
 	var p parcels
@@ -206,7 +206,7 @@ func TestTheOverlayAssembles(t *testing.T) {
 		t.Fatalf("complete %v after %d packets", o.Complete(), o.Packets())
 	}
 
-	// A square is 4 metres, the grid runs from the south west corner,
+	// A square is 4 meters, the grid runs from the south west corner,
 	// and each packet is sixteen rows: y=0 is the first packet and
 	// y=255 the last.
 	for _, c := range []struct {

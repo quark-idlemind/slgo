@@ -3,9 +3,9 @@ package msg
 // Where a region stands on the grid, and the number the protocol names
 // it by.
 //
-// The grid is squares of 256 metres.  A region's grid coordinates --
+// The grid is squares of 256 meters.  A region's grid coordinates --
 // (995, 997), the pair the map speaks in -- are the square it occupies;
-// its handle is the south-west corner of that square in metres, the x in
+// its handle is the south-west corner of that square in meters, the x in
 // the top half of a U64 and the y in the bottom (llregionhandle.h:34 and
 // :136, to_region_handle over grid_to_region_handle).  The two are one
 // fact written twice, and both spellings are needed in the same breath:
@@ -20,7 +20,7 @@ package msg
 // and the teleports there carried its handle as 1094014069892352, which
 // is what RegionHandle gives for that pair.  See doc/history/teleport.md.
 
-// regionWidth is how many metres a region is across, which is what
+// regionWidth is how many meters a region is across, which is what
 // separates the two spellings (indra_constants.h:38,
 // REGION_WIDTH_UNITS).
 const regionWidth = 256

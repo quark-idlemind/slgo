@@ -34,7 +34,7 @@
         <h2>Before you start</h2>
         <dl>
           <dt>Go 1.26.1 or newer</dt>
-          <dd>Get it from <a href="https://go.dev/dl/">go.dev/dl</a>, which has it for Linux and macOS alike. The version comes from <code>go.mod</code>. With an older Go, the default setting <code>GOTOOLCHAIN=auto</code> downloads 1.26.1 for you. If you have set <code>GOTOOLCHAIN=local</code>, the build refuses instead. (That is Go's standard behaviour, not something slgo does.)</dd>
+          <dd>Get it from <a href="https://go.dev/dl/">go.dev/dl</a>, which has it for Linux and macOS alike. The version comes from <code>go.mod</code>. With an older Go, the default setting <code>GOTOOLCHAIN=auto</code> downloads 1.26.1 for you. If you have set <code>GOTOOLCHAIN=local</code>, the build refuses instead. (That is Go's standard behavior, not something slgo does.)</dd>
           <dt>git</dt>
           <dd>To fetch the source. Build inside the git checkout: that is how each program's <code>--version</code> learns which commit it came from.</dd>
           <dt>openssl</dt>
@@ -103,7 +103,7 @@ start    = last</pre></div>
 <span class="p">$ </span>chmod 700 ~/.config/slgo; chmod 600 ~/.config/slgo/example</pre></div>
             <p>slhash prints its <code>Password:</code> prompt straight to the terminal, so it still asks you even though its output goes into the file.</p>
             <div class="note warn"><p class="label">Security</p><p>The digest is enough to log the account in. It keeps your plain password from being reused on other sites; it does not protect the Second Life account. Treat the profile like the password itself. slgod refuses a profile directory that group or others can open, and a profile file they can read, which is what the two <code>chmod</code> commands are for.</p></div>
-            <p>Other settings (<code>group</code>, <code>neighbours</code>, <code>viewer_password</code>, and the <code>pay</code> keys) are in the <a href="reference.html">reference</a>. An unknown key stops the profile from loading, so check spelling.</p>
+            <p>Other settings (<code>group</code>, <code>neighbors</code>, <code>viewer_password</code>, and the <code>pay</code> keys) are in the <a href="reference.html">reference</a>. An unknown key stops the profile from loading, so check spelling.</p>
           </div></li>
 
           <li><div class="step-body">

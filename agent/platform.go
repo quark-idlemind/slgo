@@ -4,7 +4,7 @@ package agent
 //
 // A viewer sends four of these: a three letter platform key, the
 // pointer width of the build, a dotted version number, and the name a
-// human would recognise -- "mac", 64, "15.7.7", "macOS 15.7.7".  None of
+// human would recognize -- "mac", 64, "15.7.7", "macOS 15.7.7".  None of
 // it is load bearing; Linden Lab keeps it for statistics and for
 // deciding whether a client is too old to let in.
 //

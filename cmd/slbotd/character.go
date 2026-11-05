@@ -156,7 +156,7 @@ func includePath(line string) (string, bool) {
 // may be empty.
 //
 // The directory is listed rather than guessed at, so that one rule
-// covers every way somebody might have spelt the name.  Guessing means
+// covers every way somebody might have spelled the name.  Guessing means
 // a fixed set of candidate filenames, and the one spelling that was
 // used is always the one nobody thought of.
 func characterFiles(dir string, who msg.UUID, name string) (general, mine string, err error) {
@@ -198,7 +198,7 @@ func characterFiles(dir string, who msg.UUID, name string) (general, mine string
 	return general, mine, nil
 }
 
-// stripSuffix takes ".txt" off a filename, however it was capitalised.
+// stripSuffix takes ".txt" off a filename, however it was capitalized.
 //
 // Case-insensitively, because the name in front of it is matched that
 // way too and a directory where "Example Resident.TXT" is somebody

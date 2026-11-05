@@ -37,7 +37,7 @@ func TestTheNeighboursCrossTheWireFieldByField(t *testing.T) {
 				Handshook: true,
 				Heard:     412,
 			},
-			// One that was dialled and never answered, which is an
+			// One that was dialed and never answered, which is an
 			// offer that came to nothing and has to be visible as
 			// one.
 			{Handle: msg.RegionHandle(43648, 43647), Address: "203.0.113.12:13011"},
@@ -104,7 +104,7 @@ func TestADirectSessionAnswersForItsOwnNeighbours(t *testing.T) {
 
 // TestBothBackendsAnswerTheSameThreeRequests: a program is supposed to
 // work the same whichever backend it got, and this is the one thing
-// about neighbours that can be compared without a grid -- that asking
+// about neighbors that can be compared without a grid -- that asking
 // changes nothing, that on comes back on, and that off comes back off
 // with nothing held.
 //

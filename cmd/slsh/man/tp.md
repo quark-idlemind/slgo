@@ -3,7 +3,7 @@ name, or home.  It waits for the arrival rather than reporting the
 request.  What is printed afterwards is where the avatar actually
 ended up, read back, and not the point that was asked for.
 
-Three numbers and nothing else -- X Y Z, in this region's metres -- is
+Three numbers and nothing else -- X Y Z, in this region's meters -- is
 a move to that position.  The word `home` on its own is this account's
 home position.  Anything else is a region's name, joined with spaces so
 that a name with one in it needs no quoting, and the last three words
@@ -55,19 +55,19 @@ to go there and then set it.
 
 ## A position outside this region is the region it really is in
 
-A region is 256 metres square and the grid is regions laid edge to
+A region is 256 meters square and the grid is regions laid edge to
 edge, so x of 300 is not an error and not a point in this region: it is
-44 metres into the region to the east.  x of -10 is 246 metres into the
+44 meters into the region to the east.  x of -10 is 246 meters into the
 one to the west.  The shell works out which region owns the point and
 teleports there, the way the 25th hour of Monday is one in the morning
 on Tuesday.
 
-    tp 300 128 25          44 metres into the region east of here
-    tp -10 128 25          246 metres into the region west of here
-    tp 128 -1 25           255 metres into the region to the south
+    tp 300 128 25          44 meters into the region east of here
+    tp -10 128 25          246 meters into the region west of here
+    tp 128 -1 25           255 meters into the region to the south
 
-It generalises as far as the arithmetic does.  x of 1000 is three
-regions east and 232 metres in.  The line printed before the waiting
+It generalizes as far as the arithmetic does.  x of 1000 is three
+regions east and 232 meters in.  The line printed before the waiting
 names the region by its square on the grid rather than by name; what is
 printed after the arrival is the name, read back with the position.
 
@@ -79,22 +79,22 @@ here instead.
 
 A coordinate written with a leading `~` is measured from where the
 avatar is standing rather than from the region's corner.  `~` on its
-own is that axis left alone, `~10` is ten metres further along it, and
-`~-10` is ten metres back:
+own is that axis left alone, `~10` is ten meters further along it, and
+`~-10` is ten meters back:
 
-    tp ~10 ~ ~             ten metres east, same y, same height
-    tp ~ ~ ~50             fifty metres up, without moving
+    tp ~10 ~ ~             ten meters east, same y, same height
+    tp ~ ~ ~50             fifty meters up, without moving
     tp 128 128 ~           the middle of the region, same height
-    tp ~-5 ~-5 ~           five metres back on both axes
+    tp ~-5 ~-5 ~           five meters back on both axes
 
 It is per axis, which is why it is a mark on the number and not an
 option: an option would make all three relative or none.  A bare `-10`
-already means ten metres west of this region's corner -- a real place
+already means ten meters west of this region's corner -- a real place
 in the region next door -- so a leading minus cannot also mean "ten
-metres back".
+meters back".
 
 Relative and outside-the-region compose: from x of 100, `tp ~300 ~ ~`
-is x of 400, which is 144 metres into the region to the east.
+is x of 400, which is 144 meters into the region to the east.
 
 Two of the same relative teleport go twice as far, where two of the
 same absolute one go nowhere the second time.  That is the point of it.
@@ -171,10 +171,10 @@ wait and says so.
 
 The height is the simulator's to settle.  The avatar arrives at
 whichever is higher of the height asked for and the ground under the
-point, plus about a metre.  Asking for nothing is asking for ground
+point, plus about a meter.  Asking for nothing is asking for ground
 level rather than for a fall.  The line printed afterwards is the
 position to believe -- with the one exception `where` explains: above
-1020 metres a read-back is the height the arrival stated, not the
+1020 meters a read-back is the height the arrival stated, not the
 height the avatar may since have fallen or settled to.
 
 A teleport within a region that is refused -- a parcel that will not
@@ -218,7 +218,7 @@ somebody else is `lure`.
 
 See also: `regions` for finding out what a name matches and where it is,
 `where` for the position this is given in, `look` for what the region
-underfoot says about itself, `neighbours` for walking over a border
+underfoot says about itself, `neighbors` for walking over a border
 into the next region rather than teleporting across the grid, `move`
 for shifting an object rather than the avatar, `landmark` for a place
 said by name in inventory and for setting where home is, and `answer`

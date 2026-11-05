@@ -1,7 +1,7 @@
 package slate
 
 // The position and size readings: a prim's Seen.Position and Seen.Scale,
-// compared within a millimetre on each axis.
+// compared within a millimeter on each axis.
 // Why: doc/slate-runner.md#position-and-size
 
 import (
@@ -64,7 +64,7 @@ func TestPositionAndSizeParseAndCheck(t *testing.T) {
 	checkErr(t, h+"expect size a is 0 1 1\n", "size 0 is not above 0")
 	checkErr(t, h+"expect size a is 1 -0.5 1\n", "size -0.5 is not above 0")
 	checkErr(t, h+"expect size a becomes 1 1 0\n", "size 0 is not above 0")
-	// A vector is no colour, a pair or a number.
+	// A vector is no color, a pair or a number.
 	checkErr(t, h+"expect position a is any within 1s as $v\nthen expect colour a face 0 is $v\n", "capture type mismatch")
 	checkErr(t, h+"expect offset a face 0 is any within 1s as $o\nthen expect position a is $o\n", "capture type mismatch")
 	checkErr(t, h+"expect position a is any within 1s as $v\nthen expect rotation a face 0 is $v\n", "capture type mismatch")
@@ -122,7 +122,7 @@ expect position sign changes within 1s
 expect no size sign changes within 300ms
 `)
 	wantExit(t, res, 0)
-	// A move of half a millimetre is not a change; two are.
+	// A move of half a millimeter is not a change; two are.
 	f = newGrid(t)
 	f.change(signLocal, withScale(1, 1, 1))
 	f.whenSaid("go", func() { f.changeAfter(t, 30*time.Millisecond, signLocal, withScale(1.0005, 1, 1)) })

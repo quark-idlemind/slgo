@@ -55,18 +55,18 @@ on inventing a duration, not a guarantee, and about one reply in
 twenty-five contradicted the hint outright. A better model is the fix
 for that, not a longer sentence in `Medium`.
 
-## Why the note is three labelled lines
+## Why the note is three labeled lines
 
-`Summarise` asks for three labelled lines because asking in prose does
+`Summarise` asks for three labeled lines because asking in prose does
 not work, at any size worth running. The first version of it said
 "write a brief note, in the third person, of what has passed between
 them" and it was measured against both models to hand: the 0.5B
 answered with fragments of the transcript separated by rules, and the
-3B answered by copying the exchange back verbatim. Neither summarised
+3B answered by copying the exchange back verbatim. Neither summarized
 anything, and the name the person had given -- the single most useful
 fact in the conversation -- was lost by both.
 
-Three labelled lines with a rule for the empty case work on the 3B
+Three labeled lines with a rule for the empty case work on the 3B
 first time and keep exactly what is worth keeping. Measured on the
 same exchange:
 
@@ -78,7 +78,7 @@ And they survive being folded again, which is the property the whole
 thing rests on: fed that note plus four more turns, the next fold kept
 the name, the trade and the promise, and added the new topics to the
 middle line. A prose note has nothing to hold on to and drifts; a
-labelled one has three places to put things and keeps them.
+labeled one has three places to put things and keeps them.
 
 ## Two models talking to each other
 

@@ -141,7 +141,7 @@ func (w waiter) recorded() bool {
 	return false
 }
 
-// what a person sees: who is asking, labelled when it is an object or a
+// what a person sees: who is asking, labeled when it is an object or a
 // group, and what for.
 func (w waiter) who() string {
 	switch {

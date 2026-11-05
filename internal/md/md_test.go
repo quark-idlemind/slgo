@@ -442,7 +442,7 @@ func TestFencedLanguageTagIsDropped(t *testing.T) {
 
 func TestWrapCountsStyleAsZeroWidth(t *testing.T) {
 	// A bold word must wrap as if the SGR were not there; otherwise a
-	// paragraph of emphasised words wraps early and looks ragged.
+	// paragraph of emphasized words wraps early and looks ragged.
 	src := "**one** **two** **three** **four**"
 	got := RenderWidth(src, 18)
 	for _, line := range vislines(got) {

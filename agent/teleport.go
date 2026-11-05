@@ -43,7 +43,7 @@ import (
 // all three are wanted.  The old region's remaining events are not
 // handed to clients while the avatar is arriving somewhere else, because
 // this goroutine is the one that would hand them over.  The poll against
-// the region being left is cancelled from inside its own deliver, which
+// the region being left is canceled from inside its own deliver, which
 // is the path stopEventQueue was written for -- it cancels and does not
 // wait, precisely so that the caller may be the poll itself.  And two
 // moves cannot interleave, since a second finish cannot be delivered
@@ -55,7 +55,7 @@ import (
 // client attached to this session hears nothing from the queue for that
 // long.  The alternative is worse: a move on its own goroutine would
 // have the region left behind still being relayed to clients from a
-// poll the move is in the middle of cancelling.
+// poll the move is in the middle of canceling.
 func (a *Agent) noteTeleportFinish(body any) {
 	addr, seed, handle := teleportDestination(body)
 	if addr == nil {
@@ -75,7 +75,7 @@ func (a *Agent) noteTeleportFinish(body any) {
 	}
 
 	// The context is the session's own, not the poll's.  The poll's is
-	// about to be cancelled by this very move -- stopEventQueue, step
+	// about to be canceled by this very move -- stopEventQueue, step
 	// five of moveTo -- so a move carrying it would cancel itself
 	// halfway through arriving.
 	//

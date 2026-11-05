@@ -69,7 +69,7 @@ func TestMediumTellsItToRemarkOnAPause(t *testing.T) {
 }
 
 // The hint is SENT and not STORED: the model sees it on the remark,
-// the record holds what the person actually wrote, and the summariser
+// the record holds what the person actually wrote, and the summarizer
 // is given the record.
 func TestThePauseIsSentButNotRemembered(t *testing.T) {
 	d, _, _ := newTestDaemon(t)

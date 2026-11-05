@@ -95,8 +95,8 @@ func (s *socket) ReadFrom(p []byte) (int, net.Addr, error) {
 }
 
 // SetReadDeadline is how msg.Receiver unblocks a read when its context
-// is cancelled.  It is a method on the interface it type-asserts for, so
-// without this here a cancelled session would sit in ReadFrom until the
+// is canceled.  It is a method on the interface it type-asserts for, so
+// without this here a canceled session would sit in ReadFrom until the
 // simulator said something.
 func (s *socket) SetReadDeadline(t time.Time) error {
 	return s.conn.Load().SetReadDeadline(t)
@@ -157,7 +157,7 @@ func (s *socket) Close() error {
 //  5. Stop the event queue BEFORE the capabilities are replaced.  The
 //     poll holds one region's URL for its whole life, and its last act
 //     is to close that queue; letting the set change under it first is
-//     how the region left's acknowledgement gets posted to the region
+//     how the region left's acknowledgment gets posted to the region
 //     arrived in.
 //  6. Start the poll again against the new region, if there was one.
 //  7. Close the old connection last, because until the handshake has
@@ -196,12 +196,12 @@ func (a *Agent) moveTo(ctx context.Context, addr *net.UDPAddr, seed string) erro
 	defer a.moveMu.Unlock()
 
 	// A session that has ended is not moved.  However it ended, done
-	// is closed, the context cancelled and the socket closed, and Close
+	// is closed, the context canceled and the socket closed, and Close
 	// waits on the goroutines; a move is the first thing in this
 	// package that spawns after Connect has returned, and the new
 	// region's poll added to that group during the wait is the
 	// documented way to panic a WaitGroup.  The dial has the same shape
-	// and a smaller cost -- a connection dialled after the socket was
+	// and a smaller cost -- a connection dialed after the socket was
 	// closed is one nothing will ever close, which is why the swap
 	// below refuses one too.
 	//

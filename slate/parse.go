@@ -228,8 +228,12 @@ func (p *parser) unexpected(what string) error {
 }
 
 func (p *parser) kw(s string) bool {
-	return p.tok.kind == kWord && p.tok.text == s
+	return p.tok.kind == kWord && (p.tok.text == s || spelledAs[p.tok.text] == s)
 }
+
+// spelledAs is the British spelling of a keyword, taken for the American
+// one: "colour" is "color" wherever the language has the word.
+var spelledAs = map[string]string{"colour": "color"}
 
 func (p *parser) want(kw string) error {
 	if p.err != nil {
@@ -1466,7 +1470,7 @@ func (p *parser) expectBody(e *Expect) error {
 		return p.fullbrightExp(e)
 	case p.kw("glow"):
 		return p.glowExp(e)
-	case p.kw("colour"):
+	case p.kw("color"):
 		return p.colourExp(e)
 	case p.kw("alpha"):
 		return p.alphaExp(e)
@@ -2049,7 +2053,7 @@ func (p *parser) lightValue(x *LightExp) error {
 			return p.unexpected("expected a UUID, off, original, or a capture")
 		}
 		return p.next()
-	case x.Prop == "colour":
+	case x.Prop == "color":
 		for _, n := range []*Number{&x.R, &x.G, &x.B} {
 			if *n, err = p.number(); err != nil {
 				return err
@@ -2124,7 +2128,7 @@ func (p *parser) gltfValue(x *GLTFExp) error {
 		}
 		x.ID, x.IDAt = p.tok.text, p.tok.span
 		return p.next()
-	case "colour", "emissive":
+	case "color", "emissive":
 		for _, n := range []*Number{&x.R, &x.G, &x.B} {
 			if *n, err = p.number(); err != nil {
 				return err
@@ -2403,7 +2407,7 @@ func (p *parser) materialExp(e *Expect) error {
 }
 
 func (p *parser) colourExp(e *Expect) error {
-	name, link, face, all, st, err := p.faceProp("colour")
+	name, link, face, all, st, err := p.faceProp("color")
 	if err != nil {
 		return err
 	}

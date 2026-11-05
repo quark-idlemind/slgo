@@ -3,7 +3,7 @@ package sl
 import "context"
 
 // Ground is the height of the land at a point in the region the avatar
-// is in, in metres from its south west corner, and whether the land
+// is in, in meters from its south west corner, and whether the land
 // there has arrived.
 //
 // It is read from the heightmap the region sent when the avatar

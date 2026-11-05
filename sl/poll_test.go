@@ -4,7 +4,7 @@ package sl
 // does.
 //
 // What poll promises is tested once, here.  Each call built on it is
-// tested beside its other tests for having used it: cancelled part way
+// tested beside its other tests for having used it: canceled part way
 // through its wait, it has to come back at once with the caller's
 // cancel, not at its own deadline with a timeout.
 
@@ -28,7 +28,7 @@ const promptly = 5 * time.Second
 
 // whenCancelled runs call aside on ctx and returns what it returned,
 // failing the test unless it returns within promptly of ctx being
-// cancelled.  Whatever cancels ctx -- usually the fake grid, in the
+// canceled.  Whatever cancels ctx -- usually the fake grid, in the
 // middle of answering the look a test is interested in -- decides
 // where in the wait the cancel lands.
 func whenCancelled[T any](t *testing.T, ctx context.Context, call func(context.Context) (T, error)) (T, error) {
@@ -253,7 +253,7 @@ func sleepsIn(fset *token.FileSet, f *ast.File) []string {
 }
 
 // TestNothingInThisPackageSleeps: a sleep cannot hear the caller give
-// up.  A loop that polls with one keeps going when it is cancelled --
+// up.  A loop that polls with one keeps going when it is canceled --
 // every read fails at once, or never looks at the context -- until its
 // own deadline, and then reports a timeout, which is neither true nor
 // quick.  Six calls here were that loop.

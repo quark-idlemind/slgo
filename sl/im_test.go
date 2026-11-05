@@ -779,7 +779,7 @@ func TestInventoryOffersForNarrowHowAPersonWould(t *testing.T) {
 			[]string{"A Big Box", "hovertext.lsl"}},
 		{"none at all", "", nil, nil},
 		{"by name", "A Big Box", []*InventoryOffer{box, script}, []string{"A Big Box"}},
-		// An item's name is spelt as it is: the whole of it in another
+		// An item's name is spelled as it is: the whole of it in another
 		// case is another name, and is not found as part of this one.
 		{"not by the whole name in another case", "a big BOX", []*InventoryOffer{box, script}, nil},
 		{"by part of the name", "box", []*InventoryOffer{box, script}, []string{"A Big Box"}},
@@ -1013,7 +1013,7 @@ func TestTheFriendListIsNamed(t *testing.T) {
 //
 // The names are worth up to three seconds of waiting for a listing
 // somebody is going to read, and worth nothing at all to slsh's "map",
-// which colours its friends in on every picture.  So this asks the
+// which colors its friends in on every picture.  So this asks the
 // wire: no name was requested, and the friend the grid would never
 // have named is in the answer like everybody else.
 func TestTheIdsOfTheFriendListCostNoNames(t *testing.T) {

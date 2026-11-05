@@ -209,7 +209,7 @@ var tpMiddle = msg.Vector3{X: 128, Y: 128}
 //
 // # Which of the two a line means
 //
-// Three numbers and nothing else is a position in this region's metres,
+// Three numbers and nothing else is a position in this region's meters,
 // and one inside this region stays the cheap thing it has always been:
 // no map lookup, no circuit moving under the session, nothing but the
 // request and waiting for the position to agree.  One outside it is a
@@ -221,7 +221,7 @@ var tpMiddle = msg.Vector3{X: 128, Y: 128}
 //
 // So a region whose name ends in three numbers cannot be reached from
 // here.  That is written down in the man page rather than defended
-// against, because the defence is a quoting rule everybody would have to
+// against, because the defense is a quoting rule everybody would have to
 // remember for a region nobody has met.
 //
 // Nothing but numbers, and not three of them, is refused rather than
@@ -347,15 +347,15 @@ func endOptionsAtANegativeNumber(args []string) []string {
 // tilde marks a coordinate given relative to where the avatar is
 // standing rather than to the region's corner.
 //
-// "~" on its own is that axis left alone, "~10" is ten metres further
-// along it and "~-10" ten metres back.  The character is borrowed from
+// "~" on its own is that axis left alone, "~10" is ten meters further
+// along it and "~-10" ten meters back.  The character is borrowed from
 // the game consoles that have wanted the same thing, and it is here
 // because the obvious spelling is taken: a bare -10 already means ten
-// metres west of THIS REGION's corner, which is a real place in the
+// meters west of THIS REGION's corner, which is a real place in the
 // region next door, so a leading minus cannot also mean "ten back".
 //
 // It is per axis, which is the point of using a prefix rather than a
-// flag: "tp ~10 ~ ~" is ten metres east of here at the same height and
+// flag: "tp ~10 ~ ~" is ten meters east of here at the same height and
 // the same y, and "tp 128 128 ~" is the middle of the region without
 // changing altitude.  A flag would make all three relative or none.
 const tilde = "~"
@@ -385,7 +385,7 @@ func parseCoord(s string) (coord, error) {
 		}
 		f, err := strconv.ParseFloat(rest, 32)
 		if err != nil {
-			return coord{}, fmt.Errorf("%q is not a number of metres to move by", s)
+			return coord{}, fmt.Errorf("%q is not a number of meters to move by", s)
 		}
 		return coord{v: float32(f), rel: true}, nil
 	}
@@ -417,29 +417,29 @@ func coords(args []string) (c [3]coord, rel bool, err error) {
 	return c, rel, nil
 }
 
-// tpNearby teleports to a position given in THIS region's metres, which
+// tpNearby teleports to a position given in THIS region's meters, which
 // may not be in this region.
 //
-// A region is 256 metres square and a position outside that is not an
+// A region is 256 meters square and a position outside that is not an
 // error: it is somewhere else, and which somewhere is arithmetic.  The
-// grid is regions laid edge to edge, so 300 on the x axis is 44 metres
-// into the region to the east and -10 is 246 metres into the one to the
+// grid is regions laid edge to edge, so 300 on the x axis is 44 meters
+// into the region to the east and -10 is 246 meters into the one to the
 // west, in the same way that the 25th hour of Monday is one in the
 // morning on Tuesday.  Both spellings name one point and the shell can
 // work out which region owns it, so it does, rather than making somebody
 // look a handle up to say "just over there".
 //
-// It generalises as far as the arithmetic does.  There is nothing
+// It generalizes as far as the arithmetic does.  There is nothing
 // special about one region over: the position is turned into a place on
 // the grid, the region containing that place is worked out, and what is
-// left over is where in it.  1000 is three regions east and 232 metres
+// left over is where in it.  1000 is three regions east and 232 meters
 // in, and it costs exactly what 300 does.  A region nothing is standing
 // on answers no_host, which is the grid's own way of saying there is
 // nothing there and is reported as it arrives.
 //
 // The same point given from two different regions is the same
 // teleport, which is the property that makes this worth having: a
-// script that knows where something is in one region's metres can say
+// script that knows where something is in one region's meters can say
 // so from anywhere nearby without knowing which region it is in.
 func (sh *Shell) tpNearby(ctx context.Context, out io.Writer, at [3]coord, wait time.Duration) error {
 	here, err := sh.s.Where(ctx)
@@ -452,7 +452,7 @@ func (sh *Shell) tpNearby(ctx context.Context, out io.Writer, at [3]coord, wait 
 
 	// Anything relative is resolved against where the avatar is standing
 	// NOW, before any of the grid arithmetic, so that "~300" is three
-	// hundred metres from here and lands wherever that is rather than
+	// hundred meters from here and lands wherever that is rather than
 	// meaning something different depending on which region it is.
 	asked := msg.Vector3{
 		X: at[0].resolve(here.Position.X),
@@ -488,7 +488,7 @@ func (sh *Shell) tpNearby(ctx context.Context, out io.Writer, at [3]coord, wait 
 	return sh.sayPosition(ctx, out)
 }
 
-// gridPoint turns a position in one region's metres into the region that
+// gridPoint turns a position in one region's meters into the region that
 // really owns it and the position inside that one.
 //
 // The two steps are worth naming.  A place on the grid is the region's
@@ -501,13 +501,13 @@ func (sh *Shell) tpNearby(ctx context.Context, out io.Writer, at [3]coord, wait 
 //
 // Height is not touched.  Regions are stacked edge to edge and not on
 // top of one another, so z means the same thing on both sides of a
-// border, and 2001 metres up is 2001 metres up wherever the avatar
+// border, and 2001 meters up is 2001 meters up wherever the avatar
 // stands.
 func gridPoint(from uint64, at msg.Vector3) (handle uint64, local msg.Vector3, err error) {
 	const width = 256.0
 
 	fx, fy := msg.GridCoords(from)
-	// In metres from the grid's own corner, which is where the axes are
+	// In meters from the grid's own corner, which is where the axes are
 	// continuous and the arithmetic is ordinary.
 	wx := float64(fx)*width + float64(at.X)
 	wy := float64(fy)*width + float64(at.Y)
@@ -557,7 +557,7 @@ func teleportTarget(args []string) (region string, at [3]coord, err error) {
 		if rel {
 			// "~" is "from where the avatar is standing", and the
 			// avatar is not standing in the region just named.  There
-			// is no honest answer -- a metre east of here is not a
+			// is no honest answer -- a meter east of here is not a
 			// place in somewhere else -- so this is refused rather
 			// than resolved against a position in the wrong region.
 			return "", at, usageError("tp",
@@ -653,7 +653,7 @@ func (sh *Shell) sayPosition(ctx context.Context, out io.Writer) error {
 }
 
 // positionLine is where the avatar is, in the one wording where, tp and
-// an accepted lure all say it in.  A region and a position to the metre:
+// an accepted lure all say it in.  A region and a position to the meter:
 // see man/where.md for why no more than that is honest.
 func positionLine(p *sl.Presence) string {
 	return fmt.Sprintf("%s at %.0f, %.0f, %.0f",
@@ -1033,7 +1033,7 @@ func autoSummary(out io.Writer, rep *session.AutoReport) {
 
 // near is whether an object has arrived where it was sent.  Loose
 // enough for the rounding a position makes on its way through a
-// float32 and back, tight enough that a metre's difference is not
+// float32 and back, tight enough that a meter's difference is not
 // "arrived".
 func near(a, b msg.Vector3) bool {
 	const tol = 0.25

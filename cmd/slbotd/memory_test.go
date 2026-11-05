@@ -66,8 +66,8 @@ func TestCompactingCannotLoseTheBackstory(t *testing.T) {
 	}
 }
 
-// The summariser is never given the character.  A dockhand asked to
-// summarise writes a dockhand's remark about it, and this is the one
+// The summarizer is never given the character.  A dockhand asked to
+// summarize writes a dockhand's remark about it, and this is the one
 // call that is not the avatar speaking.
 func TestTheSummariserIsNotGivenTheBackstory(t *testing.T) {
 	d, b, grid := newTestDaemon(t)

@@ -72,7 +72,7 @@ type viewerHost struct {
 //
 // Sixteen bytes, the same as a uuid, which is the size Second Life's
 // own capability URLs use for exactly this job: an unguessable path
-// element standing in for an authorisation.
+// element standing in for an authorization.
 const capTokenBytes = 16
 
 // oneTime is a viewer password minted for a single login.
@@ -144,9 +144,9 @@ func (v *viewerHost) queueFor(profile string) *viewer.EventQueue {
 func (v *viewerHost) eventsFor(profile string) func(string, []byte) {
 	q := v.queueFor(profile)
 	// Said once per KIND of withheld event rather than once per event
-	// or once per session.  A region with four neighbours introduces
+	// or once per session.  A region with four neighbors introduces
 	// them over and over, so the first is unreadable; and a session
-	// that has said its piece about neighbours would otherwise say
+	// that has said its piece about neighbors would otherwise say
 	// nothing at all the first time a teleport is withheld, which is
 	// different news about a different thing.
 	var mu sync.Mutex

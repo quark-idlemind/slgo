@@ -296,7 +296,7 @@ func (p *pager) showStatus(t *Term) {
 
 // statusLine is the bottom line, in reverse video.  The erase comes
 // before the video is turned on so that the part of the line with
-// nothing on it is erased in the terminal's own colours rather than in
+// nothing on it is erased in the terminal's own colors rather than in
 // a bar of ink stretching to the right margin.
 func (p *pager) statusLine() string {
 	return "\r" + eraseLine + reverseOn + p.status() + attrsOff

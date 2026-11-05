@@ -4,7 +4,7 @@ A region sends its heightmap once, as `LayerData` messages in the first
 seconds after the avatar arrives, and never again for the asking.
 `agent.Terrain` keeps each land body as it came, for a viewer that
 attaches later, and decodes it as it arrives into a height at every
-whole metre. `Terrain.HeightAt` reads the ground at a point and
+whole meter. `Terrain.HeightAt` reads the ground at a point and
 `Terrain.Highest` the highest it comes in a rectangle. `sl.Session`
 asks for them with `Ground` and `HighestGround`, which a hosted session
 sends to the daemon's `Ground` rpc and a direct one reads off its own
@@ -38,7 +38,7 @@ viewer's says so below.
   that times `range / 2^prequant`, plus `range / 2`, plus the DC
   offset, where `prequant` is the high nibble of `quant_wbits` plus 2
   (`decompress_patch`, `llmessage/patch_idct.cpp:590`).
-- A patch's id places its south west corner 16 metres a step from the
+- A patch's id places its south west corner 16 meters a step from the
   region's, whatever size the patch is (`llsurface.cpp:1189`).
 - Between the grid points each square is split into two triangles from
   its south west corner to its north east one, and the ground is flat
@@ -46,13 +46,13 @@ viewer's says so below.
 
 Where slgo does not do what the viewer does:
 
-- A region is taken to be 256 metres across, as everywhere else in
+- A region is taken to be 256 meters across, as everywhere else in
   slgo. A patch placed further out ends the body, as the viewer ends
   one placed outside its own region (`llsurface.cpp:870-880`); on a
   larger `M` region the viewer would have taken it.
 - A body that ends inside a patch ends there. The viewer reads on past
   the end of its buffer. In both, the patches before it stand.
-- From 255 to 256 metres, east or north, the viewer reads the edge of
+- From 255 to 256 meters, east or north, the viewer reads the edge of
   the region beyond. slgo holds none, and holds the ground level there.
 - A height is known only where the patches under its square have
   arrived. The viewer starts its ground at zero and draws that.
@@ -92,7 +92,7 @@ a script in a 0.5 m cube that had no group, within about 50 m of the
 ground, never executed, and the simulator reported it running
 (`ScriptRunning` true) all the same. Moved higher, it ran; moved back
 down, it paused; raised again, it resumed. The boundary lay between
-50.16 and 50.62 m above the ground at the cube's centre.
+50.16 and 50.62 m above the ground at the cube's center.
 
 Inferred from that one spot, and not measured anywhere else: measured
 against the decoded ground, the reading that fits best is that the
@@ -117,7 +117,7 @@ timeout for a script that will say nothing. The check:
   region, come from its position, rotation and size; the highest ground
   in that box comes from the decoded terrain. A bottom 50 m or more
   above it is not checked further.
-- The parcel under the prim's centre is asked for. Scripts on for
+- The parcel under the prim's center is asked for. Scripts on for
   everyone run everything. The parcel owner's objects run. With group
   scripts on, an object whose group is the parcel's runs, which takes a
   properties request to the object's root to learn. Anything else is

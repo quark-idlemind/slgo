@@ -170,8 +170,8 @@ type Person struct {
 	ID   msg.UUID
 	Name string
 
-	// Distance is how far away they are, in metres, and Position is
-	// where they are standing in the region's own metres.  Both are
+	// Distance is how far away they are, in meters, and Position is
+	// where they are standing in the region's own meters.  Both are
 	// zero when position is not the question: FriendList hands back
 	// this same type for people who are not in the region at all, and a
 	// zero here is "nobody said" rather than the corner of the region.
@@ -179,7 +179,7 @@ type Person struct {
 	// The two are kept separately because they answer different
 	// questions and one cannot be had from the other: a distance is
 	// what "who" sorts and prints, and a position is what a picture of
-	// the region needs, since 20 metres away says nothing about which
+	// the region needs, since 20 meters away says nothing about which
 	// way.
 	Distance float32
 	Position msg.Vector3
@@ -237,7 +237,7 @@ func (w *Session) Nearby(ctx context.Context) ([]Person, error) {
 		dy := o.Position.Y - where.Position.Y
 		dz := o.Position.Z - where.Position.Z
 		// The position is kept as well as the distance it was worked
-		// out from.  It is the region's own metres rather than the
+		// out from.  It is the region's own meters rather than the
 		// offset, so that a caller drawing the region and a caller
 		// drawing the ground around this avatar both have what they
 		// need; the offset is a subtraction away and the region
@@ -274,8 +274,8 @@ func (w *Session) Nearby(ctx context.Context) ([]Person, error) {
 // up the chain rotates the offset into the parent's frame and adds the
 // parent's position, which is what a viewer does to draw it and what the
 // agent does for its own avatar (agent.Objects.worldPlacement).  Measured
-// on Agni, 2026-09-24, before this: a seated avatar a few metres away came
-// back 4004 metres off, at the offset from its seat.
+// on Agni, 2026-09-24, before this: a seated avatar a few meters away came
+// back 4004 meters off, at the offset from its seat.
 //
 // A link that has not been described ends it with nothing, rather than a
 // guess somebody would walk to.  Eight steps, as there: a chain that deep

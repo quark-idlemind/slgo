@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// MaxDatagram is the size acknowledgements keep an outgoing packet
+// MaxDatagram is the size acknowledgments keep an outgoing packet
 // under: they are attached to it only while it stays within this.  A
 // message with no room left under it, or already over it, goes out as
 // it stands with none.
@@ -34,9 +34,9 @@ type SendStats struct {
 	Reliable    uint64 // reliable messages queued
 	Resent      uint64 // retransmissions
 	Abandoned   uint64 // reliable messages given up on
-	AcksQueued  uint64 // acknowledgements asked for
-	AcksCarried uint64 // acknowledgements that rode on another packet
-	AcksAlone   uint64 // acknowledgements sent as a PacketAck
+	AcksQueued  uint64 // acknowledgments asked for
+	AcksCarried uint64 // acknowledgments that rode on another packet
+	AcksAlone   uint64 // acknowledgments sent as a PacketAck
 	AckPackets  uint64 // PacketAck datagrams sent
 }
 
@@ -44,9 +44,9 @@ type SendStats struct {
 // serialized through its goroutine, which is also the only thing that
 // assigns sequence numbers, so no locking is needed for either.
 //
-// Acknowledgements travel on their own channel so they never queue
+// Acknowledgments travel on their own channel so they never queue
 // behind a large message.  When a message goes out, whatever
-// acknowledgements have accumulated ride along on its tail; if none
+// acknowledgments have accumulated ride along on its tail; if none
 // goes out before the ack delay (WithAckDelay) expires they are flushed
 // as a batched PacketAck.  That is the whole reason for the split: acks
 // want to be cheap and prompt, and messages want to be ordered.
@@ -99,7 +99,7 @@ type inflight struct {
 // SenderOption configures a Sender.
 type SenderOption func(*Sender)
 
-// WithAckDelay sets how long acknowledgements wait for a message to
+// WithAckDelay sets how long acknowledgments wait for a message to
 // ride out on before being flushed as a PacketAck.  Default 100ms.
 func WithAckDelay(d time.Duration) SenderOption {
 	return func(s *Sender) { s.ackDelay = d }
@@ -125,7 +125,7 @@ func WithRetransmit(rto time.Duration, tries int) SenderOption {
 // Retransmissions do not call it.  They carry the sequence number and
 // bytes of the original, so reporting them as fresh sends would show one
 // message as several and invite exactly the double-counting the relay
-// hook exists to avoid.  Bare acknowledgements do not call it either;
+// hook exists to avoid.  Bare acknowledgments do not call it either;
 // they are circuit machinery and carry no message.
 func WithSendTap(fn Handler) SenderOption {
 	return func(s *Sender) { s.tap = fn }
@@ -238,7 +238,7 @@ func (s *Sender) queue(ctx context.Context, ob *outbound) error {
 }
 
 // QueueAck asks for an inbound packet to be acknowledged.  It never
-// blocks: a dropped acknowledgement costs one retransmission from the
+// blocks: a dropped acknowledgment costs one retransmission from the
 // peer, which is a far better trade than stalling the receiver.
 func (s *Sender) QueueAck(seq uint32) {
 	select {
@@ -257,7 +257,7 @@ func (s *Sender) ConfirmAck(seq uint32) {
 	}
 }
 
-// Run writes until ctx is cancelled or the connection fails.  Call it
+// Run writes until ctx is canceled or the connection fails.  Call it
 // as a goroutine, as with Receiver.Run.
 //
 // Call it once.  Run marks the Sender stopped as it returns, after which
@@ -269,7 +269,7 @@ func (s *Sender) Run(ctx context.Context) error {
 		ctx = context.Background()
 	}
 
-	// Disarmed until an acknowledgement is waiting.  No drain after
+	// Disarmed until an acknowledgment is waiting.  No drain after
 	// Stop: since Go 1.23 a stopped timer's channel has nothing in it.
 	flush := time.NewTimer(time.Hour)
 	flush.Stop()
@@ -286,7 +286,7 @@ func (s *Sender) Run(ctx context.Context) error {
 
 		case ob := <-s.out:
 			if ob.forget {
-				// Acknowledgements still waiting are left
+				// Acknowledgments still waiting are left
 				// alone.  They name packet numbers the new
 				// peer never sent, which it discards without
 				// consequence, and draining them here would
@@ -348,7 +348,7 @@ func (s *Sender) drainAcks() {
 }
 
 // transmit builds and writes one message, attaching as many waiting
-// acknowledgements as will fit.
+// acknowledgments as will fit.
 func (s *Sender) transmit(ob *outbound) error {
 	body, err := ob.m.Encode()
 	if err != nil {
@@ -365,7 +365,7 @@ func (s *Sender) transmit(ob *outbound) error {
 		h.Flags |= FlagReliable
 	}
 
-	// How many acknowledgements fit under the datagram limit.
+	// How many acknowledgments fit under the datagram limit.
 	room := (MaxDatagram - HeaderSize - 4 - len(body) - 1) / 4
 	if room < 0 {
 		room = 0
@@ -425,7 +425,7 @@ func (s *Sender) transmit(ob *outbound) error {
 }
 
 // flushAcks sends whatever is waiting as batched PacketAck messages.
-// The C client sent one datagram per acknowledgement; PacketAck's block
+// The C client sent one datagram per acknowledgment; PacketAck's block
 // is Variable, so 255 fit in one.
 func (s *Sender) flushAcks() error {
 	for len(s.pending) > 0 {

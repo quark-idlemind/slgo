@@ -47,7 +47,7 @@ const agniTeleportFinish = `<llsd><map><key>Info</key><array><map>` +
 // cb 00 71 0b in the order they arrived; read as a big endian integer
 // and formatted it would be 3405803787, and read as a little endian one
 // it would be the same four bytes backwards -- somebody else's address
-// entirely, dialled forever.  Neither mistake can show up anywhere but on a live grid,
+// entirely, dialed forever.  Neither mistake can show up anywhere but on a live grid,
 // which is why the fixture is a measurement.
 func TestTheDestinationIsReadFromTheBytesTheGridSent(t *testing.T) {
 	addr, seed, handle := teleportDestination(decodeLLSD(t, agniTeleportFinish))
@@ -139,7 +139,7 @@ func TestATeleportFinishNobodyCanReadIsNotActedOn(t *testing.T) {
 	a, from, to := twoRegions(t, Options{OnEvent: func(string, []byte) {}})
 
 	// A three byte SimIP is the one worth naming: an address built from
-	// three of the four bytes would be somewhere, and dialled it would
+	// three of the four bytes would be somewhere, and dialed it would
 	// look like a simulator that never answered.
 	short := teleportFinishTo(to)
 	short["Info"].([]any)[0].(map[string]any)["SimIP"] = []byte{127, 0, 0}

@@ -91,7 +91,7 @@ type fakeDaemon struct {
 	slotted func(*pb.Slots) *pb.SlotsGranted
 
 	// auth is the server's half of the handshake, for a daemon that is
-	// dialled rather than handed an open connection, and the three
+	// dialed rather than handed an open connection, and the three
 	// fields after it are the ways that exchange goes wrong.
 	auth           *auth.Server
 	shortChallenge bool

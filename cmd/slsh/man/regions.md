@@ -42,7 +42,7 @@ grid than the real one.  The error says how many had come in by then.
 
 A region's place on the grid can be said two ways.  The square -- 1200,
 980 -- is the readable one, and the handle is that square's south-west
-corner in metres packed into a single number, which is how every
+corner in meters packed into a single number, which is how every
 message that names a region names it.
 
 `tp` takes a name rather than a handle, and looks it up through this
@@ -70,5 +70,5 @@ map has no field for.
 
 See also: `look` for what the region underfoot says about itself,
 `where` for the position inside it, `tp` for going to one of these, and
-`neighbours` for the regions this one touches, which are the ones the
+`neighbors` for the regions this one touches, which are the ones the
 avatar can walk into.

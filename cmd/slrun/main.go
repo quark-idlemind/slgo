@@ -535,7 +535,7 @@ func once(ctx context.Context, s *sl.Session, obj *sl.Object, path, src string) 
 //
 // Cancellation only: a deadline that ran out is somebody's timeout
 // expiring and is news.  Two shapes, because a run through slgod or a
-// backend is a gRPC call, and a cancelled one comes back as a status
+// backend is a gRPC call, and a canceled one comes back as a status
 // that does not satisfy errors.Is against context.Canceled.
 // Why: doc/slrun.md#one-line-saying-interrupted
 func quiet(err error) bool {
@@ -624,7 +624,7 @@ func runIn(ctx context.Context, o session.Options, n int) ([]place, func(), erro
 		}, nil
 	}
 
-	// An avatar named is an avatar honoured exactly, so its pool is the
+	// An avatar named is an avatar honored exactly, so its pool is the
 	// ceiling and it is known without asking anybody.  Unnamed, the
 	// ceiling is every avatar the daemon holds and the refusal comes
 	// from there, where the count is.

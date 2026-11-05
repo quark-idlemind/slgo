@@ -71,7 +71,7 @@ from `My Outfits` names a link almost every time.
 
 `drop` follows one to the item at the other end, which is what the id
 it sends has to be: the grid has no object for a link's id and answers
-an id it does not recognise with silence rather than with a refusal.
+an id it does not recognize with silence rather than with a refusal.
 
 A link this inventory cannot follow is refused, naming the id it
 looked for.  A link outlives what it pointed at, so an outfit put

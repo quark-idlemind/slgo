@@ -221,7 +221,7 @@ func TestShowMessageReportsWhatItCannotRead(t *testing.T) {
 //
 // This is the whole of watch: a connection of its own, an attach to the
 // same agent named outright, everything relayed printed as it comes,
-// and a count at the end.  It needs a daemon that can be dialled --
+// and a count at the end.  It needs a daemon that can be dialed --
 // TLS and the shared secret -- because that is what watch does.
 func TestWatchPrintsWhatArrivesAndThenStops(t *testing.T) {
 	d, addr := newAuthDaemon(t)

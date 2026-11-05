@@ -33,7 +33,7 @@ type Options struct {
 	Screen sl.HUDView
 
 	// Avatars is the session of each second avatar the file declares, by
-	// its binding. The caller dialled them and closes them; Run needs
+	// its binding. The caller dialed them and closes them; Run needs
 	// exactly the declared names, each a different avatar from the tester
 	// and from the others.
 	// Why: doc/slate-runner.md#second-avatars
@@ -207,7 +207,7 @@ func (b *binding) named(name string) bool {
 // nameIs says whether a prim of the binding has a name that the function
 // is accepts. An object's name from a message is compared through it and
 // never read out, since only Sender.Label may print one.
-// Why: doc/im-senders.md#labelling-a-sender
+// Why: doc/im-senders.md#labeling-a-sender
 func (b *binding) nameIs(is func(string) bool) bool {
 	for _, p := range b.prims() {
 		if is(p.Name) {

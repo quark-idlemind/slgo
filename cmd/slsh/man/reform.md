@@ -40,7 +40,7 @@ Two things are sent whole, so for those the file's silence is filled
 in from what the prim is now rather than from nothing.
 
 Position, rotation and scale travel in one message.  A file that gives
-only a position is honoured by reading the prim's current rotation and
+only a position is honored by reading the prim's current rotation and
 scale and sending all three.
 
 The shape is all or nothing: there is no message for "change the hollow

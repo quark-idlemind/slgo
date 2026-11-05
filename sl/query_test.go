@@ -547,7 +547,7 @@ func TestResolveStopsWhenTheCallerDoes(t *testing.T) {
 		f.mu.Unlock()
 
 		ctx, cancel := context.WithCancel(context.Background())
-		// Cancelled the moment the first batch has gone out, which is
+		// Canceled the moment the first batch has gone out, which is
 		// while the pause between them is running.
 		f.mu.Lock()
 		f.onSend = func(m msg.Message) {

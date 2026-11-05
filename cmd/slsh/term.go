@@ -62,7 +62,7 @@ const (
 	eraseLine     = "\x1b[K"   // from the cursor to the end of the line
 	cursorForward = "\x1b[%dC" // right by the number of columns given
 	reverseOn     = "\x1b[7m"  // swap foreground and background
-	attrsOff      = "\x1b[0m"  // back to the terminal's own colours
+	attrsOff      = "\x1b[0m"  // back to the terminal's own colors
 	askCellSize   = "\x1b[16t" // how big is a character cell?  See CellSize
 )
 
@@ -601,7 +601,7 @@ func (t *Term) Printf(format string, a ...any) {
 // terminal but move along the line or down to the next one.
 //
 // The shell's own escape sequences are the cost.  Anything composed
-// with colour in it -- a picture with a friend picked out, a man page
+// with color in it -- a picture with a friend picked out, a man page
 // with bold in it -- goes through printOwn instead, and whatever from
 // the grid is in it has to have been through visible already.
 func (t *Term) Print(s string) {
@@ -612,7 +612,7 @@ func (t *Term) Print(s string) {
 // sequences and all.
 //
 // Nothing is filtered here, which is the whole of the difference: the
-// colour in a picture and the bold in a man page are escape sequences
+// color in a picture and the bold in a man page are escape sequences
 // too, and Print would show them as ^[[32m.  Whatever in s came from
 // the grid must already have been through visible, and every caller
 // says so where it calls this.

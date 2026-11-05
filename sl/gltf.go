@@ -4,8 +4,8 @@ package sl
 //
 // A face has a GLTF material when its object's render material extra
 // parameter names one for it, and a script (PRIM_GLTF_*) or a build tool
-// can then override single fields of it for that face: base colour,
-// emissive colour, metallic and roughness factors, alpha mode and cutoff,
+// can then override single fields of it for that face: base color,
+// emissive color, metallic and roughness factors, alpha mode and cutoff,
 // double sided, texture ids and texture transforms.  The region tells a
 // session of them in a GenericStreamingMessage, but only a session that
 // asked the seed for ModifyMaterialParams, which every session here does.

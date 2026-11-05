@@ -105,7 +105,7 @@ func viewerCertFiles(certFile, keyFile, host string, logf func(string, ...any)) 
 
 // sayUncovered tells logf, for an endpoint bound to every address, what
 // the certificate covers: the other addresses are ones this cannot know,
-// and a viewer dialling one of them refuses the certificate.
+// and a viewer dialing one of them refuses the certificate.
 func sayUncovered(certFile, host string, logf func(string, ...any)) {
 	if certHost(host) != "" {
 		return

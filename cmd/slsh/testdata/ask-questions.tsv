@@ -68,7 +68,7 @@ do I remember this spot as a landmark	landmark	--make
 do I travel to a place I saved a landmark for	landmark tp	--go
 do I show every parcel in this region	parcel	-r
 do I draw a map of the land parcels around me	parcel map	--map
-do I find which regions border the one I am in	neighbours
+do I find which regions border the one I am in	neighbors
 do I find where on the grid a region I have never been to is	regions
 do I find what my exact coordinates are	where
 do I find what the maturity rating and water height of this region are	look

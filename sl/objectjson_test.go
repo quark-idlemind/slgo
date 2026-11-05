@@ -129,7 +129,7 @@ func TestABuiltListPutsChildrenWhereTheRootIs(t *testing.T) {
 }
 
 // TestANegativeWIsTheSameRotation.  The wire form carries three of the
-// four components and recovers the fourth by normalising, which only
+// four components and recovers the fourth by normalizing, which only
 // works if W is not negative -- so a file that writes one has to be
 // read as the same rotation with every component negated.
 func TestANegativeWIsTheSameRotation(t *testing.T) {

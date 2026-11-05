@@ -70,7 +70,7 @@ func describeClient(name string, pid int32, remote string) string {
 	if name == "" {
 		// No name at all, which is a server running without
 		// authentication: nothing ever said what it was.  "@" reads as
-		// an address attached to a name, so with no name it is spelt
+		// an address attached to a name, so with no name it is spelled
 		// out in words instead.
 		if remote == "" {
 			return "an unnamed client"
@@ -86,7 +86,7 @@ func describeClient(name string, pid int32, remote string) string {
 	return name
 }
 
-// hostOf is an address without its port.  The port a client dialled
+// hostOf is an address without its port.  The port a client dialed
 // FROM is ephemeral and tells nobody anything.
 func hostOf(a net.Addr) string {
 	if a == nil {
@@ -196,7 +196,7 @@ const tooOld = "this client is older than slgod: it sends its name in a form slg
 //
 // That field is reserved now rather than deleted, and a field this end
 // does not know is not thrown away by the decoder but kept, as it came,
-// among the message's unknown fields.  So an old client is recognised
+// among the message's unknown fields.  So an old client is recognized
 // by what it sent rather than guessed at from what it did not: an empty
 // name would be the other way to tell, and would say the same thing
 // about a new client that had merely sent none.  Every old client sent

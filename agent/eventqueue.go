@@ -86,7 +86,7 @@ func (a *Agent) startEventQueue(ctx context.Context, fn EventHandler) {
 // simulator that has just handed this agent away, which is allowed five
 // seconds; and the caller may be the event handler itself, which runs on
 // that very goroutine, so waiting for it could be waiting for the
-// caller.  Nothing needs it gone: its context is cancelled so it cannot
+// caller.  Nothing needs it gone: its context is canceled so it cannot
 // poll again, and it holds the URL it started on rather than reading the
 // capability set that is about to be replaced.
 func (a *Agent) stopEventQueue() {
@@ -120,7 +120,7 @@ var eventBackoff = []time.Duration{
 	10 * time.Second,
 }
 
-// runEventQueue polls until the context is cancelled or the session
+// runEventQueue polls until the context is canceled or the session
 // ends.
 //
 // The URL is resolved once, here, and never looked up again.  The queue
@@ -138,7 +138,7 @@ func (a *Agent) runEventQueue(ctx context.Context, fn EventHandler) {
 	fails := 0
 
 	// Every way out of this loop tells the simulator we are
-	// finished, including a poll cancelled in flight -- which is the
+	// finished, including a poll canceled in flight -- which is the
 	// usual way it ends, and was the one path that used to skip it --
 	// once there is something to acknowledge: a queue that never
 	// answered is left to the simulator's own timeout.
@@ -162,7 +162,7 @@ func (a *Agent) runEventQueue(ctx context.Context, fn EventHandler) {
 
 		switch {
 		case err != nil:
-			// A cancelled poll is a shutdown, not a failure.
+			// A canceled poll is a shutdown, not a failure.
 			if ctx.Err() != nil {
 				return
 			}
@@ -264,7 +264,7 @@ func (a *Agent) deliver(ctx context.Context, body []byte, fn EventHandler) (any,
 		// never -- so state the session owns cannot be learned there.
 		//
 		// An event earlier in this body may have moved the avatar and
-		// cancelled ctx.  What follows it is the region left's, and is
+		// canceled ctx.  What follows it is the region left's, and is
 		// still relayed but applied only where it is the avatar's own.
 		// Why: doc/history/teleport.md#what-follows-a-move-in-the-same-body
 		a.noteEvent(ctx, name, em["body"])
@@ -321,7 +321,7 @@ func (a *Agent) closeEventQueue(url string, ack any) {
 		return
 	}
 	// Its own context: the usual way here is a poll whose context has
-	// just been cancelled, and one more request has to be allowed
+	// just been canceled, and one more request has to be allowed
 	// after that or the queue is never closed at all.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -337,7 +337,7 @@ func (a *Agent) closeEventQueue(url string, ack any) {
 // belongs to the region is applied only while ctx, the poll's, stands:
 // a move cancels it, and an event behind a TeleportFinish or a
 // CrossedRegion in the same body describes the region just left -- its
-// parcel, its neighbours.  deliver still relays such an event, since a
+// parcel, its neighbors.  deliver still relays such an event, since a
 // client may have asked for it.
 //
 // Every arm runs inline, on the goroutine that polls the queue and hands

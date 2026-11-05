@@ -576,7 +576,7 @@ func TestAnEmptyNameStaysWithTheSessionItGot(t *testing.T) {
 // coming back on its own, so a client attached to it is told so by its
 // stream ending, in the words a new attach to it is refused with.
 //
-// The stream used to stay open, and a client learnt nothing from it:
+// The stream used to stay open, and a client learned nothing from it:
 // slbotd sat on one believing it was attached until the daemon was
 // restarted.
 func TestLoggingOutEndsTheStreamsOnIt(t *testing.T) {

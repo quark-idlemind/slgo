@@ -144,7 +144,7 @@ func (s *Server) login(ctx context.Context, name string, loginFor LoginFor) (*Ho
 	}
 
 	// The daemon's own context, not the caller's: the session outlives
-	// the request that asked for it, and cancelling a request must not
+	// the request that asked for it, and canceling a request must not
 	// take the avatar back out of the world.
 	h, err := s.StartAgent(s.base(), name, l, opts)
 	if err != nil {

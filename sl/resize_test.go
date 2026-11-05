@@ -86,7 +86,7 @@ func TestResizingWhatNeedsNoResizingLeavesItAlone(t *testing.T) {
 // wants the first and a photograph the second.
 func TestTheFilterIsTheCallersChoice(t *testing.T) {
 	// A hard checkerboard: every pixel is black or white, and a
-	// smoothing filter has to invent greys where a nearest-neighbour
+	// smoothing filter has to invent grays where a nearest-neighbor
 	// one cannot.
 	m := image.NewNRGBA(image.Rect(0, 0, 300, 300))
 	for y := 0; y < 300; y++ {

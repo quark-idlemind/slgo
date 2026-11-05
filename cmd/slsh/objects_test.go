@@ -181,7 +181,7 @@ func TestACopyGivenUpOnSaysWhatItMade(t *testing.T) {
 		if _, ok := m.(*msg.CopyInventoryItem); !ok {
 			return
 		}
-		// Cancelled as the request goes out, so only the last look,
+		// Canceled as the request goes out, so only the last look,
 		// which the cancel does not reach, finds the copy.
 		cancel()
 		x.grid.mu.Lock()
@@ -390,7 +390,7 @@ func TestTPReportsWhereItEndedUp(t *testing.T) {
 	x := newTestShell(t)
 
 	// The fake is already standing there, so the move is agreed to at
-	// once -- which is what a teleport of a few metres looks like.
+	// once -- which is what a teleport of a few meters looks like.
 	if got, want := x.do(t, "tp 128 128 25"), "Test Region at 128, 128, 25\n"; got != want {
 		t.Errorf("tp printed %q, want %q", got, want)
 	}
@@ -986,10 +986,10 @@ func TestLogoutRefusalNamesWhoIsUsingIt(t *testing.T) {
 
 // TestAPositionOutsideThisRegionIsTheRegionItReallyIs.
 //
-// A region is 256 metres square and the grid is regions laid edge to
+// A region is 256 meters square and the grid is regions laid edge to
 // edge, so 300 on the x axis is not an error and not this region: it is
-// 44 metres into the one east of here.  The fake stands in square
-// (1, 1), so the answers below are its neighbours.
+// 44 meters into the one east of here.  The fake stands in square
+// (1, 1), so the answers below are its neighbors.
 func TestAPositionOutsideThisRegionIsTheRegionItReallyIs(t *testing.T) {
 	for _, c := range []struct {
 		line       string
@@ -1001,7 +1001,7 @@ func TestAPositionOutsideThisRegionIsTheRegionItReallyIs(t *testing.T) {
 		{"tp 300 128 25", 2, 1, msg.Vector3{X: 44, Y: 128, Z: 25}, "(2, 1)"},
 		{"tp -10 128 25", 0, 1, msg.Vector3{X: 246, Y: 128, Z: 25}, "(0, 1)"},
 		{"tp 128 -1 25", 1, 0, msg.Vector3{X: 128, Y: 255, Z: 25}, "(1, 0)"},
-		// Exactly a border: 256 is the first metre of the next one, and
+		// Exactly a border: 256 is the first meter of the next one, and
 		// 0 is still this one, which is the half-open range the whole
 		// arithmetic rests on.
 		{"tp 256 128 25", 2, 1, msg.Vector3{X: 0, Y: 128, Z: 25}, "(2, 1)"},
@@ -1049,7 +1049,7 @@ func TestAPositionOffTheEdgeOfTheGridIsRefused(t *testing.T) {
 		t.Errorf("a position off the grid printed %q", got)
 	}
 	// And says how far there is to go, since the answer depends on which
-	// square the avatar is standing in: (1, 1) leaves 256 metres.
+	// square the avatar is standing in: (1, 1) leaves 256 meters.
 	if !strings.Contains(got, "-256") {
 		t.Errorf("the refusal does not say how far x may go: %q", got)
 	}
@@ -1062,8 +1062,8 @@ func TestAPositionOffTheEdgeOfTheGridIsRefused(t *testing.T) {
 
 // TestATildeIsAPositionRelativeToTheAvatar.
 //
-// "~" is that axis left alone and "~10" is ten metres along it.  The
-// spelling is not free: a bare -10 already means ten metres west of this
+// "~" is that axis left alone and "~10" is ten meters along it.  The
+// spelling is not free: a bare -10 already means ten meters west of this
 // region's corner, which is a real place next door, so a leading minus
 // could not also mean "ten back".
 func TestATildeIsAPositionRelativeToTheAvatar(t *testing.T) {
@@ -1086,9 +1086,9 @@ func TestATildeIsAPositionRelativeToTheAvatar(t *testing.T) {
 	}
 
 	// Backwards, and mixed with an absolute -- and relative to where the
-	// avatar is NOW, which is ten metres east of where it began, because
+	// avatar is NOW, which is ten meters east of where it began, because
 	// the teleport above moved it.  That is the whole meaning of the
-	// word: two "tp ~10 ~ ~" in a row go twenty metres, where two of an
+	// word: two "tp ~10 ~ ~" in a row go twenty meters, where two of an
 	// absolute position go nowhere the second time.
 	x.do(t, "tp ~-5 128 ~")
 	sent = lastTeleport(t, x)

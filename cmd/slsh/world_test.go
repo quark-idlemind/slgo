@@ -29,7 +29,7 @@ import (
 // export it.
 const pcodeAvatar = 47
 
-// TestWhereIsTheRegionAndThePosition, and says so in metres rather than
+// TestWhereIsTheRegionAndThePosition, and says so in meters rather than
 // in whatever the simulator counts in.
 func TestWhereIsTheRegionAndThePosition(t *testing.T) {
 	x := newTestShell(t)
@@ -607,7 +607,7 @@ func TestWorldCommandsAllAnswerForHelp(t *testing.T) {
 	x.grid.neighboursErr = x.grid.objectsErr
 
 	for _, name := range []string{
-		"where", "who", "look", "neighbours", "caps", "features", "worn", "objects",
+		"where", "who", "look", "neighbors", "caps", "features", "worn", "objects",
 	} {
 		got := x.do(t, name+" --help")
 		if !strings.Contains(got, name) {
@@ -853,17 +853,33 @@ func TestObjectsFiltersByOwner(t *testing.T) {
 func TestNeighboursSaysWhetherThisAvatarCanWalkOutOfTheRegion(t *testing.T) {
 	x := newTestShell(t)
 
-	got := x.do(t, "neighbours")
+	got := x.do(t, "neighbors")
 	if !strings.Contains(got, "off") || !strings.Contains(got, "walk over a border") {
-		t.Errorf("neighbours off printed %q", got)
+		t.Errorf("neighbors off printed %q", got)
 	}
 
 	// On with nothing held is the ordinary state away from a border,
 	// and reads nothing like a failure.
 	x.grid.neighbours = sl.Neighbours{On: true}
-	got = x.do(t, "neighbours")
+	got = x.do(t, "neighbors")
 	if !strings.Contains(got, "on") || !strings.Contains(got, "no circuit is open") {
-		t.Errorf("neighbours on with nothing held printed %q", got)
+		t.Errorf("neighbors on with nothing held printed %q", got)
+	}
+}
+
+// TestNeighboursIsNeighborsSpeltTheOtherWay: both spellings are one
+// command, so either turns the circuits on and off.
+func TestNeighboursIsNeighborsSpeltTheOtherWay(t *testing.T) {
+	if commands["neighbours"] != commands["neighbors"] {
+		t.Fatal("neighbours and neighbors are different commands")
+	}
+	x := newTestShell(t)
+	x.do(t, "neighbours on")
+	if !x.grid.neighbours.On {
+		t.Error("neighbours on did not turn the circuits on")
+	}
+	if got := x.do(t, "neighbors"); !strings.Contains(got, "neighbors are on") {
+		t.Errorf("neighbors after neighbours on printed %q", got)
 	}
 }
 
@@ -879,16 +895,16 @@ func TestNeighboursListsWhatIsHeldTheWayRegionsDoes(t *testing.T) {
 				Handle: msg.RegionHandle(43646, 43648), Addr: "203.0.113.11:13032",
 				Name: "Pelmar Mill", Handshook: true, Heard: 412,
 			},
-			// One that was dialled and has sent no handshake yet,
+			// One that was dialed and has sent no handshake yet,
 			// which is not the same as an offer that came to nothing.
 			{Handle: msg.RegionHandle(43648, 43647), Addr: "203.0.113.12:13011"},
 		},
 	}
 
-	got := x.do(t, "neighbours")
+	got := x.do(t, "neighbors")
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
 	if len(lines) != 3 {
-		t.Fatalf("neighbours printed %d lines, want a state and its two circuits:\n%s",
+		t.Fatalf("neighbors printed %d lines, want a state and its two circuits:\n%s",
 			len(lines), got)
 	}
 	if !strings.Contains(lines[0], "2 circuits held") {
@@ -905,19 +921,19 @@ func TestNeighboursListsWhatIsHeldTheWayRegionsDoes(t *testing.T) {
 		t.Errorf("an unanswered circuit reads %q", lines[2])
 	}
 	// The handle is deliberately not in the line: nothing is addressed
-	// by a neighbour's, and regions is where a number is wanted.
+	// by a neighbor's, and regions is where a number is wanted.
 	if strings.Contains(got, "47991483540340736") {
 		t.Errorf("the listing carries a handle nobody can use:\n%s", got)
 	}
 }
 
 // TestANeighbourRowFitsAnEightyColumnTerminal: the listing is copied
-// into "man neighbours", where every example line is indented by four
+// into "man neighbors", where every example line is indented by four
 // spaces, so a row that only just fits 80 on its own wraps on the page
 // and reads as two circuits instead of one.
 //
 // The row is checked at its widest ordinary size rather than at the
-// size of any particular neighbour: a name that fills its column, and
+// size of any particular neighbor: a name that fills its column, and
 // an address of a dotted quad and a five-digit simulator port.  Nothing
 // here is truncated -- a name or an address longer than its column pads
 // out rather than being cut, and the line grows -- so what this holds
@@ -939,9 +955,9 @@ func TestANeighbourRowFitsAnEightyColumnTerminal(t *testing.T) {
 		}},
 	}
 
-	got := x.do(t, "neighbours")
+	got := x.do(t, "neighbors")
 	if !strings.Contains(got, fullName) {
-		t.Fatalf("neighbours printed %q", got)
+		t.Fatalf("neighbors printed %q", got)
 	}
 	for _, line := range strings.Split(strings.TrimRight(got, "\n"), "\n") {
 		if n := len(line) + indent; n > 78 {
@@ -952,14 +968,14 @@ func TestANeighbourRowFitsAnEightyColumnTerminal(t *testing.T) {
 }
 
 // TestNeighboursTurnsThemOnAndOffAndSaysWhatItGot: the change costs the
-// daemon a socket per neighbouring region for as long as it is on, so it
+// daemon a socket per neighboring region for as long as it is on, so it
 // is worth being sure the word reached the session and that the answer
 // describes what is held afterwards rather than before.
 func TestNeighboursTurnsThemOnAndOffAndSaysWhatItGot(t *testing.T) {
 	x := newTestShell(t)
 
-	if got := x.do(t, "neighbours on"); !strings.Contains(got, "on") {
-		t.Errorf("neighbours on printed %q", got)
+	if got := x.do(t, "neighbors on"); !strings.Contains(got, "on") {
+		t.Errorf("neighbors on printed %q", got)
 	}
 	if !x.grid.neighbours.On {
 		t.Error("the session was not turned on")
@@ -970,9 +986,9 @@ func TestNeighboursTurnsThemOnAndOffAndSaysWhatItGot(t *testing.T) {
 	x.grid.neighbours.Held = []sl.Neighbour{
 		{Handle: msg.RegionHandle(43646, 43648), Name: "Pelmar Mill", Handshook: true},
 	}
-	got := x.do(t, "neighbours off")
+	got := x.do(t, "neighbors off")
 	if !strings.Contains(got, "off") || strings.Contains(got, "Pelmar Mill") {
-		t.Errorf("neighbours off printed %q", got)
+		t.Errorf("neighbors off printed %q", got)
 	}
 	if x.grid.neighbours.On || len(x.grid.neighbours.Held) != 0 {
 		t.Errorf("the session is %+v after being turned off", x.grid.neighbours)
@@ -980,8 +996,8 @@ func TestNeighboursTurnsThemOnAndOffAndSaysWhatItGot(t *testing.T) {
 
 	// Case is not the argument's business: somebody typing at a prompt
 	// has the shift key wherever they left it.
-	if got := x.do(t, "neighbours ON"); !strings.Contains(got, "on") || !x.grid.neighbours.On {
-		t.Errorf("neighbours ON printed %q", got)
+	if got := x.do(t, "neighbors ON"); !strings.Contains(got, "on") || !x.grid.neighbours.On {
+		t.Errorf("neighbors ON printed %q", got)
 	}
 }
 
@@ -991,9 +1007,9 @@ func TestNeighboursTurnsThemOnAndOffAndSaysWhatItGot(t *testing.T) {
 func TestNeighboursRefusesAWordItDoesNotUnderstand(t *testing.T) {
 	x := newTestShell(t)
 
-	for _, bad := range []string{"neighbours yes", "neighbours 1", "neighbours on off"} {
+	for _, bad := range []string{"neighbors yes", "neighbors 1", "neighbors on off"} {
 		got := x.do(t, bad)
-		if !strings.Contains(got, "usage: neighbours") {
+		if !strings.Contains(got, "usage: neighbors") {
 			t.Errorf("%q printed %q, want the usage line", bad, got)
 		}
 		if x.grid.neighbours.On {
@@ -1002,7 +1018,7 @@ func TestNeighboursRefusesAWordItDoesNotUnderstand(t *testing.T) {
 	}
 	// The one that names a word says which word, since "on off" is a
 	// count and "yes" is a synonym somebody expected to work.
-	if got := x.do(t, "neighbours yes"); !strings.Contains(got, `"yes" is neither on nor off`) {
+	if got := x.do(t, "neighbors yes"); !strings.Contains(got, `"yes" is neither on nor off`) {
 		t.Errorf("the refusal should quote the word: %q", got)
 	}
 }
@@ -1013,11 +1029,11 @@ func TestNeighboursSaysWhyItCannotAnswer(t *testing.T) {
 	x := newTestShell(t)
 	x.grid.neighboursErr = errors.New("the circuit is down")
 
-	if got := x.do(t, "neighbours"); !strings.Contains(got, "the circuit is down") {
-		t.Errorf("neighbours should report the failure, got %q", got)
+	if got := x.do(t, "neighbors"); !strings.Contains(got, "the circuit is down") {
+		t.Errorf("neighbors should report the failure, got %q", got)
 	}
-	if got := x.do(t, "neighbours on"); !strings.Contains(got, "the circuit is down") {
-		t.Errorf("neighbours on should report the failure, got %q", got)
+	if got := x.do(t, "neighbors on"); !strings.Contains(got, "the circuit is down") {
+		t.Errorf("neighbors on should report the failure, got %q", got)
 	}
 }
 

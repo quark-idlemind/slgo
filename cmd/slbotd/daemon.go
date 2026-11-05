@@ -187,10 +187,10 @@ func (d *daemon) Bots() []*bot {
 	return out
 }
 
-// control hands back the connection slgod's own calls go over, dialling
+// control hands back the connection slgod's own calls go over, dialing
 // one if there is none.
 //
-// Dialled lazily and dropped on failure, because slgod restarts: a
+// Dialed lazily and dropped on failure, because slgod restarts: a
 // connection held from startup would be dead after the first restart and
 // every host would fail against it for ever.
 func (d *daemon) control(ctx context.Context) (*client.Conn, error) {

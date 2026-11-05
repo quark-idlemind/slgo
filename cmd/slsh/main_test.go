@@ -224,7 +224,7 @@ func TestLoginSaysSoOnlyWhenItLoggedIn(t *testing.T) {
 
 // TestLoginRefusesWhatCannotMeanIt: --login is slgod's, so --direct
 // with it is a contradiction, and so is --agent naming somebody else.
-// Both are refused before anything is dialled.
+// Both are refused before anything is dialed.
 func TestLoginRefusesWhatCannotMeanIt(t *testing.T) {
 	for _, c := range []struct {
 		args []string

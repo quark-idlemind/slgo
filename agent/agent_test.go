@@ -182,7 +182,7 @@ func (f *fakeSim) run() {
 		silent := f.silent
 		f.mu.Unlock()
 		if silent {
-			// Not even an acknowledgement: an ack is an
+			// Not even an acknowledgment: an ack is an
 			// inbound packet, and an inbound packet is what
 			// tells the session its circuit is up.
 			continue
@@ -329,7 +329,7 @@ func (f *fakeSim) write(out []byte) bool {
 // hush stops this simulator writing to the circuit it is talking to now,
 // and says how many packets it wrote before it stopped.  Unlike silent
 // it holds for an answer already under way, so once the circuit has
-// heard that many packets it will hear nothing more.  A circuit dialled
+// heard that many packets it will hear nothing more.  A circuit dialed
 // afterwards, from another socket, is answered as usual.
 func (f *fakeSim) hush() int {
 	f.mu.Lock()

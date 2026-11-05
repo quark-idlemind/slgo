@@ -49,7 +49,7 @@
             <tr><td>Settings and profiles</td><td class="what" data-os-side="linux"><code>~/.config/slgo</code>, <code>~/.config/slgod</code>, <code>~/.config/slsh</code></td><td class="what" data-os-side="mac"><code>~/.config/slgo</code>, <code>~/.config/slgod</code>, <code>~/.config/slsh</code> (not <code>~/Library</code>)</td></tr>
             <tr><td>Shared secret</td><td class="what" data-os-side="linux"><code>~/.config/slgod/secret</code>, always</td><td class="what" data-os-side="mac"><code>~/.config/slgod/secret</code>, always</td></tr>
             <tr><td>A secret kept for one address</td><td class="what" colspan="2">The same name on both: <code>~/.config/slgod/secret.HOST.PORT</code>. An IPv6 address has its colons turned into dots, <code>secret.2001.db8..20.7807</code>, because macOS shows a colon in a file name as a slash (<a href="reference.html#secret-order">rules</a>).</td></tr>
-            <tr><td><code>XDG_CONFIG_HOME</code> and friends</td><td class="what" data-os-side="linux">honoured when set, except for the secret and the sl-host rules</td><td class="what" data-os-side="mac">honoured when set, except for the secret and the sl-host rules; usually not set on a Mac</td></tr>
+            <tr><td><code>XDG_CONFIG_HOME</code> and friends</td><td class="what" data-os-side="linux">honored when set, except for the secret and the sl-host rules</td><td class="what" data-os-side="mac">honored when set, except for the secret and the sl-host rules; usually not set on a Mac</td></tr>
             <tr><td>Keychain / secret service</td><td class="what" data-os-side="linux">not used</td><td class="what" data-os-side="mac">not used</td></tr>
             <tr><td>Keeping slgod running</td><td class="what" data-os-side="linux">a systemd user unit (not shipped; a template is in <a href="setups.html#service">Setups</a>)</td><td class="what" data-os-side="mac">a LaunchAgent plist (not shipped; a template is in <a href="setups.html#service">Setups</a>)</td></tr>
             <tr><td>Where a service's output goes</td><td class="what" data-os-side="linux">the journal, unless you pass <code>-log</code></td><td class="what" data-os-side="mac">the files <code>StandardOutPath</code> and <code>StandardErrorPath</code> name</td></tr>
@@ -193,8 +193,8 @@ viewer_running = pgrep -f /opt/firestorm-os/</pre></div>
         <p>slsh has its own line editor, history, completion and pager, so it needs no readline, <code>$PAGER</code> or <code>$EDITOR</code>, on either system. It uses a few common VT100 sequences, never clears the screen, and never moves the cursor to a fixed position, so your scrollback stays intact. Terminal.app, iTerm2 and the usual Linux terminals all speak those sequences.</p>
         <ul>
           <li>Window resizes are followed. With no size available, slsh assumes 80 by 24.</li>
-          <li><code>NO_COLOR</code>, set to anything, turns colour off.</li>
-          <li>With input from a pipe rather than a terminal, slsh reads plain lines, with no editing and no colour. <code>-c</code> and <code>-f</code> read nothing from the terminal.</li>
+          <li><code>NO_COLOR</code>, set to anything, turns color off.</li>
+          <li>With input from a pipe rather than a terminal, slsh reads plain lines, with no editing and no color. <code>-c</code> and <code>-f</code> read nothing from the terminal.</li>
           <li>ESC leaves chat mode. If your terminal or a multiplexer holds on to ESC, choose another key with <code>--escape</code>.</li>
           <li><code>set map_ratio auto</code> measures the font by asking the terminal. A terminal that does not answer needs the ratio set by hand (<code>man set</code> in slsh).</li>
           <li>slsh never touches the clipboard, on either system.</li>
@@ -205,7 +205,7 @@ viewer_running = pgrep -f /opt/firestorm-os/</pre></div>
       <section id="shells">
         <h2>Shells: sh, zsh and csh</h2>
         <p>The commands in this handbook are written for three families of shell: sh (with bash, dash and ksh), zsh, and csh (with tcsh). slgo has no preference among them. macOS starts zsh for a new account and many Linux distributions start bash, but any of the three will do.</p>
-        <p>Where a command can be written to run unchanged in all three, it is, and it is shown once. Where it cannot, it is shown once per shell, each labelled; the <strong>shell</strong> switch in the top bar hides the ones that are not yours. Whichever shell you use, the prompt in the examples is always shown as <code>$</code>. Type what follows it. Lines starting with <code>#</code> are notes, not commands, and they sit on lines of their own because at a prompt zsh and csh do not take <code>#</code> as the start of a comment: pasted after a command, it would reach the program as more words.</p>
+        <p>Where a command can be written to run unchanged in all three, it is, and it is shown once. Where it cannot, it is shown once per shell, each labeled; the <strong>shell</strong> switch in the top bar hides the ones that are not yours. Whichever shell you use, the prompt in the examples is always shown as <code>$</code>. Type what follows it. Lines starting with <code>#</code> are notes, not commands, and they sit on lines of their own because at a prompt zsh and csh do not take <code>#</code> as the start of a comment: pasted after a command, it would reach the program as more words.</p>
         <div class="tablewrap"><table>
           <thead><tr><th></th><th>sh, bash</th><th>zsh</th><th>csh, tcsh</th></tr></thead>
           <tbody>

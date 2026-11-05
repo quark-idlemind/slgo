@@ -339,7 +339,7 @@ func TestQuaternionPacking(t *testing.T) {
 			t.Errorf("%v: recovered W is negative", c)
 		}
 		// q and -q are the same rotation, so compare after
-		// normalising the sign of the input the way LL does.
+		// normalizing the sign of the input the way LL does.
 		wx, wy, wz, ww := c.x, c.y, c.z, c.w
 		if ww < 0 {
 			wx, wy, wz, ww = -wx, -wy, -wz, -ww

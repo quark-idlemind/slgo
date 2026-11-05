@@ -143,7 +143,7 @@ func Listen(host string, session func() *agent.Agent, census *Census, trace *Tra
 		msg.WithSender(c.send),
 		// The peer is settled by the gate, not by the relay or a tap,
 		// because it has to be decided for every packet including the
-		// ones the relay never sees -- a bare acknowledgement is the
+		// ones the relay never sees -- a bare acknowledgment is the
 		// first thing some viewers send -- and because a packet from
 		// an address this circuit has not admitted must not be
 		// acknowledged either.  See admit.
@@ -171,7 +171,7 @@ func (c *Circuit) Write(p []byte) (int, error) {
 	return c.conn.WriteToUDP(p, peer)
 }
 
-// Run serves the circuit until the context is cancelled.
+// Run serves the circuit until the context is canceled.
 func (c *Circuit) Run(ctx context.Context) {
 	ctx, c.cancel = context.WithCancel(ctx)
 	c.wg.Add(5)
@@ -779,7 +779,7 @@ func (c *Circuit) describeRegion() {
 	// handshake and the land -- though still ahead of the
 	// AgentMovementComplete that fromViewer sends once this returns --
 	// because a viewer showing an invitation before it has drawn
-	// anything is a dialogue over a grey screen.
+	// anything is a dialogue over a gray screen.
 	// Why: doc/handover.md#what-was-said-while-nobody-was-attached
 	if waiting := a.Offers().Take(); len(waiting) > 0 {
 		for _, m := range waiting {

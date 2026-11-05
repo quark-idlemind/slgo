@@ -103,7 +103,7 @@ func (d direct) Lease(ctx context.Context, in *scriptv1.LeaseRequest, _ ...grpc.
 	}
 	id := d.s.watchDirect(cancel)
 	go func() {
-		// The order matters and cost a debugging session.  Cancelling
+		// The order matters and cost a debugging session.  Canceling
 		// before closing done would race the caller: a Recv sitting in
 		// its select would see the cancellation and report Canceled,
 		// losing the InvalidArgument or DeadlineExceeded the handler
@@ -215,7 +215,7 @@ type collected[T any] struct {
 func (c *collected[T]) Send(m *T) error {
 	// Checked even though nothing here blocks, because a handler is
 	// entitled to learn from Send that the caller has gone -- over a
-	// connection that is what a Send into a cancelled stream says, and a
+	// connection that is what a Send into a canceled stream says, and a
 	// handler written against it would otherwise carry on talking to
 	// nobody.
 	if err := c.ctx.Err(); err != nil {
@@ -230,7 +230,7 @@ func (c *collected[T]) Recv() (*T, error) {
 	// of what it asked for.  Over a connection this is a race -- the
 	// transport selects between the cancellation and the bytes already
 	// buffered -- so either answer would be faithful; this is the one
-	// that cannot let a cancelled caller act on data it should not have
+	// that cannot let a canceled caller act on data it should not have
 	// had.
 	if err := c.ctx.Err(); err != nil {
 		return nil, status.FromContextError(err).Err()
@@ -259,7 +259,7 @@ type streamed[T any] struct {
 	done chan struct{}
 
 	// err is what the handler returned.  Written before done is closed
-	// and read only after, which is the whole of the synchronisation it
+	// and read only after, which is the whole of the synchronization it
 	// needs.
 	err error
 }

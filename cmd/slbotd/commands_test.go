@@ -372,7 +372,7 @@ func TestANameThatMeansTwoThingsIsRefused(t *testing.T) {
 }
 
 // The grid keeps "A Lamp" and "a lamp" as two names, so a name is the
-// one spelt that way and a case variant beside it is neither a second
+// one spelled that way and a case variant beside it is neither a second
 // meaning nor a stand-in.
 func TestPickEntryMatchesTheCaseItHas(t *testing.T) {
 	kids := []sl.Entry{
@@ -420,7 +420,7 @@ func TestStatusSaysWhatTheAttendantIsDoing(t *testing.T) {
 	}
 }
 
-// A landmark's whole name is matched as it is spelt, and several of it
+// A landmark's whole name is matched as it is spelled, and several of it
 // are refused with their ids.  A name only another spelling has is
 // refused with that spelling as the hint rather than found by the
 // search that follows, which would take it as if it had been typed.
@@ -458,7 +458,7 @@ func TestPickLandmarkMatchesTheCaseItHas(t *testing.T) {
 	}
 }
 
-// A worn object is named as it is spelt, and one worn under another
+// A worn object is named as it is spelled, and one worn under another
 // spelling of the name is offered rather than taken off.
 func TestDetachMatchesTheCaseAWornObjectHas(t *testing.T) {
 	d, b, f := newTestDaemon(t)

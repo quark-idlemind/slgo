@@ -39,7 +39,7 @@ func TestDirectionNames(t *testing.T) {
 }
 
 // TestCensusAnswersWhatIsMissing is the question the census exists for.
-// A viewer stuck on a grey screen is waiting for one message; the census
+// A viewer stuck on a gray screen is waiting for one message; the census
 // has to be able to say that message never went that way, and to
 // distinguish that from it having gone and been dropped.
 func TestCensusAnswersWhatIsMissing(t *testing.T) {

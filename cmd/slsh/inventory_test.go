@@ -619,7 +619,7 @@ func TestAMkdirGivenUpOnSaysWhatItMade(t *testing.T) {
 		if !ok {
 			return
 		}
-		// Cancelled as the request goes out, so only the last look,
+		// Canceled as the request goes out, so only the last look,
 		// which the cancel does not reach, finds the folder.
 		cancel()
 		x.grid.mu.Lock()

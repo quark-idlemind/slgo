@@ -17,7 +17,7 @@ is the point its maker set.
 The point may be the way `worn` prints it (`left hand`, `HUD top
 right`), the way the viewer names it on its own menu (`Skull`, `R Upper
 Arm`, `Top Right`), or its number.  Case and surrounding space do not
-matter, and the American `center` is taken for `centre`.  The numbers
+matter, and the British `centre` is taken for `center`.  The numbers
 run from 1 to 127; `0` asks for wherever the object itself says, the
 same as leaving `--at` off.  A word that is neither a printed name nor
 a viewer name -- `elbow` -- is refused rather than guessed at.

@@ -80,7 +80,7 @@ func TestRandomMACIsLocallyAdministered(t *testing.T) {
 	}
 }
 
-// TestLoadMachineIDKeepsWhatIsWritten: a hand written file is honoured,
+// TestLoadMachineIDKeepsWhatIsWritten: a hand written file is honored,
 // not overwritten with something invented.
 func TestLoadMachineIDKeepsWhatIsWritten(t *testing.T) {
 	dir := tempMachineDir(t)

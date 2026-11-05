@@ -21,7 +21,7 @@ look at the appearance, and fetches the texture with `TextureImage`.
 about the middle of the face it turns, then tiles by the repeats, then
 shifts by the offset, and crops to the face. One repeat with no offset
 and no rotation is the texture unchanged. A repeat of 0.5 keeps the
-middle half. A repeat of 2 lays two copies, centred, so the picture
+middle half. A repeat of 2 lays two copies, centered, so the picture
 starts on the right half of the texture. A positive offset samples
 further along the texture, and the part that slides off one edge wraps
 to the other. A negative repeat flips. Half a turn (`Rotation` 16384)

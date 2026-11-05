@@ -114,11 +114,11 @@ const (
 	ControlMLLButtonUp   uint32 = 0x80000000 // AGENT_CONTROL_ML_LBUTTON_UP
 )
 
-// RegionWidth is how many metres a region is across, and so the bound a
+// RegionWidth is how many meters a region is across, and so the bound a
 // walk's target is refused outside of.
 //
 // It is not read from the grid.  Every region on Second Life's own grid
-// is 256 metres square; the variable sized regions some OpenSimulator
+// is 256 meters square; the variable sized regions some OpenSimulator
 // grids run would be refused wrongly past 256, and nothing here has been
 // pointed at one.
 const RegionWidth = 256
@@ -128,7 +128,7 @@ const (
 	// MinWithin is the least distance a walk counts as close enough.  A
 	// request for less, zero included, is judged against this; zero
 	// still means "as close as you can", in where the walk aims (see
-	// aimFor).  A window a metre across is about the shortest walk there
+	// aimFor).  A window a meter across is about the shortest walk there
 	// is from a standstill (see stopLead), so a narrower one is one a
 	// walk that stopped outside it could step straight over again.
 	MinWithin = 0.5
@@ -144,8 +144,8 @@ const (
 //
 // Ten updates a second is a fraction of what a viewer sends -- the
 // viewer is capped at 125 a second and sends one whenever the flags or
-// the facing change -- and is enough: an avatar walks about three metres
-// a second, so between two updates it goes about a third of a metre.
+// the facing change -- and is enough: an avatar walks about three meters
+// a second, so between two updates it goes about a third of a meter.
 // The reports are for a client deciding what to do next, and four a
 // second is enough for that without the progress stream costing more
 // than the walk.
@@ -166,7 +166,7 @@ var (
 //
 // One that stopped too far off walks again, up to maxStops times in
 // all; it then ends Cancelled, "overshot".  A walk from a standstill
-// cannot be made much shorter than a metre and still go the way the
+// cannot be made much shorter than a meter and still go the way the
 // avatar faces, so nothing here tries to step finer than a walk.
 // Why: doc/walk.md#stopping-where-asked
 var (
@@ -178,7 +178,7 @@ var (
 
 // MoveRequest is where to walk to and how.
 type MoveRequest struct {
-	// Target is a place in this region, in the region's own metres.
+	// Target is a place in this region, in the region's own meters.
 	// Only X and Y are walked to: the ground decides the height, and a
 	// walk does not climb or fly.  A target outside the region is
 	// refused before anything moves, because a walk never crosses a
@@ -272,7 +272,7 @@ func (s MoveState) String() string {
 	return fmt.Sprintf("move state %d", int(s))
 }
 
-// Why a walk was cancelled.  They are the Reason of a Cancelled end.
+// Why a walk was canceled.  They are the Reason of a Cancelled end.
 const (
 	// CancelSuperseded is another Move, or a Face, taking over.  The
 	// avatar is not stopped between the two: the new walk holds the
@@ -310,7 +310,7 @@ const (
 
 	// CancelOvershot is a walk that stopped outside the distance asked
 	// for maxStops times running.  The shortest walk there is from a
-	// standstill is about a metre (see stopLead), so a target closer
+	// standstill is about a meter (see stopLead), so a target closer
 	// than that with a small Within can be one no walk lands in.
 	CancelOvershot = "overshot"
 )
@@ -325,19 +325,19 @@ type MoveProgress struct {
 
 	// Position is where the avatar is, and Exact whether that is the
 	// simulator's own figure for this avatar's object or only the
-	// whole-metre one CoarseLocationUpdate carries.  It is exact
+	// whole-meter one CoarseLocationUpdate carries.  It is exact
 	// whenever the region has described this avatar, which is always
 	// soon after arrival.
 	Position msg.Vector3
 	Exact    bool
 
 	// Velocity is how fast the avatar was last said to be moving, in
-	// metres a second, from the simulator's terse updates for it.  Zero
+	// meters a second, from the simulator's terse updates for it.  Zero
 	// when none has arrived.
 	Velocity msg.Vector3
 
 	// Yaw is which way the avatar is facing, as the simulator last said
-	// it: radians anticlockwise from east, the positive X axis, between
+	// it: radians counterclockwise from east, the positive X axis, between
 	// minus pi and pi.
 	Yaw float32
 
@@ -411,7 +411,7 @@ func (a *Agent) setDrive(flags uint32, body msg.Quaternion) {
 // The object store has the simulator's own figures for this avatar,
 // kept current by the ImprovedTerseObjectUpdate it sends several times a
 // second while the avatar moves, and that is what a walk has to steer
-// by: Position is CoarseLocationUpdate while walking, whole metres and
+// by: Position is CoarseLocationUpdate while walking, whole meters and
 // seconds behind.  Exact says which of the two this is.  The store has
 // this avatar soon after arrival, and a seated avatar's figures there
 // are an offset from its seat, so Position is what answers for one of
@@ -460,7 +460,7 @@ func reckon(pos, vel msg.Vector3, when, now time.Time) msg.Vector3 {
 }
 
 // YawTo is the facing from one place toward another, flat: radians
-// anticlockwise from east.
+// counterclockwise from east.
 func YawTo(from, to msg.Vector3) float32 {
 	return float32(math.Atan2(float64(to.Y-from.Y), float64(to.X-from.X)))
 }
@@ -727,7 +727,7 @@ func (a *Agent) Move(ctx context.Context, r MoveRequest, progress func(MoveProgr
 // uncertain by half of that either way and a little more for the coast
 // itself.  A walk asked to come within some distance aims that much
 // inside it, so as to stop near the edge rather than walk up to the
-// target: within a metre and a half of somebody is not into them.  One
+// target: within a meter and a half of somebody is not into them.  One
 // asked for as close as it can get -- a Within of zero -- aims at the
 // target itself, and comes to rest past it about as often as short.
 func aimFor(asked, within, speed float32) float32 {
@@ -776,7 +776,7 @@ func (a *Agent) steer(ctx context.Context, w *walk, pos, target msg.Vector3, fir
 // On the avatar and not behind it, as setCenter always has: the
 // simulator scopes what it describes by the camera and not by where the
 // avatar is, and a camera that fell behind a walking avatar would be a
-// camera that was a few metres wrong about what is near it.  Pointing
+// camera that was a few meters wrong about what is near it.  Pointing
 // it the way the avatar faces changes nothing about that and keeps the
 // update from being a camera looking east at an avatar walking north.
 func (a *Agent) faceCamera(at msg.Vector3, yaw float32) {
@@ -924,7 +924,7 @@ func (a *Agent) Face(ctx context.Context, target msg.Vector3) (float32, error) {
 	return yaw, a.FaceYaw(ctx, yaw)
 }
 
-// FaceYaw is Face given the facing itself: radians anticlockwise from
+// FaceYaw is Face given the facing itself: radians counterclockwise from
 // east.
 func (a *Agent) FaceYaw(ctx context.Context, yaw float32) error {
 	if a.Account == nil {

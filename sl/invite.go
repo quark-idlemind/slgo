@@ -270,7 +270,7 @@ func (w *Session) answerInvitation(ctx context.Context, i *Invitation, dialog ui
 //
 // It is the null id, which is the same value a missing field has -- so
 // it is written down rather than left as a zero somebody has to
-// recognise.  Linden Lab's viewer offers the group's roles in a menu
+// recognize.  Linden Lab's viewer offers the group's roles in a menu
 // and starts on this one; a group that has never defined a role has
 // only this.
 var RoleEveryone = msg.UUID{}

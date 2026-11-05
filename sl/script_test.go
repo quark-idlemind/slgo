@@ -1736,7 +1736,7 @@ func stopsSent(f *fakeBackend, item msg.UUID) int {
 // listening, holding memory -- long after anybody is listening, and an
 // object that has one would have it heard as the next run's output.  So
 // the run stops it at the end: finished, timed out or interrupted, the
-// last on a context of its own, since the run's own is cancelled by then.
+// last on a context of its own, since the run's own is canceled by then.
 func TestARunStopsItsScriptHoweverItEnds(t *testing.T) {
 	oAt := func(w *Session) *Object { return foundHere(w, &Object{ID: thePrim, Local: 77}) }
 	for _, c := range []struct {

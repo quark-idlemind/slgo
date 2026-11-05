@@ -21,7 +21,7 @@
 
       <section id="what">
         <h2>What you will build</h2>
-        <p>The greeter drives an avatar that slgod holds. Every few seconds it looks around. When somebody new comes within 20 metres, it turns to face them, greets them by name in local chat and offers them a gift. Anyone who says <code>info</code> nearby, or sends it by IM, is told where they are. The greeter keeps the list of people it has greeted in a file, so a restart does not greet the whole shop again.</p>
+        <p>The greeter drives an avatar that slgod holds. Every few seconds it looks around. When somebody new comes within 20 meters, it turns to face them, greets them by name in local chat and offers them a gift. Anyone who says <code>info</code> nearby, or sends it by IM, is told where they are. The greeter keeps the list of people it has greeted in a file, so a restart does not greet the whole shop again.</p>
         <p>This is what a visitor received when the greeter was tested on 25 September 2026. A small program attached to the visitor's avatar recorded it. The lines marked <code>&gt;&gt;</code> are what the visitor did. The names of the place are invented.</p>
         <div class="term" data-where-label="the visitor's side, as recorded"><pre>15:09:54  ..     waiting for the greeter
 15:09:59  local  Mirkwin Resident: Hello Quark, welcome to Example Workshop! I have sent you a Welcome Kit. Say info, or IM me info, to hear about this place.
@@ -167,7 +167,7 @@ func (g *greeter) listen(ctx context.Context) error {
               <li><strong>The filter</strong> here hears avatars only, at the three volumes a person speaks at. Without it you also get objects talking, script errors and typing notices.</li>
               <li><strong>Each channel has a buffer</strong>, 64 by default. If your loop falls behind and a buffer fills, new items are dropped rather than holding up the session. <code>ChatDropped</code> and <code>IMsDropped</code> count them. Keep each handler short.</li>
               <li><strong><code>s.Done()</code></strong> closes when the connection to slgod ends. The program then exits with an error, and a service manager can start it again.</li>
-              <li><strong><code>ctx</code></strong> is cancelled by Ctrl-C or SIGTERM, which <code>main</code> arranges. The avatar stays logged in either way.</li>
+              <li><strong><code>ctx</code></strong> is canceled by Ctrl-C or SIGTERM, which <code>main</code> arranges. The avatar stays logged in either way.</li>
               <li><strong>One handler runs at a time.</strong> That keeps the state simple, and nothing in this program needs a lock.</li>
             </ul>
           </div></li>
@@ -205,7 +205,7 @@ func (g *greeter) look(ctx context.Context) {
 	g.here = now
 }</pre></div>
             <ul>
-              <li><code>Nearby</code> lists the other avatars in the region, nearest first, with a distance in metres. It asks slgod, which has been listening since before your program started, so people who were already there are included.</li>
+              <li><code>Nearby</code> lists the other avatars in the region, nearest first, with a distance in meters. It asks slgod, which has been listening since before your program started, so people who were already there are included.</li>
               <li>It is cheap. Measured on 25 September 2026, with the program and slgod on one Mac and 808 objects known in the region: 108 ms for the first call, then 2 to 3 ms.</li>
               <li>A name reaches the avatar a moment after the person does. Until it arrives, <code>Nearby</code> shows a shortened uuid, and the greeter waits for the next look rather than greet a number.</li>
               <li><code>here</code> is who was in reach at the last look. Anybody in reach now who was not there then has just arrived. This was tested by teleporting the bot away and back, with <code>-every 2s</code>. On its return, the next look found the three people there and greeted the one it had not met.</li>
@@ -481,7 +481,7 @@ func findGift(ctx context.Context, s *sl.Session, folder, name string) (*sl.Item
               <tbody>
                 <tr><td><code>-addr</code></td><td><code>localhost:7807</code></td><td class="what">Where slgod is.</td></tr>
                 <tr><td><code>-agent</code></td><td>empty</td><td class="what">Which of slgod's avatars to use. Empty takes <code>$SLGO_AGENT</code>, or else the one slgod has held longest.</td></tr>
-                <tr><td><code>-radius</code></td><td>20</td><td class="what">Greet people who come within this many metres.</td></tr>
+                <tr><td><code>-radius</code></td><td>20</td><td class="what">Greet people who come within this many meters.</td></tr>
                 <tr><td><code>-every</code></td><td><code>5s</code></td><td class="what">How often to look around.</td></tr>
                 <tr><td><code>-again</code></td><td>0</td><td class="what">Welcome somebody back after this long away. 0 greets each person once.</td></tr>
                 <tr><td><code>-memory</code></td><td><code>greeted.json</code></td><td class="what">The file that remembers who has been greeted.</td></tr>
@@ -553,7 +553,7 @@ func findGift(ctx context.Context, s *sl.Session, folder, name string) (*sl.Item
         <ul>
           <li><strong>Your own chat comes back.</strong> Measured, as in step 7.</li>
           <li><strong>The grid marks the bot's IMs.</strong> See <a href="#before">Before you start</a>.</li>
-          <li><strong><code>Where</code> is approximate.</strong> Between arrivals it follows the grid's coarse location updates, which carry whole metres. Above 1020 metres they carry no height, so the height stays at what it was when the avatar arrived (from the code). Measured: after a short walk left the bot at 4001.2 metres, <code>Where</code> still said 4004. <code>Nearby</code> measures distances from it, so leave a few metres to spare in a radius.</li>
+          <li><strong><code>Where</code> is approximate.</strong> Between arrivals it follows the grid's coarse location updates, which carry whole meters. Above 1020 meters they carry no height, so the height stays at what it was when the avatar arrived (from the code). Measured: after a short walk left the bot at 4001.2 meters, <code>Where</code> still said 4004. <code>Nearby</code> measures distances from it, so leave a few meters to spare in a radius.</li>
           <li><strong>Names arrive late.</strong> See step 4.</li>
           <li><strong>A gift is only an offer.</strong> See step 8.</li>
           <li><strong>Everyone present at startup counts as arriving.</strong> See step 9.</li>

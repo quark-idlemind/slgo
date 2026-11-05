@@ -36,7 +36,7 @@ package agent
 //
 // The reason text is the only thing that tells them apart, which is not
 // much to hang a decision on, so the recognition is narrow and the
-// default is unchanged: a kick nobody recognises is still a decision to
+// default is unchanged: a kick nobody recognizes is still a decision to
 // respect.
 
 import (
@@ -74,7 +74,7 @@ func (a *Agent) Kicked() (string, bool) {
 //
 // The grid's words are all there is to go on -- there is no code, and
 // the sentence is written for a person -- so this matches the one thing
-// it is sure of and nothing more.  A reason it does not recognise is
+// it is sure of and nothing more.  A reason it does not recognize is
 // treated as a decision, which is the answer that costs a wait rather
 // than a fight with whoever is holding the session.
 func (k *Kicked) RegionWentDown() bool {

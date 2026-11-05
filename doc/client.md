@@ -79,7 +79,7 @@ idle and closes its transport; the next call opens a new one, with a new
 TLS session that has never logged in. A transport re-established after
 a network blip would be the same; that is inferred, not measured. That
 the idle one does this was measured on
-2026-10-02 against a running slgod, with a probe that dialled, called
+2026-10-02 against a running slgod, with a probe that dialed, called
 `ListAgents`, waited and called again:
 
     22:29:19 at once: agents=8 code=OK err=<nil>
@@ -88,7 +88,7 @@ the idle one does this was measured on
 
 After 5 seconds idle, the same probe's second call was answered. The
 effect seen in production on 2026-10-01 was slbotd's control
-connection, dialled once, refusing every `Host` from then on, so that an
+connection, dialed once, refusing every `Host` from then on, so that an
 avatar needing to be hosted again never was until slbotd restarted.
 
 So a `Conn` from `Dial` now logs in again when a call is refused
@@ -103,7 +103,7 @@ logging in again fails, the call returns the refusal, with the reason
 added, and `status.Code` still says `Unauthenticated`.
 
 Streams are not retried. A stream on a lost transport ends and the
-`Conn` finishes as it always did; whoever dialled attaches again. A
+`Conn` finishes as it always did; whoever dialed attaches again. A
 login that fails is also why slbotd drops its control connection on
 `Unauthenticated` as it does on `Unavailable`: the next call dials
 afresh.

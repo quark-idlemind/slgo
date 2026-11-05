@@ -76,7 +76,7 @@ func TestGroupMarksTheOneItIsActingAs(t *testing.T) {
 	if !strings.HasPrefix(lines[1], "active") {
 		t.Errorf("the active group was not marked: %q", lines[1])
 	}
-	// Both halves of every line: the name is what a person recognises
+	// Both halves of every line: the name is what a person recognizes
 	// and the key is what everything else takes.
 	for _, want := range []string{
 		testBuilders.String(), "Pelmar Reach Builders",

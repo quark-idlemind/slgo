@@ -14,7 +14,7 @@ import (
 // zoom the viewer draws HUDs at.
 //
 // The world view is the window less the viewer's menu bar; the bars
-// drawn over it do not shrink it.  Its height is one metre of HUD
+// drawn over it do not shrink it.  Its height is one meter of HUD
 // whatever its width, so the pixels can be whatever the caller counts
 // in -- a Retina screen's backing pixels or its points -- as long as
 // Width and Height are counted the same way.
@@ -43,7 +43,7 @@ type ScreenFace struct {
 	Outline []ScreenPoint
 
 	// Depth is how far the face's middle is along the viewer's line of
-	// sight, in metres; the smaller is in front.
+	// sight, in meters; the smaller is in front.
 	Depth float64
 }
 
@@ -200,7 +200,7 @@ func (v HUDView) point(p int) (vec, error) {
 }
 
 // project is where a point in the HUD's frame lands on the screen.  The
-// view is orthographic and looks along +X, one metre tall, so X is
+// view is orthographic and looks along +X, one meter tall, so X is
 // dropped; +Y is to the left and +Z up.
 func (v HUDView) project(p vec) ScreenPoint {
 	h, z := float64(v.Height), v.zoom()
@@ -362,7 +362,7 @@ type hit struct {
 // prim, if it does.
 func (p hudPrim) intersect(ray vec) (hit, bool) {
 	// The line in the prim's own frame: from where it crosses X = 0 in
-	// the HUD's frame, going one metre along X per unit.
+	// the HUD's frame, going one meter along X per unit.
 	from := p.turn.conj().rotate(ray.sub(p.at)).over(p.scale)
 	along := p.turn.conj().rotate(vec{1, 0, 0}).over(p.scale)
 	var (

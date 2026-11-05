@@ -147,7 +147,7 @@ func TestAShapedPatchDecodesAsTheTransformSays(t *testing.T) {
 	var tr Terrain
 	tr.note(landMessage('L', encodeLand(16, false,
 		testPatch{x: 3, y: 5, dc: dc, rng: rng, quant: quant, coeffs: sent},
-		// Neighbours to the east, north and north east, so the last
+		// Neighbors to the east, north and north east, so the last
 		// row and column of the first are readable.
 		testPatch{x: 4, y: 5, dc: 30, rng: 2},
 		testPatch{x: 3, y: 6, dc: 30, rng: 2},
@@ -205,7 +205,7 @@ func TestTheLargeLayerHasWideIDs(t *testing.T) {
 }
 
 // TestA32PatchCoversFourCells: the viewer decodes patches of 32 as well
-// as 16, and places them by the same 16 metre ids.
+// as 16, and places them by the same 16 meter ids.
 func TestA32PatchCoversFourCells(t *testing.T) {
 	var tr Terrain
 	tr.note(landMessage('L', encodeLand(32, false,
@@ -268,7 +268,7 @@ func grid(f func(x, y int) float32) *Terrain {
 // TestASquareIsSplitFromSouthWestToNorthEast: resolveHeightRegion
 // (llsurface.cpp:948-984).  A square whose south west and north east
 // corners are low and the other two high is a valley along that
-// diagonal; split the other way, or read bilinearly, its centre would be
+// diagonal; split the other way, or read bilinearly, its center would be
 // a ridge or a saddle.
 func TestASquareIsSplitFromSouthWestToNorthEast(t *testing.T) {
 	tr := grid(func(x, y int) float32 {
@@ -296,7 +296,7 @@ func TestASquareIsSplitFromSouthWestToNorthEast(t *testing.T) {
 }
 
 // TestHighestIsTheHighestAnywhere: against the ground sampled every
-// centimetre, on rough land, for rectangles large and small.
+// centimeter, on rough land, for rectangles large and small.
 func TestHighestIsTheHighestAnywhere(t *testing.T) {
 	r := rand.New(rand.NewSource(7))
 	tr := grid(func(x, y int) float32 { return 30 + 4*r.Float32() })
@@ -320,7 +320,7 @@ func TestHighestIsTheHighestAnywhere(t *testing.T) {
 			sampled = max(sampled, h)
 		}
 		// Sampling can only miss the top, and by no more than a
-		// centimetre's worth of the steepest slope here.
+		// centimeter's worth of the steepest slope here.
 		if got < sampled-1e-4 || got > sampled+0.1 {
 			t.Errorf("highest in %v,%v to %v,%v = %v, sampled %v", w, s, e, n, got, sampled)
 		}

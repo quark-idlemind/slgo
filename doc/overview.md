@@ -233,7 +233,7 @@ the protocol needs.
 | `Fixed N` | `[N]byte` | N bytes |
 
 Everything is little endian except what is in network order: the
-packet sequence number, the acknowledgements appended to a packet, a
+packet sequence number, the acknowledgments appended to a packet, a
 Low message's number, `IPADDR` and `IPPORT`.
 
 ## Where the wire format came from
@@ -360,15 +360,15 @@ and took the whole client down.
     }
 
 `Run` blocks, so the caller decides where the goroutine lives. It
-closes the channel on return, so `range` terminates. Cancelling the
+closes the channel on return, so `range` terminates. Canceling the
 context unblocks a read in progress via `SetReadDeadline`, which
-`*net.UDPConn` supports; a cancelled `Run` returns nil rather than the
+`*net.UDPConn` supports; a canceled `Run` returns nil rather than the
 resulting timeout.
 
 Each `Packet` is one of three things, and the doc comment says so:
 `Message` set means it decoded, `Err` set means it did not and `Body`
 holds the raw bytes, and both nil means the datagram carried only
-acknowledgements. `Acks` is filled in either way — a packet whose body
+acknowledgments. `Acks` is filled in either way — a packet whose body
 is corrupt still releases whatever it was acknowledging, which is not
 true of the C, where a bad body means the acks in the same datagram are
 processed but the packet is then dropped on the floor.
@@ -391,14 +391,14 @@ the header's extra bytes and any raw body are copied on the way out.
 
 When the channel is full the default is to block, which pushes back on
 the network and lets the kernel drop datagrams — honest for UDP, but it
-also stalls the caller's acknowledgements behind a slow consumer.
+also stalls the caller's acknowledgments behind a slow consumer.
 `DropWhenFull()` inverts that and counts what it discards.
 
 ## Sending
 
 `Sender` owns the write end and is the only thing that assigns sequence
 numbers, so neither needs a lock. It takes messages on one channel and
-acknowledgements on another, and selects on both:
+acknowledgments on another, and selects on both:
 
     send := msg.NewSender(conn)
     go func() { err = send.Run(ctx) }()
@@ -408,7 +408,7 @@ acknowledgements on another, and selects on both:
     send.ConfirmAck(seq)                     // from Packet.Acks
 
 The two channels are the whole point. When a message goes out, whatever
-acknowledgements have piled up ride on its tail — `FlagAck`, four bytes
+acknowledgments have piled up ride on its tail — `FlagAck`, four bytes
 each, a count byte — so they cost no datagram at all. If nothing goes
 out within `AckDelay` (100ms by default) they are flushed as a batched
 `PacketAck` instead, so they never wait indefinitely for traffic that
@@ -421,7 +421,7 @@ exactly one, so a session that acknowledged 23,371 packets sent 23,371
 datagrams to do it. `PacketAck.Packets` is a `Variable` block that holds
 255.
 
-`QueueAck` never blocks. Dropping an acknowledgement under pressure
+`QueueAck` never blocks. Dropping an acknowledgment under pressure
 costs one retransmission from the peer, which is a much better trade
 than stalling the receive loop — and it means the receiver can hand acks
 to the sender without the two being able to deadlock on each other.
@@ -434,7 +434,7 @@ its `acktime` only ever grew.
 ## Dispatching
 
 `Dispatcher` consumes the receiver's channel, routes each packet, and
-does the acknowledgement bookkeeping in between:
+does the acknowledgment bookkeeping in between:
 
     send := msg.NewSender(conn)
     d := msg.NewDispatcher(
@@ -460,9 +460,9 @@ assembles against, and `RegionHandshake`, the teleport sequence and
 inventory descent all care. Those want `Inline()`; everything else does
 not.
 
-Acknowledgement bookkeeping happens for *every* packet, before anything
+Acknowledgment bookkeeping happens for *every* packet, before anything
 else and including duplicates and ones that failed to decode. A
-duplicate arrived precisely because our previous acknowledgement did
+duplicate arrived precisely because our previous acknowledgment did
 not get through, so it needs another one.
 
 Duplicates are then suppressed by sequence number over a ring of the
@@ -544,10 +544,10 @@ Credentials live one file per account under a private directory:
     password = $1$<the md5 of the password>
     start    = last
     group    = Builders
-    neighbours= yes
+    neighbors = yes
 
 Not every key is part of the login request. `group` is which group the
-avatar acts as once it is up, `neighbours` is whether to hold the child
+avatar acts as once it is up, `neighbors` is whether to hold the child
 circuits a border crossing needs, and `viewer_password` is what a real
 viewer must type to be handed this session -- deliberately not the
 account password, since nothing on the grid has ever seen it. `url`,
@@ -612,7 +612,7 @@ in `platform_string` would be a worse answer than naming none.
 A profile may override the first three, and `platform` travels alone:
 it is the two DESCRIPTIONS that go together, so `platform_version` and
 `platform_string` are filled in from the host only when neither was set
-by hand. `address_size` is not a profile key at all -- an unrecognised
+by hand. `address_size` is not a profile key at all -- an unrecognized
 key is a hard error rather than a setting that silently does nothing, so
 a profile written to name one fails to load.
 
@@ -622,7 +622,7 @@ server names it, and `LoginError.MessageID` and `.MessageArgs` carry
 that -- `LoginFailedAccountSuspended` with the `TIME` it ends, rather
 than a string to match on.
 
-[doc/login-parameters.md](login-parameters.md) is the full catalogue
+[doc/login-parameters.md](login-parameters.md) is the full catalog
 of what a viewer sends, read out of the Firestorm source: every
 parameter, the options array, the refusal reasons, and which of them we
 deliberately do not send.
@@ -751,7 +751,7 @@ it. All three used to print as three numbers.
       6bdc7e57-…  Tanagera Design       228, 66, 30
         d7987e57-…  HearthEmbers          offset -29.2, 6.5, 8.1
     Perrick Hobb
-      ec247e57-…  HUD control           worn on HUD centre 2
+      ec247e57-…  HUD control           worn on HUD center 2
 
 Three levels: who owns it, what they own -- standing here or worn --
 and the prims inside each. A region is mostly one person's things at a
@@ -1083,7 +1083,7 @@ on the grid's map by the start of its name. `sit` sits on a thing or on
 the ground and `stand` gets up from either. `parcel` is the land under
 the avatar, drawn or listed, and `landmark` lists the landmarks in
 inventory, says where one goes, makes one and goes to one.
-`neighbours` says which circuits are held to the regions around this
+`neighbors` says which circuits are held to the regions around this
 one -- which is what walking over a border needs, and is off unless
 asked for.
 
@@ -1224,7 +1224,7 @@ clients and sl-host together.
 The address a client ends up with also chooses its secret. One shared
 secret, `~/.config/slgod/secret`, is the usual case; a slgod started
 with a secret of its own (`-secret FILE`, or a `secret` in its `-config`
-directory) is reached with a copy kept under the address as dialled --
+directory) is reached with a copy kept under the address as dialed --
 `~/.config/slgod/secret.127.0.0.1.7808`, then `secret.127.0.0.1`, then
 the shared one -- with an IPv6 address's colons turned into dots. So
 `localhost:7808` and `127.0.0.1:7808` are two files; doc/guide.md has
@@ -1398,7 +1398,7 @@ untouched, and the record still holds what the person actually wrote.
 
 The conversation is kept as text, which is the record. The kv cache is
 an accelerator and is treated as disposable: it is welded to one model,
-one quantisation, one context size and one server build, and the server
+one quantization, one context size and one server build, and the server
 checks none of that before loading one -- a state from another model
 loads cleanly and answers nonsense. So a fingerprint of all four, plus
 the backstory, travels with each conversation and a cache whose
@@ -1428,7 +1428,7 @@ model writes a short note and the note replaces them, while the last
 few exchanges stay word for word. Folding again merges the note with
 whatever has accumulated since. The backstory is not part of this and
 cannot be lost to it -- it is read from its file every turn and the
-summariser is never given it.
+summarizer is never given it.
 
 Measured live against a 3B: sixteen turns became `THEM: Quark,
 chandlery, upriver / TOPICS: ropes, tide, north berth, salt barge /
@@ -1439,7 +1439,7 @@ nothing else.
 
 Asking for the note in prose does not work and that was measured too:
 at 0.5B it returned fragments of the transcript, at 3B it copied the
-exchange back verbatim, and both lost the name. Three labelled lines
+exchange back verbatim, and both lost the name. Three labeled lines
 work, and survive being folded again, which is the property the whole
 thing rests on.
 
@@ -1458,7 +1458,7 @@ A reply is held back until a person could have written it:
 `len(arrived)/read-cps` seconds of silence, then `len(reply)/type-cps`
 spent sending the same "typing..." notice a viewer sends. The model's
 own seconds count towards it, measured from when the remark arrived, so
-a reply it laboured over goes out at once. Characters a second rather
+a reply it labored over goes out at once. Characters a second rather
 than words a minute because that is what you are judging when you set
 it, and per avatar, since one may type with two fingers and another
 answer the instant they have read it.
@@ -1629,7 +1629,7 @@ as a **503 from the edge cache**, not a 404.
 The codec is [`github.com/mububoki/jpeg2000`](https://github.com/mububoki/jpeg2000),
 pure Go with no dependencies of its own. It was chosen by testing rather
 than by reading: of the three pure-Go candidates on pkg.go.dev, one
-returned a flat grey square for a real Second Life texture -- no error,
+returned a flat gray square for a real Second Life texture -- no error,
 right dimensions, nothing in it -- while this one and
 `ajroetker/go-jpeg2000` agreed to within a rounding error and each
 decoded the other's output exactly. That interoperability is most of
@@ -1852,7 +1852,7 @@ children alike. That is not what the grid says: a child prim's update
 describes it in its ROOT's frame -- an offset from the root, and a
 rotation relative to the root's -- so `dump` composes the root's frame
 back out and `reform` puts it back in. Without that, a three-prim
-object two metres across dumps its children as `[2,0,0]` and rebuilds
+object two meters across dumps its children as `[2,0,0]` and rebuilds
 them at the region's edge. Verified by round trip: a spread-out linkset
 described at 254,186,22 / 256,186,22 / 254,186,24 came back at exactly
 those three points.
@@ -1911,7 +1911,7 @@ asking a script with `llGetPrimitiveParams`.
 
 Two things the format does that surprise:
 
-  - **The colour is stored inverted.** Opaque white is four zero bytes,
+  - **The color is stored inverted.** Opaque white is four zero bytes,
     which is why an untouched prim costs nothing to describe -- and why
     forgetting the inversion would make every prim black and invisible.
   - **Bumpiness, shininess and fullbright share one byte.** The setters
@@ -1935,8 +1935,8 @@ faces once and send them with `SetFaces` when making several changes.
     faces, err := w.Faces(ctx, o)
 
     a sign, 6 faces
-      faces 0-1,3-5  texture none  colour 255,255,255  alpha 255  repeats 1,1
-      face 2         texture 89556747-…  colour 255,80,80  alpha 200  repeats 4,2  offset 0.25,-0.5  fullbright  shiny high  glow 100
+      faces 0-1,3-5  texture none  color 255,255,255  alpha 255  repeats 1,1
+      face 2         texture 89556747-…  color 255,80,80  alpha 200  repeats 4,2  offset 0.25,-0.5  fullbright  shiny high  glow 100
 
 Given nothing to change, `texture` says what is there instead. Faces
 that look alike are printed once under all their numbers, because that
@@ -2141,7 +2141,7 @@ set, which is what `Deny` sends. And a request for several things can be
 answered with one of them: a script that asked for debit and animation,
 answered with animation alone, saw `run_time_permissions` fire with
 `mask=16, anim=1, debit=0`. A viewer cannot send that, since its dialog
-has one accept button, so it is worth knowing the simulator honours it.
+has one accept button, so it is worth knowing the simulator honors it.
 
 ## Saying things on a negative channel
 
@@ -2161,8 +2161,8 @@ to scripts.
 What it costs, measured: at most 254 bytes, since the template gives
 ButtonLabel a one byte length prefix, and no volume, so whispering or
 shouting on a negative channel is refused rather than quietly sent at
-ordinary range. The reach is chat's reach -- heard at two metres, not
-heard with the listener a hundred metres up, heard again when it came
+ordinary range. The reach is chat's reach -- heard at two meters, not
+heard with the listener a hundred meters up, heard again when it came
 back down.
 
 ## Not done
@@ -2178,8 +2178,8 @@ Walking over a border works, but only with `neighbours` on. A simulator
 will not hand an avatar over to a client holding no child circuit to the
 region it is walking into, which is why the border used to be a wall: an
 avatar walked to Pelmar Reach's west edge, stopped dead at x=0 and stayed
-there. Hold the circuits -- `slsh neighbours on`, `slgod -neighbours`,
-`neighbours = yes` in a profile -- and the same walk was in Pelmar Mill
+there. Hold the circuits -- `slsh neighbors on`, `slgod -neighbors`,
+`neighbors = yes` in a profile -- and the same walk was in Pelmar Mill
 four and a half seconds after the key went down, with the region change
 reaching a client on the way. Off by default, because it costs a socket
 and a share of the traffic per surrounding region and a daemon acting
@@ -2189,7 +2189,7 @@ What that still does not do is cross *seamlessly*: `moveTo` dials the
 new simulator afresh even when a child circuit to it is already open, so
 the capabilities are fetched again and the new region describes itself
 from nothing. Promoting the child instead is stage 3 of
-[doc/history/neighbours.md](history/neighbours.md), and objects in a neighbouring
+[doc/history/neighbours.md](history/neighbours.md), and objects in a neighboring
 region do not reach a client at all -- local ids are the region's own
 numbering, and what the daemon says about objects carries no region, so
 a client is told only about the one the avatar stands in. An `sl.Object`
@@ -2212,7 +2212,7 @@ up through the same `UploadAsset` and none has been tried.
 rates in the C client's stats — 600k in a long session — that is worth
 a pool eventually, but not before there is something to measure.
 
-## Licence
+## License
 
 Apache License 2.0.  The full text is in `LICENSE`.
 

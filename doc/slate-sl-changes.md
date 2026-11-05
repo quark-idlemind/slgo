@@ -122,7 +122,7 @@ It exports:
 
 | Name | What it is |
 |---|---|
-| `Find(img image.Image, ...*Request)` | Finds each request in a decoded image and returns items with a location, size and centre. |
+| `Find(img image.Image, ...*Request)` | Finds each request in a decoded image and returns items with a location, size and center. |
 | `FindFile(path, ...*Request)` | Decodes a PNG, JPEG or GIF and calls `Find`. |
 | `Text`, `Pattern`, `Drawing`, `Box` | Constructors for a request: a word or line, a regular expression over words, a circle or an arrow, an outlined box. |
 

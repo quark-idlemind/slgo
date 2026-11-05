@@ -120,7 +120,7 @@
               <li><strong>No long reasoning before it answers.</strong> "Thinking" models can spend their whole token allowance reasoning and return nothing. slbotd has no way to add a per-request field to turn that off, so pick a model that answers directly, or turn reasoning off on the server side. The server-side option has not been tried here.</li>
               <li><strong>Small enough to answer in seconds</strong> on your hardware. A reply is a few sentences, so a small model goes a long way.</li>
             </ul>
-            <p>For reference, the measurements in the repository used Qwen2.5-0.5B-Instruct and Qwen2.5-3B-Instruct, both quantised to Q4_K_M, on an Intel i9 with no GPU. That is what was measured, not a recommendation.</p>
+            <p>For reference, the measurements in the repository used Qwen2.5-0.5B-Instruct and Qwen2.5-3B-Instruct, both quantized to Q4_K_M, on an Intel i9 with no GPU. That is what was measured, not a recommendation.</p>
           </div></li>
 
           <li><div class="step-body">
@@ -224,7 +224,7 @@ slot-save-path = ~/.local/state/llama-server/slots</pre></div>
           <fieldset>
             <legend>Size and pace</legend>
             <div class="fields">
-              <div class="field"><label for="cb-ctx">chat-context</label><input type="number" id="cb-ctx" name="ctx" value="1536" min="64"><small>Prompt budget in tokens. Over it, old turns are summarised.</small></div>
+              <div class="field"><label for="cb-ctx">chat-context</label><input type="number" id="cb-ctx" name="ctx" value="1536" min="64"><small>Prompt budget in tokens. Over it, old turns are summarized.</small></div>
               <div class="field"><label for="cb-summary">chat-summary</label><input type="number" id="cb-summary" name="summary" value="200" min="32"><small>Cap on the memory note. Under half of chat-context.</small></div>
               <div class="field"><label for="cb-maxtok">chat-max-tokens</label><input type="number" id="cb-maxtok" name="maxtok" value="160" min="16"><small>Longest reply, in tokens.</small></div>
               <div class="field"><label for="cb-jobs">chat-jobs</label><input type="number" id="cb-jobs" name="jobs" value="2" min="1"><small>Conversations answered at once, per avatar.</small></div>

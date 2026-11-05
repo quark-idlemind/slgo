@@ -523,7 +523,7 @@ func (f *fakeGrid) answerNames(m msg.Message) {
 // answerAttachments does what the region does with a wear and a take-off.
 //
 // A wear puts the object into the region, parented to this avatar, and
-// tells the session so with the update the session recognises it by; a
+// tells the session so with the update the session recognizes it by; a
 // take-off makes the region stop listing it, and the item stays in
 // inventory.  An item that is already worn is not worn twice, and the
 // region's refusal past a limit is a test's to arrange with wearLimit.
@@ -788,7 +788,7 @@ func (l *listsSessions) Sessions(context.Context) ([]string, error) { return l.n
 // fakeDaemon is a slgod with nothing behind it, on loopback, for
 // Connect, which dials.
 //
-// It has to be dialled rather than handed a connection, so it does the
+// It has to be dialed rather than handed a connection, so it does the
 // whole handshake: TLS, and a challenge each way over a secret in a home
 // directory the test owns.  Everything else it answers is the least a
 // session needs to get as far as finding its objects already worn --
@@ -1194,7 +1194,7 @@ func TestConnectWithNoAddressAsksSlHost(t *testing.T) {
 // TestConnectDirectLogsInFromThisProcess: --direct is the other half of
 // the package doc -- whether to attach or to log in is a decision a
 // command line makes -- and it goes through the credentials on disk, so
-// a profile that is not there is a refusal before anything is dialled.
+// a profile that is not there is a refusal before anything is dialed.
 func TestConnectDirectLogsInFromThisProcess(t *testing.T) {
 	// A login server that refuses everything, so that the login is
 	// reached and answered without a grid being involved, and counts
@@ -1248,7 +1248,7 @@ func TestConnectDirectLogsInFromThisProcess(t *testing.T) {
 	}
 
 	// A profile that is not there is the caller's mistake and is
-	// refused without anything being dialled at all.
+	// refused without anything being dialed at all.
 	before = asked()
 	o.Agent = "nobody"
 	_, err = Connect(context.Background(), o)
@@ -2103,7 +2103,7 @@ func confirmRez(t *testing.T, f *fakeGrid) {
 		switch v := m.(type) {
 		case *msg.ObjectAdd:
 			// Where the simulator puts it: the prim's bottom on the
-			// point asked for, so its centre half its height above.
+			// point asked for, so its center half its height above.
 			at := v.ObjectData.RayEnd
 			at.Z += v.ObjectData.Scale.Z / 2
 			f.mu.Lock()

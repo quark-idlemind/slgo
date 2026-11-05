@@ -62,7 +62,7 @@ func drew(g mapGrid, people ...sl.Person) string {
 	return drewIn(mapHighlight{}, g, people...)
 }
 
-// drewIn is drew with a highlight, for the pictures that have colour in
+// drewIn is drew with a highlight, for the pictures that have color in
 // them.
 func drewIn(hl mapHighlight, g mapGrid, people ...sl.Person) string {
 	var b bytes.Buffer
@@ -85,13 +85,13 @@ func atID(id msg.UUID, name string, x, y, z float32) sl.Person {
 	return p
 }
 
-// mapGreen is the escape the default friend colour is written with,
+// mapGreen is the escape the default friend color is written with,
 // looked up rather than spelled out here: a test that wrote "\x1b[32m"
 // of its own would go on passing if the table underneath it changed.
 var mapGreen = mapColours[mapDefaultFriendColour]
 
 // befriending is the highlight that puts these ids on the friend list
-// and lets the picture use colour.
+// and lets the picture use color.
 func befriending(ids ...msg.UUID) mapHighlight {
 	hl := mapHighlight{colour: mapDefaultFriendColour, friends: map[msg.UUID]bool{}}
 	for _, id := range ids {
@@ -103,13 +103,13 @@ func befriending(ids ...msg.UUID) mapHighlight {
 // TestThePictureIsDrawnWhereThePeopleAre, one case at a time, with the
 // exact characters written down.
 //
-// Four rows over sixteen metres, which at the default 7:3 is nine
-// columns -- round(4 * 7 / 3) -- so four metres to a row and 16/9, a
+// Four rows over sixteen meters, which at the default 7:3 is nine
+// columns -- round(4 * 7 / 3) -- so four meters to a row and 16/9, a
 // little under one and eight tenths, to a column.  Small enough to
 // write out in full and with the same arithmetic in it as the default
 // sixteen rows.  The star is at column four, since the avatar stands
-// eight metres from the west edge and 8/(16/9) is 4.5, and at row one,
-// since it is eight metres up from the south edge and the rows are
+// eight meters from the west edge and 8/(16/9) is 4.5, and at row one,
+// since it is eight meters up from the south edge and the rows are
 // counted from the top.
 func TestThePictureIsDrawnWhereThePeopleAre(t *testing.T) {
 	g := aroundGrid(DefaultConfig(), 4, 16, mapMe)
@@ -130,7 +130,7 @@ func TestThePictureIsDrawnWhereThePeopleAre(t *testing.T) {
 			"|         |\n" +
 			"+---------+",
 	}, {
-		// North is up.  Four metres north of the avatar is one row up,
+		// North is up.  Four meters north of the avatar is one row up,
 		// in the same column, and this is the case a flipped axis gets
 		// exactly backwards.
 		name:   "somebody to the north is above the star",
@@ -143,7 +143,7 @@ func TestThePictureIsDrawnWhereThePeopleAre(t *testing.T) {
 			"|         |\n" +
 			"+---------+",
 	}, {
-		// East is right, in the same row.  Four metres east is 4/(16/9)
+		// East is right, in the same row.  Four meters east is 4/(16/9)
 		// = 2.25 columns, so two columns along from the star.
 		name:   "somebody to the east is to the right of the star",
 		people: []sl.Person{at("Odile Marne", 132, 128, 25)},
@@ -170,7 +170,7 @@ func TestThePictureIsDrawnWhereThePeopleAre(t *testing.T) {
 			"|    o    |\n" +
 			"+---------+",
 	}, {
-		// Height picks the mark.  Five metres up is more than a storey
+		// Height picks the mark.  Five meters up is more than a story
 		// and is drawn as being above, however near it is on the
 		// ground.
 		name: "higher and lower are different marks",
@@ -188,8 +188,8 @@ func TestThePictureIsDrawnWhereThePeopleAre(t *testing.T) {
 			"+---------+",
 	}, {
 		// Two people in one cell are a count rather than one of them
-		// silently standing for both.  A column is 16/9 metres wide, so
-		// these two are a metre apart north to south and in the same
+		// silently standing for both.  A column is 16/9 meters wide, so
+		// these two are a meter apart north to south and in the same
 		// column as each other.
 		name: "two in one cell are counted",
 		people: []sl.Person{
@@ -250,8 +250,8 @@ func TestThePictureIsDrawnWhereThePeopleAre(t *testing.T) {
 // avatar in a corner of it belongs in that corner.
 func TestTheStarIsWhereTheAvatarReallyIsInTheRegionPicture(t *testing.T) {
 	var b bytes.Buffer
-	// Ten metres in from the south-west corner, in a picture where a
-	// row is 64 metres and a column 256/9, a little over 28.
+	// Ten meters in from the south-west corner, in a picture where a
+	// row is 64 meters and a column 256/9, a little over 28.
 	drawMap(&b, regionGrid(DefaultConfig(), 4), msg.Vector3{X: 10, Y: 10, Z: 25}, nil, mapHighlight{})
 	want := "" +
 		"+---------+\n" +
@@ -283,9 +283,9 @@ func TestTheStarIsWhereTheAvatarReallyIsInTheRegionPicture(t *testing.T) {
 // TestTheRegionAndTheRelativeViewDisagreeAboutTheSameNeighbour, which
 // is what having two views is for.
 //
-// Somebody forty metres north is a neighbour worth seeing in the
+// Somebody forty meters north is a neighbor worth seeing in the
 // picture around the avatar, and in the region picture they are inside
-// the same sixty-four metre row and cannot be told apart from the
+// the same sixty-four meter row and cannot be told apart from the
 // avatar at all.
 func TestTheRegionAndTheRelativeViewDisagreeAboutTheSameNeighbour(t *testing.T) {
 	them := at("Ozu Brantwick", 128, 168, 25)
@@ -405,7 +405,7 @@ func TestTheCellRatioDecidesHowManyColumnsThereAre(t *testing.T) {
 // TestHowFarCountsAsLevelIsASetting, and the picture says which number
 // it is using.
 //
-// Somebody four metres up is on the roof at the default three and in
+// Somebody four meters up is on the roof at the default three and in
 // the same room at five, and the two pictures are the same characters
 // but for the one mark -- which is exactly why the legend has to carry
 // the number rather than the word "level".
@@ -432,12 +432,12 @@ func TestHowFarCountsAsLevelIsASetting(t *testing.T) {
 }
 
 // TestAFriendIsDrawnInTheColourThatWasNamed, which is the whole of what
-// the setting buys, and the legend names the colour it is showing.
+// the setting buys, and the legend names the color it is showing.
 //
 // A name and not an escape: what is checked here is that the name
 // reached the picture as the escape the table has for it, since a
 // setting that quietly drew green whatever was asked for would look
-// exactly like a terminal that will not do colours.
+// exactly like a terminal that will not do colors.
 func TestAFriendIsDrawnInTheColourThatWasNamed(t *testing.T) {
 	for _, name := range []string{"green", "red", "bright magenta"} {
 		hl := befriending(mapFriendID)
@@ -448,7 +448,7 @@ func TestAFriendIsDrawnInTheColourThatWasNamed(t *testing.T) {
 		if want := mapColours[name] + "o" + mapColourOff; !strings.Contains(out, want) {
 			t.Errorf("the friend should be drawn in %s:\n%q", name, out)
 		}
-		// The legend says the colour's own name, in that colour: the
+		// The legend says the color's own name, in that color: the
 		// name is what has to be typed to change it, and a legend that
 		// went on saying "green" in red would be a lie in two ways.
 		if want := mapColours[name] + name + mapColourOff; !strings.Contains(out, want) {
@@ -460,10 +460,10 @@ func TestAFriendIsDrawnInTheColourThatWasNamed(t *testing.T) {
 // TestAFriendsNameIsColouredAndShownRatherThanObeyed.
 //
 // The line under the picture is the one place a name from the grid
-// and the shell's own colour share a line, so it cannot go through
-// Print, which would show the colour as text along with the name.  The
-// name is made visible where the line is built instead, and the colour
-// round it is left to be a colour.
+// and the shell's own color share a line, so it cannot go through
+// Print, which would show the color as text along with the name.  The
+// name is made visible where the line is built instead, and the color
+// round it is left to be a color.
 func TestAFriendsNameIsColouredAndShownRatherThanObeyed(t *testing.T) {
 	out := drewIn(befriending(mapFriendID), aroundGrid(DefaultConfig(), 4, 16, mapMe),
 		atID(mapFriendID, "Ozu\x1b[2J\x1b]0;owned\x07Brantwick", 128, 200, 25),
@@ -597,7 +597,7 @@ func TestMapRefusesWhatItCannotDraw(t *testing.T) {
 		{"map --rows 1", "--rows wants 2 to 64"},
 		{"map --rows 400", "--rows wants 2 to 64"},
 		{"map --region --span 100", "--region covers the region"},
-		{"map --span 1", "--span is metres across"},
+		{"map --span 1", "--span is meters across"},
 		{"map somewhere", "takes no argument"},
 	} {
 		if got := x.do(t, c.line); !strings.Contains(got, c.want) {
@@ -607,10 +607,10 @@ func TestMapRefusesWhatItCannotDraw(t *testing.T) {
 }
 
 // TestAFriendIsGreenAndAStrangerIsNot, which is the whole of what the
-// colour claims.
+// color claims.
 //
 // The escape sequences are looked for rather than looked at: a
-// character that is coloured and one that is not are the same character
+// character that is colored and one that is not are the same character
 // on the screen and in the failure message, so the only way to check
 // this is to count what was actually written.
 func TestAFriendIsGreenAndAStrangerIsNot(t *testing.T) {
@@ -622,13 +622,13 @@ func TestAFriendIsGreenAndAStrangerIsNot(t *testing.T) {
 		t.Errorf("the friend's mark should be coloured:\n%q", out)
 	}
 	// Twice in the whole picture: the friend's mark, and the word in
-	// the legend that says what the colour means.  The stranger is one
+	// the legend that says what the color means.  The stranger is one
 	// of them only if the count is three.
 	if got := strings.Count(out, mapGreen); got != 2 {
 		t.Errorf("the picture is coloured %d times, want 2 (the friend and the legend):\n%q", got, out)
 	}
 	// And the row the stranger is in is exactly the row it was before
-	// there was any colour at all.
+	// there was any color at all.
 	if !strings.Contains(out, "|    * o  |") {
 		t.Errorf("the stranger's mark should be untouched:\n%s", out)
 	}
@@ -677,7 +677,7 @@ func TestAFriendOutsideThePictureIsGreenInTheLineThatNamesThem(t *testing.T) {
 	if !strings.Contains(out, "Odile Marne 108m") {
 		t.Errorf("the stranger outside should be untouched:\n%q", out)
 	}
-	// Nothing is drawn in colour inside the frame, and the legend
+	// Nothing is drawn in color inside the frame, and the legend
 	// still belongs, because there is green in the picture.
 	if strings.Contains(picture(t, out), mapGreen) {
 		t.Errorf("nobody outside the picture should be drawn in it:\n%q", out)
@@ -690,9 +690,9 @@ func TestAFriendOutsideThePictureIsGreenInTheLineThatNamesThem(t *testing.T) {
 // TestTheLegendOnlyExplainsAColourThatIsThere.
 //
 // A line explaining green to a picture with no green in it is a line
-// about nothing, and a picture on its way to a file has no colour to
-// explain at all.  With the colour off, the picture must be exactly the
-// picture it was before there was any colour to have.
+// about nothing, and a picture on its way to a file has no color to
+// explain at all.  With the color off, the picture must be exactly the
+// picture it was before there was any color to have.
 func TestTheLegendOnlyExplainsAColourThatIsThere(t *testing.T) {
 	const legend = "is somebody on your friend list"
 	g := aroundGrid(DefaultConfig(), 4, 16, mapMe)
@@ -706,7 +706,7 @@ func TestTheLegendOnlyExplainsAColourThatIsThere(t *testing.T) {
 		t.Errorf("a picture with no friend in it should not explain green:\n%s", got)
 	}
 
-	// The friend list is the same and only the colour is off, which is
+	// The friend list is the same and only the color is off, which is
 	// what a redirection and a pipe both look like from here.
 	plain := drewIn(mapHighlight{friends: map[msg.UUID]bool{mapFriendID: true}}, g, friend)
 	if strings.Contains(plain, legend) || strings.Contains(plain, "\x1b") {
@@ -718,10 +718,10 @@ func TestTheLegendOnlyExplainsAColourThatIsThere(t *testing.T) {
 }
 
 // TestMapPicksFriendsOutOnlyOnTheTerminal, which is the other half of
-// it: a picture is only coloured when it is going somewhere that can
-// show a colour, and there are three ways for it not to be.
+// it: a picture is only colored when it is going somewhere that can
+// show a color, and there are three ways for it not to be.
 func TestMapPicksFriendsOutOnlyOnTheTerminal(t *testing.T) {
-	// A terminal that is not a pipe, and a friend standing ten metres
+	// A terminal that is not a pipe, and a friend standing ten meters
 	// north of this avatar.
 	newShell := func(t *testing.T, terminal bool) *testShell {
 		t.Helper()
@@ -754,7 +754,7 @@ func TestMapPicksFriendsOutOnlyOnTheTerminal(t *testing.T) {
 	}
 
 	// A redirection, where the command is handed a file instead of the
-	// shell's own writer.  The colour would end up in the file, which
+	// shell's own writer.  The color would end up in the file, which
 	// is usually on its way back through ". listing".
 	path := filepath.Join(t.TempDir(), "picture")
 	x = newShell(t, true)
@@ -778,7 +778,7 @@ func TestMapPicksFriendsOutOnlyOnTheTerminal(t *testing.T) {
 }
 
 // TestMapDrawsThePictureWhenTheFriendListWillNot: the picture is worth
-// having without the colour, and the missing colour is said out loud,
+// having without the color, and the missing color is said out loud,
 // since a picture with no green in it otherwise reads as a picture with
 // no friends in it.
 func TestMapDrawsThePictureWhenTheFriendListWillNot(t *testing.T) {

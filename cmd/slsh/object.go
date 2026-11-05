@@ -60,7 +60,7 @@ var objectFileCommands = map[string]*command{
 		params:   "NAME|UUID",
 		flags:    func() any { return new(textureFlags) },
 		brief:    "set what a face looks like, or with no flags say what it looks like",
-		keywords: "face appearance colour color texture image repeats alpha glow shiny fullbright look change",
+		keywords: "face appearance color texture image repeats alpha glow shiny fullbright look change",
 		man:      "texture",
 		run:      cmdTexture,
 	},
@@ -382,7 +382,7 @@ type touchFlags struct {
 	At    string `getopt:"--at=X,Y,Z         the point touched, in region coordinates"`
 	Norm  string `getopt:"--normal=X,Y,Z     the surface direction there [0,0,1]"`
 	Press string `getopt:"--press=SECONDS    hold still at the first point before moving"`
-	Move  string `getopt:"--move=SECONDS     spend this long travelling through the points"`
+	Move  string `getopt:"--move=SECONDS     spend this long traveling through the points"`
 	Dwell string `getopt:"--dwell -H=SECONDS rest at the last point before letting go"`
 	Rate  int    `getopt:"--rate=N          updates a second while moving [45]"`
 	Help  bool   `getopt:"--help -h          show what this command takes"`
@@ -786,7 +786,7 @@ func describeFace(f sl.Face) string {
 	}
 	parts := []string{
 		"texture " + texture,
-		fmt.Sprintf("colour %d,%d,%d", f.Colour[0], f.Colour[1], f.Colour[2]),
+		fmt.Sprintf("color %d,%d,%d", f.Colour[0], f.Colour[1], f.Colour[2]),
 		fmt.Sprintf("alpha %d", f.Colour[3]),
 		fmt.Sprintf("repeats %g,%g", f.ScaleS, f.ScaleT),
 	}

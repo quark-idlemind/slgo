@@ -134,8 +134,8 @@ func TestGLTFParseAndCheck(t *testing.T) {
 	}
 	// gltf and its props are words in their own place only.
 	mustCheck(t, "slate 1\nobject gltf is \"A\"\nobject colour is \"B\"\nexpect gltf colour gltf face 0 is none\nexpect fullbright colour face 0 is on\n")
-	parseErr(t, h+"expect gltf a face 0 is on\n", "expected override, material, colour")
-	parseErr(t, h+"expect gltf sparkle a face 0 is on\n", "expected override, material, colour")
+	parseErr(t, h+"expect gltf a face 0 is on\n", "expected override, material, color")
+	parseErr(t, h+"expect gltf sparkle a face 0 is on\n", "expected override, material, color")
 	parseErr(t, h+"expect gltf override a is on\n", "expected face")
 	parseErr(t, h+"expect gltf override a face 0 is none\n", "expected on, off, original, or a capture")
 	parseErr(t, h+"expect gltf override a face 0 is maybe\n", "expected on, off, original, or a capture")
@@ -151,7 +151,7 @@ func TestGLTFParseAndCheck(t *testing.T) {
 	checkErr(t, h+"expect gltf metallic a face all is 1\n", "there is no face all")
 	checkErr(t, h+"expect gltf metallic a face 45 is 1\n", "face 45 is past the 45 faces a prim has")
 	checkErr(t, h+"expect gltf metallic a face 0 is any\n", "is any needs as")
-	checkErr(t, h+"expect gltf colour a face 0 is 1.5 0 0\n", "gltf colour 1.5 is outside 0 to 1")
+	checkErr(t, h+"expect gltf colour a face 0 is 1.5 0 0\n", "gltf color 1.5 is outside 0 to 1")
 	checkErr(t, h+"expect gltf emissive a face 0 is 0 -0.5 0\n", "gltf emissive -0.5 is outside 0 to 1")
 	checkErr(t, h+"expect gltf metallic a face 0 is 2\n", "gltf metallic 2 is outside 0 to 1")
 	checkErr(t, h+"expect gltf alpha a face 0 is -1\n", "gltf alpha -1 is outside 0 to 1")
@@ -261,7 +261,7 @@ expect gltf basetexture sign face 2 is `+gltfTexA.String()+` within 500ms
 expect gltf emissivetexture sign face 2 is `+msg.GLTFOverrideNullTexture.String()+` within 500ms
 `)
 	wantExit(t, res, 0)
-	mustHave(t, res, "gltf colour sign face 2 1 0.5 0", "gltf alpha sign face 2 0.25", "gltf emissive sign face 2 0 0.5 1",
+	mustHave(t, res, "gltf color sign face 2 1 0.5 0", "gltf alpha sign face 2 0.25", "gltf emissive sign face 2 0 0.5 1",
 		"gltf metallic sign face 2 0", "gltf roughness sign face 2 0.75", "gltf alphamode sign face 2 mask",
 		"gltf cutoff sign face 2 0.5", "gltf doublesided sign face 2 on", "gltf basetexture sign face 2 "+gltfTexA.String())
 }
@@ -370,7 +370,7 @@ func TestGLTFNumbersAreNearAsOtherNumbersAre(t *testing.T) {
 	f := newGridWithOverride(t, withOverride(2, &msg.GLTFOverride{Roughness: fl(0.7), BaseColour: &[4]float32{0.5, 0.5, 0.5, 1}}))
 	wantExit(t, play(t, f, hdr+"expect gltf roughness sign face 2 is 0.75 near 0.1 within 300ms\n"), 0)
 	wantExit(t, play(t, f, hdr+"expect gltf roughness sign face 2 is 0.75 near 10 percent within 300ms\n"), 0)
-	wantExit(t, play(t, f, hdr+"expect gltf colour sign face 2 is 0.45 0.55 0.5 near 0.1 within 300ms\n"), 0)
+	wantExit(t, play(t, f, hdr+"expect gltf color sign face 2 is 0.45 0.55 0.5 near 0.1 within 300ms\n"), 0)
 	res := play(t, f, hdr+"expect gltf roughness sign face 2 is 0.75 within 150ms\n")
 	wantExit(t, res, 1)
 	mustHave(t, res, "unmatched gltf roughness sign face 2 is 0.75 within 150ms", "gltf roughness sign face 2 0.7")

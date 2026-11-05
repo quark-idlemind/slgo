@@ -2,7 +2,7 @@ package agent
 
 // The land as heights.  A LayerData body is a group header and then
 // patches, each a square block of DCT coefficients -- 16 on a side on
-// Second Life -- quantised and bit packed.  This decodes them as Firestorm does -- llmessage/patch_code.cpp
+// Second Life -- quantized and bit packed.  This decodes them as Firestorm does -- llmessage/patch_code.cpp
 // for the bits, patch_idct.cpp for the transform -- and reads a height
 // between the grid points as newview/llsurface.cpp does.
 // Why: doc/ground.md
@@ -15,7 +15,7 @@ import (
 
 const (
 	// groundPatch is how far apart patch ids place their patches, in
-	// metres: WORLD_PATCH_SIZE (newview/llworld.cpp:82), whatever size
+	// meters: WORLD_PATCH_SIZE (newview/llworld.cpp:82), whatever size
 	// the patches themselves are.
 	groundPatch = 16
 
@@ -309,14 +309,14 @@ func (t *Terrain) decode(typ uint8, body []byte) {
 }
 
 // HeightAt is the height of the ground at a point in the region, in
-// metres from its south west corner, and whether the land there has
+// meters from its south west corner, and whether the land there has
 // arrived.
 //
 // Between the grid points it is read as the viewer reads it
 // (LLSurface::resolveHeightRegion, llsurface.cpp:927): each square is
 // split into two triangles from its south west corner to its north east
 // one, and the ground is flat across each.  Past the last grid point, at
-// 255 to 256 metres, it is held level, where the viewer would read the
+// 255 to 256 meters, it is held level, where the viewer would read the
 // edge of the region beyond.
 func (t *Terrain) HeightAt(x, y float32) (float32, bool) {
 	t.mu.Lock()
@@ -415,7 +415,7 @@ func (t *Terrain) Highest(west, south, east, north float32) (float32, bool) {
 	return best, true
 }
 
-// groundLines is the two ends of a span and every whole metre between.
+// groundLines is the two ends of a span and every whole meter between.
 func groundLines(from, to float32) []float32 {
 	out := []float32{from}
 	for v := float32(math.Floor(float64(from))) + 1; v < to; v++ {

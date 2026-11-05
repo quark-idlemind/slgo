@@ -44,7 +44,7 @@ func TestHostedReadsEveryFieldOfAnOverride(t *testing.T) {
 				},
 			},
 			{Face: 4},                              // says nothing
-			{Face: 5, BaseColour: []float32{1, 2}}, // a colour of the wrong length is not one
+			{Face: 5, BaseColour: []float32{1, 2}}, // a color of the wrong length is not one
 		},
 	}}
 	seen, err := h.Objects(context.Background(), "", "")

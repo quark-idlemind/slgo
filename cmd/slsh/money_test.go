@@ -179,7 +179,7 @@ func TestAKeyNobodyHasIsNotPaid(t *testing.T) {
 	}
 }
 
-// Money received is a line, with the payer labelled as anybody who sends
+// Money received is a line, with the payer labeled as anybody who sends
 // anything is.
 func TestMoneyReceivedIsALine(t *testing.T) {
 	x := newTestShell(t)

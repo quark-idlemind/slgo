@@ -50,7 +50,7 @@ capture still agree with each other.
 
 A name comes from `tools/known-names`, and is invented. Every name the
 tree uses is written down there, by kind, and a name that is not is
-refused wherever one can be recognised (`doc/identities.md` lists the
+refused wherever one can be recognized (`doc/identities.md` lists the
 places). When you need a new one, take it from the spares at the end of
 that file and add a spare in its place. An invention need not match a
 real place one for one, and must not be a real resident, region, parcel,
@@ -59,7 +59,7 @@ and `Test` names, which are the mark of an invention as `7e57` is for
 ids; the owner's own (`Quark Idlemind`, `qi`, his group `Quark
 Engineering Works`); and Linden's, each with why in the list. The local
 identity list below stays as a backstop for prose, which nothing can
-recognise.
+recognize.
 
 An invented uuid carries one signature, and there is no other way for
 an id to be here:
@@ -109,9 +109,9 @@ integer are for review.
 
 A grid square is invented too, and marked in the way a uuid is signed: the high
 byte of both coordinates of an invented square is always `0xAA`. On
-each axis the invented square is `base + (real - centre)`, where
-`centre` is the real square of the region the group is about. A region
-and its neighbours move together, so the one to the west is still x-1
+each axis the invented square is `base + (real - center)`, where
+`center` is the real square of the region the group is about. A region
+and its neighbors move together, so the one to the west is still x-1
 and a test of a crossing still crosses, and nothing of the real number
 is left. The first group, the home region's, has the base `0xAA80` on
 both axes; each further group gets a base of its own, anywhere in
@@ -156,7 +156,7 @@ looked at, not only the words.
 
 A change that takes a real name out of the tree must not write it down
 again on the way out. Its commit message says what was replaced and
-where -- "invent the region squares in the neighbour tests" -- and never
+where -- "invent the region squares in the neighbor tests" -- and never
 what it was: not the name, not part of it, not a description that picks
 it out ("the parcel next to ours", "the avatar that was lent"), and not
 "A becomes B because A is a real name". The same holds for a pull
@@ -172,7 +172,7 @@ and is never left to be removed afterwards.
 Capturing live output is how measurements get into this repository and
 it is worth doing; it is the reason to read what came back before
 saving it. A transcript of `parcel --region` is a list of the
-neighbours' parcels. A landmark listing names the places somebody has
+neighbors' parcels. A landmark listing names the places somebody has
 been. `objects --owner` names people.
 
     tools/check-identities            what is staged
@@ -187,7 +187,7 @@ square that is not marked, a name that is not on `tools/known-names`, a
 name on the local list. Only the last needs the list kept off the tree;
 the others need nothing, and run for everybody. An id in a file
 name, a tag or a commit message is as written down as one in a file, and
-`doc/identities.md` catalogues every form an identifier or a name takes
+`doc/identities.md` catalogs every form an identifier or a name takes
 here and which check, if any, sees it. What an image shows -- a name
 tag, a chat line, a map -- is not checked by anything: look at every
 image before committing it.
@@ -260,6 +260,16 @@ not write a measurement that was not taken, do not compose a transcript
 out of two real ones, and do not tidy the grid's own words. If
 something was inferred rather than measured, the sentence says so.
 
+## Spelling is American
+
+Prose, names and output are spelled the American way: color, center,
+meter, canceled, recognize.  The British spellings already in the tree
+are accidental, not a house style to follow.  A name somebody types that
+is spelled the British way is renamed to the American spelling and keeps
+the British one as an alias, as `neighbors` keeps `neighbours`, and
+`how` and `ask` match either spelling (`internal/askindex/spelling.go`).
+What the grid, a viewer or Linden wrote is quoted as they wrote it.
+
 ## Comments are short, and the reasons live in doc/
 
 A comment says what the code does, where that is not plain from the
@@ -295,7 +305,7 @@ here when another is shared the same way.
   `ErrTimeout` at the deadline. A loop of read, `time.Sleep`, go round
   cannot hear a cancel, and `TestNothingInThisPackageSleeps` refuses
   one anywhere in `sl`; a plain pause is `Session.Settle`. A call that
-  asked for something to be made follows a cancelled poll with
+  asked for something to be made follows a canceled poll with
   `lastLook`, beside it, and hands back what that finds.
 - `Session.await`, in `sl/session.go`: waits for what the session has
   been told to satisfy a predicate, checked under the session's lock,

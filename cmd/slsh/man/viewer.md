@@ -46,7 +46,7 @@ It does reach that viewer's arguments, where any process this user
 owns can read them.  Single use is the answer to it: an onlooker who
 copies the password out is racing a viewer already logging in with
 it, and loses the moment it does.  The expiry is the second line of
-defence, and generous, because a viewer takes the better part of a
+defense, and generous, because a viewer takes the better part of a
 minute to reach a login screen.
 
 ## The viewer has to be one that can be told about another grid

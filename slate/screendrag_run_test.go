@@ -16,7 +16,7 @@ var (
 
 const paneHdr = "slate 1\ntimeout 20s\nobject hud is \"Example HUD\"\nobject sign is \"Example Sign\"\n"
 
-// withPane wears a half-metre box on Center 2, in front of anything else
+// withPane wears a half-meter box on Center 2, in front of anything else
 // worn, with a child to one side of it.
 func (f *fakeGrid) withPane() *sl.Seen {
 	root := prim(idPane, 301, "Example HUD", testMe)
@@ -83,7 +83,7 @@ func TestAScreenDragFromAFaceIsPutOnTheScreenAndMoved(t *testing.T) {
 func TestAScreenDragFromALinkUsesThatPrim(t *testing.T) {
 	f := newGrid(t)
 	f.withPane()
-	// The child sits half a metre to the side, so face 4 at 0.5 0.5 of
+	// The child sits half a meter to the side, so face 4 at 0.5 0.5 of
 	// link 2 is nowhere near the middle; it is a press on that prim.
 	res := play(t, f, paneHdr+"drag hud on screen from link 2 face 4 at 0.5 0.5 by 10 10 over 100ms\n")
 	wantExit(t, res, 0)

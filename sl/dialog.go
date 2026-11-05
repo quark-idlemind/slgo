@@ -35,7 +35,7 @@ type Dialog struct {
 
 	// Object is what asked, ObjectName what it is called, and Owner
 	// who owns it.  OwnerName is the owner's name as the simulator
-	// sent it, which is there so a dialog can be recognised without
+	// sent it, which is there so a dialog can be recognized without
 	// another round trip.
 	Object     msg.UUID
 	ObjectName string
@@ -62,7 +62,7 @@ type Dialog struct {
 //
 // llTextBox is not a message of its own: the simulator sends an
 // ordinary ScriptDialog whose single button carries this sentinel, and
-// a viewer that recognises it draws a field to type in instead of a
+// a viewer that recognizes it draws a field to type in instead of a
 // button to press (lllslconstants.h:213).  The answer goes back as the
 // same ScriptDialogReply with the typed text where the button label
 // would be (llviewermessage.cpp:8278).

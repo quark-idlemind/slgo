@@ -512,7 +512,7 @@ func paid(r *Money) (msg.UUID, int, error) {
 
 // movedBetween is what the grid's answers after from and up to to say
 // moved the balance, as far as they can be told apart from a payment
-// whose answer was not recognised: what others paid this avatar, and
+// whose answer was not recognized: what others paid this avatar, and
 // what payments another call took as its answer came to.  unsure is a
 // payment of this avatar's that no call took, or answers no longer kept.
 // Called with mu held.

@@ -160,7 +160,7 @@ func openScript(ctx context.Context, c scriptv1.RunnerClient, targets int, agent
 	}
 
 	// The lease is a stream and stays open for the life of the process.
-	// Cancelling it is how the objects go back, and so is dying, which is
+	// Canceling it is how the objects go back, and so is dying, which is
 	// the point of its being a stream at all.
 	lctx, cancel := context.WithCancel(context.Background())
 	stream, err := c.Lease(lctx, &scriptv1.LeaseRequest{

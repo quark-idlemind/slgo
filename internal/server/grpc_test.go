@@ -128,7 +128,7 @@ func TestTheUnaryCallsAnswerFromWhatTheSessionWasTold(t *testing.T) {
 		t.Errorf("sculpt kind %d id %q, want a mesh of %s", o.GetSculptKind(), o.GetSculptId(), prim)
 	}
 	// A light and a projector are what their blocks say, as the wire
-	// carries them: the colour bytes, the intensity byte over 255.
+	// carries them: the color bytes, the intensity byte over 255.
 	if o := all.GetObjects()[0]; o.GetLight().GetRed() != 255 || o.GetLight().GetGreen() != 128 || o.GetLight().GetBlue() != 0 ||
 		o.GetLight().GetIntensity() != 1 || o.GetLight().GetRadius() != 10 || o.GetLight().GetFalloff() != 0.75 {
 		t.Errorf("light %v, want 255 128 0 at full intensity, radius 10, falloff 0.75", o.GetLight())
@@ -311,7 +311,7 @@ func TestARelayEncodesWhatItWasNotGivenTheBytesOf(t *testing.T) {
 
 	// One that will not encode is dropped rather than relayed empty: a
 	// client cannot tell "no body" from "a body of nothing", and the
-	// acknowledgement does not wait on the relay, so there is nothing to
+	// acknowledgment does not wait on the relay, so there is nothing to
 	// fail.
 	tooLong := &msg.ChatFromSimulator{}
 	tooLong.ChatData.FromName = make([]byte, 300) // longer than its length prefix
@@ -322,7 +322,7 @@ func TestARelayEncodesWhatItWasNotGivenTheBytesOf(t *testing.T) {
 	default:
 	}
 
-	// Acknowledgements carry neither, and stop here.
+	// Acknowledgments carry neither, and stop here.
 	h.relay(&msg.Packet{})
 	if n := h.relayed.Load(); n != 1 {
 		t.Errorf("%d relays counted, want the one that had a body", n)
@@ -1088,7 +1088,7 @@ func TestNeighboursAreAskedAboutAndTurnedOverThroughTheOneCall(t *testing.T) {
 			got.GetNeighbours(), got.GetOn())
 	}
 
-	// The neighbour, which is an ordinary simulator that answers a
+	// The neighbor, which is an ordinary simulator that answers a
 	// circuit: a child needs no event queue and no capability.
 	next := newSim(t)
 	t.Cleanup(next.close)

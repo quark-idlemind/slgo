@@ -16,7 +16,7 @@ import (
 //	 "Info":[{"AgentID":"...","Reason":"You must be a premium or vip
 //	  subscriber to enter this region."}]}
 //
-// AlertInfo.Message is a KEY -- the grid's name for the refusal, spelt
+// AlertInfo.Message is a KEY -- the grid's name for the refusal, spelled
 // for a program rather than for a person -- and Info.Reason is
 // sometimes that same key and sometimes a sentence for a person.  So
 // the key is the one a program can act on, and the sentence is the one

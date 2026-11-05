@@ -44,10 +44,10 @@ Opening a group's chat window is `LLGroupActions::startIM`
      is `""` with size 1, `llmessage/llinstantmessage.cpp:46-47`).
 4. It then waits for the answer, up to `SESSION_INITIALIZATION_TIMEOUT`,
    30 seconds (`llimview.cpp:113`, `945-946`).  When the time is up and
-   the session is still not initialised it shows
+   the session is still not initialized it shows
    "session_initialization_timed_out_error" (`llimview.cpp:143-153`).
 5. The answer is not on the circuit but on the event queue:
-   `ChatterBoxSessionStartReply` (below).  Success initialises the
+   `ChatterBoxSessionStartReply` (below).  Success initializes the
    session, hands the body to the speaker list and, when the
    "FetchGroupChatHistory" setting is on, asks for recent history
    through `ChatSessionRequest` (`llimview.cpp:4887-4912`).  Failure

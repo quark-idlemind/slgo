@@ -155,7 +155,7 @@ func TestTheFeeAndTheRoleComeOutOfTheBucket(t *testing.T) {
 // The viewer drops an invitation whose bucket is not exactly twenty
 // bytes, and the comment beside the dialog in llinstantmessage.h:52-59
 // describes a different shape again -- so a bucket this does not
-// recognise is not hypothetical, it is what an older simulator would
+// recognize is not hypothetical, it is what an older simulator would
 // send.  Treating it as a fee of zero would be the one wrong guess
 // that costs money, and dropping the invitation would leave a person
 // invited with nothing to answer, so it is kept with the fee marked as

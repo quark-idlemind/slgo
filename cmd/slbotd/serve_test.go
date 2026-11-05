@@ -171,8 +171,8 @@ func TestAnObjectIsNotObeyed(t *testing.T) {
 
 // TestNothingButAPersonIsLoggedAsOne: whatever dialog an instant message
 // carries, one sent by an object, a group or the grid under a person's
-// name is logged with the name labelled as what sent it.
-// Why: doc/im-senders.md#labelling-a-sender
+// name is logged with the name labeled as what sent it.
+// Why: doc/im-senders.md#labeling-a-sender
 func TestNothingButAPersonIsLoggedAsOne(t *testing.T) {
 	d, b, _ := newTestDaemon(t)
 	logged := &logBook{}

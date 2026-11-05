@@ -57,8 +57,8 @@ func (f *Face) SetBumpiness(b uint8) { f.Bump = f.Bump&^Bumpiness | b&Bumpiness 
 
 // SetAlpha sets how opaque a face is, 0 clear and 255 solid.
 //
-// It is the fourth component of the colour rather than a field of its
-// own, which is worth saying because the wire stores the whole colour
+// It is the fourth component of the color rather than a field of its
+// own, which is worth saying because the wire stores the whole color
 // inverted and a face that has never been touched is four zero bytes:
 // opaque white.
 func (f *Face) SetAlpha(a uint8) { f.Colour[3] = a }
@@ -74,7 +74,7 @@ func (f *Face) SetRepeats(s, t float32) { f.ScaleS, f.ScaleT = s, t }
 // SetOffsets moves the texture on the face, each -1 to 1.
 //
 // The wire keeps these as signed fractions of the range, so what goes
-// out is quantised to about one part in thirty thousand.
+// out is quantized to about one part in thirty thousand.
 func (f *Face) SetOffsets(s, t float32) {
 	f.OffsetS, f.OffsetT = fraction16(s), fraction16(t)
 }

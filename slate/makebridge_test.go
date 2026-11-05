@@ -34,7 +34,7 @@ func TestMakeBridgeHappyPath(t *testing.T) {
 	if got := b.inv.folderOf(idMadeItem); got != idObjectsFolder {
 		t.Errorf("the item is in folder %s, want Objects %s", got, idObjectsFolder)
 	}
-	// One metre along +X from the body at (128, 128, 22), 0.1 m on a side.
+	// One meter along +X from the body at (128, 128, 22), 0.1 m on a side.
 	if want := (msg.Vector3{X: 129, Y: 128, Z: 22}); b.rezzedAt != want {
 		t.Errorf("rezzed at %v, want %v", b.rezzedAt, want)
 	}

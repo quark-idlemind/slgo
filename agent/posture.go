@@ -11,7 +11,7 @@ import (
 // two different roads.
 //
 // A sit on an object is a reparenting.  The simulator answers
-// AgentRequestSit by moving the avatar -- up to about ten metres, over
+// AgentRequestSit by moving the avatar -- up to about ten meters, over
 // whatever is in the way -- and sending this avatar's own ObjectUpdate
 // back with ParentID set to the seat's local id: measured on Agni, 123
 // milliseconds after the request, with the position in it now an offset
@@ -34,7 +34,7 @@ import (
 // the viewer's own constants and the viewer is the authority for them:
 // every id below was read out of indra/llcharacter/llanimationstates.cpp
 // in a Firestorm checkout, where they are ANIM_AGENT_SIT and its
-// neighbours.
+// neighbors.
 //
 // Three of them were also watched arriving on Agni, and the two accounts
 // agree exactly: AnimSit was running while the avatar sat on a box and
@@ -243,7 +243,7 @@ type Seat struct {
 // it arrives whether or not any animation ever does, and it is not
 // something a script can dress up.  The animation can be: furniture that
 // plays its own pose stops the standard sit, so an avatar plainly seated
-// on a chair may be running nothing this package would recognise, and
+// on a chair may be running nothing this package would recognize, and
 // deciding on the animation would call it standing.
 //
 // The animation decides the ground, because for the ground it is all

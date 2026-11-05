@@ -41,7 +41,7 @@ type entry struct {
 	dialog sl.Dialog
 
 	// what names it on the screen, and n is the number it was listed
-	// as, so that a person who came from "waiting" recognises it.
+	// as, so that a person who came from "waiting" recognizes it.
 	what string
 	n    int
 

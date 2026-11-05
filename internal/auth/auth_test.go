@@ -387,7 +387,7 @@ func TestNewRequiresSecret(t *testing.T) {
 
 // The binding is what ties a proof to one TLS session, so a proof made
 // on one connection must be worthless on another. That is the whole
-// defence against a man in the middle relaying an unverified channel.
+// defense against a man in the middle relaying an unverified channel.
 func TestAProofDoesNotTravelBetweenConnections(t *testing.T) {
 	s := newServer(t)
 	other := []byte("a DIFFERENT tls channel binding...")
@@ -410,7 +410,7 @@ func TestServerProofIsPerConnection(t *testing.T) {
 	}
 }
 
-// A client looks for a secret kept for the address it is dialling, then
+// A client looks for a secret kept for the address it is dialing, then
 // for the host, then the shared one; IPv6 colons become dots, since a
 // colon is not a character every filesystem takes in a name.
 func TestSecretPathsForAnAddress(t *testing.T) {

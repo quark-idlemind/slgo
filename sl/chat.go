@@ -123,7 +123,7 @@ func itoa(n int) string {
 
 // Fault is a run-time error the simulator blamed on a named script.
 //
-// This is the fatal kind, and the only kind that can be recognised.
+// This is the fatal kind, and the only kind that can be recognized.
 // The simulator reports it as two messages: a header naming the object
 // and the script, then the reason on its own.  A script that hits one
 // stops, so there is no point waiting for anything more from it.
@@ -134,7 +134,7 @@ func itoa(n int) string {
 type Fault struct {
 	Script string // the script the simulator named
 	Reason string // "Math Error", "Stack-Heap Collision"
-	Line   Line   // the header line it was recognised from
+	Line   Line   // the header line it was recognized from
 }
 
 func (f *Fault) String() string {
@@ -162,7 +162,7 @@ func (f *Fault) OutOfMemory() bool {
 	return strings.Contains(f.Reason, "Stack-Heap")
 }
 
-// faultScript recognises the header of a script fault and returns the
+// faultScript recognizes the header of a script fault and returns the
 // script it names:
 //
 //	Test HUD [script:slgo try divzero] Script run-time error
@@ -238,7 +238,7 @@ func (c *collector) add(l Line) {
 	}
 }
 
-// faultSeen returns the fault, if one was recognised.
+// faultSeen returns the fault, if one was recognized.
 func (c *collector) faultSeen() *Fault {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -607,8 +607,8 @@ const MaxDialogReply = 254
 //
 // Measured against a script listening on -4242: the text arrives
 // verbatim, the script sees this avatar as the speaker exactly as it
-// would for chat, and the reach is chat's reach -- heard at two metres,
-// not heard with the listener a hundred metres up, heard again when it
+// would for chat, and the reach is chat's reach -- heard at two meters,
+// not heard with the listener a hundred meters up, heard again when it
 // came back.  So this is a say, not a shout and not a region-wide
 // backdoor.
 //

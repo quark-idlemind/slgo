@@ -81,7 +81,7 @@ func TestAnAvatarFlagThatDoesNotFitTheFileIsExit3(t *testing.T) {
 		src  string
 		args []string
 		want string
-		dial int // sessions dialled before the error: 0 means none, not even the tester's
+		dial int // sessions dialed before the error: 0 means none, not even the tester's
 	}{
 		{"declared and not given", withVisitor, []string{"-agent", profileOne},
 			"visitor is declared but no --avatar visitor=... was given", 0},
@@ -117,7 +117,7 @@ func TestAnAvatarFlagThatDoesNotFitTheFileIsExit3(t *testing.T) {
 			if out != "" {
 				t.Errorf("stdout = %q, want nothing", out)
 			}
-			// An error the file and flags decide is found before anything is dialled.
+			// An error the file and flags decide is found before anything is dialed.
 			if c.dial == 0 && len(p.dialed) != 0 {
 				t.Errorf("dialled %q before the error", p.dialed)
 			}

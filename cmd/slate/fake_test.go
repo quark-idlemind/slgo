@@ -129,7 +129,7 @@ func (f *fakeGrid) Close() error {
 	return nil
 }
 
-// withPane wears a half-metre box on HUD centre 2, in front of anything
+// withPane wears a half-meter box on HUD center 2, in front of anything
 // else worn.
 func (f *fakeGrid) withPane() {
 	shape, err := sl.DefaultShape().Pack()

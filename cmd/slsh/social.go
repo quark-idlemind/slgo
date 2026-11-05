@@ -316,7 +316,7 @@ func (sh *Shell) watch(ctx context.Context) {
 // heard prints one instant message.  Whatever sent it is named through
 // Sender.Label, so an object, a group or the grid is never printed as
 // though a person had said it.
-// Why: doc/im-senders.md#labelling-a-sender
+// Why: doc/im-senders.md#labeling-a-sender
 func (sh *Shell) heard(m *sl.IM) {
 	name := m.FromName
 	switch {
@@ -607,7 +607,7 @@ type profileOptions struct {
 //
 // # What it prints, and what it says instead of nothing
 //
-// A block of labelled fields with the group listing under it:
+// A block of labeled fields with the group listing under it:
 //
 //	Hobb Resident
 //	  key       d22b7e57-7e57-c0de-0e4e-000000000001
@@ -1278,7 +1278,7 @@ func (sh *Shell) onTheGrid(ctx context.Context, out io.Writer, runs []string, re
 
 	// The first run that turned anybody up is the one listed: it is the
 	// most of what was typed that resembles somebody, and people whose
-	// names are like "Lorn Harbour" are more use than every Lorn there is.
+	// names are like "Lorn Harbor" are more use than every Lorn there is.
 	var near []sl.Found
 	var nearFor string
 	for i, run := range runs {

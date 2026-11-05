@@ -154,7 +154,7 @@ counted it as conversation. Now:
   no report of trouble. It logs
   `ignored an instant message from [Object] NAME, owned by OWNER`, the
   owner named from what the session already knew of that id and
-  labelled `[Group]` when the object is a group's.
+  labeled `[Group]` when the object is a group's.
 - slsh prints one as `< [Object] NAME: TEXT` and opens no
   conversation. A do-not-disturb auto response is a notice,
   `* do not disturb auto response from NAME: TEXT`.
@@ -168,7 +168,7 @@ counted it as conversation. Now:
   folder, `llviewermessage.cpp:1781` writes it to the bucket), not
   measured; an empty bucket has never been measured either way.
 
-## Labelling a sender
+## Labeling a sender
 
 An object's name can be anybody's, so slsh and slbotd never print one
 as though a person had said it. `sl.Sender` says what the name on a
@@ -191,10 +191,10 @@ measured beyond dialog 19 above:
   group invitation and a group notice, which carry the group's id with
   the name of whoever invited or posted
   (`llimprocessing.cpp:1341-1356`, `1477`).
-- Local chat is labelled by its source type: an avatar's is a person's,
+- Local chat is labeled by its source type: an avatar's is a person's,
   an object's an object's, and the simulator's own is the grid's.
 
-What is labelled, in slsh: chat (`< [Local] [Object] NAME: TEXT`), an
+What is labeled, in slsh: chat (`< [Local] [Object] NAME: TEXT`), an
 object's message, every other instant message that is not a person's
 (`* object alert from [Object] NAME: TEXT`), a group notice's poster
 when it is not a person, a script's dialog and permission request as

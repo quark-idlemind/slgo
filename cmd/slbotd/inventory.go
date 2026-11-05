@@ -604,7 +604,7 @@ func cmdDetach(ctx context.Context, r *req, out io.Writer, args []string) error 
 	if err != nil {
 		return err
 	}
-	// The name as it is spelt, through sl.PickNamedFunc: several worn
+	// The name as it is spelled, through sl.PickNamedFunc: several worn
 	// objects of it are refused with the ids of their items, and none
 	// with any worn in another case as the hint.
 	w, err := sl.PickNamedFunc(worn, want, "worn object", "",

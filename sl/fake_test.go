@@ -147,7 +147,7 @@ type fakeBackend struct {
 	// neighbours is what the far end holds, and it is changed by a
 	// set the way a real backend changes it: turning them off drops
 	// what is held rather than only refusing the next offer, which is
-	// the half of the behaviour a caller can see from here.
+	// the half of the behavior a caller can see from here.
 	neighbours    Neighbours
 	neighboursErr error
 

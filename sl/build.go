@@ -28,12 +28,12 @@ type Prim struct {
 	// Position in region coordinates.
 	Position msg.Vector3
 
-	// Size is the prim's scale.  Zero means half a metre cubed.
+	// Size is the prim's scale.  Zero means half a meter cubed.
 	Size msg.Vector3
 
 	// Rotation.  The zero value is no rotation: a quaternion goes over
 	// the wire as three floats with the fourth recovered by
-	// normalising, and all three zero recovers a W of one.
+	// normalizing, and all three zero recovers a W of one.
 	Rotation msg.Quaternion
 
 	// Shape is what the prim is: a box, a sphere, a torus with a hole
@@ -153,7 +153,7 @@ func (w *Session) buildOne(ctx context.Context, p Prim) (*Object, error) {
 
 	// Say where it goes rather than trusting where it landed.  The
 	// simulator puts the prim's bottom on the point rather than its
-	// centre, and lifts one asked for underground onto the ground.
+	// center, and lifts one asked for underground onto the ground.
 	if err := w.Place(ctx, o, p.Position, p.Rotation, size); err != nil {
 		return o, err
 	}
@@ -308,7 +308,7 @@ func (w *Session) rezAt(ctx context.Context, at, scale msg.Vector3, rot msg.Quat
 	return w.findOurs(ctx, before, at, scale, 15*time.Second)
 }
 
-// rezSlack is how far, in metres, a new prim may be from where the
+// rezSlack is how far, in meters, a new prim may be from where the
 // rules in landedAt put it: more than the float32 spacing of a
 // position anywhere below 8,192 m.
 const rezSlack = 0.001
@@ -332,7 +332,7 @@ func landedAt(p, at msg.Vector3) bool {
 //
 // It is a root prim that was not in the region before, stands where
 // landedAt says a rez at at lands, and is owned by us.  Among several,
-// the one whose centre is nearest half its height above the point is
+// the one whose center is nearest half its height above the point is
 // taken, and none is taken while a nearer one's owner is unknown.
 //
 // Ownership is confirmed rather than assumed: building on somebody
@@ -345,7 +345,7 @@ func landedAt(p, at msg.Vector3) bool {
 // once.  A cancel is followed by lastLook, and a prim of ours that it
 // finds is returned with the caller's error, so that it can be cleared
 // away.
-// Why: doc/rez.md#how-a-rez-is-recognised
+// Why: doc/rez.md#how-a-rez-is-recognized
 func (w *Session) findOurs(ctx context.Context, before map[uint32]bool, at, scale msg.Vector3, timeout time.Duration) (*Object, error) {
 	w.mu.Lock()
 	mark := len(w.alerts)
@@ -429,7 +429,7 @@ func appendVector(b []byte, v msg.Vector3) []byte {
 
 // appendQuaternion writes the three float wire form, which is what a
 // rotation is on this protocol: the fourth component is recovered by
-// normalising and is not sent.
+// normalizing and is not sent.
 func appendQuaternion(b []byte, q msg.Quaternion) []byte {
 	b = binary.LittleEndian.AppendUint32(b, math.Float32bits(q.X))
 	b = binary.LittleEndian.AppendUint32(b, math.Float32bits(q.Y))

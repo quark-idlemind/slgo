@@ -283,7 +283,7 @@ func TestAValueASettingWillNotTakeIsRefusedByName(t *testing.T) {
 		{"map_span = 1\n", "map_span: want 2 or more"},
 		{"map_level = 0\n", "map_level: want 1 or more"},
 		{"map_ratio = sideways\n", "map_ratio: want height:width"},
-		{"map_friend_colour = puce\n", "map_friend_colour: no colour called"},
+		{"map_friend_color = puce\n", "map_friend_color: no color called"},
 		{"escape = not a key\n", "escape: \"not a key\" is not a key"},
 	} {
 		writeConfig(t, c.body)
@@ -300,7 +300,7 @@ func TestAValueASettingWillNotTakeIsRefusedByName(t *testing.T) {
 		}
 	}
 
-	// A refused value leaves the colour it names in the message, since
+	// A refused value leaves the color it names in the message, since
 	// the answer to "puce" is the list of what there is.
 	writeConfig(t, "map_friend_colour = puce\n")
 	if _, err := LoadConfig(); err == nil || !strings.Contains(err.Error(), "green") {
@@ -487,14 +487,14 @@ func TestASettingsFileThatIsNotThereIsCreated(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "not", "there", "yet")
 	t.Setenv("SLSH_CONFIG_DIR", dir)
 
-	path, err := saveSetting(mustSetting(t, "map_friend_colour"), "bright cyan")
+	path, err := saveSetting(mustSetting(t, "map_friend_color"), "bright cyan")
 	if err != nil {
 		t.Fatalf("saveSetting: %v", err)
 	}
 	if want := filepath.Join(dir, "config"); path != want {
 		t.Errorf("saveSetting wrote %q, want %q", path, want)
 	}
-	if got, want := readConfig(t), "map_friend_colour = bright cyan\n"; got != want {
+	if got, want := readConfig(t), "map_friend_color = bright cyan\n"; got != want {
 		t.Errorf("the new file is %q, want %q", got, want)
 	}
 	c, err := LoadConfig()

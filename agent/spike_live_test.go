@@ -296,7 +296,7 @@ watch:
 //
 // A region sends its heightmap once, on arrival, and slgo had not looked
 // at LayerData at all when this was written.  So a viewer attached to a
-// running session would have no ground under it -- literally the grey
+// running session would have no ground under it -- literally the gray
 // void.  If the simulator can be asked again, the fix is one line; if
 // not, slgod has to record the raw land patches from the moment it
 // connects and replay them, which is a per-region store and a good deal

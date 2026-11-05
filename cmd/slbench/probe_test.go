@@ -207,7 +207,7 @@ func TestAWholeSearchThroughTheTransport(t *testing.T) {
 }
 
 // TestARememberedPaddingIsConfirmedAndNotTrusted: finding a padding costs
-// about a dozen runs and recognising one costs a hash, so it is worth
+// about a dozen runs and recognizing one costs a hash, so it is worth
 // remembering -- but what SL's compiler does can change, and a padding
 // that is wrong by k reports every Size wrong by k with nothing in the
 // output to show it.  So it is confirmed on every use, which is two runs.

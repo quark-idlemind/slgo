@@ -22,7 +22,7 @@ type Presence struct {
 	// which objects get described to us.
 	Camera msg.Vector3
 
-	// DrawDistance is how far, in metres, the simulator is asked to
+	// DrawDistance is how far, in meters, the simulator is asked to
 	// describe things.
 	DrawDistance float32
 
@@ -93,7 +93,7 @@ type Group struct {
 // Where reports the avatar's position and view.
 //
 // Position is exact after a teleport or entering a region, and while
-// walking is whole metres across and four up and down, which is all
+// walking is whole meters across and four up and down, which is all
 // CoarseLocationUpdate carries.  A seated avatar's is worked out from
 // its seat; see agent.Agent.Position.
 func (w *Session) Where(ctx context.Context) (*Presence, error) {
@@ -215,7 +215,7 @@ type Seen struct {
 
 	// Light is the prim's point light, nil while it has none, and
 	// Projector its projector, nil while it has none.  A light that is
-	// switched off has no block, so nil is off.  The colour is the
+	// switched off has no block, so nil is off.  The color is the
 	// wire's bytes, which are linear.
 	// Why: doc/lights.md
 	Light     *msg.Light

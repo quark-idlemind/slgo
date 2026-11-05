@@ -15,7 +15,7 @@ package sl
 // # Why this cannot be a unit test
 //
 // Almost nothing in this protocol confirms itself.  An item goes into
-// an object with no acknowledgement; a name change is a request; a
+// an object with no acknowledgment; a name change is a request; a
 // permission mask is set by a message that answers nothing.  A fake
 // simulator would confirm whatever this code believed, which is exactly
 // the belief worth testing.  So each step here READS BACK what it did,

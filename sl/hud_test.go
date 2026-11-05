@@ -89,7 +89,7 @@ func within(t *testing.T, what string, got, want, margin float64) {
 	}
 }
 
-// TestAHUDBoxIsHalfTheWorldViewTall: a metre is the world view's height,
+// TestAHUDBoxIsHalfTheWorldViewTall: a meter is the world view's height,
 // whatever its width (test 3: 1024 by 1026 pixels).
 func TestAHUDBoxIsHalfTheWorldViewTall(t *testing.T) {
 	faces := shown(t, measured, prim(t, "box", 0.5, front, msg.Quaternion{}))
@@ -170,7 +170,7 @@ func TestABoxCornerOnIsAHexagon(t *testing.T) {
 
 // TestACylinderEndOnIsADisc (test 10): turned -90 about Y its top, face
 // 0, is a disc 1024 across; turned +90, its bottom, face 2.  Twenty
-// degrees off end-on the top is an ellipse 1024 by 964 centred at
+// degrees off end-on the top is an ellipse 1024 by 964 centered at
 // y = 958, with the side, face 1, below it down to y = 1790.
 func TestACylinderEndOnIsADisc(t *testing.T) {
 	for _, c := range []struct {
@@ -204,7 +204,7 @@ func TestACylinderEndOnIsADisc(t *testing.T) {
 // to the right and T upward, and clicks at the pixels for five S,T came
 // back as those S,T.  The touch position is from the middle of the
 // screen, which on Center 2 is the HUD point: the middle of the face of a
-// box half a metre in front is -0.75 along X.
+// box half a meter in front is -0.75 along X.
 func TestAClickOnFaceFourIsItsST(t *testing.T) {
 	linkset := []*Seen{prim(t, "box", 0.5, front, msg.Quaternion{})}
 	for _, st := range [][2]float32{{0.5, 0.5}, {0.1, 0.1}, {0.9, 0.1}, {0.1, 0.9}, {0.9, 0.9}} {
@@ -257,11 +257,11 @@ func TestAClickOnATurnedFaceIsItsST(t *testing.T) {
 	within(t, "face 3's S", float64(h.Touch.ST.X), 0.5, 0.003)
 }
 
-// TestSAndTOnEveryFace (test 13): each face of a half-metre box and
+// TestSAndTOnEveryFace (test 13): each face of a half-meter box and
 // cylinder turned to the viewer and clicked 0.15 of the world view's
 // height right of its middle and above it.  The S,T are the ones the
 // viewer's clicks came back with; they were 308 pixels off in a world
-// view whose metre measured 2048, so each is within a few thousandths
+// view whose meter measured 2048, so each is within a few thousandths
 // of what exactly 0.15 m gives.
 func TestSAndTOnEveryFace(t *testing.T) {
 	right := ScreenPoint{1920 + 0.15*2050, 1025}
@@ -397,9 +397,9 @@ func TestPickAndPointOfAgreeEverywhere(t *testing.T) {
 }
 
 // TestAChildIsPlacedByItsRoot (test 7): a child's position is the root's
-// frame's, so a child a quarter metre along the root's +Y is a quarter
-// metre to the left (measured 512 pixels to the left of 2048 a metre),
-// and with the root turned 90 degrees about X it is a quarter metre up
+// frame's, so a child a quarter meter along the root's +Y is a quarter
+// meter to the left (measured 512 pixels to the left of 2048 a meter),
+// and with the root turned 90 degrees about X it is a quarter meter up
 // (513 above).
 func TestAChildIsPlacedByItsRoot(t *testing.T) {
 	for _, c := range []struct {
@@ -456,7 +456,7 @@ func TestAChildTurnedShowsTwoFaces(t *testing.T) {
 }
 
 // TestZoomScalesSizeAndPlaceAlike (test 8): HUDScaleFactor scales a HUD
-// about the middle of the world view.  A half-metre box 0.2 m left of and
+// about the middle of the world view.  A half-meter box 0.2 m left of and
 // 0.1 m above Center 2 was, at zoom 0.5, 514 pixels square, its middle
 // 205 left of and 103 above the HUD's; at 0.75, 768 square, 308 left and
 // 154 above.
@@ -534,12 +534,12 @@ func TestAShapedPrimIsInTheWayAndNoMore(t *testing.T) {
 }
 
 // TestATouchPositionOnAnotherPointIsFromTheMiddleOfTheScreen: off the
-// centre points the viewer's touch position is not from the point the
+// center points the viewer's touch position is not from the point the
 // prim is worn on but from the middle of the screen.  Measured in
 // Firestorm on a world view of 3840x2050: a 0.1 x 0.4 x 0.2 box worn
 // unturned on Top Left, clicked on face 4 at S,T 0.97836, 0.02782, read
 // llDetectedTouchPos <-0.05, 0.74524, 0.40556> -- the point, half the
-// aspect across and half a metre up, plus the place on the box.
+// aspect across and half a meter up, plus the place on the box.
 func TestATouchPositionOnAnotherPointIsFromTheMiddleOfTheScreen(t *testing.T) {
 	box := prim(t, "box", 0.1, msg.Vector3{}, msg.Quaternion{})
 	box.Scale = msg.Vector3{X: 0.1, Y: 0.4, Z: 0.2}

@@ -58,7 +58,7 @@ func TestTheActiveGroupIsWhatDecidesWhetherWeMayBuild(t *testing.T) {
 
 // TestGroupMembershipComesFromTheSimulatorAndNotTheLogin: the login
 // server answers only what its options ask for, and "groups" is not one
-// it honours -- so asking there gets a missing field, which reads exactly
+// it honors -- so asking there gets a missing field, which reads exactly
 // like belonging to none.  The simulator volunteers the real list moments
 // after the handshake.
 func TestGroupMembershipComesFromTheSimulatorAndNotTheLogin(t *testing.T) {
@@ -125,7 +125,7 @@ func TestWaitGroupsGivesUpRatherThanInsisting(t *testing.T) {
 		t.Errorf("WaitGroups waited %s past its deadline", d)
 	}
 
-	// Cancelled while waiting: it hands back whatever it has, which is
+	// Canceled while waiting: it hands back whatever it has, which is
 	// the same answer a moment earlier.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -294,7 +294,7 @@ func TestTheCameraFollowsTheAvatar(t *testing.T) {
 // TestWalkingAwayIsOnlyEverReportedCoarsely: CoarseLocationUpdate is the
 // only thing that keeps arriving as an avatar walks, so it is what stops
 // the camera drifting away from one that moved without teleporting.  It
-// is whole metres, and four of them vertically, which is ample for
+// is whole meters, and four of them vertically, which is ample for
 // deciding what is nearby.
 func TestWalkingAwayIsOnlyEverReportedCoarsely(t *testing.T) {
 	t.Parallel()
@@ -478,9 +478,9 @@ func TestAFriendListThatWasNeverSeededStillTakesNotifications(t *testing.T) {
 
 // TestAnAvatarAboveTheCoarseCeilingKeepsTheHeightItHad.
 //
-// The height in a coarse location is one byte of four metre steps, so it
+// The height in a coarse location is one byte of four meter steps, so it
 // stops at 1020 and 255 means "higher than this can say".  Read as a
-// height it puts the camera a kilometre under an avatar on a skybox --
+// height it puts the camera a kilometer under an avatar on a skybox --
 // and then everything the region describes is judged against a place the
 // avatar is not: the objects around it, and the other avatars standing
 // beside it, arrive already out of range and are dropped.  A region
@@ -503,7 +503,7 @@ func TestAnAvatarAboveTheCoarseCeilingKeepsTheHeightItHad(t *testing.T) {
 	}
 
 	// Now a coarse update with the height at its ceiling.  Sideways
-	// movement is still worth having -- it is whole metres and correct
+	// movement is still worth having -- it is whole meters and correct
 	// -- but the height it reports is not a height.
 	m := &msg.CoarseLocationUpdate{}
 	m.Location = []msg.CoarseLocationUpdate_Location{{X: 33, Y: 75, Z: 255}}
@@ -538,7 +538,7 @@ func TestAnAvatarAboveTheCoarseCeilingKeepsTheHeightItHad(t *testing.T) {
 // the first anybody knew was a command failing.
 //
 // The reason text is all there is to tell them apart, so the match is
-// narrow and anything unrecognised still stays out. Getting that
+// narrow and anything unrecognized still stays out. Getting that
 // backwards is the expensive direction: a daemon that reconnects when
 // told not to fights whoever is holding the avatar, and wins.
 func TestARegionGoingDownIsNotADecisionAboutTheAvatar(t *testing.T) {

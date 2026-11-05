@@ -10,7 +10,7 @@ import (
 	"github.com/quark-idlemind/slgo/msg"
 )
 
-// wornHUD puts a half-metre box on Center 2 in the fake region, worn by
+// wornHUD puts a half-meter box on Center 2 in the fake region, worn by
 // an avatar, and returns it.
 func wornHUD(t *testing.T, f *fakeBackend) *Seen {
 	t.Helper()

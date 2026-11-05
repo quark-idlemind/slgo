@@ -174,7 +174,7 @@ func viewerPlaceholders(cfg Config, c *pb.ViewerCredentialResponse) map[string]s
 		"grid": cfg.ViewerGrid,
 
 		// The address is still offered even though the default no
-		// longer passes it: a viewer that honours --loginuri, or a
+		// longer passes it: a viewer that honors --loginuri, or a
 		// platform whose launcher takes a URL, should not have to be
 		// told the address some other way.
 		"uri":      c.GetLoginUri(),

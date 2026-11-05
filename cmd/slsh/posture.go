@@ -3,7 +3,7 @@ package main
 // Sitting down, and getting up again.
 //
 // A sit is not a walk: the simulator picks the avatar up and puts it on
-// the seat, over whatever is in the way, from as much as ten metres
+// the seat, over whatever is in the way, from as much as ten meters
 // off, and standing up does not put it back.  So what these two print
 // is not only what they did but where that left the avatar, in the same
 // words where and tp say it.
@@ -79,7 +79,7 @@ type postureFlags struct {
 // # What it prints, and why the position is half of it
 //
 // A sit moves the avatar, so a shell that reported only what it sat on
-// would leave somebody holding a position that is now several metres
+// would leave somebody holding a position that is now several meters
 // wrong.  The position is read back rather than worked out -- the
 // simulator decides where the seat is -- and it is printed by the same
 // helper tp and where use, so that "where" run afterwards agrees with

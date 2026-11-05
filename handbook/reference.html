@@ -30,7 +30,7 @@
           <thead><tr><th>Path</th><th>What it is</th><th>Mode</th><th>Moved by</th><th>Written by</th></tr></thead>
           <tbody>
             <tr><td><code>~/.config/slgod/secret</code></td><td class="what">The shared secret. The same file on the slgod machine and every client machine. The first line that is not blank or a <code>#</code> comment is the secret. A client uses it when no file below is kept for the address it dials (<a href="#secret-order">order</a>).</td><td>600, dir 700. <strong>Refused</strong> otherwise</td><td>For slgod, <code>-secret FILE</code> or a <code>secret</code> in its <code>-config</code> directory. For clients, nothing: always <code>$HOME/.config/slgod</code>, whatever <code>XDG_CONFIG_HOME</code> says</td><td>you</td></tr>
-            <tr><td><code>~/.config/slgod/secret.HOST.PORT</code></td><td class="what">On a client machine: the secret of the one slgod this client reaches at <code>HOST:PORT</code>, for a slgod that keeps a secret of its own. <code>HOST</code> is written as dialled, in lower case; see <a href="#secret-order">how the name is made</a>. Most setups have none.</td><td>600, dir 700. <strong>Refused</strong> otherwise, not skipped</td><td>Nothing</td><td>you</td></tr>
+            <tr><td><code>~/.config/slgod/secret.HOST.PORT</code></td><td class="what">On a client machine: the secret of the one slgod this client reaches at <code>HOST:PORT</code>, for a slgod that keeps a secret of its own. <code>HOST</code> is written as dialed, in lower case; see <a href="#secret-order">how the name is made</a>. Most setups have none.</td><td>600, dir 700. <strong>Refused</strong> otherwise, not skipped</td><td>Nothing</td><td>you</td></tr>
             <tr><td><code>~/.config/slgod/secret.HOST</code></td><td class="what">The same, for every port on <code>HOST</code>.</td><td>600, dir 700. <strong>Refused</strong> otherwise, not skipped</td><td>Nothing</td><td>you</td></tr>
             <tr><td><code>DIR/secret</code></td><td class="what">On the slgod machine: the secret of a slgod started with <code>-config DIR</code>, when the file is there. Without it that slgod uses the shared secret.</td><td>600, dir 700. <strong>Refused</strong> otherwise</td><td><code>-secret FILE</code></td><td>you</td></tr>
             <tr><td><code>~/.config/slgo/</code></td><td class="what">Profile directory, on the slgod machine. Also holds <code>slbotd.conf</code>.</td><td>700. <strong>Refused</strong> otherwise</td><td>slgod <code>-config</code>, else <code>SLGO_CONFIG_DIR</code>, else <code>$XDG_CONFIG_HOME/slgo</code></td><td>you</td></tr>
@@ -69,7 +69,7 @@
             <tr><td><code>-v</code></td><td>off</td><td class="what">Also log every grid message slgod has no handler for.</td></tr>
             <tr><td><code>-start WHERE</code></td><td>—</td><td class="what">Override every profile's <code>start</code>: <code>last</code>, <code>home</code> or a region name.</td></tr>
             <tr><td><code>-group G</code>, <code>-group PROFILE=G</code></td><td>—</td><td class="what">Group to act as, by name or uuid, overriding the profile. Repeatable.</td></tr>
-            <tr><td><code>-neighbours</code></td><td>off</td><td class="what">Hold neighbouring regions' circuits for profiles that do not say, for smoother border crossings.</td></tr>
+            <tr><td><code>-neighbors</code> (<code>-neighbours</code>)</td><td>off</td><td class="what">Hold neighboring regions' circuits for profiles that do not say, for smoother border crossings.</td></tr>
             <tr><td><code>-viewer ADDR</code></td><td>—</td><td class="what">Serve viewer logins over HTTPS here, so a real viewer can take a session over. Must include a port, e.g. <code>127.0.0.1:9000</code>.</td></tr>
             <tr><td><code>-viewer-cert FILE</code>, <code>-viewer-key FILE</code></td><td>self-signed, in <code>~/.config/slgod</code></td><td class="what">Your own certificate for <code>-viewer</code>. Give both, and only with <code>-viewer</code>.</td></tr>
             <tr><td><code>-no-auth</code></td><td>off</td><td class="what">No TLS and no secret. None of the shipped clients can connect to it. Do not use it.</td></tr>
@@ -187,9 +187,9 @@
           <tbody>
             <tr><td>0</td><td class="what">Every test passed. Cleanup warnings may still be printed.</td></tr>
             <tr><td>1</td><td class="what">A test failed.</td></tr>
-            <tr><td>2</td><td class="what">The file did not parse or failed a check. Nothing was dialled.</td></tr>
+            <tr><td>2</td><td class="what">The file did not parse or failed a check. Nothing was dialed.</td></tr>
             <tr><td>3</td><td class="what">Setup failed: the dial, an object or item not found, a second avatar not given, the bridge or a probe. Outranks 1.</td></tr>
-            <tr><td>4</td><td class="what">slate was used wrongly: a missing file, an unknown flag, a bad <code>-run</code> pattern. Nothing was dialled.</td></tr>
+            <tr><td>4</td><td class="what">slate was used wrongly: a missing file, an unknown flag, a bad <code>-run</code> pattern. Nothing was dialed.</td></tr>
           </tbody>
         </table></div>
         <div class="tablewrap"><table>
@@ -226,7 +226,7 @@
             <tr><td><code>XDG_STATE_HOME</code></td><td>slbotd</td><td class="what">Base for the conversation store (<code>slbotd</code>).</td></tr>
             <tr><td><code>SL_HOST</code>, <code>RSSH_HOST</code></td><td>sl-host</td><td class="what">The answer outright, for a one-off: <code>env SL_HOST=198.51.100.7 slsh</code>.</td></tr>
             <tr><td><code>SL_HOSTFILE</code>, <code>RSSH_HOSTFILE</code></td><td>sl-host</td><td class="what">Path of the rules file.</td></tr>
-            <tr><td><code>NO_COLOR</code></td><td>slsh</td><td class="what">Any value turns colour off.</td></tr>
+            <tr><td><code>NO_COLOR</code></td><td>slsh</td><td class="what">Any value turns color off.</td></tr>
             <tr><td><code>HOME</code></td><td>all</td><td class="what">Every default path starts here, including the secret's.</td></tr>
           </tbody>
         </table></div>
@@ -278,12 +278,12 @@
         <p>A file at step 1 or 2 that exists but cannot be used (wrong mode, or empty) is an error. The client does not go on to the next one. When none of the three exists, the error names the shared secret and adds <code>(looked first for …)</code> with the other two paths.</p>
         <p>How the name is made from the address:</p>
         <ul>
-          <li>The host is written as the client dialled it, in lower case, with no brackets. <code>localhost:7808</code> and <code>127.0.0.1:7808</code> are different files, even when both reach the same slgod.</li>
+          <li>The host is written as the client dialed it, in lower case, with no brackets. <code>localhost:7808</code> and <code>127.0.0.1:7808</code> are different files, even when both reach the same slgod.</li>
           <li>An IPv6 address has its colons turned into dots, because a colon is not safe in a file name on every filesystem.</li>
           <li>A host containing <code>/</code> or <code>\</code> gets no file of its own; only the shared secret is looked for.</li>
         </ul>
         <div class="tablewrap"><table>
-          <thead><tr><th>Address dialled</th><th>Looked for first</th><th>Then</th></tr></thead>
+          <thead><tr><th>Address dialed</th><th>Looked for first</th><th>Then</th></tr></thead>
           <tbody>
             <tr><td><code>localhost:7807</code> (the default)</td><td><code>secret.localhost.7807</code></td><td><code>secret.localhost</code></td></tr>
             <tr><td><code>127.0.0.1:7808</code></td><td><code>secret.127.0.0.1.7808</code></td><td><code>secret.127.0.0.1</code></td></tr>
@@ -330,7 +330,7 @@ last            = Resident
 password        = $1$&lt;the md5 of the password&gt;
 start           = last
 group           = Example Builders
-neighbours      = yes</pre></div>
+neighbors       = yes</pre></div>
         <div class="tablewrap"><table>
           <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
           <tbody>
@@ -338,7 +338,7 @@ neighbours      = yes</pre></div>
             <tr><td><code>password</code> (<code>passwd</code>)</td><td class="what">Required. <code>$1$</code> plus the md5 of the password (make it with <code>slhash</code>), or plain text. Either is enough to log the account in.</td></tr>
             <tr><td><code>start</code></td><td class="what"><code>last</code>, <code>home</code> or a region name.</td></tr>
             <tr><td><code>group</code></td><td class="what">Group to act as, by name or uuid.</td></tr>
-            <tr><td><code>neighbours</code> (<code>neighbors</code>)</td><td class="what"><code>yes</code>/<code>no</code>. Hold neighbouring regions' circuits.</td></tr>
+            <tr><td><code>neighbors</code> (<code>neighbours</code>)</td><td class="what"><code>yes</code>/<code>no</code>. Hold neighboring regions' circuits.</td></tr>
             <tr><td><code>viewer_password</code></td><td class="what">The password a real viewer must give to take this session over through <code>-viewer</code>. Without it, the session cannot be handed over.</td></tr>
             <tr id="pay"><td><code>pay</code></td><td class="what"><code>on</code>/<code>off</code>. Whether programs may pay or buy with L$ as this avatar. Off unless present. slgod checks every payment and purchase a client sends -- objects, land, group joins and invitations, classifieds; a session held with <code>--direct</code> checks its own. A viewer attached through slgod is not checked.</td></tr>
             <tr><td><code>pay_max</code></td><td class="what">The most one payment or purchase may be, in L$. 10 when not given.</td></tr>
@@ -370,7 +370,7 @@ neighbours      = yes</pre></div>
             <tr><td><code>how_slot</code></td><td>empty</td><td class="what">llama-server slot number (0 or more).</td></tr>
             <tr><td><code>how_timeout</code></td><td>empty (2m)</td><td class="what">How long a whole question may take, like <code>45s</code>.</td></tr>
             <tr><td><code>how_extra</code></td><td>empty</td><td class="what">A JSON object added to every request, e.g. <code>{"reasoning_effort": "none"}</code>.</td></tr>
-            <tr><td><code>map_rows</code>, <code>map_span</code>, <code>map_ratio</code>, <code>map_level</code>, <code>map_friend_colour</code></td><td>see <code>man map</code></td><td class="what">How <code>map</code> draws. <code>map_ratio auto</code> measures the terminal font.</td></tr>
+            <tr><td><code>map_rows</code>, <code>map_span</code>, <code>map_ratio</code>, <code>map_level</code>, <code>map_friend_color</code></td><td>see <code>man map</code></td><td class="what">How <code>map</code> draws. <code>map_ratio auto</code> measures the terminal font.</td></tr>
           </tbody>
         </table></div>
       </section>
@@ -400,7 +400,7 @@ neighbours      = yes</pre></div>
             <tr><td><code>llm-timeout</code></td><td><code>2m</code></td><td class="what">Limit on each call to the model.</td></tr>
             <tr><td><code>backstory</code></td><td>none</td><td class="what"><code>AVATAR PATH</code>: a file, or a directory with <code>default.txt</code> and per-person files.</td></tr>
             <tr><td><code>chat-jobs</code></td><td><code>2</code></td><td class="what">Conversations one avatar answers at once.</td></tr>
-            <tr><td><code>chat-context</code></td><td><code>1536</code></td><td class="what">Token budget for the prompt before older turns are summarised.</td></tr>
+            <tr><td><code>chat-context</code></td><td><code>1536</code></td><td class="what">Token budget for the prompt before older turns are summarized.</td></tr>
             <tr><td><code>chat-keep</code></td><td><code>6</code></td><td class="what">Turns kept word for word through a summary.</td></tr>
             <tr><td><code>chat-summary</code></td><td><code>200</code></td><td class="what">Token cap on the summary. Must be under half of <code>chat-context</code>.</td></tr>
             <tr><td><code>chat-reply-limit</code></td><td><code>2</code></td><td class="what">Most IMs in one chat reply.</td></tr>

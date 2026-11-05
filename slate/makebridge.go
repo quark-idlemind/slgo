@@ -34,7 +34,7 @@ func defaultBridgeCfg() bridgeCfg {
 	return bridgeCfg{rez: 15 * time.Second, name: 20 * time.Second, take: 20 * time.Second, cleanup: 15 * time.Second}
 }
 
-// MakeBridge rezzes a 0.1 m prim one metre along +X from the tester's body,
+// MakeBridge rezzes a 0.1 m prim one meter along +X from the tester's body,
 // names it "slate bridge" and takes it into the Objects folder. It needs
 // build rights where the tester stands.
 //

@@ -10,7 +10,7 @@
 //
 // This file is the record of what crossed, and it is here because of how
 // the far end fails.  A viewer that is missing something does not say
-// so: it renders an empty grey world and waits, looking exactly the same
+// so: it renders an empty gray world and waits, looking exactly the same
 // whether the fault is a message never sent, a message sent in the wrong
 // direction, or a message the relay ate.  With no record of what
 // crossed, every one of those is the same symptom and the only tool is
@@ -26,7 +26,7 @@
 // The Census is the tally: how many of each message went each way, and
 // what was dropped and why.  It answers "what is missing", and that is
 // the question that actually finds these faults.  A viewer stuck at a
-// grey screen is nearly always waiting on one particular message, and a
+// gray screen is nearly always waiting on one particular message, and a
 // census showing that message with a count of zero -- or, worse, under a
 // disposition other than forwarded -- names the bug outright, where the
 // transcript would have to be read to notice the absence of something.
@@ -303,9 +303,9 @@ func NewTrace(w io.Writer, only []string, bodies bool) *Trace {
 	return t
 }
 
-// Write records one packet travelling in one direction.
+// Write records one packet traveling in one direction.
 //
-// It is safe to call from any goroutine, and it serialises them: the
+// It is safe to call from any goroutine, and it serializes them: the
 // file's order is the order the entries reached the lock, which is as
 // close to the order things happened as a relay can know.
 func (t *Trace) Write(dir Direction, p *msg.Packet, what Disposition) {

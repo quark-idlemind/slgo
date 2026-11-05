@@ -24,8 +24,8 @@ all, HUD and body points together, so there was never a reason to
 spread them over the eight HUD points; they are small and are moved
 instead.
 
-Idle, an object is parked: off the screen, a metre to the left of the
-corner and a metre below it.  `show` lays them out along the bottom of
+Idle, an object is parked: off the screen, a meter to the left of the
+corner and a meter below it.  `show` lays them out along the bottom of
 the screen, one cube's width apart, so that twenty-four make a row 1.2 m
 long and you can see them.
 

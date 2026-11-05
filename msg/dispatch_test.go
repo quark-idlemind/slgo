@@ -414,9 +414,9 @@ func TestDispatchStopsOnCancel(t *testing.T) {
 }
 
 // TestDispatchAckWiring runs receiver, dispatcher and sender together
-// over loopback UDP and checks the acknowledgement bookkeeping: an
+// over loopback UDP and checks the acknowledgment bookkeeping: an
 // inbound reliable packet gets acknowledged, and an inbound
-// acknowledgement stops a retransmission.
+// acknowledgment stops a retransmission.
 func TestDispatchAckWiring(t *testing.T) {
 	// The peer we are talking to.
 	peer, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -444,13 +444,13 @@ func TestDispatchAckWiring(t *testing.T) {
 	go func() { ddone <- d.Run(dctx, in) }()
 	defer func() { dcancel(); <-ddone }()
 
-	// Something of ours is in flight and awaiting acknowledgement.
+	// Something of ours is in flight and awaiting acknowledgment.
 	if err := sender.SendReliable(context.Background(), &CompletePingCheck{}); err != nil {
 		t.Fatal(err)
 	}
 	waitFor(t, "our packet to go out", func() bool { return sender.Stats().Sent >= 1 })
 
-	// A reliable packet arrives carrying an acknowledgement of it.
+	// A reliable packet arrives carrying an acknowledgment of it.
 	in <- &Packet{
 		Header:  Header{Sequence: 500, Flags: FlagReliable},
 		ID:      IDOf(&CompletePingCheck{}),
@@ -479,7 +479,7 @@ func BenchmarkDispatch(b *testing.B) {
 }
 
 // TestDispatchConfirmsPacketAckMessages is the bug the live login
-// found: a simulator sends most acknowledgements as a PacketAck message
+// found: a simulator sends most acknowledgments as a PacketAck message
 // in its own datagram, not on the tail of another packet.  Confirming
 // only p.Acks meant every reliable message we sent retransmitted until
 // it was abandoned.
@@ -496,7 +496,7 @@ func TestDispatchConfirmsPacketAckMessages(t *testing.T) {
 	waitFor(t, "the first send", func() bool { return c.count() == 1 })
 	h, _, _ := DecodeHeader(c.all()[0])
 
-	// The acknowledgement arrives as a message, with nothing in
+	// The acknowledgment arrives as a message, with nothing in
 	// Packet.Acks at all.
 	in := make(chan *Packet, 1)
 	in <- &Packet{
@@ -662,7 +662,7 @@ func TestRelaySeesMessagesNothingHandles(t *testing.T) {
 	}
 }
 
-// TestRelaySkipsConsumedPacketAck: acknowledgements are terminated at
+// TestRelaySkipsConsumedPacketAck: acknowledgments are terminated at
 // each end of a relay rather than forwarded, since the two sides number
 // their packets independently.  A PacketAck the bookkeeping has already
 // acted on is circuit machinery, not a message, and must not be offered.
@@ -759,7 +759,7 @@ func TestDispatchWithoutAContext(t *testing.T) {
 }
 
 // TestDispatchGivesUpWaitingForASlot: with every handler slot taken and
-// the context cancelled, the loop must stop rather than block on a
+// the context canceled, the loop must stop rather than block on a
 // semaphore nothing is going to release.
 func TestDispatchGivesUpWaitingForASlot(t *testing.T) {
 	t.Parallel()

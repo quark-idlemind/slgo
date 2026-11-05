@@ -24,7 +24,7 @@ var (
 	idElD = msg.MustParseUUID("fa667e57-7e57-c0de-314a-03ab9b732a8d") // worn, never recorded
 )
 
-// panelRecord is texture A: two buttons side by side, centres (0.275, 0.70)
+// panelRecord is texture A: two buttons side by side, centers (0.275, 0.70)
 // and (0.725, 0.70). Texture B is an atlas: the left half of the texture is
 // one version of a panel and the right half another, with an ok button in
 // each, a cancel button only in the left and a menu only in the right.

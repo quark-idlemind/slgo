@@ -99,7 +99,7 @@ func refuse(t *testing.T, sim *fakeSim, key agent.RefusalKey) {
 func asked(sim *fakeSim) int { return counted(sim, "TeleportLandmarkRequest") }
 
 // TestAHomeStartAsksToGoHome: "start = home" is a request the login
-// server may not honour, and nothing afterwards says whether it did --
+// server may not honor, and nothing afterwards says whether it did --
 // so the session asks, which is the only question it can ask.
 func TestAHomeStartAsksToGoHome(t *testing.T) {
 	quickHoming(t)
@@ -114,7 +114,7 @@ func TestAHomeStartAsksToGoHome(t *testing.T) {
 //
 // "start = last" means where the avatar was, and an avatar dragged home
 // from there is this daemon overruling the profile rather than
-// honouring it.
+// honoring it.
 func TestAnythingButHomeIsLeftAlone(t *testing.T) {
 	quickHoming(t)
 	for _, start := range []string{"last", "", "Pelmar Reach"} {
@@ -169,7 +169,7 @@ func TestSilenceKeepsAsking(t *testing.T) {
 }
 
 // TestArrivingStopsIt: a teleport that happened is the end of it, and a
-// move inside the region counts -- home may be a few metres away rather
+// move inside the region counts -- home may be a few meters away rather
 // than in another region, and TeleportLocal is how the grid says so.
 func TestArrivingStopsIt(t *testing.T) {
 	quickHoming(t)
@@ -384,7 +384,7 @@ func TestAReconnectWithAViewerOnDoesNotGoHome(t *testing.T) {
 }
 
 // TestAClientSittingDoesNotStopIt: a sit moves the avatar up to ten
-// metres and is not somebody saying where it should be.  Stopping on
+// meters and is not somebody saying where it should be.  Stopping on
 // one would leave an avatar that sat on a chair on the way home never
 // getting there.
 func TestAClientSittingDoesNotStopIt(t *testing.T) {

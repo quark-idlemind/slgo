@@ -58,17 +58,17 @@ which is the only thing that replays the region and answers the
 movement request, while the peer was noticed anyway because the tap
 that noticed it then ran ahead of the duplicate check. The daemon
 logged a viewer appearing and then said nothing, and the viewer sat at
-`STATE_AGENT_WAIT` with a grey world until slgod was restarted.
+`STATE_AGENT_WAIT` with a gray world until slgod was restarted.
 
 Measured on Agni, from two daemon traces, which is why it looked
 intermittent rather than certain. Where re-attaching failed the first
 viewer had sent 326 traced packets, so 1 and 2 were still in the ring.
 Where it succeeded the first viewer had sent 3777 traced packets and
-about fifty minutes of acknowledgements and pings the trace does not
+about fifty minutes of acknowledgments and pings the trace does not
 record, which is enough for the ring to have wrapped past them.
 
 Both halves of the circuit forget, because both are the departed
-viewer's. Anything still awaiting acknowledgement was addressed to a
+viewer's. Anything still awaiting acknowledgment was addressed to a
 socket that has closed, and the `LogoutReply` case is the one that
 bites: a viewer that quits sends `LogoutRequest`, and the reply it never
 acknowledged would be retransmitted to its replacement and log that one
@@ -110,7 +110,7 @@ and the agent uses it for a child circuit on the same
 reasoning. A viewer that is there is never that quiet -- it sends an
 `AgentUpdate` several times a second -- so nothing live is let go. Any
 datagram from the admitted address counts as hearing from it,
-acknowledgements included.
+acknowledgments included.
 
 The watch is the session's own silence watchdog, `agent.WatchSilence`,
 pointed at the time the circuit last heard its viewer. It starts at each
@@ -170,7 +170,7 @@ of the copy (`withheldEvents`). Each is held with the reason it is
 held, because the daemon says that reason out loud once per kind and a
 sentence kept somewhere else would end up describing the wrong one.
 
-`EstablishAgentCommunication` is the simulator introducing a neighbour
+`EstablishAgentCommunication` is the simulator introducing a neighbor
 region: its UDP address and its seed capability, so that a viewer can
 open a child connection and draw what is over the border. Handed to a
 viewer, that is exactly what it does -- and the connection it opens is
@@ -180,7 +180,7 @@ part of the session is then in the daemon and part of it is in the
 viewer, and nothing can see both.
 
 So it is withheld, and the cost is plain rather than hidden: the viewer
-draws this region and nothing beyond it. Neighbouring regions are void.
+draws this region and nothing beyond it. Neighboring regions are void.
 slgod can hold the child connections itself (`agent.Options.Neighbours`,
 off by default), but making them work in the viewer means offering it
 slgod's own port for each, and that is not built
@@ -188,7 +188,7 @@ slgod's own port for each, and that is not built
 
 `EnableSimulator` is the other half of that introduction and was relayed
 for as long as the front end had existed, which made the paragraph above
-half true at best. It carries a neighbour's handle, IP and port and no
+half true at best. It carries a neighbor's handle, IP and port and no
 capability of any kind -- and a capability is not what opening a circuit
 takes. `UseCircuitCode`'s whole content is the circuit code, the session
 id and the agent id, and a viewer holding this session already has all
@@ -196,7 +196,7 @@ three: they are in the login response it was replayed, and
 `Circuit.checkCircuit` exists precisely because the viewer sends them
 back on attaching. So an address is the only thing it was missing, and
 this message is an address. The seed in `EstablishAgentCommunication`
-buys the neighbour's HTTP capabilities; the UDP circuit, which is where
+buys the neighbor's HTTP capabilities; the UDP circuit, which is where
 the object updates arrive and where anything a viewer might send as this
 agent would go, needs none of it. The reference viewer does exactly this
 on receiving one -- enables the circuit and sends `UseCircuitCode` to
@@ -206,7 +206,7 @@ source rather than something measured here, and the withholding does not
 rest on it: the message plus what the viewer already holds is
 sufficient on its own.
 
-A neighbour circuit is worse than the one `EstablishAgentCommunication`
+A neighbor circuit is worse than the one `EstablishAgentCommunication`
 would open, not better. Every absorb in the package -- the logout that
 would end the grid session, the teleports, the circuit claim -- is
 enforced on the one circuit slgod owns, and a circuit the viewer opened
@@ -216,7 +216,7 @@ Withheld, then, and it is the older hole rather than one the teleport
 work made: it had been relayed since the front end existed, and the
 capture taken in teleport's stage 0 has three of them arriving every few
 seconds. What it costs is that a viewer no longer creates the
-neighbouring regions at all, so anything it was managing to draw across
+neighboring regions at all, so anything it was managing to draw across
 a border stops -- which is the sentence above finally becoming true
 rather than a new restriction.
 

@@ -284,7 +284,7 @@ Or pass -no-auth to serve loopback without it.</span></pre></div>
           <summary><span class="sym">slgod disappears when the terminal it was started in is closed</span><span class="where-tag">slgod</span></summary>
           <div class="fix">
             <h4>Why</h4>
-            <p>slgod handles Ctrl-C (SIGINT) and SIGTERM by logging every avatar out and printing <code>done</code>. It does not handle SIGHUP, which a closing terminal sends. From Go's default behaviour we expect that to end slgod at once, without a logout. This has not been measured.</p>
+            <p>slgod handles Ctrl-C (SIGINT) and SIGTERM by logging every avatar out and printing <code>done</code>. It does not handle SIGHUP, which a closing terminal sends. From Go's default behavior we expect that to end slgod at once, without a logout. This has not been measured.</p>
             <h4>Fix</h4>
             <p>Run slgod under launchd or systemd, or inside tmux or screen. See <a href="platforms.html">Linux &amp; macOS</a> for service files.</p>
           </div>
@@ -318,7 +318,7 @@ Or pass -no-auth to serve loopback without it.</span></pre></div>
           <div class="fix">
             <h4>Why</h4>
             <p>The client has no shared secret. It reads the secret before it contacts the address, so here "cannot reach" means "has no secret". slgod was not even tried.</p>
-            <p>The <code>(looked first for …)</code> line names the two files a client tries before the shared secret, kept for the address it was about to dial: <code>secret.HOST.PORT</code> and <code>secret.HOST</code>. They are only for a slgod with a secret of its own (<a href="reference.html#secret-order">rules</a>). If you copied such a file and still see this, its name does not match the address as dialled; compare it with the names in that line, and see <a href="#f-secret-by-address">the entry on names</a>.</p>
+            <p>The <code>(looked first for …)</code> line names the two files a client tries before the shared secret, kept for the address it was about to dial: <code>secret.HOST.PORT</code> and <code>secret.HOST</code>. They are only for a slgod with a secret of its own (<a href="reference.html#secret-order">rules</a>). If you copied such a file and still see this, its name does not match the address as dialed; compare it with the names in that line, and see <a href="#f-secret-by-address">the entry on names</a>.</p>
             <h4>Fix</h4>
             <p>Copy the secret from the slgod machine, byte for byte, over a secure route such as scp. On the machine slgod runs on, the file is already there.</p>
             <div class="term" data-where="laptop"><pre><span class="p">$ </span>(umask 077; mkdir -p ~/.config/slgod)
@@ -348,7 +348,7 @@ Or pass -no-auth to serve loopback without it.</span></pre></div>
             <p>The client's secret, in the file the message names, is not the same as slgod's. The daemon gives the same answer for every kind of failure, so the message cannot say more.</p>
             <p>Look at the file named first:</p>
             <ul>
-              <li>If it is the shared secret, <code>~/.config/slgod/secret</code>, and this slgod has a secret of its own, the client found no copy kept for the address it dialled. See <a href="#f-secret-by-address">the entry below</a>.</li>
+              <li>If it is the shared secret, <code>~/.config/slgod/secret</code>, and this slgod has a secret of its own, the client found no copy kept for the address it dialed. See <a href="#f-secret-by-address">the entry below</a>.</li>
               <li>If it is a <code>secret.HOST.PORT</code> or <code>secret.HOST</code> file, that copy is out of date, or belongs to another slgod.</li>
             </ul>
             <p>Two related messages:</p>
@@ -371,7 +371,7 @@ Or pass -no-auth to serve loopback without it.</span></pre></div>
           <summary><span class="sym">Works with <code>--addr 127.0.0.1:PORT</code> but not with <code>localhost:PORT</code>, or the other way round</span><span class="where-tag">slsh</span></summary>
           <div class="fix">
             <h4>Why</h4>
-            <p>This slgod has a secret of its own, and the client keeps its copy under one address. A client picks the secret by the address exactly as it dials it: <code>secret.127.0.0.1.7808</code> is found for <code>127.0.0.1:7808</code> and for nothing else. Dialling <code>localhost:7808</code> looks for <code>secret.localhost.7808</code> and <code>secret.localhost</code>, finds neither, and uses the shared secret, which this slgod does not accept. This has been seen with a tunnel on local port 7808: reached as <code>localhost:7808</code>, the client fell back to the shared secret and was refused.</p>
+            <p>This slgod has a secret of its own, and the client keeps its copy under one address. A client picks the secret by the address exactly as it dials it: <code>secret.127.0.0.1.7808</code> is found for <code>127.0.0.1:7808</code> and for nothing else. Dialing <code>localhost:7808</code> looks for <code>secret.localhost.7808</code> and <code>secret.localhost</code>, finds neither, and uses the shared secret, which this slgod does not accept. This has been seen with a tunnel on local port 7808: reached as <code>localhost:7808</code>, the client fell back to the shared secret and was refused.</p>
             <p>The refusal says so at its end: <code>(the secret used was …/.config/slgod/secret)</code>, the shared one, where you expected the per-address file. The same happens with a host name and its IP address, a tunnel moved to another local port, or an sl-host answer that differs from the address the file is named for. Remember that a client given no address at all dials <code>localhost:7807</code>.</p>
             <h4>Fix</h4>
             <p>Dial the address the file is named for, or give the file the name for the address you dial. Copy it rather than rename it if you use both:</p>
@@ -520,7 +520,7 @@ Or pass -no-auth to serve loopback without it.</span></pre></div>
           <div class="fix">
             <h4>Why</h4>
             <p>The rule that matched has an address with no port, and a client adds <code>:7807</code> to an address with none. A slgod started with <code>-listen :7900</code> is not there.</p>
-            <p>If the rule does name a port and the client still tries 7807, the client is older than sl-host: an older client adds <code>:7807</code> whatever sl-host printed, which makes an address that cannot be dialled (read from the code).</p>
+            <p>If the rule does name a port and the client still tries 7807, the client is older than sl-host: an older client adds <code>:7807</code> whatever sl-host printed, which makes an address that cannot be dialed (read from the code).</p>
             <h4>Fix</h4>
             <p>Put the port in the rule, then check what sl-host prints:</p>
             <div class="file"><div class="name">~/.config/sl-host</div><pre>0/0            server.example:7900    anywhere</pre></div>
@@ -783,7 +783,7 @@ chat    = *</pre></div>
             <ul>
               <li><code>not answering X: not in the chat list</code>: adjust the <code>chat</code> lines.</li>
               <li><code>too busy talking to answer X</code>: raise <code>chat-jobs</code>, or llama-server's <code>-np</code>.</li>
-              <li><code>ignored an instant message from [Object] X, owned by Y</code>: a script sent it with <code>llInstantMessage</code>. slbotd never answers or obeys an object, whatever it is called. A name that is not a person's is always labelled in the log: <code>[Object]</code>, <code>[Group]</code> or <code>[Grid]</code>.</li>
+              <li><code>ignored an instant message from [Object] X, owned by Y</code>: a script sent it with <code>llInstantMessage</code>. slbotd never answers or obeys an object, whatever it is called. A name that is not a person's is always labeled in the log: <code>[Object]</code>, <code>[Group]</code> or <code>[Grid]</code>.</li>
               <li><code>not answering X: that is builder, which this daemon drives as well, and they have said 8 things to each other already, and will not until they have said nothing for 30m0s</code>: two of the daemon's own avatars, or one and a <code>chat-bot</code> ("which another program's model drives"), reached <code>chat-own</code>.</li>
             </ul>
             <p>A reply can also just be slow. slbotd waits as if reading and typing: with the defaults, a long reply takes minutes.</p>
@@ -866,7 +866,7 @@ chat    = *</pre></div>
           <summary><span class="sym"><code>slate: setup: "Example Sign" is not in the region, or is beyond the draw distance</code>, or <code>names 2 objects</code></span><span class="where-tag">slate</span></summary>
           <div class="fix">
             <h4>Why</h4>
-            <p>An <code>object</code> header names a prim by its exact, case-sensitive name, and it must find exactly one within draw distance. The first sentence says none was found after 30 seconds: the name is spelt differently, the tester is not near it, or it is in another region. <code>names 2 objects</code> says two prims have that name. Both are exit 3, before any step runs.</p>
+            <p>An <code>object</code> header names a prim by its exact, case-sensitive name, and it must find exactly one within draw distance. The first sentence says none was found after 30 seconds: the name is spelled differently, the tester is not near it, or it is in another region. <code>names 2 objects</code> says two prims have that name. Both are exit 3, before any step runs.</p>
             <h4>Fix</h4>
             <p>Stand the tester next to the product (Slate does not walk or teleport it) and copy the name from the product's own properties. For two of one name, give each header a <code>description</code>: <code>object north is "Example Sign" description "north"</code> (<a href="testing-recipes.html#links">Link numbers</a>).</p>
           </div>

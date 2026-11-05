@@ -141,7 +141,7 @@ func (o *GLTFOverride) Empty() bool {
 // The viewer's own type tests are kept: mf, rf, ac and a transform's r
 // are read only when they are reals, am only when an integer, ds only
 // when a boolean, so an integer metallic factor is not an override.  A
-// colour, emissive colour, offset or scale that is not an array is
+// color, emissive color, offset or scale that is not an array is
 // skipped here, where the viewer would read it as zeros; no region has
 // been seen to send one.  A nil v, the undef a clear sends, is the empty
 // override.

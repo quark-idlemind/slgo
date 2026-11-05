@@ -17,7 +17,7 @@ import (
 // on the event queue at every arrival, naming the parcel landed on and
 // no other, with everything a person would want to know about it.
 // ParcelOverlay comes on the circuit at the same moment, four packets
-// that together say who owns each 4 metre square of the whole region --
+// that together say who owns each 4 meter square of the whole region --
 // no names, but the shape of every parcel at once.
 //
 // Both describe the region the avatar is in, so both are dropped when
@@ -56,7 +56,7 @@ type Parcel struct {
 	Group        msg.UUID
 	IsGroupOwned bool
 
-	// Area is in square metres, and AABBMin/AABBMax the box the parcel
+	// Area is in square meters, and AABBMin/AABBMax the box the parcel
 	// occupies.  A parcel need not be a rectangle, so the box bounds it
 	// rather than describing it; Bitmap is the exact shape.
 	Area             int32
@@ -165,8 +165,8 @@ const (
 	ParcelDenyAgeUnverified = 1 << 31
 )
 
-// Overlay dimensions.  A region is 256 metres and the overlay describes
-// it in 4 metre squares, one byte each, so it is a 64 by 64 grid that
+// Overlay dimensions.  A region is 256 meters and the overlay describes
+// it in 4 meter squares, one byte each, so it is a 64 by 64 grid that
 // arrives as four packets of 1024 bytes.
 const (
 	OverlayStep    = 4
@@ -263,7 +263,7 @@ func OverlayFrom(squares []byte, quarters uint8) *Overlay {
 	return o
 }
 
-// At is the square covering a point in region metres, and whether that
+// At is the square covering a point in region meters, and whether that
 // part of the overlay has arrived.
 func (o *Overlay) At(x, y float32) (byte, bool) {
 	if x < 0 || y < 0 {

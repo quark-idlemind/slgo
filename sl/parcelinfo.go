@@ -25,7 +25,7 @@ type ParcelInfo struct {
 	Name string
 	Desc string
 
-	// ActualArea and BillableArea are in square metres.
+	// ActualArea and BillableArea are in square meters.
 	ActualArea   int32
 	BillableArea int32
 
@@ -33,9 +33,9 @@ type ParcelInfo struct {
 	// viewer reads, and it reads no others.
 	Flags uint8
 
-	// Global is the reply's GlobalX/Y/Z, in metres on the grid.  It is
+	// Global is the reply's GlobalX/Y/Z, in meters on the grid.  It is
 	// the parcel's own point and not the point asked about.  Inferred,
-	// not measured, to be its landing point or centre.
+	// not measured, to be its landing point or center.
 	Global msg.Vector3
 
 	// RegionName is the reply's SimName.

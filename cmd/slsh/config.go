@@ -10,7 +10,7 @@ package main
 //	map_rows          = 16
 //	map_span          = 64
 //	map_ratio         = 7:3
-//	map_friend_colour = green
+//	map_friend_color = green
 //
 //	viewer_app     = Firestorm-OpenSim
 //	viewer_grid    = slgod
@@ -64,14 +64,14 @@ type Config struct {
 	// The shape and scale of the picture "map" draws: how many rows it
 	// is given, how much ground the close view covers, the shape of a
 	// character cell, how far off this avatar's height still counts as
-	// level, and the colour a friend is picked out in.  map.go holds
+	// level, and the color a friend is picked out in.  map.go holds
 	// the defaults and does the arithmetic; --rows and --span override
 	// the first two for one command, as a flag should.
 	MapRows         int
 	MapSpan         int
 	MapRatio        CellRatio
 	MapLevel        int
-	MapFriendColour string // a colour by name, never an escape sequence
+	MapFriendColour string // a color by name, never an escape sequence
 
 	// Log says whether to keep a transcript, and LogDir where.  Empty
 	// LogDir is the default place; see transcript.go.
@@ -370,7 +370,7 @@ var settings = []setting{{
 	},
 }, {
 	name:  "map_span",
-	about: "how much ground the close picture covers, in metres",
+	about: "how much ground the close picture covers, in meters",
 	show:  func(c *Config) string { return strconv.Itoa(c.MapSpan) },
 	parse: func(c *Config, v string) error {
 		n, err := settingNumber(v, 2)
@@ -397,7 +397,7 @@ var settings = []setting{{
 	},
 }, {
 	name:  "map_level",
-	about: "how far above or below you still counts as level, in metres",
+	about: "how far above or below you still counts as level, in meters",
 	show:  func(c *Config) string { return strconv.Itoa(c.MapLevel) },
 	parse: func(c *Config, v string) error {
 		n, err := settingNumber(v, 1)
@@ -408,8 +408,9 @@ var settings = []setting{{
 		return nil
 	},
 }, {
-	name:  "map_friend_colour",
-	about: "the colour a friend is drawn in, by name; \"man map\" names them",
+	name:  "map_friend_color",
+	also:  []string{"map_friend_colour"},
+	about: "the color a friend is drawn in, by name; \"man map\" names them",
 	show:  func(c *Config) string { return c.MapFriendColour },
 	parse: func(c *Config, v string) error {
 		name, err := ParseColour(v)
@@ -539,8 +540,8 @@ func settingNames() []string {
 
 // settingNumber reads a whole number that has to be at least something.
 //
-// There is no upper bound to give here in general: a map fifty metres
-// across and one four hundred metres across are both pictures somebody
+// There is no upper bound to give here in general: a map fifty meters
+// across and one four hundred meters across are both pictures somebody
 // might want, and the two settings that do have a ceiling say so
 // themselves.  The floor is where the setting stops meaning anything --
 // a picture one row tall, a span narrower than the avatar in the middle

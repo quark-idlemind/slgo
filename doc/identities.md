@@ -4,7 +4,7 @@ This repository is public and most of it was measured on a live grid, so
 nearly everything captured there names somebody. `CLAUDE.md` has the rule:
 nothing that identifies a real resident, their land, their objects or their
 groups belongs in a file, a tag or a commit message. This page is the
-catalogue behind it: every shape an identifier or a name has been seen to
+catalog behind it: every shape an identifier or a name has been seen to
 take here, or can take, and which check, if any, would notice it. A check
 that is not listed against a form does not exist, and the form is left to
 reading what came back before committing it.
@@ -12,14 +12,14 @@ reading what came back before committing it.
 Two kinds of thing are kept out, and they are kept out differently.
 
 An **identifier** is a value with a shape: a uuid, a password digest, a
-login's `mac` and `id0`, a grid square. A rule can recognise the shape, so
+login's `mac` and `id0`, a grid square. A rule can recognize the shape, so
 the rule is that an invented one carries a signature and a real one is
 refused. That needs no list of what is real, and it runs for everybody.
 
 A **name** is words, and no rule can tell a real name from an invented
 one, so the rule is the other way round: every name the tree uses is
 written down in `tools/known-names`, and one that is not there is refused
-wherever a name can be recognised (below). An invention need not match a
+wherever a name can be recognized (below). An invention need not match a
 real place one for one; it has to be a name nobody has. A new one is taken
 from the spares at the end of that file. The list kept off the tree
 (`~/.config/slgo/identities.tsv`) stays as a backstop for prose.
@@ -63,7 +63,7 @@ without keeping any of the characters.
 
 ## Uuids, as written
 
-`tools/scan-ids` finds all of these, normalises each to 32 lowercase hex
+`tools/scan-ids` finds all of these, normalizes each to 32 lowercase hex
 digits, and `tools/check-identities` refuses any that is not signed and
 not in `tools/known-uuids`. The examples are one invented id.
 
@@ -148,7 +148,7 @@ reads a square out of `RegionHandle(x, y)`, the handle in decimal, in hex
 as a constant or as spaced or unspaced bytes or a Go byte list, and as
 LLSD's base64. A bare `(x, y)` is not looked for -- too many pairs of
 numbers are something else -- and is left to the list of real names. A
-square is also written as a map tile URL, as global metres, and inside a
+square is also written as a map tile URL, as global meters, and inside a
 SLURL or a `maps.secondlife.com` link, and none of those is looked for.
 
 ## Names
@@ -179,7 +179,7 @@ tree by `go test ./tools`) reads these places, and nothing else:
 - the first string handed to the test helpers that make a region, parcel,
   group, avatar or offer (`mapBlock`, `enterRegion`, `AnswerTeleport`,
   `aGroup`, `avatarGroups`, `pickerRow`, `inviting`, `at`, ...), the strings
-  of a `map[msg.UUID]string{...}`, and the labelled variables a test gives a
+  of a `map[msg.UUID]string{...}`, and the labeled variables a test gives a
   person (`owner:`, `stranger:`, `somebody:`, `wearer:`, ...);
 - `first =` and `last =` of a profile, `--first` and `--last`, and the name
   after `--login`; a username (`Username: "first.last"`, `im first.last`),
@@ -190,7 +190,7 @@ tree by `go test ./tools`) reads these places, and nothing else:
 - a region in a transcript: `Name at x, y, z`, the key after `tp` and
   `regions` (a whole name or the start of one), and a region listing row
   (a name, spaces, then the two grid coordinates);
-- the `parcel --map` legend rows (a letter, the name, the area in square metres);
+- the `parcel --map` legend rows (a letter, the name, the area in square meters);
 - the group an avatar `acting as group NAME (`, `group = NAME` in a profile
   and `-group NAME`;
 - a landmark by path (`/Landmarks/NAME`) or after `landmark`, `--go` and
@@ -218,7 +218,7 @@ What follows is how a name is disguised, for a change that adds one.
 - **Regions**: the name; the name URL-encoded; inside a SLURL and a
   `maps.secondlife.com` link; a prefix used as a map search key; the
   simulator's host name, address and port; the region id; and the grid
-  square in every form above, with global metres and the map tile URLs.
+  square in every form above, with global meters and the map tile URLs.
 - **Parcels**: the name and the description; the local id with its region;
   the parcel id; the flags word and the other numbers read off About Land;
   the area with the position; and a landmark's default name, `Parcel,
@@ -251,14 +251,14 @@ it is rarely written one way.
 
 - **Addresses and host names**: a simulator's, and the owner's network's.
   An address outside loopback, private and documentation ranges is refused.
-  A host name is not an address and is not recognised.
+  A host name is not an address and is not recognized.
 - **Password digests, MFA tokens and secrets**: a digest is a 32-digit
   value and takes the signature; a token has no shape and is replaced
   when it is read.
 - **Machine ids**: `mac` and `id0` are 32-digit values and take the
   signature. A raw hardware address and a serial number have no shape a
   rule can use, and are invented and not kept.
-- **Email addresses and real names**, which no rule recognises.
+- **Email addresses and real names**, which no rule recognizes.
 - **L$ amounts with a transaction id**: the id is a uuid; the amount is
   not found, and a figure beside a name or a time says who paid.
 - **A timestamp together with a region**, which places somebody at a
@@ -270,12 +270,12 @@ An image carries two things, and only one of them is checked by machine.
 
 What it carries besides its pixels is: a screenshot or a photograph keeps
 the machine, the software, the time and sometimes the place in its
-metadata -- PNG text chunks, Exif and XMP, colour profiles named after a
-display, a JPEG comment.  `tools/scan-images` recognises PNG, JPEG, GIF and
+metadata -- PNG text chunks, Exif and XMP, color profiles named after a
+display, a JPEG comment.  `tools/scan-images` recognizes PNG, JPEG, GIF and
 WebP by their first bytes, whatever the file is called, and names every
 kind it finds beyond what drawing the image needs; `check-identities`
 refuses the image and suggests `exiftool -all= FILE`.  Allowed are a PNG's
-critical chunks, transparency, its colour space and APNG's animation
+critical chunks, transparency, its color space and APNG's animation
 chunks; a JPEG's JFIF and Adobe headers and what decoding needs; a GIF's
 frames, graphic control and animation loop; a WebP's bitstreams, alpha,
 extended header and animation.  Everything else is reported, and so is
@@ -305,7 +305,7 @@ minimap, a window title.  Every image is looked at before it is committed.
 | avatar, region, parcel, group, landmark names in the places listed above | `tools/scan-names` against `tools/known-names`, run by `tools/check-identities` and by `go test ./tools` |
 | the same names in prose, object and inventory names, other disguises | the local list of real names kept off the tree (a backstop), and review: the allowlist is not consulted for these |
 | host names, email addresses, real-life names, tokens, serials | the local list, and review |
-| chat, IMs, notices, profiles, picks, classifieds | reading what came back before committing it: captured speech is always replaced, because no rule can recognise it |
+| chat, IMs, notices, profiles, picks, classifieds | reading what came back before committing it: captured speech is always replaced, because no rule can recognize it |
 
 `tools/check-identities` runs every check on every run and exits 1 at the
 end if any found something; only the checks of names need the list
@@ -313,7 +313,7 @@ kept off the tree, and without it those are skipped with a note while
 the rest run. `go.sum` is not read, since it is a list of hashes of other
 people's code and base64 inside it means nothing.
 
-What no rule can recognise is found by reading, and `tools/words` makes
+What no rule can recognize is found by reading, and `tools/words` makes
 the reading shorter: it lists every distinct word in a revision, or with
 `--history` in every file version, commit message, tag message and ref
 name on any branch or tag, with how often each occurs and where one is.

@@ -116,7 +116,7 @@ func TestCheckCommandLineRefusesWhatTheShellRefuses(t *testing.T) {
 
 // Operands and flag values that come from a list the shell keeps are
 // checked against that list, by the code the command uses; the
-// capitalised placeholders its usage line writes pass as they are.
+// capitalized placeholders its usage line writes pass as they are.
 // Every wrong word here is invented.
 func TestCheckCommandLineChecksWordsFromTheShellsLists(t *testing.T) {
 	for _, c := range []struct {
@@ -175,12 +175,12 @@ func TestCheckCommandLineChecksWordsFromTheShellsLists(t *testing.T) {
 		{"man sethome", `man: no command called "sethome"`},
 		{"man landmark tp", "man: one command at a time"},
 
-		// neighbours: on or off, read off its own parameters.
-		{"neighbours", ""},
-		{"neighbours on", ""},
-		{"neighbours OFF", ""},
-		{"neighbours yes", `neighbours: "yes" is neither on nor off`},
-		{"neighbours on off", "neighbours: one word at most"},
+		// neighbors: on or off, read off its own parameters.
+		{"neighbors", ""},
+		{"neighbors on", ""},
+		{"neighbors OFF", ""},
+		{"neighbors yes", `neighbors: "yes" is neither on nor off`},
+		{"neighbors on off", "neighbors: one word at most"},
 
 		// put: the roundings and the filters, by put's own method.
 		{"put --round up photo.png", ""},
@@ -196,8 +196,8 @@ func TestCheckCommandLineChecksWordsFromTheShellsLists(t *testing.T) {
 		{"wear --at POINT PATH", ""},
 		{"wear --at elbow PATH", `wear: --at: "elbow" is not an attachment point`},
 		{"wear --at 900 PATH", "wear: --at: 900 is not an attachment point"},
-		{`wear --at "HUD centre" PATH`, `wear: --at: "HUD centre" is HUD centre 1 or HUD centre 2; say which, or give its number`},
-		{`wear --at "hud center" PATH`, `is HUD centre 1 or HUD centre 2; say which, or give its number`},
+		{`wear --at "HUD centre" PATH`, `wear: --at: "HUD centre" is HUD center 1 or HUD center 2; say which, or give its number`},
+		{`wear --at "hud center" PATH`, `is HUD center 1 or HUD center 2; say which, or give its number`},
 		{`wear --at left PATH`, `"left" is left ear, left eye, left foot`},
 		{`wear --at "left ring" PATH`, `did you mean "left ring finger"`},
 		{`wear --at "HUD centre 1" PATH`, ""},
@@ -254,7 +254,7 @@ func TestCheckCommandLineRefusesUsageSyntax(t *testing.T) {
 		{"say TEXT ...]", `say: "...]" is the usage line's [...]`},
 
 		// Alternatives: the usage line's own, or with its placeholder in.
-		{"neighbours on|off", `neighbours: "on|off" is the usage line's A|B`},
+		{"neighbors on|off", `neighbors: "on|off" is the usage line's A|B`},
 		{"wear PATH|UUID", `wear: "PATH|UUID" is the usage line's A|B`},
 		{"take --into Objects Example|UUID", `take: "Example|UUID" is the usage line's A|B`},
 
@@ -291,7 +291,7 @@ func TestCheckCommandLineRefusesUsageSyntax(t *testing.T) {
 	}
 }
 
-// The placeholders are the usage line's own capitalised words, and
+// The placeholders are the usage line's own capitalized words, and
 // nothing else.
 func TestAskPlaceholdersAreTheUsageLines(t *testing.T) {
 	ph := askPlaceholders(commands["set"].usage("set"))
@@ -471,7 +471,7 @@ func TestFilterAskAnswerKeepsOnlyWhatChecks(t *testing.T) {
 		{Command: "sethome", CommandLine: "sethome", Quote: "sets home to where you are standing"},
 		// A real line with an invented quote.
 		{Command: "landmark", CommandLine: "landmark --home", Quote: "teleports you to your home location instantly"},
-		// A line that runs one command, labelled as another.
+		// A line that runs one command, labeled as another.
 		{Command: "tp", CommandLine: "landmark --home", Quote: "tp home is the same trip said the short way"},
 		// The good one again, wrapped the way models wrap it.
 		{Command: "landmark", CommandLine: "`$ landmark  --set-home`", Quote: good.Quote},
@@ -490,7 +490,7 @@ func TestFilterAskAnswerKeepsOnlyWhatChecks(t *testing.T) {
 		{"landmark --sethome", []string{"landmark: unknown option: --sethome"}},
 		{"sethome", []string{"sethome: no such command; try help", "sethome: no such command"}},
 		{"landmark --home", []string{"not in landmark's"}},
-		{"landmark --home", []string{"labelled tp but the line runs landmark"}},
+		{"landmark --home", []string{"labeled tp but the line runs landmark"}},
 	}
 	if len(rejected) != len(want) {
 		t.Fatalf("rejected %d, want %d: %+v", len(rejected), len(want), rejected)

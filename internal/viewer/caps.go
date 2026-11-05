@@ -55,7 +55,7 @@ const MaxHeldPolls = 4
 //
 // A viewer's login is about three kilobytes of XML-RPC (the Firestorm
 // capture in agent/testdata is 3164 bytes).  Its seed request is a
-// list of capability names and its poll an acknowledgement; neither
+// list of capability names and its poll an acknowledgment; neither
 // has been measured, but both are lists of short strings, and this is
 // eighty times the login.  Without it a body is read to its end however
 // long the sender keeps sending -- the seed with io.ReadAll, the login
@@ -89,11 +89,11 @@ type EventQueue struct {
 // withheldEvents are the events a viewer must not be given, each with
 // the reason the daemon logs the first time one of its kind is withheld.
 //
-// Each names another simulator -- a neighbour, or the one a teleport or
+// Each names another simulator -- a neighbor, or the one a teleport or
 // a crossing has taken the avatar to -- and a viewer holding this
 // session already has the ids UseCircuitCode takes.  Given the address,
 // it opens its own circuit there as this avatar, where none of
-// Circuit's absorbs apply.  So neighbouring regions are void in the
+// Circuit's absorbs apply.  So neighboring regions are void in the
 // viewer.  TeleportFailed is let through: it names nowhere, and it is
 // what takes a viewer out of the teleport tunnel.
 // Why: doc/handover.md#what-a-viewer-is-not-given
@@ -195,7 +195,7 @@ func (q *EventQueue) take() ([]event, int64) {
 func (q *EventQueue) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Body != nil {
 		defer r.Body.Close()
-		// The ack is read and discarded.  Acknowledgement is
+		// The ack is read and discarded.  Acknowledgment is
 		// between the session and the simulator; this queue hands
 		// over what it holds and forgets it, so there is nothing
 		// for a viewer to acknowledge and nothing to resend.

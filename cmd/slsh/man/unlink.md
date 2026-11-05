@@ -20,7 +20,7 @@ How long to let the region describe itself.  Without it, thirty.
 Naming the root takes the whole object apart.  Naming one prim of it
 frees that prim and leaves the rest linked.
 
-That is the viewer's pair of behaviours -- clicking an object selects
+That is the viewer's pair of behaviors -- clicking an object selects
 the linkset and Unlink frees all of it, while editing linked parts
 selects one prim and Unlink frees only that.  The root is never among
 the prims being freed: it has no parent to lose, so naming it frees

@@ -56,7 +56,7 @@ func DecodeHeader(b []byte) (Header, int, error) {
 	return h, HeaderSize + n, nil
 }
 
-// SplitAcks removes the acknowledgements a sender appended to the tail
+// SplitAcks removes the acknowledgments a sender appended to the tail
 // of a packet, returning the remaining body and the sequence numbers.
 //
 // The tail is a count byte preceded by that many big endian sequence

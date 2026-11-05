@@ -36,13 +36,13 @@ import (
 	"github.com/quark-idlemind/slgo/sl"
 )
 
-// AutoSize is the edge of an auto object, in metres.
+// AutoSize is the edge of an auto object, in meters.
 const AutoSize float32 = 0.05
 
 // AutoParked is where an idle auto object sits, in the frame of the point
 // it is worn on.  The HUD frame has +Y to the left and +Z up, so from
-// Bottom Left the screen is at -Y and +Z; <0, 1, -1> is a metre left of
-// the corner and a metre below it, which is off the screen, and well
+// Bottom Left the screen is at -Y and +Z; <0, 1, -1> is a meter left of
+// the corner and a meter below it, which is off the screen, and well
 // within the 3.5 m the region lets an attachment stray from its point.
 var AutoParked = msg.Vector3{X: 0, Y: 1, Z: -1}
 

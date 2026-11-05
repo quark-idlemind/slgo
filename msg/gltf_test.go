@@ -36,7 +36,7 @@ func TestEveryOverrideKeyIsRead(t *testing.T) {
 	}
 }
 
-// TestAZeroIsNotUnset: a factor of zero and a colour of black are
+// TestAZeroIsNotUnset: a factor of zero and a color of black are
 // overrides, and a key left out is not one.
 func TestAZeroIsNotUnset(t *testing.T) {
 	t.Parallel()

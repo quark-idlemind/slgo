@@ -43,7 +43,7 @@ package main
 //
 // Some operands are not names of things in the world but words from a
 // list the shell itself keeps: set's setting names, maturity's ratings,
-// help's groups, man's commands, neighbours' on and off, and the values
+// help's groups, man's commands, neighbors' on and off, and the values
 // of put's --round and --filter, wear's --at and perms' letters.  Those
 // ARE checked, because a model will write "set display_name ..." with
 // every appearance of confidence, and the shell's answer to it is a
@@ -52,7 +52,7 @@ package main
 // never by a copy of its list, which would be free to disagree the day
 // a setting is added.
 //
-// A capitalised placeholder the usage line itself uses -- "set NAME
+// A capitalized placeholder the usage line itself uses -- "set NAME
 // VALUE", "maturity RATING", "--at=POINT" -- passes, because that is
 // what the prompt asks a model to write where a person fills something
 // in.  One the usage line does not use, like YOUR_DISPLAY_NAME, is an
@@ -175,14 +175,14 @@ type askOperandRule func(opts any, operands []string, placeholder func(string) b
 // askOperandRules is every command with such a list, by name.  See the
 // head of this file for why each is checked by the command's own code.
 var askOperandRules = map[string]askOperandRule{
-	"set":        askCheckSet,
-	"maturity":   askCheckMaturity,
-	"help":       askCheckHelp,
-	"man":        askCheckMan,
-	"neighbours": askCheckNeighbours,
-	"put":        askCheckPut,
-	"wear":       askCheckWear,
-	"perms":      askCheckPerms,
+	"set":       askCheckSet,
+	"maturity":  askCheckMaturity,
+	"help":      askCheckHelp,
+	"man":       askCheckMan,
+	"neighbors": askCheckNeighbors,
+	"put":       askCheckPut,
+	"wear":      askCheckWear,
+	"perms":     askCheckPerms,
 }
 
 // checkOperands runs c's rule, if it has one, under whichever name the
@@ -203,7 +203,7 @@ func checkOperands(name string, c *command, opts any, operands []string) error {
 // a person fills in: NAME, VALUE, L$FEE's FEE.
 var askPlaceholderWord = regexp.MustCompile(`[A-Z][A-Z0-9_]*`)
 
-// askPlaceholders is every capitalised word in a usage line.  Only
+// askPlaceholders is every capitalized word in a usage line.  Only
 // whole words count: the D in "--dry-run" is not in capitals and is
 // not a placeholder, and nothing in lower case ever is.
 func askPlaceholders(usage string) map[string]bool {
@@ -295,11 +295,11 @@ func askCheckMan(_ any, operands []string, placeholder func(string) bool) error 
 	return nil
 }
 
-// askCheckNeighbours is neighbours [on|off].  The words are read off the
+// askCheckNeighbors is neighbors [on|off].  The words are read off the
 // command's own parameters, which name them, rather than written out
 // again here; the command compares them without regard to case.
-func askCheckNeighbours(_ any, operands []string, _ func(string) bool) error {
-	words := strings.Split(strings.Trim(commands["neighbours"].params, "[]"), "|")
+func askCheckNeighbors(_ any, operands []string, _ func(string) bool) error {
+	words := strings.Split(strings.Trim(commands["neighbors"].params, "[]"), "|")
 	switch len(operands) {
 	case 0:
 		return nil
@@ -422,7 +422,7 @@ func checkNoFlagAfterOperands(name string, c *command, args, rest []string) erro
 // such as a JSON value for set.  No example line in any man page has
 // brackets or a bar in it (TestEveryManPageExampleIsTakenByTheChecker).
 //
-// The shell's own capitalised placeholders, NAME and PATH alone, pass
+// The shell's own capitalized placeholders, NAME and PATH alone, pass
 // here as they do everywhere else.
 func checkNoUsageSyntax(name string, c *command, args []string, quoted []bool) error {
 	usage := c.usage(name)
@@ -699,7 +699,7 @@ func filterAskAnswer(a askAnswer) (kept []askSuggestion, rejected []askRejection
 			case !ok:
 				reasons = append(reasons, fmt.Sprintf("%s: no such command", s.Command))
 			case lineOK && labelCmd != lineCmd:
-				reasons = append(reasons, fmt.Sprintf("the suggestion is labelled %s but the line runs %s", s.Command, name))
+				reasons = append(reasons, fmt.Sprintf("the suggestion is labeled %s but the line runs %s", s.Command, name))
 			}
 			if !lineOK && ok {
 				// The line is refused already; the quote is still worth

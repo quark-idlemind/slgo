@@ -236,7 +236,7 @@ is from before it was kept and reads as not known. At login:
   when the avatar was seen standing.
 - the avatar is in the seat's region, or the region is not known: it is
   asked for as above. If every attempt was answered by
-  `SitFailNotSameRegion` (recognised by the notification's name in the
+  `SitFailNotSameRegion` (recognized by the notification's name in the
   alert, or failing that the shape of its text) and none seated the
   avatar, then the seat is not in the region the avatar is in, which is
   to say it is gone, and it is forgotten, with a line saying so and
@@ -271,7 +271,7 @@ a thing the daemon can put a name to. Measured, and the reason it is
 written this way: a restart where the chair was absent from the region
 listing throughout confirmed the sit only on the sixth and last
 attempt, eighty-five seconds in, because each round was waiting to
-recognise an object rather than to see the avatar sit down. It had
+recognize an object rather than to see the avatar sit down. It had
 actually sat within seconds.
 
 ### Somebody else deciding is not a reason to stop watching
@@ -390,7 +390,7 @@ supervisor reapplies it every time it puts a new session in place.
 
 ### What the refusal looks like
 
-Measured on Agni, in Pelmar Reach, with two avatars a couple of metres
+Measured on Agni, in Pelmar Reach, with two avatars a couple of meters
 apart:
 
     hobb       Pelmar Reach at 33, 75, 2001 / acting as group 488f7e57-...

@@ -4,7 +4,7 @@ package main
 //
 // One message and no answer (sl/animation.go), so what this prints is
 // what was asked for and never that the animation is playing: the
-// simulator drops a request it will not honour without a word.
+// simulator drops a request it will not honor without a word.
 //
 // A NAME is looked for in inventory first and among the built-ins
 // second.  A name that is both is the inventory animation, said so, and

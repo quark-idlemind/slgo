@@ -202,7 +202,7 @@ func (w *Session) loadKept() {
 //
 // An offer the daemon never named, a backend that keeps nothing, and a
 // keeper that could not be asked all mean go ahead.  The last is a
-// judgement: a daemon that cannot answer this is one the answer is not
+// judgment: a daemon that cannot answer this is one the answer is not
 // going to reach either, and refusing on its behalf would turn a fault
 // in the bookkeeping into an offer nobody can accept.
 func (w *Session) answering(ctx context.Context, key, how string) (undo func(), err error) {

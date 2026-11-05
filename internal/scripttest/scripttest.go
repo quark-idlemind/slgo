@@ -32,9 +32,9 @@
 // Everything here would be shorter as a Go value implementing
 // RunnerClient directly, and it would test less.  Over a connection --
 // Pipe gives one, in process and with no network -- the messages are
-// marshalled, the streams are real streams, and a caller that goes away
+// marshaled, the streams are real streams, and a caller that goes away
 // mid-lease goes away the way a caller really does: the server's context
-// is cancelled and it has to notice.  That last one is the whole reason
+// is canceled and it has to notice.  That last one is the whole reason
 // the lease is a stream, and an in-process fake cannot fail it.
 //
 // # And why there is an in-process client anyway
@@ -307,8 +307,8 @@ const bufSize = 1 << 20
 // connection to it.
 //
 // No network and no port: the pipe is a pair of buffers.  What it does
-// keep is everything above the socket -- the messages are marshalled,
-// the streams are HTTP/2 streams, and cancelling a call cancels the
+// keep is everything above the socket -- the messages are marshaled,
+// the streams are HTTP/2 streams, and canceling a call cancels the
 // server's context -- which is the difference between testing a caller
 // and testing a caller's idea of a backend.
 //
@@ -348,7 +348,7 @@ func (s *Server) Listen(addr string) (net.Addr, error) {
 // in flight are cut off rather than waited for, which is what a caller
 // that leaked a lease should see.
 //
-// A Direct lease is cut off the only way it can be, by cancelling the
+// A Direct lease is cut off the only way it can be, by canceling the
 // context its handler is waiting on.  A Direct RUN is not: it happens on
 // the caller's own goroutine and has returned before there is anything
 // to stop.
@@ -359,7 +359,7 @@ func (s *Server) Stop() {
 	direct := s.direct
 	s.direct = nil
 	s.mu.Unlock()
-	// Outside the lock: cancelling wakes a lease handler, and the first
+	// Outside the lock: canceling wakes a lease handler, and the first
 	// thing it does is give its group back, which takes the lock.
 	for _, cancel := range direct {
 		cancel()

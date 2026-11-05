@@ -17,7 +17,7 @@ package main
 //	lsl -m -f      one function a line, tab-separated fields
 //
 // The machine form is deliberately dull.  One record a line, tab
-// separated, no alignment, no totals, no colour, and the first field
+// separated, no alignment, no totals, no color, and the first field
 // always says what kind of record it is -- so `lsl -m -a` can be read
 // by the same loop as `lsl -m -f`, and a reader that meets a kind it
 // does not know can skip the line rather than misparse it.

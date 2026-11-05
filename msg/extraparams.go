@@ -11,7 +11,7 @@ import "fmt"
 //
 // The point of the encoding is that a reader can skip what it does not
 // understand: the length is there whether or not the type is known.
-// So an unrecognised block is kept as bytes rather than being an error
+// So an unrecognized block is kept as bytes rather than being an error
 // -- Linden Lab has added several of these over the years and will add
 // more.
 
@@ -107,9 +107,9 @@ func SculptMarkOf(params []ExtraParam) SculptMark {
 // is off.
 // Why: doc/lights.md#the-light
 type Light struct {
-	// Colour is the first three of four colour bytes on the wire; the
+	// Colour is the first three of four color bytes on the wire; the
 	// fourth carries Intensity, which is split out.  The bytes are the
-	// linear colour the viewer feeds its shaders, not the sRGB one its
+	// linear color the viewer feeds its shaders, not the sRGB one its
 	// swatch shows (LLLightParams::unpack, llprimitive.cpp:1747).
 	Colour    [3]uint8
 	Intensity float32
@@ -156,7 +156,7 @@ func SculptOf(params []ExtraParam) (Sculpt, bool) {
 
 // LightOf returns the light block if there is one.
 //
-// Colour and intensity share four bytes: three for the colour and one
+// Colour and intensity share four bytes: three for the color and one
 // for how bright it is, scaled so that 255 is full.
 func LightOf(params []ExtraParam) (Light, bool) {
 	for _, p := range params {

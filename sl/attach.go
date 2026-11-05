@@ -37,9 +37,9 @@ type attachPointName struct {
 // same point (avatar_lad.xml, <attachment_point ... name="...">).  Body
 // points run to 30 and the HUD points carry on from there.
 //
-// Twenty-one of the fifty-five names differ by more than case and the
-// spelling of centre, in three ways, and none of the three is a slip to
-// be tidied back into the viewer's spelling:
+// Twenty-one of the fifty-five names differ by more than case, in three
+// ways, and none of the three is a slip to be tidied back into the
+// viewer's spelling:
 //
 //   - abbreviations written out.  "R Upper Arm" is "right upper arm"
 //     here, "L Forearm" is "left lower arm", "Left Eyeball" is "left
@@ -89,17 +89,17 @@ var attachPointNames = map[int]attachPointName{
 	29: {"left pec", "Left Pec"},
 	30: {"right pec", "Right Pec"},
 
-	HUDCenter2:     {"HUD centre 2", "Center 2"},
+	HUDCenter2:     {"HUD center 2", "Center 2"},
 	HUDTopRight:    {"HUD top right", "Top Right"},
 	HUDTop:         {"HUD top", "Top"},
 	HUDTopLeft:     {"HUD top left", "Top Left"},
-	HUDCenter1:     {"HUD centre 1", "Center"},
+	HUDCenter1:     {"HUD center 1", "Center"},
 	HUDBottomLeft:  {"HUD bottom left", "Bottom Left"},
 	HUDBottom:      {"HUD bottom", "Bottom"},
 	HUDBottomRight: {"HUD bottom right", "Bottom Right"},
 
 	39: {"neck", "Neck"},
-	40: {"avatar centre", "Avatar Center"},
+	40: {"avatar center", "Avatar Center"},
 	41: {"left ring finger", "Left Ring Finger"},
 	42: {"right ring finger", "Right Ring Finger"},
 	43: {"tail base", "Tail Base"},
@@ -133,9 +133,8 @@ func AttachPointName(point int) string {
 // and that goes for the viewer's name as much as for ours.
 //
 // The keys are folded to lower case, and "center" is accepted for
-// "centre" as well, because the viewer spells the HUD points the
-// American way and a person reading them off its menu should not be told
-// there is no such point.  Accepting the viewer's whole name for a point
+// "center" as well, so that the British spelling is not told there is
+// no such point.  Accepting the viewer's whole name for a point
 // -- "Skull" for "head", "Top" for "HUD top" -- is the same courtesy
 // carried the rest of the way.
 //
@@ -153,7 +152,7 @@ var attachPointsByName = func() map[string]int {
 			panic(fmt.Sprintf("sl: attachment point name %q is both %d and %d", n, was, point))
 		}
 		m[n] = point
-		if alt := strings.ReplaceAll(n, "centre", "center"); alt != n {
+		if alt := strings.ReplaceAll(n, "center", "centre"); alt != n {
 			if was, ok := m[alt]; ok && was != point {
 				panic(fmt.Sprintf("sl: attachment point name %q is both %d and %d", alt, was, point))
 			}
@@ -185,8 +184,8 @@ func AttachPointNamed(name string) (int, bool) {
 var ErrNoAttachPoint = errors.New("sl: not an attachment point")
 
 // AttachPointStartError is a name that is not a point's whole name but
-// begins the names of one or more: "HUD centre" begins "HUD centre 1"
-// and "HUD centre 2", and "left" begins a dozen.
+// begins the names of one or more: "HUD center" begins "HUD center 1"
+// and "HUD center 2", and "left" begins a dozen.
 type AttachPointStartError struct {
 	Name   string // as the person typed it
 	Points []int  // the points it begins, by the name printed
@@ -210,10 +209,10 @@ func (e *AttachPointStartError) Error() string {
 }
 
 // attachWords is a point's name as the words it is matched by: folded
-// to lower case, spaces collapsed, and "center" spelt as the table spells
-// it.
+// to lower case, spaces collapsed, and "center" spelled as the table
+// spells it.
 func attachWords(name string) []string {
-	return strings.Fields(strings.ReplaceAll(strings.ToLower(name), "center", "centre"))
+	return strings.Fields(strings.ReplaceAll(strings.ToLower(name), "centre", "center"))
 }
 
 // ParseAttachPoint is AttachPointNamed that says why it found nothing.
@@ -247,8 +246,8 @@ func ParseAttachPoint(name string) (int, error) {
 	if len(points) == 0 {
 		return 0, ErrNoAttachPoint
 	}
-	// By the name printed, so that "HUD centre 1" comes before "HUD
-	// centre 2" though the viewer numbers them the other way round.
+	// By the name printed, so that "HUD center 1" comes before "HUD
+	// center 2" though the viewer numbers them the other way round.
 	slices.SortFunc(points, func(a, b int) int {
 		return strings.Compare(AttachPointName(a), AttachPointName(b))
 	})
@@ -266,7 +265,7 @@ type Attached struct {
 	Point  int
 
 	// Scale is the size the region last described the object as, in
-	// metres.  WornObjects and WornFromItem fill it; an attachment
+	// meters.  WornObjects and WornFromItem fill it; an attachment
 	// reported as it went on does not carry one, and it is zero.
 	Scale msg.Vector3
 }
@@ -284,7 +283,7 @@ func attachPoint(state uint8) int {
 //
 // This is the only thing tying a worn object back to the inventory
 // item it came from.  The object gets a fresh id every time it is
-// attached, so it cannot be recognised by that.
+// attached, so it cannot be recognized by that.
 func attachItem(nv []byte) (msg.UUID, bool) {
 	for _, line := range strings.Split(trimNul(nv), "\n") {
 		f := strings.Fields(line)
@@ -372,7 +371,7 @@ func (w *Session) Wear(ctx context.Context, it *Item, point int, timeout time.Du
 // time.
 //
 // Forgetting what was known about this item first is the part worth
-// naming: the confirmation is recognised by the item it came from, so
+// naming: the confirmation is recognized by the item it came from, so
 // a stale entry from a previous wearing would otherwise be mistaken
 // for the answer to this one.
 func (w *Session) AskToWear(ctx context.Context, it *Item, point int) error {
@@ -566,7 +565,7 @@ func (w *Session) EnsureAttached(ctx context.Context, folder msg.UUID, name stri
 // dropRezzed deletes a prim that a failed call rezzed and will not hand
 // back, into the trash as a viewer's delete goes.  On a context of its
 // own, since a call that failed because its caller gave up has a
-// cancelled one.
+// canceled one.
 func (w *Session) dropRezzed(ctx context.Context, o *Object) error {
 	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()

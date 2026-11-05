@@ -33,7 +33,7 @@ func TestPlaceRefusesTheLineThatUsedToMoveAnObject(t *testing.T) {
 	}
 }
 
-// TestAPlaceGivenUpOnDeletesWhatItRezzed: a place cancelled while it
+// TestAPlaceGivenUpOnDeletesWhatItRezzed: a place canceled while it
 // waits, whose object turns up all the same, deletes that object into
 // the trash rather than leaving it standing with nobody holding its id.
 func TestAPlaceGivenUpOnDeletesWhatItRezzed(t *testing.T) {
@@ -50,7 +50,7 @@ func TestAPlaceGivenUpOnDeletesWhatItRezzed(t *testing.T) {
 		if _, ok := m.(*msg.RezObject); !ok {
 			return
 		}
-		// Cancelled as the rez goes out, and described too late for
+		// Canceled as the rez goes out, and described too late for
 		// the look that follows, so only the last look finds it.
 		cancel()
 		x.grid.mu.Lock()

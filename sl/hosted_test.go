@@ -6,7 +6,7 @@ package sl
 // protobuf because that is what crosses the wire, and this turns it into
 // the package's own types so that nothing above ever sees a generated
 // struct.  A translation is exactly the kind of code that looks right
-// and is wrong -- a field read off the neighbouring one, a uuid parsed
+// and is wrong -- a field read off the neighboring one, a uuid parsed
 // out of the wrong string -- and none of it can be reached without
 // something at the far end.
 //
@@ -403,7 +403,7 @@ func TestRefreshAsksAboutTheSessionItIsAttachedTo(t *testing.T) {
 
 // TestTheAgentInfoIsTranslatedFieldByField: this is the one place a
 // protobuf becomes a package type, and every id in it arrives as a
-// string -- so a field read off its neighbour would give a session that
+// string -- so a field read off its neighbor would give a session that
 // believes it is somebody else and is refused by the simulator for a
 // reason it never explains.
 func TestTheAgentInfoIsTranslatedFieldByField(t *testing.T) {

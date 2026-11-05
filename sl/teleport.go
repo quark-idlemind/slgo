@@ -144,7 +144,7 @@ func (e *TeleportRefusal) Error() string {
 
 // Unwrap is what makes errors.Is(err, ErrTeleportRefused) true of a
 // refusal, which is how every caller written before this type existed
-// still recognises one.
+// still recognizes one.
 func (e *TeleportRefusal) Unwrap() error { return ErrTeleportRefused }
 
 // refusedWith says whether err is the grid refusing a teleport with
@@ -201,7 +201,7 @@ func (w *Session) TeleportLocal(ctx context.Context, to msg.Vector3, timeout tim
 	// Near enough, rather than exact: the simulator stands the avatar
 	// on whatever is under the point, so the height it settles at is
 	// its choice and not ours.
-	const near = 4.0 // metres
+	const near = 4.0 // meters
 	return poll(ctx, timeout, 500*time.Millisecond, fmt.Sprintf("the avatar to arrive at %v; "+
 		"a parcel that will not have this avatar refuses silently", to),
 		func(ctx context.Context) (bool, error) {
@@ -237,7 +237,7 @@ const DefaultTeleportTimeout = 90 * time.Second
 // The handle of the region the avatar is ALREADY in is not an error and
 // not a circuit move: it is TeleportLocal, and that is what this does
 // with it.  Nothing else would be honest -- there is one region and one
-// simulator either way, and dialling a second circuit to the simulator
+// simulator either way, and dialing a second circuit to the simulator
 // on the other end of this one is a relog to where we are standing.
 //
 // Returning means the session is usable in the new region: the daemon
@@ -345,7 +345,7 @@ type teleportWatch struct {
 // not been asked for yet.
 //
 // local says whether a TeleportLocal counts as an answer.  It does for a
-// lure, which may well be to a spot a few metres away and is answered
+// lure, which may well be to a spot a few meters away and is answered
 // with one of those and nothing else; it does not for a teleport that
 // asked to leave the region, since a move inside it cannot be what that
 // was answered with.

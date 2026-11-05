@@ -1,10 +1,10 @@
 package main
 
-// Where everybody is, as a picture rather than as a column of metres.
+// Where everybody is, as a picture rather than as a column of meters.
 //
 // "who" answers how far away somebody is and says nothing at all about
 // which way, which is the half of the question a person standing in a
-// region actually has: three people at 20 metres are a crowd in one
+// region actually has: three people at 20 meters are a crowd in one
 // direction and three people scattered around the avatar in another,
 // and the listing reads the same either way.  So this draws them.
 //
@@ -15,7 +15,7 @@ package main
 // wide, and a square region comes out looking like a doorway -- which
 // matters, because the whole point of a picture is that the eye reads
 // the shape without doing any arithmetic.  So a picture is drawn with
-// more columns than rows, and each column covers fewer metres than a
+// more columns than rows, and each column covers fewer meters than a
 // row does.  The numbers are said under the grid all the same, because
 // "about square" is not a scale.
 //
@@ -30,7 +30,7 @@ package main
 // The precise ones, out of the object updates the simulator sent for
 // each avatar, by way of sl.Nearby.  The other source of avatar
 // positions is CoarseLocationUpdate, which is what a viewer's mini-map
-// is drawn from, and its height is a byte of four-metre steps that
+// is drawn from, and its height is a byte of four-meter steps that
 // saturates: 255 means "higher than this can say" and not 1020.  See
 // the handler in agent/agent.go for what that does to a session that
 // believes it.  A picture that marks somebody as level with this avatar
@@ -55,20 +55,20 @@ import (
 
 // The shape and scale of a picture nobody has said anything about.
 // Every one of these is a setting -- map_rows, map_span, map_ratio,
-// map_level, map_friend_colour -- and these are what an empty
+// map_level, map_friend_color -- and these are what an empty
 // configuration file leaves them at.  See config.go.
 //
 // mapDefaultRows is a size that fits any terminal: 16 rows at the
 // default ratio is 37 columns, 39 with the frame, so it sits inside an
 // 80 column window beside everything else on the screen.
 //
-// mapDefaultSpan is a judgement rather than a measurement.  It is how
-// many metres across the picture around the avatar covers, and 64 was
-// chosen because it is comfortably more than the 20 metres ordinary
+// mapDefaultSpan is a judgment rather than a measurement.  It is how
+// many meters across the picture around the avatar covers, and 64 was
+// chosen because it is comfortably more than the 20 meters ordinary
 // chat carries and less than the draw distance usually is: the people
 // in it are the people somebody is dealing with, and a picture that
 // covered everything described would put them all in one cell in the
-// middle.  With the default rows that is 4 metres to a row and about
+// middle.  With the default rows that is 4 meters to a row and about
 // 1.7 to a column.
 //
 // mapDefaultRatio is a measurement, of the font this was written in.
@@ -85,15 +85,15 @@ const (
 
 var mapDefaultRatio = CellRatio{Tall: 7, Wide: 3}
 
-// mapRegionSize is how many metres a region is across, which is what
+// mapRegionSize is how many meters a region is across, which is what
 // --region covers and the one scale nobody gets to choose.
 const mapRegionSize = 256
 
 // mapDefaultLevel is how far above or below this avatar somebody can be
 // and still be drawn as standing at the same height.
 //
-// About one storey.  An avatar is a couple of metres tall and a floor
-// of a building is three or so, so within three metres is somebody who
+// About one story.  An avatar is a couple of meters tall and a floor
+// of a building is three or so, so within three meters is somebody who
 // could be walked over to, and outside it is somebody on the roof or in
 // the cellar.  Anything much larger and a skybox platform would read as
 // level with the ground under it -- which is why it is three and not
@@ -108,9 +108,9 @@ const mapDefaultLevel = 3
 // A name rather than an escape sequence, so that a misspelling is
 // refused where it is typed and "set" can print it back.  The eight a
 // terminal has always had and the bright half of each, written "bright
-// green", and never a 256-colour index or an RGB triple.  Drawn as the
+// green", and never a 256-color index or an RGB triple.  Drawn as the
 // foreground of the mark, never as a block behind it.
-// Why: doc/slsh.md#the-colours-a-map-is-drawn-in
+// Why: doc/slsh.md#the-colors-a-map-is-drawn-in
 var mapColours = map[string]string{
 	"black":          "\x1b[30m",
 	"red":            "\x1b[31m",
@@ -134,7 +134,7 @@ var mapColours = map[string]string{
 // somebody says otherwise.
 //
 // Green because it is what a friend has been drawn in since there was
-// any colour in a picture at all, and because it is the one of the
+// any color in a picture at all, and because it is the one of the
 // eight that is legible over both kinds of paper -- blue disappears
 // into a dark terminal and yellow into a light one.  Nothing depends
 // on it being green, which is the point of it being a setting.
@@ -142,19 +142,19 @@ const mapDefaultFriendColour = "green"
 
 const mapColourOff = "\x1b[0m"
 
-// ParseColour reads a colour by name, in whatever case and spacing
-// somebody typed it: "Bright  Green" is the same colour as "bright
+// ParseColour reads a color by name, in whatever case and spacing
+// somebody typed it: "Bright  Green" is the same color as "bright
 // green", since one of those came off a command line where the words
 // were separate arguments.
 func ParseColour(s string) (string, error) {
 	name := strings.ToLower(strings.Join(strings.Fields(s), " "))
 	if _, ok := mapColours[name]; !ok {
-		return "", fmt.Errorf("no colour called %q; there is %s", s, colourNames())
+		return "", fmt.Errorf("no color called %q; there is %s", s, colourNames())
 	}
 	return name, nil
 }
 
-// colourNames is the colours there are, for a refusal that has to say
+// colourNames is the colors there are, for a refusal that has to say
 // what it would have taken.
 //
 // The plain eight in the order a terminal numbers them, which is the
@@ -166,7 +166,7 @@ func colourNames() string {
 		"and \"bright\" before any of them"
 }
 
-// mapHighlight is who the picture picks out, and what colour it is
+// mapHighlight is who the picture picks out, and what color it is
 // allowed to do it in.
 //
 // Both are decided by the caller and neither is discovered here.  The
@@ -174,19 +174,19 @@ func colourNames() string {
 // file or to a test's buffer, and a picture that reached for the
 // environment half way down would be a different picture depending on
 // who ran it.  See Shell.colour for what decides whether there is a
-// colour at all, and cmdMap for where the ids and the colour come from.
+// color at all, and cmdMap for where the ids and the color come from.
 //
-// colour is the NAME of the colour, not the escape, so that the legend
-// under the grid can say which colour it is talking about in the same
-// breath as showing it.  Empty is a picture with no colour in it at
+// colour is the NAME of the color, not the escape, so that the legend
+// under the grid can say which color it is talking about in the same
+// breath as showing it.  Empty is a picture with no color in it at
 // all, which is a redirection, a pipe, or NO_COLOR.
 type mapHighlight struct {
 	friends map[msg.UUID]bool
 	colour  string
 }
 
-// paint puts the friend colour round a piece of the picture, and hands
-// back what it was given when the picture is not in colour.
+// paint puts the friend color round a piece of the picture, and hands
+// back what it was given when the picture is not in color.
 func (hl mapHighlight) paint(s string) string {
 	esc := mapColours[hl.colour]
 	if esc == "" {
@@ -195,11 +195,11 @@ func (hl mapHighlight) paint(s string) string {
 	return esc + s + mapColourOff
 }
 
-// friendColour is the name of the colour a friend is drawn in:
-// whatever map_friend_colour says.
+// friendColour is the name of the color a friend is drawn in:
+// whatever map_friend_color says.
 //
 // A Config that never went through LoadConfig -- a test's, mostly --
-// names no colour at all, and the default is a better answer than a
+// names no color at all, and the default is a better answer than a
 // picture that silently stopped picking anybody out.  A name that is in
 // no table cannot arrive here otherwise: both the file and "set" refuse
 // one where it is typed.
@@ -225,9 +225,9 @@ type mapOptions struct {
 // cmdMap draws the avatars around this one.
 //
 // The two views are the same picture over a different square of the
-// world: --region covers the region, which is 256 metres and settles
+// world: --region covers the region, which is 256 meters and settles
 // the scale by itself, and without it the picture is a square of --span
-// metres centred on this avatar.
+// meters centered on this avatar.
 //
 // Nothing here is numbered, and the last listing is deliberately left
 // alone: "im 2" still means the second line of whatever who, friends
@@ -258,16 +258,16 @@ func cmdMap(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 	var span int
 	switch {
 	case o.Region && o.Span != 0:
-		// Not ignored quietly.  A region is 256 metres and that is the
+		// Not ignored quietly.  A region is 256 meters and that is the
 		// whole of the scale; somebody who typed both meant one of them
 		// and should be told which one this would have thrown away.
 		return usageError("map",
-			"--region covers the region, which is 256 metres; --span is for the picture around the avatar")
+			"--region covers the region, which is 256 meters; --span is for the picture around the avatar")
 	case o.Span == 0:
 		span = firstSet(sh.cfg.MapSpan, mapDefaultSpan)
 	case o.Span < 2:
 		return usageError("map",
-			"--span is metres across, and less than 2 is narrower than the avatar in the middle of it")
+			"--span is meters across, and less than 2 is narrower than the avatar in the middle of it")
 	default:
 		span = o.Span
 	}
@@ -292,7 +292,7 @@ func cmdMap(ctx context.Context, sh *Shell, out io.Writer, args []string) error 
 		switch {
 		case err != nil:
 			// Not fatal, because the picture is worth having without
-			// the colour.  Said out loud all the same: a picture with
+			// the color.  Said out loud all the same: a picture with
 			// no green in it otherwise reads as a picture with no
 			// friends in it, and that is a different fact.
 			sh.errorf("map: no friend list, so nobody is picked out: %v", err)
@@ -353,11 +353,11 @@ func firstSet(ns ...int) int {
 // the picture look square on a screen.  See cols.
 type mapGrid struct {
 	rows  int       // rows of characters
-	span  float32   // metres the picture covers, the same each way
-	west  float32   // the region metre at the left edge
-	south float32   // the region metre at the bottom edge
+	span  float32   // meters the picture covers, the same each way
+	west  float32   // the region meter at the left edge
+	south float32   // the region meter at the bottom edge
 	ratio CellRatio // the shape of a character cell, height first
-	level int       // metres above or below that are still level
+	level int       // meters above or below that are still level
 }
 
 // gridFrom is the part of every picture that comes out of the settings.
@@ -386,8 +386,8 @@ func regionGrid(cfg Config, rows int) mapGrid {
 	return g
 }
 
-// aroundGrid is the picture centred on this avatar, covering span
-// metres each way.
+// aroundGrid is the picture centered on this avatar, covering span
+// meters each way.
 func aroundGrid(cfg Config, rows int, span float32, me msg.Vector3) mapGrid {
 	g := gridFrom(cfg)
 	g.rows, g.span = rows, span
@@ -425,7 +425,7 @@ func (g mapGrid) cols() int {
 	return n
 }
 
-// perCol and perRow are how many metres one character covers.  A column
+// perCol and perRow are how many meters one character covers.  A column
 // is less than a row because there are more of them across the same
 // square.
 func (g mapGrid) perCol() float32 { return g.span / float32(g.cols()) }
@@ -526,9 +526,9 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl ma
 	}
 
 	// The line naming whoever the picture does not reach is built
-	// before anything is written, because whether there is any colour
+	// before anything is written, because whether there is any color
 	// in it is part of what decides whether the legend above it
-	// explains what the colour means.
+	// explains what the color means.
 	outsideLine, outsideColoured := "", false
 	if len(outside) > 0 {
 		outsideLine, outsideColoured = namesOutside(outside, hl)
@@ -545,7 +545,7 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl ma
 			c := cells[row*g.cols()+col]
 			switch {
 			case meIn && row == meRow && col == meCol:
-				// The star is never coloured, however much company it
+				// The star is never colored, however much company it
 				// has.  Two highlights in one picture are no highlight
 				// at all, and this avatar is the one thing in the
 				// picture nobody has to look for.
@@ -558,7 +558,7 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl ma
 			}
 		}
 		line.WriteByte('|')
-		// The shell's own writing, colour and all: nothing in a row of
+		// The shell's own writing, color and all: nothing in a row of
 		// the picture is anybody's name.  See writeOwn.
 		writeOwn(out, line.String()+"\n")
 	}
@@ -569,15 +569,15 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl ma
 	fmt.Fprintf(out, "* you   o within %dm of your height   ^ higher   v lower\n", g.level)
 	fmt.Fprintln(out, "a digit is that many in one cell, and + is more than nine")
 	if coloured || outsideColoured {
-		// Only when there is something coloured to explain.  A picture
-		// with no colour in it -- a redirection, a pipe, an avatar
+		// Only when there is something colored to explain.  A picture
+		// with no color in it -- a redirection, a pipe, an avatar
 		// with no friend in sight -- must read exactly as it did
-		// before there was any colour at all, and a line explaining a
-		// colour to a file is nonsense.  The colour's own name is the
-		// word said, and said in that colour, the way the lines above
+		// before there was any color at all, and a line explaining a
+		// color to a file is nonsense.  The color's own name is the
+		// word said, and said in that color, the way the lines above
 		// it show the marks they are about rather than describing
-		// them: what a person has to recognise in the grid is the
-		// colour, and what they have to type to change it is the name.
+		// them: what a person has to recognize in the grid is the
+		// color, and what they have to type to change it is the name.
 		writeOwn(out, fmt.Sprintf("%s is somebody on your friend list\n", hl.paint(hl.colour)))
 	}
 
@@ -602,9 +602,9 @@ func drawMap(out io.Writer, g mapGrid, me msg.Vector3, people []sl.Person, hl ma
 	if len(outside) > 0 {
 		line := fmt.Sprintf("%d outside it: %s\n", len(outside), outsideLine)
 		if hl.colour != "" {
-			// A picture in colour is on its way to the terminal, and
+			// A picture in color is on its way to the terminal, and
 			// the names in this line were made visible where it was
-			// built, which is what lets the colour round them through.
+			// built, which is what lets the color round them through.
 			// See namesOutside.
 			writeOwn(out, line)
 		} else {
@@ -658,21 +658,21 @@ func (g mapGrid) markFor(me, them msg.Vector3) byte {
 // nearest first.
 //
 // It stops at eight names.  A region with forty avatars in it and a
-// picture 64 metres across would otherwise print the whole of "who"
+// picture 64 meters across would otherwise print the whole of "who"
 // under the grid, and "who" is the command for that.
 //
-// A friend is coloured here too, and the second answer says whether any
+// A friend is colored here too, and the second answer says whether any
 // of them was.  Being outside the picture does not stop somebody being
 // a friend, and this line is exactly where a person looks when the
 // friend they wanted is not among the marks; leaving it plain would
-// mean the same fact was worth a colour three lines higher up and not
-// here.  The name is what is coloured and not the distance, since the
+// mean the same fact was worth a color three lines higher up and not
+// here.  The name is what is colored and not the distance, since the
 // distance is not what makes them a friend.
 //
-// In a picture in colour every name is made visible here, a friend's
+// In a picture in color every name is made visible here, a friend's
 // or not, because that line goes to the terminal by writeOwn and Print
 // never sees it: a name is what somebody chose to be called, and it is
-// the only part of the line a stranger wrote.  Without colour the line
+// the only part of the line a stranger wrote.  Without color the line
 // goes the way any other output does, and is left as it arrived.
 func namesOutside(people []sl.Person, hl mapHighlight) (line string, coloured bool) {
 	const most = 8

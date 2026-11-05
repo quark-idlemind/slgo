@@ -367,8 +367,8 @@ func (b *bot) take(ctx context.Context, offer *sl.InventoryOffer) {
 }
 
 // whoSaid is the best name there is for whoever sent a message,
-// labelled when it is an object, a group or the grid.
-// Why: doc/im-senders.md#labelling-a-sender
+// labeled when it is an object, a group or the grid.
+// Why: doc/im-senders.md#labeling-a-sender
 func (b *bot) whoSaid(s *sl.Session, im *sl.IM) string {
 	name := im.FromName
 	switch {
@@ -383,7 +383,7 @@ func (b *bot) whoSaid(s *sl.Session, im *sl.IM) string {
 
 // ownedBy is ", owned by OWNER" for an object's message, which carries
 // its owner's id: named only from what the session already knows, and
-// labelled a group when the object is a group's.  Empty for anything
+// labeled a group when the object is a group's.  Empty for anything
 // else.
 func ownedBy(s *sl.Session, im *sl.IM) string {
 	if im.Sender() != sl.SenderObject {

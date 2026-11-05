@@ -25,18 +25,18 @@ import (
 //	password   = $1$<the md5 of the password>
 //	start      = last
 //	group      = Builders
-//	neighbours = yes
+//	neighbors  = yes
 //	pay        = on
 //	pay_to     = Example Resident
 //
 // Not every key is part of the login request.  "group" is which group
-// this avatar acts as and "neighbours" is whether it holds a circuit to
-// the regions around it: properties of the avatar rather than of any
-// one login, which is why they live here with the credentials.  A
-// profile that says nothing about neighbours leaves the answer to
-// whoever starts the session -- slgod's -neighbours flag -- and one
-// that says either wins over that.  The pay keys are what a program may
-// pay, and whom; see package pay.
+// this avatar acts as and "neighbors" (or "neighbors") is whether it
+// holds a circuit to the regions around it: properties of the avatar
+// rather than of any one login, which is why they live here with the
+// credentials.  A profile that says nothing about neighbors leaves the
+// answer to whoever starts the session -- slgod's -neighbors flag --
+// and one that says either wins over that.  The pay keys are what a
+// program may pay, and whom; see package pay.
 //
 // Storing the "$1$" digest rather than the plain password is worth
 // doing.  It is the only form that ever goes over the wire, so it loses
@@ -184,7 +184,7 @@ func parseProfile(r *os.File) (Login, error) {
 			l.ViewerPassword = value
 		case "group":
 			l.Group = value
-		case "neighbours", "neighbors":
+		case "neighbors", "neighbours":
 			on, err := profileBool(value)
 			if err != nil {
 				return l, fmt.Errorf("line %d: %s: %w", n, key, err)
@@ -230,7 +230,7 @@ func parseProfile(r *os.File) (Login, error) {
 // Wider than strconv.ParseBool, which knows "1", "t" and "true" and not
 // the two words a person actually writes in a configuration file.  A
 // value that is none of these is an error rather than a false: a profile
-// saying "neighbours = sometimes" has asked for something, and answering
+// saying "neighbors = sometimes" has asked for something, and answering
 // it with the default silently is how a setting comes to be believed in
 // and not working.
 func profileBool(v string) (bool, error) {
@@ -292,7 +292,7 @@ func SaveProfile(name string, l Login) error {
 	// that never said anything would turn a profile that defers to the
 	// daemon into one that overrules it, which is a different profile.
 	if l.Neighbours != nil {
-		write("neighbours", yesNo(*l.Neighbours))
+		write("neighbors", yesNo(*l.Neighbours))
 	}
 	write("url", l.URL)
 	write("channel", l.Channel)

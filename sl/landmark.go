@@ -6,7 +6,7 @@ package sl
 // text naming a region and a point in it.  That is the whole of it: not
 // a handle, not a region name, and nothing about the parcel.  What a
 // landmark remembers is a point, and everything a person would
-// recognise about the place has to be asked for again on arrival --
+// recognize about the place has to be asked for again on arrival --
 // Parcel is the call that does that.
 //
 // Three things happen here and each is one message.  Reading one is a
@@ -67,7 +67,7 @@ const LandmarkVersion = 2
 // sold, the prim stood on taken away, and the region itself may be
 // gone; none of that is in the asset and the grid says none of it on
 // arrival.  A landmark into empty air is arrival in empty air followed
-// by a fall -- measured, from 1000 metres to the ground, with nothing
+// by a fall -- measured, from 1000 meters to the ground, with nothing
 // reported.
 type Landmark struct {
 	// Region is the region's grid-wide uuid, which is what the asset
@@ -77,9 +77,9 @@ type Landmark struct {
 	// FindRegions goes by name, and a landmark has no name in it.
 	Region msg.UUID
 
-	// Position is where in that region, in metres from its south west
+	// Position is where in that region, in meters from its south west
 	// corner.  The simulator writes it from where the avatar stood, so
-	// it is accurate to the couple of centimetres a standing avatar
+	// it is accurate to the couple of centimeters a standing avatar
 	// drifts.
 	Position msg.Vector3
 
@@ -90,7 +90,7 @@ type Landmark struct {
 	Version int
 
 	// Asset is the id this was read from, so that a landmark read and
-	// then travelled to does not have to be carried alongside its own
+	// then traveled to does not have to be carried alongside its own
 	// id.  Zero for one that came from ParseLandmark, which is handed
 	// bytes and never learns where they came from.
 	Asset msg.UUID
@@ -309,7 +309,7 @@ func (w *Session) MakeLandmark(ctx context.Context, name, desc string) (*Item, e
 // called is what to call the destination when one of those errors has
 // to be written, and it is what the CALLER calls it -- an inventory
 // name somebody typed -- because nothing the grid knows about a
-// landmark is a thing a person would recognise, and a refusal naming
+// landmark is a thing a person would recognize, and a refusal naming
 // the asset id reads badly.  Empty falls back to the asset id, which is
 // better than nothing and is all a caller with no name for it has.
 // Why: doc/history/landmark.md#stage-3----live-on-the-grid-run
@@ -482,7 +482,7 @@ const DefaultHomeSetTimeout = 10 * time.Second
 // out: a caller that read its own before calling would be printing a
 // place that is not the one asked for.  They differ oftener than they
 // look as though they would -- an avatar that has just teleported is
-// still settling, and eight metres of falling separated two reads a
+// still settling, and eight meters of falling separated two reads a
 // second apart when this was measured.  It is nil only where the read
 // itself failed.
 //

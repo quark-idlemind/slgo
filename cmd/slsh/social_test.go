@@ -337,9 +337,9 @@ func TestAnObjectsMessageIsShownAsAnObjects(t *testing.T) {
 
 // TestNothingButAPersonIsPrintedAsOne: every dialog an instant message
 // can carry, sent by an object, a group or the grid under a person's
-// name, is printed with the name labelled as what sent it.  A kind
+// name, is printed with the name labeled as what sent it.  A kind
 // printed with the name bare fails here, whichever it is.
-// Why: doc/im-senders.md#labelling-a-sender
+// Why: doc/im-senders.md#labeling-a-sender
 func TestNothingButAPersonIsPrintedAsOne(t *testing.T) {
 	x := newTestShell(t)
 	const name = "A Friend"
@@ -1669,7 +1669,7 @@ func TestWhoTurnsWhatWasTypedIntoSomebody(t *testing.T) {
 // daemon has known this avatar since before slsh started, and the
 // session's cache has had nobody mentioned to it, so a name that "who"
 // would list is a name every command should take.  Nothing here is a
-// guess -- the person is thirty metres away and answers to that name.
+// guess -- the person is thirty meters away and answers to that name.
 func TestWhoFindsSomebodyStandingInTheRegion(t *testing.T) {
 	x := newTestShell(t)
 	ctx := context.Background()
@@ -1991,7 +1991,7 @@ func TestPartOfANameOnTheGridIsListedNotGuessed(t *testing.T) {
 //
 // The grid's search is the last place looked, and a failure there is
 // nobody found -- the refusal the shell always gave, since that is what
-// a line nothing here recognises was always going to get.  What changes
+// a line nothing here recognizes was always going to get.  What changes
 // is that it says the grid was not asked, which is the one part worth
 // trying again; a refusal reading exactly as it did before would say the
 // grid had been searched and had nobody.

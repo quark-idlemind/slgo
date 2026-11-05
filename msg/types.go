@@ -3,7 +3,7 @@
 // message structures generated from message_template.msg.
 //
 // Numbers on the wire are little endian, with exceptions that are
-// network order: the packet sequence number and the acknowledgements
+// network order: the packet sequence number and the acknowledgments
 // appended to a packet, a Low message's number, IPADDR and IPPORT.
 //
 // # Compatibility
@@ -251,7 +251,7 @@ func (q Quaternion) Mul(r Quaternion) Quaternion {
 		Y: qw*ry - qx*rz + qy*rw + qz*rx,
 		Z: qw*rz + qx*ry - qy*rx + qz*rw,
 	}
-	// W is recovered by normalising and is never negative, so a
+	// W is recovered by normalizing and is never negative, so a
 	// product whose W came out negative is the same rotation with
 	// every component negated.
 	if w := qw*rw - qx*rx - qy*ry - qz*rz; w < 0 {

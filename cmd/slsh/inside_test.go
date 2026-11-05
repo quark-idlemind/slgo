@@ -499,7 +499,7 @@ func TestRmAndMvInsideRefuseWhatIsNotThere(t *testing.T) {
 // TestANameInsideAnObjectIsSpeltAsItIs.
 //
 // An object keeps "Greeter" and "greeter" as two scripts, so each verb
-// that names one inside it takes the one spelt that way, and a third
+// that names one inside it takes the one spelled that way, and a third
 // spelling is nothing -- with what differs from it only in case offered
 // in place of the pointer at ls --in, since that is the likelier typo.
 func TestANameInsideAnObjectIsSpeltAsItIs(t *testing.T) {

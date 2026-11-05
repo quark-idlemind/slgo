@@ -55,26 +55,26 @@ import (
 // what closes it -- or, for a simulator that went away without saying
 // so, childSilence with nothing heard, or an offer of the same
 // region at another address.  A region the avatar came back to within
-// seconds of leaving offered none of its neighbours again, measured, so
+// seconds of leaving offered none of its neighbors again, measured, so
 // a session that let its children go on every move came back holding
 // none.  A move closes only the child to the region moved into
 // (neighboursAfterMove), and the cap closes the ones that are no longer
 // beside the avatar's region (MaxNeighbours).
 // Why: doc/history/neighbours.md#kept-across-a-move
 //
-// **What is deliberately not handled here.**  A neighbour describes
+// **What is deliberately not handled here.**  A neighbor describes
 // itself fully and unprompted -- stage 0 counted what one sent in thirty
 // seconds -- and none of it is kept.  Terrain and objects from a
-// neighbour are stage 4 of the plan, and wiring them to the Cache here
+// neighbor are stage 4 of the plan, and wiring them to the Cache here
 // would be wrong twice over: the store is keyed by the region uuid this
 // avatar is IN, and local ids are each region's own numbering, so a
-// neighbour's updates put through the root's store would describe this
+// neighbor's updates put through the root's store would describe this
 // region with another one's objects.  Everything about the avatar --
 // AgentMovementComplete, KickUser, CrossedRegion -- must stay unhandled
 // on a child for the other half of the same rule: a child that answered
 // AgentMovementComplete would move this session's idea of where the
 // avatar is to a region it is not in, and one that acted on KickUser
-// would end the session on a neighbour's say-so.
+// would end the session on a neighbor's say-so.
 
 // MaxNeighbours is how many child circuits a session will hold at once.
 //
@@ -87,7 +87,7 @@ import (
 // be held when the new region's offers arrive.  An offer that finds the
 // cap reached closes a child whose region does not touch the avatar's
 // to make room, and is turned down only when every child held is a
-// neighbour.
+// neighbor.
 const MaxNeighbours = 8
 
 // childSilence is how long a child circuit may hear nothing from its
@@ -98,7 +98,7 @@ const MaxNeighbours = 8
 // included.  The viewer counts from the last answer to a ping of its
 // own; this session sends none on any circuit, so it counts from the
 // last packet of any kind, as the root's watchdog does.  A live
-// neighbour is never that quiet: it pinged a child five times in thirty
+// neighbor is never that quiet: it pinged a child five times in thirty
 // seconds.
 const childSilence = 100 * time.Second
 
@@ -106,7 +106,7 @@ const childSilence = 100 * time.Second
 // has left, and what this session has of it.
 //
 // Every field of it crosses to a client, which is what slsh's
-// neighbours prints; no viewer sees a neighbour, and what a viewer may
+// neighbors prints; no viewer sees a neighbor, and what a viewer may
 // eventually be offered is a later stage of doc/history/neighbours.md.
 type Neighbour struct {
 	// Handle identifies the region on the grid.  msg.GridCoords turns
@@ -130,11 +130,11 @@ type Neighbour struct {
 	Heard uint64
 }
 
-// child is one circuit to a neighbouring simulator.
+// child is one circuit to a neighboring simulator.
 //
 // It has its own socket, sender, receiver and dispatcher and shares
 // none of the root's.  That is not tidiness: every circuit has its own
-// sequence numbers, its own acknowledgements and its own duplicate
+// sequence numbers, its own acknowledgments and its own duplicate
 // ring, so a child hung off the root's would have two simulators
 // numbering into one filter and each dropping the other's packets as
 // retransmissions.
@@ -145,7 +145,7 @@ type child struct {
 	// The holder rather than the connection, for the reason Connect
 	// uses one: msg.NewSender takes a PacketWriter and
 	// msg.NewReceiver a PacketSource, and this is both, plus the
-	// SetReadDeadline that lets a cancelled receiver stop waiting.
+	// SetReadDeadline that lets a canceled receiver stop waiting.
 	sock *socket
 
 	send *msg.Sender
@@ -175,7 +175,7 @@ type child struct {
 //
 // Options.Neighbours is what it starts as and SetNeighbours is what
 // changes it.  On with nothing held is an ordinary state and not a
-// failure: a simulator offers a neighbour when the avatar is near one,
+// failure: a simulator offers a neighbor when the avatar is near one,
 // and offered nothing at all to an avatar in a skybox in the middle of
 // a region.
 func (a *Agent) NeighboursOn() bool { return a.holdNeighbours.Load() }
@@ -228,7 +228,7 @@ func (a *Agent) Neighbours() []Neighbour {
 
 	// In a definite order, because the map is not one and a listing
 	// that shuffled itself between two readings would look like the
-	// neighbours were changing.
+	// neighbors were changing.
 	sort.Slice(out, func(i, j int) bool { return out[i].Handle < out[j].Handle })
 	return out
 }
@@ -236,7 +236,7 @@ func (a *Agent) Neighbours() []Neighbour {
 // noteEnableSimulator takes up the offers an EnableSimulator on the
 // event queue carries.
 //
-// The message is the simulator introducing a neighbour: a handle, an
+// The message is the simulator introducing a neighbor: a handle, an
 // address and nothing else -- no capability, which is not what opening
 // a circuit takes.  It repeats for as long as the offer goes untaken,
 // 57 times in a 200 second run naming only four regions, and stops at
@@ -269,7 +269,7 @@ func (a *Agent) noteEnableSimulator(body any) {
 //
 // eventBlock beside it takes the first row and no more, which is right
 // for a destination -- an avatar is handed to one simulator -- and
-// would be wrong here: the block is what names the neighbours, and
+// would be wrong here: the block is what names the neighbors, and
 // there is nothing in the message to stop a simulator introducing two
 // at once.  A bare map is taken as well, for eventBlock's reason.
 func offeredSimulators(body any) []map[string]any {
@@ -295,9 +295,9 @@ func offeredSimulators(body any) []map[string]any {
 // neighbourAddr builds the address an offer names, or nil for one it
 // could not.
 //
-// A neighbour that cannot be addressed is one to do nothing about.
+// A neighbor that cannot be addressed is one to do nothing about.
 // There is no falling back on anything: this message is the only place
-// a neighbour's address is ever named, and what a bad one costs is a
+// a neighbor's address is ever named, and what a bad one costs is a
 // border that stays a wall, which is where this daemon stood before
 // this file existed.
 func neighbourAddr(ip []byte, port int64) *net.UDPAddr {
@@ -320,21 +320,21 @@ func neighbourAddr(ip []byte, port int64) *net.UDPAddr {
 // as four bytes in network order and IPPORT as a port -- so what is
 // left to refuse is an address that names nowhere.
 //
-// **It is registered whether or not neighbours are on**, which reads
+// **It is registered whether or not neighbors are on**, which reads
 // like a mistake beside noteEnableSimulator asking the flag instead, so:
 // this runs once, from register, and a registration cannot be withdrawn
 // -- Dispatcher has no way to remove a handler, and a second MustHandle
 // for one message panics.  A registration made when the flag went on
 // would therefore have to be made once and never again, and would still
 // have to check the flag for the case where it has since gone off.  That
-// is this, without the bookkeeping.  What it costs when neighbours are
+// is this, without the bookkeeping.  What it costs when neighbors are
 // off is a map entry and a returning function per EnableSimulator, where
 // before it was a message counted as unhandled.
 //
 // It is not Inline, because a dial in the middle of the packet path is
 // worth keeping off the dispatch goroutine; openNeighbour is serialized
 // by its own lock, so two arriving at once cannot open the same
-// neighbour twice.
+// neighbor twice.
 func (a *Agent) followNeighbours() {
 	a.Disp.MustHandle("EnableSimulator", func(p *msg.Packet) {
 		if !a.NeighboursOn() {
@@ -355,12 +355,12 @@ func (a *Agent) followNeighbours() {
 	})
 }
 
-// openNeighbour holds a circuit to one neighbouring simulator.
+// openNeighbour holds a circuit to one neighboring simulator.
 //
 // Everything is done under the one lock, the dial included.  The offers
 // arrive on two goroutines -- the event queue's poll and the dispatcher
 // -- and a check that let go before the socket was made would open two
-// circuits to the same neighbour, each with its own sequence numbers,
+// circuits to the same neighbor, each with its own sequence numbers,
 // which is the one thing a simulator cannot be asked to make sense of.
 // What that costs is a syscall's worth of a held mutex.
 func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
@@ -368,7 +368,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		return
 	}
 
-	// The region the avatar is standing in is not a neighbour.  A
+	// The region the avatar is standing in is not a neighbor.  A
 	// circuit to it would be a second one to the simulator already on
 	// the other end of the root's, which is what crossTo refuses for
 	// the same reason -- and here it is also how a stale offer reads
@@ -384,7 +384,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 	// second thing in this package to spawn after Connect returned,
 	// and moveTo was the first.  Like moveTo this narrows the window
 	// rather than closing it -- spawnChild asks again -- and what is
-	// left is a circuit dialled into a session that is shutting down,
+	// left is a circuit dialed into a session that is shutting down,
 	// which is closed below the moment a spawn is refused.
 	select {
 	case <-a.done:
@@ -407,7 +407,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		return
 	}
 
-	// A neighbour already held at the same address, and still heard
+	// A neighbor already held at the same address, and still heard
 	// from, is the offer being repeated, which is what happens until it
 	// is taken up.  One held at another address, or silent past the
 	// timeout, is stale and is replaced, as LLWorld::addRegion replaces
@@ -438,7 +438,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		}
 	}
 	if len(a.neighbours) >= MaxNeighbours {
-		// Once per neighbour, not once per offer.  An offer that
+		// Once per neighbor, not once per offer.  An offer that
 		// goes untaken is repeated for as long as it is ignored --
 		// 57 times in 200 seconds -- and this is exactly the case
 		// where it will go on being ignored, so a line each would
@@ -466,7 +466,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 	c.recv = msg.NewReceiver(c.sock)
 	c.disp = msg.NewDispatcher(
 		msg.WithSender(c.send),
-		// Everything the neighbour says, counted and dropped.  The
+		// Everything the neighbor says, counted and dropped.  The
 		// counter is the whole of what this stage does with a
 		// region's description of itself; see the head of this file
 		// for why none of it reaches the object store.
@@ -550,7 +550,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 	// sends at login and at the far end of a teleport.  What is NOT
 	// sent is CompleteAgentMovement: that is what would make this
 	// circuit the one the avatar stands in, and sending it here would
-	// move the avatar into the neighbour.
+	// move the avatar into the neighbor.
 	if err := c.send.SendReliable(ctx, a.useCircuitCode()); err != nil {
 		a.logf("neighbour %s at %s: UseCircuitCode: %v", gridSquare(handle), addr, err)
 		c.close()
@@ -581,9 +581,9 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 // It is Agent.spawn without the failure: a child's sender returns an
 // error the moment its socket is closed, which is how a circuit is
 // dropped on purpose, and through spawn that would call fail and end
-// the whole session over a neighbour nobody was talking to any more.
-// Nothing a neighbour does is a reason to end this session -- the
-// avatar is standing in the root's region, and a neighbour that went
+// the whole session over a neighbor nobody was talking to any more.
+// Nothing a neighbor does is a reason to end this session -- the
+// avatar is standing in the root's region, and a neighbor that went
 // quiet costs a border crossing rather than a connection.
 func (a *Agent) spawnChild(fn func()) bool {
 	select {
@@ -601,10 +601,10 @@ func (a *Agent) spawnChild(fn func()) bool {
 
 // dropNeighbours closes every child circuit and says why.
 //
-// Its callers are the session ending and neighbours being turned off.
+// Its callers are the session ending and neighbors being turned off.
 // Not a move: a simulator does not offer again a child agent it still
 // counts as connected, and closing the socket tells it nothing, so the
-// neighbours of a region the avatar came back to soon after were never
+// neighbors of a region the avatar came back to soon after were never
 // offered again.  See neighboursAfterMove.
 func (a *Agent) dropNeighbours(why string) {
 	a.neighMu.Lock()
@@ -665,7 +665,7 @@ func (a *Agent) neighboursAfterMove() {
 
 // strayNeighbour is a child whose region does not touch the one the
 // avatar is in, the lowest handle first, or nil when every child held is
-// a neighbour.  The caller holds neighMu.
+// a neighbor.  The caller holds neighMu.
 func (a *Agent) strayNeighbour() *child {
 	here := a.RegionHandle()
 	var stray *child

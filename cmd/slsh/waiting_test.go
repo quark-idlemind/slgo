@@ -414,7 +414,7 @@ func TestABareAnswerWillNotSpendMoney(t *testing.T) {
 // The bucket a fee arrives in is the one part of an invitation still
 // worth doubting: the viewer's own header describes a different shape
 // from the one its code parses, and one grid's answer does not settle
-// it.  A bucket this does not recognise therefore means "the
+// it.  A bucket this does not recognize therefore means "the
 // invitation did not say", and the safe-looking guess -- reading it as
 // free and joining -- is the one that spends money.  It still has to be
 // answerable, or an invitation from a simulator with an older idea of
@@ -701,7 +701,7 @@ func TestAnAnsweredPermissionStopsWaiting(t *testing.T) {
 
 // TestAnObjectsGiveIsWaitingLabelledAndAnsweredAsDialogTen: an object's
 // give is an inventory offer too.  It lists with the item's name out of
-// the text and the object's name labelled as one, and accepting it sends
+// the text and the object's name labeled as one, and accepting it sends
 // dialog 10 into the folder the shell is in.
 // Why: doc/im-senders.md#an-objects-give
 func TestAnObjectsGiveIsWaitingLabelledAndAnsweredAsDialogTen(t *testing.T) {

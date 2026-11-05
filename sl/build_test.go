@@ -4,7 +4,7 @@ package sl
 //
 // A build is a sequence of things that are not confirmed by replies.  A
 // rez is answered by the prim turning up, its bottom rather than its
-// centre on the point asked for, so it is recognised by where it stands
+// center on the point asked for, so it is recognized by where it stands
 // and then put where it belongs; a rename has no reply, so the name is
 // read back; a description
 // only arrives in the full properties, which have to be asked for by
@@ -100,7 +100,7 @@ func TestBuildFinishesEachPrimBeforeStartingTheNext(t *testing.T) {
 	confirmRez(t, f, thePrim, 77, 1)
 
 	// The prim is told where it goes rather than trusted to have landed
-	// there: the simulator puts its bottom on the point, not its centre.
+	// there: the simulator puts its bottom on the point, not its center.
 	place := waitSent[*msg.MultipleObjectUpdate](t, f)
 	if len(place.ObjectData) != 1 || place.ObjectData[0].ObjectLocalID != 77 {
 		t.Fatalf("placed %+v", place.ObjectData)
@@ -111,7 +111,7 @@ func TestBuildFinishesEachPrimBeforeStartingTheNext(t *testing.T) {
 	}
 	// Position, then rotation, then scale, twelve bytes each: a
 	// quaternion travels as three floats with the fourth recovered by
-	// normalising.
+	// normalizing.
 	if len(d.Data) != 36 {
 		t.Fatalf("the payload is %d bytes, want 36", len(d.Data))
 	}
@@ -464,7 +464,7 @@ func TestPlaceSaysAllThreeThingsInOneMessage(t *testing.T) {
 	if got := readVector(d.Data[0:]); got != at {
 		t.Errorf("position = %v", got)
 	}
-	// The fourth component is not sent: it is recovered by normalising.
+	// The fourth component is not sent: it is recovered by normalizing.
 	if got := readVector(d.Data[12:]); got != (msg.Vector3{X: 0.5, Y: 0.5, Z: 0.5}) {
 		t.Errorf("rotation = %v", got)
 	}
@@ -603,7 +603,7 @@ func TestFindingOursWillNotClaimSomebodyElsesPrim(t *testing.T) {
 // another client of this avatar, can make one at the same moment -- and
 // taking the first new one of ours has handed back the wrong one.  The
 // simulator gives X and Y back exactly as sent, so one anywhere else,
-// even a centimetre off, is somebody else's rez.
+// even a centimeter off, is somebody else's rez.
 func TestFindingOursTakesThePrimWhereItWasAskedFor(t *testing.T) {
 	t.Parallel()
 	w, f := newFakeSession(t)
@@ -655,7 +655,7 @@ func TestFindingOursAcceptsAPrimRaisedToTheGround(t *testing.T) {
 }
 
 // TestFindingOursPrefersTheOneAtTheHeightItShouldBe: two of ours on the
-// same spot are told apart by height -- the new one's centre is half
+// same spot are told apart by height -- the new one's center is half
 // its height above the point -- and one whose owner is still unknown is
 // waited for rather than passed over for one further off.
 func TestFindingOursPrefersTheOneAtTheHeightItShouldBe(t *testing.T) {
@@ -960,7 +960,7 @@ func TestRezIsMadeInTheActiveGroup(t *testing.T) {
 //
 // This one had no pause of its own -- the only wait was inside
 // Properties -- so an error that came back at once sent it round again
-// at once.  A cancelled context did exactly that, and the loop span
+// at once.  A canceled context did exactly that, and the loop span
 // flat out for the full twenty seconds before reporting a timeout that
 // was not the reason.
 func TestSetDescriptionStopsWhenTheCallerGivesUp(t *testing.T) {

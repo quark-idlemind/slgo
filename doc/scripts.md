@@ -214,13 +214,13 @@ whether the "Running" box is ticked.
 circuit, and the viewer still sends it that way rather than through any
 capability: it packs one and sends it reliably to the region's host at
 `llpreviewscript.cpp:2875-2881`, and it has no entry of its own in
-`message.xml`, so it takes the server default flavour -- "template", at
+`message.xml`, so it takes the server default flavor -- "template", at
 `message.xml:4-10` -- which is what chooses the template builder over
 the LLSD one (`message.cpp:3427-3452`).
 
 The reply has moved off the circuit. `ScriptRunningReply` is marked
 `UDPDeprecated` in the template (`message_template.msg:5510`) and
-`message.xml` gives it the llsd flavour, under a heading that says
+`message.xml` gives it the llsd flavor, under a heading that says
 "UDPDeprecated Messages" (`message.xml:590-597`). The tell is a field:
 the template's `Mono` is commented out with "Added to LLSD message"
 (`message_template.msg:5516`), and the viewer reads `Mono` by name when

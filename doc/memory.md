@@ -59,7 +59,7 @@ block count does not change at all.
 | `key` | +8 |
 | `vector` | +16 |
 | `quaternion` | +16 |
-| `string` (uninitialised) | +22 |
+| `string` (uninitialized) | +22 |
 | `list` | +44 |
 | four `integer`s | +16 |
 | `vector` + `quaternion` + `list` | +68 |
@@ -112,7 +112,7 @@ carried, so 4 bytes is the resolution to expect.
 ## What a function costs
 
 Measured over 64 declarations at once, so that anything paid once per
-script is amortised away:
+script is amortized away:
 
     a declaration        32 + one byte per character of its name
     + calling a library function     ~304 more
@@ -367,14 +367,14 @@ several rounds and calling them one.
 
 A benchmark measures one shape and reports what a copy of the code costs
 in it. There used to be two modes -- `-1` measuring one copy outright and
-copy mode amortising over up to 512 -- and copy mode existed because
+copy mode amortizing over up to 512 -- and copy mode existed because
 dividing a difference by a large count was how it beat the 512-byte
-quantisation. Exact padding searches removed that reason, and `--extra`
+quantization. Exact padding searches removed that reason, and `--extra`
 gives the same marginal cost from a handful of copies, so `-1` is the
 only mode and its flag is gone with the mode it distinguished.
 
 Gone with copy mode: `--max` (the copy-count ceiling), `--fast` (skip the
-padding search and report a quantised size), and the ladder that found
+padding search and report a quantized size), and the ladder that found
 how many copies would fit. Gone separately: `--title`, which the script
 said and this program read back out of what the script said; `--pad`, an
 arbitrary string prepended to the filler; `--object` and `--rez` and
@@ -395,7 +395,7 @@ everywhere; the one at the padding is shorter and says why it works.
 
 A construct pays part of its cost once and shares it, so what C copies
 cost is that once-paid part plus C marginal ones. Copy mode gets the
-marginal cost by amortising: it builds a script with as many copies as
+marginal cost by amortizing: it builds a script with as many copies as
 will fit -- up to 512 -- and fits a line through two counts. `-1
 --extra=N` gets it from two small scripts instead, one copy and N+1
 copies, measured at the same padding. The difference is N marginal
@@ -452,7 +452,7 @@ Copies cost **48, 48, 48, 44** repeating. That sums to 188, which is
 exactly four copies of 47 -- and 47 is what N of 4, 8, 12, 16 and 20 all
 report. It is the 4-alignment above showing through: a copy whose real
 cost is not a multiple of 4 is charged a little more or less than its
-neighbours, and only a multiple of four copies averages it out.
+neighbors, and only a multiple of four copies averages it out.
 
 So `--extra=1` reports 48 and `--extra=2` reports 48, both confidently
 and both wrong by one byte, while 3, 5, 6, 7 and 9 report 46.67, 47.2,
@@ -558,7 +558,7 @@ was.
 A remembered padding is keyed by the rendered base script, hashed, and
 nothing else.
 
-It used to need a normalisation, because the script said the title --
+It used to need a normalization, because the script said the title --
 `--title`, which a script can only ever have repeated back, so the round
 trip could not produce a fact -- and so the caller's own text was in the
 bytecode and part of the shape being identified. Two runs of the same

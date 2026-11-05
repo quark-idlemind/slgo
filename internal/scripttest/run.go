@@ -36,7 +36,7 @@ func (s *Server) Run(req *scriptv1.RunRequest, stream grpc.ServerStreamingServer
 		return err
 	}
 	if req.GetCompileOnly() && !s.caps.CompileOnly {
-		// The contract's own words: where compile_only is not honoured,
+		// The contract's own words: where compile_only is not honored,
 		// asking for it is an error rather than a run.  Silently running
 		// the script would be the worst answer -- the caller asked for
 		// the object not to be disturbed.
@@ -148,7 +148,7 @@ func (s *Server) execute(ctx context.Context, stream grpc.ServerStreamingServer[
 	// is llGetUsedMemory answering wrongly, so the wrong number is what
 	// the script reports -- live the script has only the one number and
 	// cannot know it is wrong -- while the compiler's refusal above and
-	// the collision below are unmoved, being the region's judgement about
+	// the collision below are unmoved, being the region's judgment about
 	// the script rather than the script's report of itself.
 	reading := mem.Reading(cnt, pad)
 	if benchmark && s.opt.Noise != nil {

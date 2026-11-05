@@ -14,7 +14,7 @@ import (
 
 // TestSenderIsWhatTheNameNames: the kind follows what the viewer makes
 // of the same message, so that an object named after a person, a group
-// and the grid's own messages are each labelled as what they are.
+// and the grid's own messages are each labeled as what they are.
 func TestSenderIsWhatTheNameNames(t *testing.T) {
 	t.Parallel()
 	somebody := msg.MustParseUUID("876e7e57-7e57-c0de-8597-66b760a8cb5f")
@@ -136,7 +136,7 @@ func bareObjectNamesIn(fset *token.FileSet, f *ast.File) []string {
 // SenderObject.Label, which says it is an object's.  A read of one in
 // sl, slsh, slbotd, slate or the slate command outside a call to Label,
 // or a comparison with == or !=, fails this test.
-// Why: doc/im-senders.md#labelling-a-sender
+// Why: doc/im-senders.md#labeling-a-sender
 func TestNoObjectNameIsPrintedBare(t *testing.T) {
 	fset := token.NewFileSet()
 	for _, dir := range []string{".", "../cmd/slsh", "../cmd/slbotd", "../slate", "../cmd/slate"} {

@@ -7,7 +7,7 @@ package main
 // the backend.  What it cannot reach is how slrun gets one: both ways
 // of finding somewhere to run -- the shared auto object, and an object
 // named on the command line -- go through session.Connect, which DIALS
-// slgod.  There is no seam there and there should not be one: dialling
+// slgod.  There is no seam there and there should not be one: dialing
 // is the whole of what those functions do.
 //
 // So this is a real gRPC daemon in this process, doing the real

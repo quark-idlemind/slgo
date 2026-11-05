@@ -143,7 +143,7 @@ func decodeXfer(t *testing.T, m *client.Message) *msg.SendXferPacket {
 // A reassembler is half a conversation: it acknowledges every packet as
 // it goes, and the simulator sends the next only when that arrives -- so
 // what goes out is as much a part of the protocol as what comes in, and
-// a test that only fed packets in would never notice an acknowledgement
+// a test that only fed packets in would never notice an acknowledgment
 // that stopped being sent.
 type recordingSender struct {
 	mu   sync.Mutex
@@ -179,9 +179,9 @@ func (s *recordingSender) Sent() []msg.Message {
 }
 
 // TestEveryXferPacketIsAcknowledgedBeforeAnythingElse: the simulator
-// sends the next packet only when the acknowledgement arrives, so
+// sends the next packet only when the acknowledgment arrives, so
 // anything done before replying is on the critical path of the whole
-// transfer -- and an acknowledgement that never went out is a transfer
+// transfer -- and an acknowledgment that never went out is a transfer
 // that simply stops.
 func TestEveryXferPacketIsAcknowledgedBeforeAnythingElse(t *testing.T) {
 	t.Parallel()

@@ -37,7 +37,7 @@ import (
 )
 
 // Profiles is how the server learns which agents COULD be started.
-// Nil means it knows of no others, which is the old behaviour.
+// Nil means it knows of no others, which is the old behavior.
 type Profiles func() []string
 
 // LoginFor supplies what is needed to bring one up.  Nil means none can

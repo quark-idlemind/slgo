@@ -810,7 +810,7 @@ func TestFixedFieldWidthIsCheckedOnTheWayIn(t *testing.T) {
 
 // TestAZerocodedMessageReadsPastItsEndAsZeros: wherever in its final
 // run of zeros an ObjectUpdate is cut short, it decodes to the same
-// thing.  See Unmarshal for why that is the grid's behaviour and not a
+// thing.  See Unmarshal for why that is the grid's behavior and not a
 // guess.
 func TestAZerocodedMessageReadsPastItsEndAsZeros(t *testing.T) {
 	m := objectWithAQuietTail()

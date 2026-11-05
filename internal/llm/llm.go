@@ -34,7 +34,7 @@
 //     sampler cannot leave, and which Ollama documents support for too.
 //     A model asked for JSON in words alone can forget a brace or wander
 //     into prose; asked through a grammar, it cannot.  (Which servers
-//     honour it was read from their documentation, not measured here:
+//     honor it was read from their documentation, not measured here:
 //     the tests beside this file are against a stand-in.)
 //
 // # Errors
@@ -206,7 +206,7 @@ var ErrMalformed = errors.New("the model's answer was not a reply")
 type StatusError struct {
 	Code    int    // 404, 500, ...
 	Status  string // "404 Not Found"
-	Message string // the server's own words, or enough of the body to recognise
+	Message string // the server's own words, or enough of the body to recognize
 }
 
 func (e *StatusError) Error() string {
@@ -411,7 +411,7 @@ func serverSays(b []byte) string {
 	return excerpt(b)
 }
 
-// excerpt is enough of a body to recognise it by, on one line.
+// excerpt is enough of a body to recognize it by, on one line.
 func excerpt(b []byte) string {
 	s := strings.Join(strings.Fields(string(b)), " ")
 	if r := []rune(s); len(r) > 200 {

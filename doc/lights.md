@@ -12,12 +12,12 @@ offers them under the same names. The viewer is Firestorm 885631b93a,
 ## The light
 
 The block is sixteen bytes. `LLLightParams::unpack` (`llprimitive.cpp:1747`)
-reads a colour as four bytes, then three float32: the radius, the cutoff
-and the falloff. The fourth colour byte is not an alpha: the viewer keeps
+reads a color as four bytes, then three float32: the radius, the cutoff
+and the falloff. The fourth color byte is not an alpha: the viewer keeps
 the four bytes over 255 as one `LLColor4` (`LLColor4(const LLColor4U&)`,
 `llmath/v4color.cpp:144`) and uses the fourth as the intensity
 (`LLVOVolume::setLightIntensity`, `llvovolume.cpp:3390`; the light's
-colour in a shader is the colour times it, `getLightLinearColor`,
+color in a shader is the color times it, `getLightLinearColor`,
 `llvovolume.cpp:3473`). So `msg.Light` has `Colour` as the three bytes,
 `Intensity` as the fourth over 255, and the three floats as sent. The
 viewer clamps radius to 0 to 20, falloff to 0 to 2 and cutoff to 0 to 180
@@ -37,17 +37,17 @@ viewer sends `ObjectExtraParams` (`llviewerobject.cpp:6901`) and has no
 handler for one coming in, so the store does not look for it; that the
 region never sends it to a viewer is inferred from that, not seen.
 
-**The colour space.** The wire carries the linear colour: `unpack` hands
+**The color space.** The wire carries the linear color: `unpack` hands
 the bytes to `setLinearColor` (`llprimitive.h:168-169`), whose comment calls it
 "the value as it appears in shaders", while the swatch in the build
 floater shows `getSRGBColor` (`llprimitive.h:177`, `llpanelvolume.cpp:326`)
 and sets the light with `setLightSRGBColor`, which converts to linear
 first (`llvovolume.cpp:3370`). Slate reads the wire's bytes over 255 and
 does no conversion, so what a test writes is the linear value. Whether
-LSL's `PRIM_POINT_LIGHT` colour is that same linear value, as it reads
+LSL's `PRIM_POINT_LIGHT` color is that same linear value, as it reads
 from the wiki, was not checked against the grid here and is the one thing
 a live measurement has to settle: if the region converted a script's
-colour on the way, a test would be off by that curve, and `light colour`
+color on the way, a test would be off by that curve, and `light color`
 would say how far.
 
 ## The projector

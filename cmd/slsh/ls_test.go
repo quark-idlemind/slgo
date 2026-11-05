@@ -120,7 +120,7 @@ func TestAttachPointNames(t *testing.T) {
 		1:                "chest",
 		sl.HUDBottomLeft: "HUD bottom left",
 		sl.HUDTop:        "HUD top",
-		40:               "avatar centre",
+		40:               "avatar center",
 		250:              "point 250", // no such point; say the number
 	} {
 		if got := sl.AttachPointName(point); got != want {

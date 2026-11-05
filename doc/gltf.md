@@ -1,8 +1,8 @@
 # A face's GLTF material and the overrides on it
 
 A face of a prim can have a GLTF (PBR) material, and a script or a build
-tool can then override single fields of it for that face: the base colour,
-the emissive colour, the metallic and roughness factors, the alpha mode and
+tool can then override single fields of it for that face: the base color,
+the emissive color, the metallic and roughness factors, the alpha mode and
 its cutoff, double sided, a texture for each of four slots and a transform
 for each (`PRIM_GLTF_BASE_COLOR`, `PRIM_GLTF_NORMAL`, `PRIM_GLTF_EMISSIVE`
 and the rest of LSL). The region does not put the overrides in the object's
@@ -109,9 +109,9 @@ for none.
 
 | Key | Field | Read as |
 |---|---|---|
-| `tex` | texture ids by slot, 0 base colour, 1 normal, 2 metallic and roughness, 3 emissive | an array of uuids; a null or undef element leaves that slot alone; `ffffffff-ffff-ffff-ffff-ffffffffffff` sets the slot to no texture (`applyOverrideUUID`, `:597-609`) |
-| `bc` | base colour | an array of four reals, red, green, blue, alpha |
-| `ec` | emissive colour | an array of three reals |
+| `tex` | texture ids by slot, 0 base color, 1 normal, 2 metallic and roughness, 3 emissive | an array of uuids; a null or undef element leaves that slot alone; `ffffffff-ffff-ffff-ffff-ffffffffffff` sets the slot to no texture (`applyOverrideUUID`, `:597-609`) |
+| `bc` | base color | an array of four reals, red, green, blue, alpha |
+| `ec` | emissive color | an array of three reals |
 | `mf` | metallic factor | a real; an integer is ignored |
 | `rf` | roughness factor | a real |
 | `am` | alpha mode | an integer, 0 opaque, 1 blend, 2 mask |
@@ -133,7 +133,7 @@ slots with no `ti`. The offset and scale are as given and the rotation is in
 radians. Slate reads them as `baserepeats`, `baseoffset`, `baserotation` and
 the same for the other slots, the rotation in turns
 ([GLTF materials](slate-runner.md#gltf-materials)). A
-colour or offset that is defined and not an array is read by the viewer as
+color or offset that is defined and not an array is read by the viewer as
 zeros and is skipped here; no region has been seen to send one.
 
 Whether the region always sends the whole set, and so relies on the

@@ -106,14 +106,14 @@ func (w *Session) mover() (Mover, error) {
 // was sent and nothing is wrong with the session.  The error is kept for
 // not being able to ask.
 //
-// A target already within agent.MinWithin (half a metre) of the avatar,
+// A target already within agent.MinWithin (half a meter) of the avatar,
 // or within Within, is Arrived at once and nothing moves: the shortest
-// walk an avatar can make from standing is about a metre (measured
+// walk an avatar can make from standing is about a meter (measured
 // 2026-09-24), so a nearer target has no step to take.  A caller planning
 // its own legs should not send ones that short, or it will be told
 // Arrived for ever without going anywhere.
 //
-// Cancelling ctx stops the avatar and ends the walk Cancelled, "client
+// Canceling ctx stops the avatar and ends the walk Cancelled, "client
 // gone".  Another Move takes this one over -- it ends Cancelled,
 // "superseded", and the avatar does not stop in between -- which is how
 // a caller steering round something changes its mind; Halt stops it.
@@ -126,7 +126,7 @@ func (w *Session) Move(ctx context.Context, r MoveRequest, progress func(MovePro
 }
 
 // Face turns the avatar toward a place in the region without moving it,
-// and returns the heading it was given: radians anticlockwise from east.
+// and returns the heading it was given: radians counterclockwise from east.
 // It ends a walk under way.
 func (w *Session) Face(ctx context.Context, target msg.Vector3) (float32, error) {
 	m, err := w.mover()
@@ -136,7 +136,7 @@ func (w *Session) Face(ctx context.Context, target msg.Vector3) (float32, error)
 	return m.Face(ctx, target)
 }
 
-// FaceYaw turns the avatar to a heading, radians anticlockwise from
+// FaceYaw turns the avatar to a heading, radians counterclockwise from
 // east.
 func (w *Session) FaceYaw(ctx context.Context, yaw float32) error {
 	m, err := w.mover()

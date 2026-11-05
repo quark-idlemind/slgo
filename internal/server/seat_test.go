@@ -241,7 +241,7 @@ func TestNotKnowingIsNotStanding(t *testing.T) {
 // Measured, and the reason: a restart where the chair was missing from
 // the region listing throughout confirmed only on the sixth and last
 // attempt, eighty-five seconds in, having actually sat within seconds.
-// Waiting to RECOGNISE the seat rather than to see the avatar sit is
+// Waiting to RECOGNIZE the seat rather than to see the avatar sit is
 // what cost that, and a slower region would have turned it into a
 // report of failure for a sit that worked.
 func TestAnUnnameableSeatIsStillASeat(t *testing.T) {

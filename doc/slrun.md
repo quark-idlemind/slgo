@@ -32,12 +32,12 @@ happened. `main` says "interrupted", once, and `quiet` is what keeps the
 six quiet.
 
 `quiet` knows two shapes of it, because a run reaches the grid through
-gRPC and a cancelled call comes back as a status rather than as the
+gRPC and a canceled call comes back as a status rather than as the
 context's own error: `rpc error: code = Canceled desc = context
 canceled` does not satisfy `errors.Is` against `context.Canceled`. That
 was found by the test, `TestInterruptingARunSaysSoOnceAndFails` in
 `cmd/slrun/daemon_test.go`, which is the reason it drives a real
-interrupt through a daemon rather than cancelling a context and assuming
+interrupt through a daemon rather than canceling a context and assuming
 the rest.
 
 ## A name on every line, and none on one script

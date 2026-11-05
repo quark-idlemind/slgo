@@ -24,7 +24,7 @@ var (
 )
 
 // TestPickNamedTakesTheOneSpeltThatWay: "Script" and "script" are two
-// names on the grid, so each is the one spelt that way, and the other
+// names on the grid, so each is the one spelled that way, and the other
 // sitting beside it is neither a second meaning nor a stand-in.
 func TestPickNamedTakesTheOneSpeltThatWay(t *testing.T) {
 	es := []Entry{
@@ -119,7 +119,7 @@ func TestPickNamedRefusesANameThatMeansNothingWithTheNearMisses(t *testing.T) {
 
 // TestAFolderPathIsWalkedByTheExactName: each segment of a path picks
 // out one folder the way PickNamed does, so a folder is reached by its
-// name as spelt, never through a case variant beside it, and a segment
+// name as spelled, never through a case variant beside it, and a segment
 // that two folders answer to stops the walk.
 func TestAFolderPathIsWalkedByTheExactName(t *testing.T) {
 	w, f := newFakeSession(t)

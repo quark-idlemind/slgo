@@ -182,7 +182,7 @@ type Hit struct {
 }
 
 // Default BM25 parameters.  k1 is how quickly more occurrences of a word
-// stop counting; b is how much a long document is penalised for being
+// stop counting; b is how much a long document is penalized for being
 // long.  These are the usual values, and nothing here was tuned against
 // them.
 const (

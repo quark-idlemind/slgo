@@ -39,7 +39,7 @@ func TestRotatingAVector(t *testing.T) {
 // the arithmetic: W is not stored, it is recovered as
 // sqrt(1 - x^2 - y^2 - z^2) in float32, so every composition
 // reconstructs it and the error compounds.  Measured here at 7e-4 for
-// two quarter turns.  It is a millimetre at metre scale, which is
+// two quarter turns.  It is a millimeter at meter scale, which is
 // under the resolution prim positions are sent at anyway.
 func TestComposingRotations(t *testing.T) {
 	q := Quaternion{Z: float32(math.Sin(math.Pi / 4))}

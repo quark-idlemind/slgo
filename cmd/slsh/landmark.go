@@ -279,10 +279,10 @@ func landmarkPlace(ctx context.Context, sh *Shell, out io.Writer, lm *sl.Landmar
 //
 // The position is printed to two decimals because that is what the
 // asset holds: the simulator writes it from where the avatar stood, and
-// the couple of centimetres it is out by are a standing avatar's drift
+// the couple of centimeters it is out by are a standing avatar's drift
 // rather than a rounding this should hide.
 //
-// Both uuids, and labelled.  The whole trap this command is built
+// Both uuids, and labeled.  The whole trap this command is built
 // around is that they are not interchangeable -- the asset id is the one
 // the grid takes and the item id is the one a listing puts in front of a
 // person -- so a page that showed one of them would be showing half of
@@ -447,7 +447,7 @@ func landmarkHome(ctx context.Context, sh *Shell, out io.Writer, wait time.Durat
 // The place printed is the one sl sent and not one read here.  A
 // position read for the printing would be a second read, and the two
 // are not always the same: an avatar that has just teleported is still
-// settling, and this shell printed a position eight metres above the
+// settling, and this shell printed a position eight meters above the
 // one that went out before that was the rule.  Both lines therefore
 // come after the answer, which costs nothing a person would notice --
 // measured, the grid answers at once.
@@ -611,7 +611,7 @@ func nearLandmarks(kept []sl.Entry, want string) error {
 // findLandmark turns what somebody typed into exactly one landmark.
 //
 // Only kept landmarks are searched, so a deleted one can neither be
-// travelled to nor make a live one ambiguous.  That holds for the whole
+// traveled to nor make a live one ambiguous.  That holds for the whole
 // path and for the id as well as for the bare name: a form that reached
 // into the trash would mean --go could still take the avatar to a
 // landmark somebody deleted, which is the whole of what excluding them
@@ -623,7 +623,7 @@ func nearLandmarks(kept []sl.Entry, want string) error {
 // is an avatar somewhere it was not sent.  Reading is refused as well
 // as going, although reading is harmless, because the two forms differ
 // by five characters and a rule that held for one of them and not the
-// other would be learnt from the harmless one.
+// other would be learned from the harmless one.
 func findLandmark(ctx context.Context, sh *Shell, out io.Writer, name string) (sl.Entry, error) {
 	all, kept, trashed, err := landmarksHeld(ctx, sh)
 	if err != nil {
@@ -713,7 +713,7 @@ func noSuchLandmark(all, kept, trashed []sl.Entry, name string) error {
 		return fmt.Errorf("no landmark in inventory has the id %s, as either "+
 			"of its two ids; a uuid that is not something this avatar holds is refused "+
 			"rather than sent, because the grid answers a landmark id it does not "+
-			"recognise with silence and never with an error", id)
+			"recognize with silence and never with an error", id)
 	}
 	if err := nearLandmarks(kept, name); err != nil {
 		return err

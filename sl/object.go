@@ -54,7 +54,7 @@ func (o Object) String() string {
 // RezOptions tune what gets rezzed.
 type RezOptions struct {
 	At    msg.Vector3
-	Scale msg.Vector3 // zero means half a metre cubed
+	Scale msg.Vector3 // zero means half a meter cubed
 }
 
 // Rez creates a single prim and returns it, having confirmed we own it.
@@ -114,7 +114,7 @@ func (w *Session) SetName(ctx context.Context, o *Object, name string) error {
 		// A timeout here is the ordinary case and means ask again --
 		// the simulator answers a family request when it feels like
 		// it.  Anything else is the caller giving up, and has to come
-		// back as that.  Discarding it altogether made a cancelled
+		// back as that.  Discarding it altogether made a canceled
 		// context spin this loop flat out for the full twenty seconds
 		// and then report a timeout, which is neither true nor quick.
 		err := w.await(ctx, 3*time.Second, "the new name", func() bool {

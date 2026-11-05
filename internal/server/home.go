@@ -132,7 +132,7 @@ func (a homeAnswer) blocked() bool {
 //
 // A session that asked for anything else is left alone.  "start = last"
 // means where the avatar was, and dragging that avatar home would be
-// this daemon overruling the profile rather than honouring it.
+// this daemon overruling the profile rather than honoring it.
 func (h *Hosted) keepHome(ctx context.Context) {
 	if !strings.EqualFold(strings.TrimSpace(h.login.Start), "home") {
 		return

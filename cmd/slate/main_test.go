@@ -18,7 +18,7 @@ const (
 	failing = "slate 1\nobject sign is \"Example Sign\"\ntest \"opens\" {\n  say \"go\" on 0\n}\ntest \"waits\" {\n  expect say \"never\" on public from object sign within 100ms\n}\n"
 )
 
-// noDial is a dialler that fails the test if it is called.
+// noDial is a dialer that fails the test if it is called.
 type noDial struct {
 	t     *testing.T
 	calls int
@@ -39,7 +39,7 @@ func writeFile(t *testing.T, src string) string {
 	return p
 }
 
-// do runs the command with a dialler and returns the exit code and both outputs.
+// do runs the command with a dialer and returns the exit code and both outputs.
 func do(t *testing.T, d dialer, args ...string) (int, string, string) {
 	t.Helper()
 	var out, errw bytes.Buffer

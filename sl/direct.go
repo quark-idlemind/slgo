@@ -141,7 +141,7 @@ func (d *Direct) Logout(ctx context.Context, timeout time.Duration) error {
 // reader that has stopped must not be able to stop the circuit.
 func (d *Direct) tap(p *msg.Packet) {
 	if p.Message == nil && p.Body == nil {
-		return // acknowledgements carry nothing to relay
+		return // acknowledgments carry nothing to relay
 	}
 	body := p.Body
 	if body == nil {

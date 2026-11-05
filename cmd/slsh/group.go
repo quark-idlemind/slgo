@@ -355,7 +355,7 @@ func nameOfGroup(groups []sl.Group, id msg.UUID) string {
 // describeGroup is a group in one phrase.
 //
 // The key stays in the line even when there is a name for it.  The name
-// is what a person recognises and the key is what everything else takes
+// is what a person recognizes and the key is what everything else takes
 // -- a second client, a script, this command's own argument -- and a
 // group that could not be named at all still has to print as something.
 func describeGroup(name string, id msg.UUID) string {

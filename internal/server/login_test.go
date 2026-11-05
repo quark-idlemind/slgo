@@ -8,7 +8,7 @@ package server
 // only exists once a real TLS 1.3 session has been established, and the
 // whole point of the exercise is that a proof made on one connection is
 // worthless on another.  So there is a real server here, with real
-// credentials, dialled by the real client -- which is also the only way
+// credentials, dialed by the real client -- which is also the only way
 // the interceptors are reached at all, since they refuse on the
 // connection rather than on the request.
 //

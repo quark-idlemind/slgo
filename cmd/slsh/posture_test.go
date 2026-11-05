@@ -80,8 +80,8 @@ func TestSittingOnTheGroundNamesNothingAndPutsNoMessageOnTheWire(t *testing.T) {
 // TestSittingOnAnObjectSaysWhatItSatOnAndWhereThatLeftTheAvatar.
 //
 // Both halves are the answer.  A sit carries the avatar up to about ten
-// metres, so a command that named the seat and stopped would leave
-// somebody holding a position that is now several metres wrong -- and
+// meters, so a command that named the seat and stopped would leave
+// somebody holding a position that is now several meters wrong -- and
 // the position printed is read back from the session, which is what
 // makes "where" afterwards agree with it rather than merely come close.
 func TestSittingOnAnObjectSaysWhatItSatOnAndWhereThatLeftTheAvatar(t *testing.T) {
@@ -166,7 +166,7 @@ func TestAWordThatNamesTwoObjectsIsRefusedRatherThanGuessedAt(t *testing.T) {
 // are not always accurate -- a key that is no object at all is refused
 // with "not in the same region as you" -- so they are repeated rather
 // than interpreted.  The alert used here is the one Agni sent for an
-// object eleven metres off.
+// object eleven meters off.
 func TestARefusedSitPrintsTheGridsOwnWords(t *testing.T) {
 	x := newTestShell(t)
 	x.grid.objects = []*sl.Seen{
@@ -212,7 +212,7 @@ func TestASitNothingAnsweredReadsAsSilenceAndNotAsARefusal(t *testing.T) {
 //
 // Which is not where it was before it sat down: standing up does not
 // undo the journey the sit made, and the measured case left the avatar
-// six metres from where it started.  So the position is printed for the
+// six meters from where it started.  So the position is printed for the
 // same reason sit prints it.
 //
 // unsit is the same command under the other spelling, and asking twice

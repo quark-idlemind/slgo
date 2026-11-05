@@ -164,7 +164,7 @@ func TestAFailureSaysWhatWasTried(t *testing.T) {
 }
 
 // An address may carry a port, for a slgod that is not on 7807, and it
-// is printed as written.  A port that could never be dialled is refused
+// is printed as written.  A port that could never be dialed is refused
 // against its line rather than left to fail as a connection later.
 func TestAnAddressMayCarryAPort(t *testing.T) {
 	var warn bytes.Buffer

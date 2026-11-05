@@ -9,7 +9,7 @@
 // have been a shame.
 //
 // That forgiveness is the point.  The C client called err(1,
-// "Unexpected value type got %s") on anything it did not recognise,
+// "Unexpected value type got %s") on anything it did not recognize,
 // which is how a login response that grew <int> fields took the whole
 // program down.  Here an unfamiliar type is data to keep rather than a
 // reason to stop.

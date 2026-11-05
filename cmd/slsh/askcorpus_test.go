@@ -81,7 +81,7 @@ func TestEveryCommandHasKeywords(t *testing.T) {
 func TestCommandNamesAreSearchable(t *testing.T) {
 	for _, n := range commandNames() {
 		if strings.Trim(n, "abcdefghijklmnopqrstuvwxyz") != "" {
-			continue // ".", which no question will say, and "How", which is how capitalised
+			continue // ".", which no question will say, and "How", which is how capitalized
 		}
 		if n == howName {
 			// The one name that is meant to be dropped.  Every question
@@ -222,7 +222,7 @@ var askQuestions = []askQuestion{
 	{"do I save an object as a json file", "dump", 3},
 	{"do I build an object from a json file", "rez", 3},
 	{"do I change my maturity rating to adult", "maturity", 3},
-	{"do I walk across the border into the next region", "neighbours", 3},
+	{"do I walk across the border into the next region", "neighbors", 3},
 	{"do I open a real viewer on this avatar", "viewer", 3},
 	{"do I find what is waiting for me to answer", "waiting", 3},
 	{"do I walk over to that spot", "walk", 3},

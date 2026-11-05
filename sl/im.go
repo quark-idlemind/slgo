@@ -480,7 +480,7 @@ func TaskOfferItemName(text string) (string, bool) {
 }
 
 // FromLabel is who offered it as a line should print it: an object's give
-// carries the object's name, so it is labelled as one; see Sender.Label.
+// carries the object's name, so it is labeled as one; see Sender.Label.
 func (o *InventoryOffer) FromLabel() string {
 	if o.Dialog == DialogTaskInventoryOffered {
 		return SenderObject.Label(o.FromName)
@@ -708,7 +708,7 @@ func (w *Session) forget(from msg.UUID) {
 // holds is a friend.  slsh's "map" picks its friends out of the
 // picture that way, on every picture, and a map that stopped for three
 // seconds to look up names it will never print would be a worse
-// command than one with no colour in it.
+// command than one with no color in it.
 func (w *Session) FriendIDs(ctx context.Context) ([]msg.UUID, error) {
 	fs, err := w.b.Friends(ctx)
 	if err != nil {

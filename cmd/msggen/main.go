@@ -42,7 +42,7 @@
 //
 // # What this program is not
 //
-// The wire behaviour lives in package msg, not here: the generated
+// The wire behavior lives in package msg, not here: the generated
 // structs carry the template's own type names in `ll` struct tags and
 // the generic codec interprets them.  So adding a field type is a
 // change to msg/codec.go plus one line in the table below, and a new
@@ -432,7 +432,7 @@ func (p *parser) field() (*Field, error) {
 // -------------------------------------------------------------- emitter
 
 // goType maps a template type to the Go type that represents it.  The
-// wire behaviour for each is in msg/codec.go, keyed on the same names.
+// wire behavior for each is in msg/codec.go, keyed on the same names.
 var goType = map[string]string{
 	"U8":           "uint8",
 	"U16":          "uint16",

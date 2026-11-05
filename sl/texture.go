@@ -22,7 +22,7 @@ import (
 // way, only the width of the value changing:
 //
 //	texture     16 bytes, a UUID
-//	colour       4 bytes, RGBA, stored inverted
+//	color       4 bytes, RGBA, stored inverted
 //	scale S      4 bytes, float
 //	scale T      4 bytes, float
 //	offset S     2 bytes, signed
