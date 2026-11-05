@@ -132,7 +132,7 @@ func AttachPointName(point int) string {
 // above is understood here without anybody remembering to add it twice,
 // and that goes for the viewer's name as much as for ours.
 //
-// The keys are folded to lower case, and "center" is accepted for
+// The keys are folded to lower case, and "centre" is accepted for
 // "center" as well, so that the British spelling is not told there is
 // no such point.  Accepting the viewer's whole name for a point
 // -- "Skull" for "head", "Top" for "HUD top" -- is the same courtesy
@@ -209,7 +209,7 @@ func (e *AttachPointStartError) Error() string {
 }
 
 // attachWords is a point's name as the words it is matched by: folded
-// to lower case, spaces collapsed, and "center" spelled as the table
+// to lower case, spaces collapsed, and "centre" spelled as the table
 // spells it.
 func attachWords(name string) []string {
 	return strings.Fields(strings.ReplaceAll(strings.ToLower(name), "centre", "center"))
