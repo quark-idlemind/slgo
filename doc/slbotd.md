@@ -148,6 +148,18 @@ capability answered 404, re-established 74 seconds later -- and giving
 up on the first error left that avatar missing part of its outfit until
 the next restart.
 
+It is done again whenever slgod logs the avatar in again. slgod keeps
+the stream open across that, so slbotd is not attached a second time,
+and the restore used to run only on attaching. Seen in the logs
+(2026-11-05): the home region restarted, slgod logged the avatar in
+again in a neighboring region and brought it home seven minutes later,
+slbotd logged both notices, and the avatar stayed without its dress
+and arms until somebody put them on by hand. The notice slgod sends
+is a region change with the detail `session re-established`
+(`client.ReEstablished`), and it starts the restore again, stopping a
+run still going. A teleport or a border crossing keeps the
+attachments and does not.
+
 ## Stopping a program and what it started
 
 `exec.CommandContext` on its own kills the one process it started and

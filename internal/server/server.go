@@ -637,7 +637,7 @@ func (h *Hosted) supervise(ctx context.Context) {
 			// avatar is, which is not always where it was.
 			h.notice(&pb.AgentEvent{
 				Kind:         pb.AgentEvent_REGION_CHANGED,
-				Detail:       "session re-established",
+				Detail:       "session re-established", // client.SessionReEstablished
 				Region:       next.RegionName(),
 				RegionHandle: next.RegionHandle(),
 			})
