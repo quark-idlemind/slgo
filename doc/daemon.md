@@ -228,12 +228,22 @@ is from before it was kept and reads as not known. At login:
 
 - the avatar is not in the seat's region: nothing is asked, because it
   cannot work from here, and the seat is not forgotten for that, since it
-  may well be there. One line says so. The watch then forgets it once it
-  sees the avatar standing, as it always has: what is remembered is what
-  the avatar is sitting on, and a standing avatar sits on nothing. So
-  what this saves is the attempts that could not work. Checked live: a
-  seat recorded in another region was not asked for, and was forgotten
-  when the avatar was seen standing.
+  may well be there. One line says so. Nor does the watch forget it for
+  the avatar standing there, and nor does a stop: standing in another
+  region than the seat's is not standing up. When the getting-home loop
+  brings the avatar back, the seat is asked for then.
+
+  The watch used to forget it, on the grounds that a standing avatar
+  sits on nothing, and that lost the seat to every region restart. Seen
+  in the daemon's log (2026-11-05): the home region restarted, the
+  login that followed came up in a neighboring region, the seat was not
+  asked for there, and the getting-home loop brought the avatar back
+  seven minutes later, where it stayed standing. Nothing then asked for
+  the seat. That the watch had also forgotten it is read from the code
+  rather than seen, since the watch logs nothing: it saw the avatar
+  standing every thirty seconds for those seven minutes. What leaves a seat on purpose is now written down
+  when it is asked for, as a stand is: a teleport a client or a viewer
+  asks for forgets the seat at once.
 - the avatar is in the seat's region, or the region is not known: it is
   asked for as above. If every attempt was answered by
   `SitFailNotSameRegion` (recognized by the notification's name in the

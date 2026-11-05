@@ -259,6 +259,7 @@ func (h *Hosted) stopHoming(why string) {
 func (h *Hosted) noteRequest(id msg.ID, who string) {
 	if teleportRequest(id) {
 		h.stopHoming(who + " teleported this avatar")
+		h.noteTeleportAsked(who)
 	}
 	if id == msg.IDOf(&msg.SetStartLocationRequest{}) {
 		h.forgetHome()
@@ -314,6 +315,9 @@ func (h *Hosted) homeward(ctx context.Context, id uint64, pace homePace) {
 		case answer.arrived:
 			h.cameHome(id)
 			h.logf("home, after %s", attempts(attempt+1))
+			// The login that put it elsewhere could not sit it down,
+			// and the seat may well be here.  See seat.go.
+			h.keepSeat(ctx)
 			return
 		case answer.blocked():
 			h.refusedHome(id, answer.refusal)

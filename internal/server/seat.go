@@ -19,11 +19,14 @@ package server
 // The restore asks again for a while, since a sit naming an object the
 // simulator has not described yet is answered with nothing, and then
 // gives up.  It does not ask from another region than the seat's, which
-// cannot work and loses nothing.  If every ask was refused as "not in
+// cannot work and loses nothing, and asks again when the getting-home
+// loop brings the avatar back.  If every ask was refused as "not in
 // this region" the seat is forgotten; any other end keeps it.  It leaves
 // alone an avatar somebody else sat down meanwhile, and the watch goes on
-// writing down whatever the avatar sits on.  A stop reads the seat one
-// last time, for a stand the watch had not yet seen.
+// writing down whatever the avatar sits on.  Standing in another region
+// than the seat's says nothing about the seat and forgets nothing; a
+// stand or a teleport asked for does.  A stop reads the seat one last
+// time, for a stand the watch had not yet seen.
 // Why: doc/daemon.md#sitting-down-again
 
 import (
@@ -243,9 +246,30 @@ func (h *Hosted) standingAtStop() {
 		return
 	}
 	if on, known := h.currentSeat(); known && on.IsZero() {
-		if was, _ := h.seats.Seat(h.Name); !was.IsZero() {
+		if was, in := h.seats.Seat(h.Name); !was.IsZero() && !elsewhere(in, h.regionID()) {
 			h.seats.SetSeat(h.Name, msg.UUID{}, msg.UUID{})
 		}
+	}
+}
+
+// elsewhere says whether the avatar is known to be in another region
+// than the seat's.  Standing there is not standing up: a login put it
+// there while its own region was down, and the seat is where it was.
+// Why: doc/daemon.md#gone-elsewhere-or-only-slow
+func elsewhere(seat, here msg.UUID) bool {
+	return !seat.IsZero() && !here.IsZero() && seat != here
+}
+
+// noteTeleportAsked forgets the seat when a client or a viewer teleports
+// this avatar: like a stand, it is somebody leaving the seat on purpose,
+// and the watch no longer forgets a seat in a region the avatar has left.
+func (h *Hosted) noteTeleportAsked(who string) {
+	if h.seats == nil {
+		return
+	}
+	if was, _ := h.seats.Seat(h.Name); !was.IsZero() {
+		h.seats.SetSeat(h.Name, msg.UUID{}, msg.UUID{})
+		h.logf("forgot the seat %s: %s teleported this avatar", was, who)
 	}
 }
 
@@ -332,9 +356,9 @@ func (h *Hosted) watchSeat(ctx context.Context, pace seatPace) {
 		}
 		was, wasIn := h.seats.Seat(h.Name)
 		switch here := h.regionID(); {
-		case on.IsZero() && !was.IsZero():
+		case on.IsZero() && !was.IsZero() && !elsewhere(wasIn, here):
 			h.seats.SetSeat(h.Name, msg.UUID{}, msg.UUID{})
-		case !on.IsZero() && (on != was || wasIn.IsZero() && !here.IsZero()):
+		case !on.IsZero() && (on != was || !here.IsZero() && wasIn != here):
 			h.seats.SetSeat(h.Name, on, here)
 		}
 	}
