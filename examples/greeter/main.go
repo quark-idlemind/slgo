@@ -48,7 +48,7 @@ func main() {
 	var o options
 	flag.StringVar(&o.addr, "addr", "localhost:7807", "where slgod is")
 	flag.StringVar(&o.agent, "agent", "", "which of slgod's avatars to use (empty: $SLGO_AGENT, or the one slgod has held longest)")
-	flag.Float64Var(&o.radius, "radius", 20, "greet people who come within this many metres")
+	flag.Float64Var(&o.radius, "radius", 20, "greet people who come within this many meters")
 	flag.DurationVar(&o.every, "every", 5*time.Second, "how often to look around")
 	flag.DurationVar(&o.again, "again", 0, "welcome somebody back after this long away (0: greet each person once)")
 	flag.StringVar(&o.memory, "memory", "greeted.json", "the file that remembers who has been greeted")

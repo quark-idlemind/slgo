@@ -202,7 +202,7 @@ func (a *Agent) SetNeighbours(on bool) {
 		return
 	}
 	if !on {
-		a.dropNeighbours("neighbours were turned off")
+		a.dropNeighbours("neighbors were turned off")
 	}
 }
 
@@ -425,7 +425,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		}
 		delete(a.neighbours, handle)
 		old.close()
-		a.logf("neighbour %s at %s: circuit closed, %s", gridSquare(handle), old.addr, why)
+		a.logf("neighbor %s at %s: circuit closed, %s", gridSquare(handle), old.addr, why)
 	}
 	if len(a.neighbours) >= MaxNeighbours {
 		// Room is made out of a child kept from before a move whose
@@ -433,7 +433,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		if stray := a.strayNeighbour(); stray != nil {
 			delete(a.neighbours, stray.handle)
 			stray.close()
-			a.logf("neighbour %s at %s: circuit closed to make room, its region is not beside this one",
+			a.logf("neighbor %s at %s: circuit closed to make room, its region is not beside this one",
 				gridSquare(stray.handle), stray.addr)
 		}
 	}
@@ -448,7 +448,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 				a.refused = map[uint64]bool{}
 			}
 			a.refused[handle] = true
-			a.logf("neighbour %s at %s: not opened, %d circuits is the limit",
+			a.logf("neighbor %s at %s: not opened, %d circuits is the limit",
 				gridSquare(handle), addr, MaxNeighbours)
 		}
 		return
@@ -456,7 +456,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 
 	conn, err := net.DialUDP("udp", nil, addr)
 	if err != nil {
-		a.logf("neighbour %s: dial %s: %v", gridSquare(handle), addr, err)
+		a.logf("neighbor %s: dial %s: %v", gridSquare(handle), addr, err)
 		return
 	}
 
@@ -499,7 +499,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		// Said once, for the same reason: the second handshake is
 		// the first one again.
 		if !c.shook.Swap(true) {
-			a.logf("neighbour %s at %s: %s answered", gridSquare(handle), addr, quoted(name))
+			a.logf("neighbor %s at %s: %s answered", gridSquare(handle), addr, quoted(name))
 		}
 	}, msg.Inline())
 
@@ -552,7 +552,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 	// circuit the one the avatar stands in, and sending it here would
 	// move the avatar into the neighbor.
 	if err := c.send.SendReliable(ctx, a.useCircuitCode()); err != nil {
-		a.logf("neighbour %s at %s: UseCircuitCode: %v", gridSquare(handle), addr, err)
+		a.logf("neighbor %s at %s: UseCircuitCode: %v", gridSquare(handle), addr, err)
 		c.close()
 		return
 	}
@@ -572,7 +572,7 @@ func (a *Agent) openNeighbour(handle uint64, addr *net.UDPAddr) {
 		a.neighbours = map[uint64]*child{}
 	}
 	a.neighbours[handle] = c
-	a.logf("neighbour %s at %s: circuit open", gridSquare(handle), addr)
+	a.logf("neighbor %s at %s: circuit open", gridSquare(handle), addr)
 }
 
 // spawnChild starts one of a child circuit's goroutines, reporting
@@ -621,7 +621,7 @@ func (a *Agent) dropNeighbours(why string) {
 	sort.Slice(closing, func(i, j int) bool { return closing[i].handle < closing[j].handle })
 	for _, c := range closing {
 		c.close()
-		a.logf("neighbour %s at %s: circuit closed, %s", gridSquare(c.handle), c.addr, why)
+		a.logf("neighbor %s at %s: circuit closed, %s", gridSquare(c.handle), c.addr, why)
 	}
 }
 
@@ -640,7 +640,7 @@ func (a *Agent) dropNeighbour(c *child, why string) {
 	a.neighMu.Unlock()
 	if held {
 		c.close()
-		a.logf("neighbour %s at %s: circuit closed, %s", gridSquare(c.handle), c.addr, why)
+		a.logf("neighbor %s at %s: circuit closed, %s", gridSquare(c.handle), c.addr, why)
 	}
 }
 

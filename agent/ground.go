@@ -237,7 +237,7 @@ func decodeLand(body []byte, large bool, put func(px, py int, size int, h []floa
 			px, py = int(ids>>5), int(ids&0x1f)
 		}
 		if px >= groundPatches || py >= groundPatches {
-			return fmt.Errorf("patch %d,%d is outside a %d metre region", px, py, RegionWidth)
+			return fmt.Errorf("patch %d,%d is outside a %d meter region", px, py, RegionWidth)
 		}
 		if err := readCoefficients(r, cp, int(qw&0xf)+2); err != nil {
 			return err
