@@ -1319,7 +1319,7 @@ func (c *checker) expect(e Expect, same map[string]bool, seenAs map[string]Span)
 		return c.level(e, "alpha", x.Name, x.Link, x.Face, x.FaceAll, x.State, x.Any, x.Use, same, x.Value)
 	case e.Colour != nil:
 		x := e.Colour
-		return c.level(e, "colour", x.Name, x.Link, x.Face, x.FaceAll, x.State, x.Any, x.Use, same, x.R, x.G, x.B)
+		return c.level(e, "color", x.Name, x.Link, x.Face, x.FaceAll, x.State, x.Any, x.Use, same, x.R, x.G, x.B)
 	case e.Give != nil:
 		if err := c.toRef(e.Give.To); err != nil {
 			return err
@@ -1452,7 +1452,7 @@ func (c *checker) near(e Expect) error {
 	}
 	n := e.Near
 	if w := nearWord(e); w != "" {
-		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, colour, alpha, glossiness, environment, a sound's gain, the numbers of a light or a projector and the numbers of a GLTF override are numbers a reading can be off by", w)
+		return c.err(n.Span, "%s takes no near: near gives a number a margin, and only position, size, turn, offset, repeats, rotation, glow, color, alpha, glossiness, environment, a sound's gain, the numbers of a light or a projector and the numbers of a GLTF override are numbers a reading can be off by", w)
 	}
 	if e.Turn != nil && n.Percent {
 		return c.err(n.Span, "a turn takes near in degrees, not percent: an angle has no size to be a share of")
@@ -1536,7 +1536,7 @@ func (c *checker) buttonExp(x *ButtonExp, same map[string]bool) error {
 // lightType is the type of what a light or projector expectation reads.
 func lightType(x *LightExp) CaptureType {
 	switch {
-	case x.Prop == "colour":
+	case x.Prop == "color":
 		return CapTriple
 	case x.Prop != "":
 		return CapNumber
@@ -1547,8 +1547,8 @@ func lightType(x *LightExp) CaptureType {
 }
 
 // lightExp checks light and projector: the object, its link, the reading,
-// and that a literal is a number the thing can have.  A light's colour and
-// intensity are 0 to 1, as a face's colour is; the others are only
+// and that a literal is a number the thing can have.  A light's color and
+// intensity are 0 to 1, as a face's color is; the others are only
 // numbers, since the region's own limits are the region's to say.
 // Why: doc/slate-language.md#light-and-projector
 func (c *checker) lightExp(e Expect, x *LightExp, same map[string]bool) error {
@@ -1565,9 +1565,9 @@ func (c *checker) lightExp(e Expect, x *LightExp, same map[string]bool) error {
 	switch x.Prop {
 	case "":
 		return nil
-	case "colour":
+	case "color":
 		for _, n := range []Number{x.R, x.G, x.B} {
-			if err := c.unitLevel(n, "light colour"); err != nil {
+			if err := c.unitLevel(n, "light color"); err != nil {
 				return err
 			}
 		}
@@ -1579,10 +1579,10 @@ func (c *checker) lightExp(e Expect, x *LightExp, same map[string]bool) error {
 }
 
 // gltfIsNumber is whether a gltf prop reads numbers a reading can be off
-// by: the colours and factors, and not an id, a mode or an on and off.
+// by: the colors and factors, and not an id, a mode or an on and off.
 func gltfIsNumber(prop string) bool {
 	switch prop {
-	case "colour", "alpha", "emissive", "metallic", "roughness", "cutoff":
+	case "color", "alpha", "emissive", "metallic", "roughness", "cutoff":
 		return true
 	}
 	return gltfTransform(prop) != ""
@@ -1607,7 +1607,7 @@ func gltfType(prop string) CaptureType {
 	switch prop {
 	case "override", "doublesided":
 		return CapOnOff
-	case "colour", "emissive":
+	case "color", "emissive":
 		return CapTriple
 	case "alphamode":
 		return CapText
@@ -1622,7 +1622,7 @@ func gltfType(prop string) CaptureType {
 
 // gltfExp checks gltf: the object, one face of it (a face has its own
 // override, so there is no face all, and a prim has at most 45 faces), the
-// reading, and that a literal is something the prop can hold.  The colours
+// reading, and that a literal is something the prop can hold.  The colors
 // and factors are 0 to 1, as the material holds them, and a texture and a
 // material are ids; none says the override does not set the field and
 // binds nothing.
@@ -1648,7 +1648,7 @@ func (c *checker) gltfExp(e Expect, x *GLTFExp, same map[string]bool) error {
 		return nil
 	}
 	switch x.Prop {
-	case "colour", "emissive":
+	case "color", "emissive":
 		for _, n := range []Number{x.R, x.G, x.B} {
 			if err := c.unitLevel(n, "gltf "+x.Prop); err != nil {
 				return err
@@ -1683,7 +1683,7 @@ func (c *checker) unitLevel(n Number, what string) error {
 	return nil
 }
 
-// level checks glow, alpha or colour: the face, the reading, and that a
+// level checks glow, alpha or color: the face, the reading, and that a
 // literal lies in 0 to 1.
 func (c *checker) level(e Expect, what string, name Ident, link *Int, face Int, all bool, st State, any bool, use *Capture, same map[string]bool, lits ...Number) error {
 	if err := c.faceRef(name, link, face, all, same); err != nil {
@@ -1738,7 +1738,7 @@ func (c *checker) material(e Expect, x *MaterialExp, same map[string]bool) error
 }
 
 func levelType(what string) CaptureType {
-	if what == "colour" {
+	if what == "color" {
 		return CapTriple
 	}
 	return CapNumber

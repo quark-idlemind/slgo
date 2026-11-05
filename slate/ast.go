@@ -279,7 +279,7 @@ const (
 	CapNumber                       // a rotation, glow or alpha reading
 	CapClick                        // a click action reading
 	CapSubstance                    // a physical material reading
-	CapTriple                       // a colour reading
+	CapTriple                       // a color reading
 	CapOnOff                        // a fullbright reading
 	CapVector                       // a position or size reading
 )
@@ -299,7 +299,7 @@ func (t CaptureType) String() string {
 	case CapSubstance:
 		return "substance"
 	case CapTriple:
-		return "colour triple"
+		return "color triple"
 	case CapOnOff:
 		return "on or off"
 	case CapVector:
@@ -935,7 +935,7 @@ type VecExp3 struct {
 // ProjectorProps; Prop is empty for the light's on and off and the
 // projector's texture.  Which value is set depends on what is read:
 // On for the light's on or off, ID or Off for the projector's texture,
-// R G B for a light's colour and Num for every other number.  Any and
+// R G B for a light's color and Num for every other number.  Any and
 // Use are as for TextureExp, and Use has the type of what is read.
 // Why: doc/slate-language.md#light-and-projector
 type LightExp struct {
@@ -957,7 +957,7 @@ type LightExp struct {
 // LightProps and ProjectorProps are the property words of a light and of
 // a projector.
 var (
-	LightProps     = []string{"colour", "intensity", "radius", "falloff"}
+	LightProps     = []string{"color", "intensity", "radius", "falloff"}
 	ProjectorProps = []string{"fov", "focus", "ambiance"}
 )
 
@@ -965,7 +965,7 @@ var (
 // GLTF material: whether the face has an override at all, the id of its
 // material, and the fields an override sets.  The order is the order of the
 // stateKinds that read them.
-var GLTFProps = []string{"override", "material", "colour", "alpha", "emissive", "metallic", "roughness",
+var GLTFProps = []string{"override", "material", "color", "alpha", "emissive", "metallic", "roughness",
 	"alphamode", "cutoff", "doublesided", "basetexture", "normaltexture", "ormtexture", "emissivetexture",
 	"baserepeats", "baseoffset", "baserotation", "normalrepeats", "normaloffset", "normalrotation",
 	"ormrepeats", "ormoffset", "ormrotation", "emissiverepeats", "emissiveoffset", "emissiverotation"}
@@ -979,7 +979,7 @@ var GLTFAlphaModes = []string{"opaque", "blend", "mask"}
 // for override, which is on or off, and material, the value of a field is
 // `none` when the face's override does not set it, or what it sets: On for
 // doublesided and override, ID for material and the textures, R G B for
-// colour and emissive, Mode for alphamode, Pair for the repeats and offset
+// color and emissive, Mode for alphamode, Pair for the repeats and offset
 // of a texture slot, and Num for the rest, a slot's rotation among them
 // (in turns).  None is
 // the word none; the zero value of the others is only meaningful for the
@@ -1074,7 +1074,7 @@ type GlowExp struct {
 	Use     *Capture
 }
 
-// ColourExp is a face's colour, three numbers 0 to 1. Use is a triple
+// ColourExp is a face's color, three numbers 0 to 1. Use is a triple
 // capture. The other fields are as for FullbrightExp.
 type ColourExp struct {
 	Name    Ident

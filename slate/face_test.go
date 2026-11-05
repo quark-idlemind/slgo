@@ -1,8 +1,8 @@
 package slate
 
-// Face properties (fullbright, glow, colour, alpha) and face all, on the
+// Face properties (fullbright, glow, color, alpha) and face all, on the
 // fake grid. The entries are encoded as the store encodes them, so the
-// glow byte, the inverted colour and the bump byte take the route they
+// glow byte, the inverted color and the bump byte take the route they
 // take on the wire.
 
 import (
@@ -89,13 +89,13 @@ expect colour sign face 0 becomes 1 0 0.5 within 1s
 expect alpha sign face 0 becomes 0.25 within 1s
 `)
 	wantExit(t, res, 0)
-	mustHave(t, res, "colour sign face 0 1 0 0.502", "alpha sign face 0 0.251")
+	mustHave(t, res, "color sign face 0 1 0 0.502", "alpha sign face 0 0.251")
 	// One channel off by more than a step fails the whole.
 	f = newGrid(t)
 	f.change(signLocal, withFace(0, func(fc *sl.Face) { fc.SetColour(255, 0, 128) }))
-	wantExit(t, play(t, f, hdr+"say \"go\" on 0\nexpect colour sign face 0 is 1 0 0.5 within 300ms\n"), 0)
+	wantExit(t, play(t, f, hdr+"say \"go\" on 0\nexpect color sign face 0 is 1 0 0.5 within 300ms\n"), 0)
 	wantExit(t, play(t, f, hdr+"say \"go\" on 0\nexpect colour sign face 0 is 1 0.1 0.5 within 150ms\n"), 1)
-	// Colour changes when any channel moves, and alpha is not colour.
+	// Color changes when any channel moves, and alpha is not color.
 	f = newGrid(t)
 	f.whenSaid("go", func() {
 		f.changeAfter(t, 30*time.Millisecond, signLocal, withFace(0, func(fc *sl.Face) { fc.SetAlpha(10) }))

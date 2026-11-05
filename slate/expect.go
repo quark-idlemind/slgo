@@ -1,6 +1,6 @@
 package slate
 
-// State expectations (texture, offset, repeats, rotation, click, fullbright, glow, colour, alpha, position, size, text) and what
+// State expectations (texture, offset, repeats, rotation, click, fullbright, glow, color, alpha, position, size, text) and what
 // reads them: the object poll, the readings it logs, the baseline and
 // `original` they are judged against, the click describe, and observe,
 // the one hook the step loop calls for everything that is not a heard
@@ -72,7 +72,7 @@ const vecTol = 0.001 + 1e-9
 
 // lightTol is the tolerance of a light's radius and falloff and a
 // projector's field of view, focus and ambiance: each travels as a float32
-// and is read whole, so it is only the float arithmetic. A light's colour
+// and is read whole, so it is only the float arithmetic. A light's color
 // and intensity travel as bytes and are compared within levelTol.
 // Why: doc/slate-runner.md#light-and-projector
 const lightTol = 1e-9
@@ -199,7 +199,7 @@ func (k stateKind) gltfWord() string { return "gltf " + GLTFProps[k-kGLTFOverrid
 // lightWords is how each light kind is written, and as the transcript
 // says it.
 var lightWords = map[stateKind]string{
-	kLight: "light", kLightColour: "light colour", kLightIntensity: "light intensity",
+	kLight: "light", kLightColour: "light color", kLightIntensity: "light intensity",
 	kLightRadius: "light radius", kLightFalloff: "light falloff",
 	kProjector: "projector", kProjFOV: "projector fov", kProjFocus: "projector focus", kProjAmbiance: "projector ambiance",
 }
@@ -214,7 +214,7 @@ const (
 	primFace = -3
 )
 
-// gltfTol is the tolerance of an override's colours and factors: each travels
+// gltfTol is the tolerance of an override's colors and factors: each travels
 // as a number the region prints and the session holds as a float32, so only
 // the printing could be off, and a millionth is above that.  Inferred: the
 // region's own rounding of a value has not been measured.
@@ -229,7 +229,7 @@ const gltfTol = 1e-6
 // Why: doc/slate-runner.md#gltf-materials
 const gltfRotTol = 1e-5
 
-// levelTol is the tolerance of glow, colour and alpha: one step of the
+// levelTol is the tolerance of glow, color and alpha: one step of the
 // byte they travel as, round(value * 255).
 // Why: doc/slate-runner.md#face-properties
 const levelTol = 1.0/255 + 1e-9
@@ -475,7 +475,7 @@ func (k stateKind) word() string {
 	if k.isGLTF() {
 		return k.gltfWord()
 	}
-	return [...]string{kOffset: "offset", kRepeats: "repeats", kRotation: "rotation", kGlow: "glow", kColour: "colour",
+	return [...]string{kOffset: "offset", kRepeats: "repeats", kRotation: "rotation", kGlow: "glow", kColour: "color",
 		kAlpha: "alpha", kPosition: "position", kSize: "size", kTurn: "turn",
 		kGlossiness: "glossiness", kEnvironment: "environment"}[k]
 }
@@ -784,7 +784,7 @@ func (k stateKind) text(r *reading) string {
 }
 
 // gltfText is a GLTF reading as the transcript says it: none for a field
-// the override does not set, a colour as its three numbers.
+// the override does not set, a color as its three numbers.
 func (k stateKind) gltfText(r *reading) string {
 	if r.unset {
 		return "none"
@@ -848,7 +848,7 @@ func (k stateKind) show(key readKey, r *reading) string {
 		return fmt.Sprintf("%s %s face %d %s", k.word(), key.name, key.face, k.text(r))
 	}
 	word := [...]string{kTexture: "texture", kOffset: "offset", kRepeats: "repeats", kRotation: "rotation",
-		kFullbright: "fullbright", kGlow: "glow", kColour: "colour", kAlpha: "alpha", kAlphaMode: "alphamode",
+		kFullbright: "fullbright", kGlow: "glow", kColour: "color", kAlpha: "alpha", kAlphaMode: "alphamode",
 		kNormalMap: "normalmap", kSpecularMap: "specularmap", kGlossiness: "glossiness", kEnvironment: "environment"}[k]
 	face := fmt.Sprintf("%d", key.face)
 	if key.face == allFace {
@@ -1160,7 +1160,7 @@ func lightKind(x *LightExp) stateKind {
 	case x.Projector:
 		return map[string]stateKind{"": kProjector, "fov": kProjFOV, "focus": kProjFocus, "ambiance": kProjAmbiance}[x.Prop]
 	}
-	return map[string]stateKind{"": kLight, "colour": kLightColour, "intensity": kLightIntensity,
+	return map[string]stateKind{"": kLight, "color": kLightColour, "intensity": kLightIntensity,
 		"radius": kLightRadius, "falloff": kLightFalloff}[x.Prop]
 }
 

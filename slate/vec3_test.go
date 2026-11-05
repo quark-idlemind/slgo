@@ -64,7 +64,7 @@ func TestPositionAndSizeParseAndCheck(t *testing.T) {
 	checkErr(t, h+"expect size a is 0 1 1\n", "size 0 is not above 0")
 	checkErr(t, h+"expect size a is 1 -0.5 1\n", "size -0.5 is not above 0")
 	checkErr(t, h+"expect size a becomes 1 1 0\n", "size 0 is not above 0")
-	// A vector is no colour, a pair or a number.
+	// A vector is no color, a pair or a number.
 	checkErr(t, h+"expect position a is any within 1s as $v\nthen expect colour a face 0 is $v\n", "capture type mismatch")
 	checkErr(t, h+"expect offset a face 0 is any within 1s as $o\nthen expect position a is $o\n", "capture type mismatch")
 	checkErr(t, h+"expect position a is any within 1s as $v\nthen expect rotation a face 0 is $v\n", "capture type mismatch")

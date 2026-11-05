@@ -14,7 +14,7 @@ import (
 )
 
 // withLight puts a point light on a prim, the way a region's update says
-// it: colour as bytes (what LSL's 0 to 1 becomes), an intensity byte over
+// it: color as bytes (what LSL's 0 to 1 becomes), an intensity byte over
 // 255, a radius, a cutoff and a falloff.
 func withLight(r, g, b uint8, intensity uint8, radius, falloff float32) func(*sl.Seen) {
 	return func(o *sl.Seen) {
@@ -43,7 +43,7 @@ func TestLightAndProjectorParseAndCheck(t *testing.T) {
 		"expect light a becomes original\n",
 		"expect no light a is on within 1s\n",
 		"expect light a is any within 1s as $v\nthen expect light a is $v\n",
-		"expect light a colour is 1 0.5 0\n",
+		"expect light a color is 1 0.5 0\n",
 		"expect light a colour becomes 0 0 1 near 0.01 within 2s\n",
 		"expect light a intensity is 0.8\n",
 		"expect light a radius is 10 near 10 percent\n",
@@ -71,8 +71,8 @@ func TestLightAndProjectorParseAndCheck(t *testing.T) {
 	parseErr(t, h+"expect projector a is on\n", "expected a UUID, off, original, or a capture")
 	parseErr(t, h+"expect projector a fov is off\n", "expected a number")
 	checkErr(t, h+"expect light a is any\n", "is any needs as")
-	checkErr(t, h+"expect light a colour is 1.5 0 0\n", "light colour 1.5 is outside 0 to 1")
-	checkErr(t, h+"expect light a colour is 0 0 -0.1\n", "light colour -0.1 is outside 0 to 1")
+	checkErr(t, h+"expect light a colour is 1.5 0 0\n", "light color 1.5 is outside 0 to 1")
+	checkErr(t, h+"expect light a colour is 0 0 -0.1\n", "light color -0.1 is outside 0 to 1")
 	checkErr(t, h+"expect light a intensity is 2\n", "light intensity 2 is outside 0 to 1")
 	checkErr(t, h+"expect light a is on near 1\n", "light takes no near")
 	checkErr(t, h+"expect projector a is off near 1\n", "projector takes no near")
@@ -118,11 +118,11 @@ expect light sign radius is 10 within 300ms
 expect light sign falloff is 0.75 within 300ms
 `)
 	wantExit(t, res, 0)
-	mustHave(t, res, "light colour sign 1 0.502 0", "light intensity sign 0.8", "light radius sign 10", "light falloff sign 0.75")
-	// More than a step of the byte off is not the colour; near widens it.
+	mustHave(t, res, "light color sign 1 0.502 0", "light intensity sign 0.8", "light radius sign 10", "light falloff sign 0.75")
+	// More than a step of the byte off is not the color; near widens it.
 	res = play(t, f, hdr+"expect light sign colour is 1 0.49 0 within 150ms\n")
 	wantExit(t, res, 1)
-	mustHave(t, res, "light colour sign 1 0.502 0")
+	mustHave(t, res, "light color sign 1 0.502 0")
 	wantExit(t, play(t, f, hdr+"expect light sign colour is 1 0.49 0 near 0.02 within 300ms\n"), 0)
 	wantExit(t, play(t, f, hdr+"expect light sign intensity is 0.7 within 150ms\n"), 1)
 	wantExit(t, play(t, f, hdr+"expect light sign intensity is 0.7 near 0.15 within 300ms\n"), 0)
