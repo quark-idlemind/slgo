@@ -29,6 +29,15 @@ package main
 // saved by.  A bad file is refused with 400 and the server carries on,
 // which was measured too: truncated, garbage and absent files all come
 // back the same way and none of them brought it down.
+//
+// # A server of several models
+//
+// llama-server started without a model is a router: it loads models on
+// demand and sends each request to the one it names.  Every request
+// then has to name one -- "model" in the body of a POST, ?model= on a
+// GET -- and a GET /props that names none answers for the router
+// itself rather than failing, so it is refused here instead.
+// Why: doc/slbotd.md#a-server-of-several-models
 
 import (
 	"bytes"
@@ -39,6 +48,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -148,7 +158,7 @@ func (l *LLM) SaveSlot(ctx context.Context, slot int, name string) (int, error) 
 		Written int `json:"n_written"`
 	}
 	path := fmt.Sprintf("/slots/%d?action=save", slot)
-	if err := l.do(ctx, "POST", path, map[string]any{"filename": name}, &out); err != nil {
+	if err := l.do(ctx, "POST", path, l.named(map[string]any{"filename": name}), &out); err != nil {
 		return 0, err
 	}
 	return out.Saved, nil
@@ -168,7 +178,7 @@ func (l *LLM) RestoreSlot(ctx context.Context, slot int, name string) (int, erro
 		Restored int `json:"n_restored"`
 	}
 	path := fmt.Sprintf("/slots/%d?action=restore", slot)
-	if err := l.do(ctx, "POST", path, map[string]any{"filename": name}, &out); err != nil {
+	if err := l.do(ctx, "POST", path, l.named(map[string]any{"filename": name}), &out); err != nil {
 		return 0, err
 	}
 	return out.Restored, nil
@@ -178,7 +188,17 @@ func (l *LLM) RestoreSlot(ctx context.Context, slot int, name string) (int, erro
 // land in it does not match a prefix of somebody else's.
 func (l *LLM) EraseSlot(ctx context.Context, slot int) error {
 	path := fmt.Sprintf("/slots/%d?action=erase", slot)
-	return l.do(ctx, "POST", path, map[string]any{}, nil)
+	return l.do(ctx, "POST", path, l.named(map[string]any{}), nil)
+}
+
+// named adds the model to a request body, which is how a server of
+// several models knows which one a POST is for.  A server of one model
+// is not told, as it never was.
+func (l *LLM) named(body map[string]any) map[string]any {
+	if l.model != "" {
+		body["model"] = l.model
+	}
+	return body
 }
 
 // Props is what the server says about itself.
@@ -191,13 +211,30 @@ type Props struct {
 	Settings struct {
 		Ctx int `json:"n_ctx"`
 	} `json:"default_generation_settings"`
+
+	// Role is "router" when the server serves several models and the
+	// answer is about it rather than about any one of them.
+	Role string `json:"role"`
 }
 
 // Props asks what model is loaded and how many slots there are.
+//
+// A router asked without a model answers for itself, with a model of
+// "none" and no context, and a fingerprint made of that would match
+// every conversation saved under any model.  So that answer is an
+// error, and says what is missing.
 func (l *LLM) Props(ctx context.Context) (*Props, error) {
+	path := "/props"
+	if l.model != "" {
+		path += "?model=" + url.QueryEscape(l.model)
+	}
 	var p Props
-	if err := l.do(ctx, "GET", "/props", nil, &p); err != nil {
+	if err := l.do(ctx, "GET", path, nil, &p); err != nil {
 		return nil, err
+	}
+	if p.Role == "router" {
+		return nil, fmt.Errorf("the server at %s serves several models and "+
+			"was not told which: set llm-model to one of them", l.url)
 	}
 	return &p, nil
 }
@@ -294,7 +331,7 @@ func (l *LLM) Template(ctx context.Context, msgs []Message) (string, error) {
 	var out struct {
 		Prompt string `json:"prompt"`
 	}
-	body := map[string]any{"messages": msgs}
+	body := l.named(map[string]any{"messages": msgs})
 	if err := l.do(ctx, "POST", "/apply-template", body, &out); err != nil {
 		return "", err
 	}

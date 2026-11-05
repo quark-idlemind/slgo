@@ -1900,6 +1900,13 @@ the avatar can be told something about particular people:
 **One file is chosen, not two**: the person's if there is one, the
 default otherwise.
 
+Whatever the backstory, the avatar is also told who is speaking: the
+display name they chose, or their first name if they never chose one,
+and their avatar's sex once it has been seen in the region -- *"You are
+talking with Kit. Kit's avatar is female."* The sex is the shape's
+Male/Female setting, which a mesh body can hide, so a shape left at the
+wrong setting is introduced the wrong way.
+
 ### Including one file in another
 
 A line in a character that is nothing but a relative path *is* the file
@@ -2165,6 +2172,18 @@ the server reports. `llm-slots = N` keeps it to the first N (slots 0 to
 N-1), so that another program can send `id_slot` for the ones above and
 the two never spoil each other's cached conversations. Start the server
 with more `-np` to make room; each slot's share of `-c` is its context.
+
+A server started with no model serves several (llama.cpp's router
+mode), and then slbotd has to say which one it means:
+
+    llm-url   = http://127.0.0.1:8080
+    llm-model = Example-8B-Q4_K_M    # as the server's /models lists it
+
+Every request names it, and the server loads it when it needs to.
+Without `llm-model` the chat is refused by the server and the model's
+fingerprint by slbotd, which says to set it. The slots are the ones the
+router gives that model, from its own settings, so give it enough of
+them for `llm-slots`.
 
 ### Answering at the speed of a person
 

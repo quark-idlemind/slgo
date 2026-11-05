@@ -475,6 +475,79 @@ func (w *Session) pickerReply(m *msg.AvatarPickerReply) {
 	}
 }
 
+// DisplayNameCap is the capability the grid answers display names on.
+const DisplayNameCap = "GetDisplayNames"
+
+// DisplayName is what the grid's display name service says of one
+// avatar.
+type DisplayName struct {
+	ID msg.UUID
+
+	// Display is the name shown above their head.  Default says it is
+	// the one made from their account name rather than one they chose.
+	Display string
+	Default bool
+
+	First, Last string // the legacy name, "Resident" for a newer account
+	Username    string
+}
+
+// CallName is what to call somebody: the display name they chose, and
+// their first name when they have not chosen one.
+func (d DisplayName) CallName() string {
+	if s := strings.TrimSpace(d.Display); s != "" && !d.Default {
+		return s
+	}
+	if d.First != "" {
+		return d.First
+	}
+	first, _, _ := strings.Cut(d.Username, ".")
+	return first
+}
+
+// DisplayNames asks the grid what the given avatars are called.  An id
+// the grid does not answer for is left out of the map.
+func (w *Session) DisplayNames(ctx context.Context, ids []msg.UUID) (map[msg.UUID]DisplayName, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	q := url.Values{}
+	for _, id := range ids {
+		q.Add("ids", id.String())
+	}
+	body, err := w.capDo(ctx, agent.CapRequest{Cap: DisplayNameCap, Method: "GET", Path: "/?" + q.Encode()})
+	if err != nil {
+		return nil, err
+	}
+	v, err := llsd.Decode(bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("sl: the display names came back unreadable: %w", err)
+	}
+	agents, _ := llsd.Map(v)["agents"].([]any)
+
+	out := make(map[msg.UUID]DisplayName, len(agents))
+	for _, e := range agents {
+		m, ok := e.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, err := msg.ParseUUID(llsdString(m["id"]))
+		if err != nil || id.IsZero() {
+			continue
+		}
+		def, _ := m["is_display_name_default"].(bool)
+		out[id] = DisplayName{
+			ID:       id,
+			Display:  llsdString(m["display_name"]),
+			Default:  def,
+			First:    llsdString(m["legacy_first_name"]),
+			Last:     llsdString(m["legacy_last_name"]),
+			Username: llsdString(m["username"]),
+		}
+	}
+	return out, nil
+}
+
 func sqrt(f float32) float32 { return float32(math.Sqrt(float64(f))) }
 
 func llsdString(v any) string {

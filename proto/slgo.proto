@@ -1362,6 +1362,11 @@ message AttachmentsResponse {
   // it: measured on Agni, not even in the copy an avatar is sent about
   // itself.
   repeated SimAttachment attachments = 4;
+
+  // The appearance's visual parameters, one byte each, in the order
+  // the simulator sent them.  What a position means is the client's
+  // business: sl reads the shape's sex out of it.
+  bytes visual_params = 5;
 }
 
 // SimAttachment is one entry in an avatar's attachment list.

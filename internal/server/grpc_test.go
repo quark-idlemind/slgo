@@ -372,6 +372,7 @@ func TestAttachmentsAreWhatTheSimulatorLastSaid(t *testing.T) {
 		{ID: body, AttachmentPoint: 40},
 		{AttachmentPoint: 2}, // pending
 	}
+	m.VisualParam = []msg.AvatarAppearance_VisualParam{{ParamValue: 7}, {ParamValue: 255}, {ParamValue: 0}}
 	r.sim.send(m, 0)
 	other := &msg.AvatarAppearance{}
 	other.Sender.ID = someoneElse
@@ -395,6 +396,10 @@ func TestAttachmentsAreWhatTheSimulatorLastSaid(t *testing.T) {
 	if len(a) != 2 || a[0].GetObjectId() != body.String() || a[0].GetPoint() != 40 ||
 		a[1].GetObjectId() != "" || a[1].GetPoint() != 2 {
 		t.Errorf("attachments = %v", a)
+	}
+	// The visual parameters go through as they came, in their order.
+	if vp := got.GetVisualParams(); string(vp) != "\x07\xff\x00" {
+		t.Errorf("visual params = %v, want 7 255 0", vp)
 	}
 
 	theirs, err := r.srv.Attachments(ctx, &pb.AttachmentsRequest{Avatar: someoneElse.String()})

@@ -54,6 +54,10 @@ type SimAttachments struct {
 	// which a viewer discards and so does everything here.
 	Objects []SimAttachment
 	Pending int
+
+	// VisualParams is the same appearance's visual parameters, one
+	// byte each in the order they were sent; Sex reads one of them.
+	VisualParams []byte
 }
 
 // simAttachmentsFrom reads the list out of an appearance.  Nil for no
@@ -73,7 +77,48 @@ func simAttachmentsFrom(m *msg.AvatarAppearance, at time.Time) *SimAttachments {
 		}
 		out.Objects = append(out.Objects, SimAttachment{Object: b.ID, Point: int(b.AttachmentPoint)})
 	}
+	for _, p := range m.VisualParam {
+		out.VisualParams = append(out.VisualParams, p.ParamValue)
+	}
 	return out
+}
+
+// Sex is what an avatar's shape is, as its appearance says: the shape's
+// male or female setting, which is the avatar's and not necessarily
+// the person's.
+type Sex int
+
+const (
+	SexUnknown Sex = iota // no appearance heard, or too short to say
+	SexFemale
+	SexMale
+)
+
+func (s Sex) String() string {
+	switch s {
+	case SexFemale:
+		return "female"
+	case SexMale:
+		return "male"
+	}
+	return "unknown"
+}
+
+// MaleParam is where the shape's male setting (visual param 80,
+// "male") sits among the parameters an appearance carries.  It is 0
+// for a female shape and 255 for a male one.
+// Why: doc/outfit.md#the-shapes-sex
+const MaleParam = 31
+
+// Sex reads the shape's sex out of the visual parameters.
+func (s *SimAttachments) Sex() Sex {
+	if s == nil || len(s.VisualParams) <= MaleParam {
+		return SexUnknown
+	}
+	if s.VisualParams[MaleParam] >= 128 {
+		return SexMale
+	}
+	return SexFemale
 }
 
 // SimAttachments is what the simulator last said an avatar is wearing;

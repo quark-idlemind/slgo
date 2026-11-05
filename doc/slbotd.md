@@ -198,3 +198,68 @@ nothing will say so -- an avatar that is suddenly nobody, quietly. That
 is the price of the file deciding, and `slbotd --check` assembles every
 character so the answer is at least visible before anybody is logged
 in.
+
+## A server of several models
+
+llama-server started with no model is a router: it lists the models it
+can find, loads one when a request names it, and passes the request to
+it. slbotd used to send `llm-model` with a chat and nothing else, which
+is all a server of one model needs; against a router, with `llm-model`
+set, the chat worked and everything about the kv cache did not.
+
+Measured against b11960 in router mode, with a 3B model loaded on
+demand:
+
+    POST /v1/chat/completions, "model" in the body   answered
+    POST /slots/1?action=save, "model" in the body   saved
+    POST /slots/1?action=save&model=...             400 model name is missing
+    POST /slots/1?action=save, no model             400 model name is missing
+    POST /apply-template, no model                  400 model name is missing
+    GET  /props, no model                           200, about the router
+    GET  /props?model=...                           200, about that model
+
+So a POST names its model in the body, never in the query, and a GET
+names it in the query. With the model unloaded, `GET /props?model=`
+and a slot restore each loaded it before answering, so nothing here has
+to load it first.
+
+The `/props` line is the one that matters. Without a model it does not
+fail: it answers for the router, with a `model_path` of `none`, a
+context of 0 and `"role": "router"`, which no single model's answer
+has. A fingerprint made of that is the same for every model the router
+serves, and a conversation saved under one would be restored into
+another. So that answer is refused, with the setting that is missing,
+rather than fingerprinted.
+
+The router gives each model the slots its own settings give it, and
+`llm-slots` and `chat-context` count those, so the model slbotd is
+pointed at wants a preset with enough of them.
+
+## Who it is talking to
+
+The model is told who it is talking to in one sentence after the
+character, and it is told the avatar's sex only when the avatar has
+been seen:
+
+    You are talking with Kit. Kit's avatar is female.
+
+The name is the one the person chose. The grid's display name service
+says whether a display name is still the default one it made up, and a
+default one is the account name over again, so then it is the legacy
+first name that is used: what anybody in the region would call them.
+The username, up to its dot, is there for an account the service
+describes with neither.
+
+The sex is the shape's setting (see
+[outfit.md](outfit.md#the-shapes-sex)), read from the appearance the
+region sent this avatar. Somebody writing an IM from another region has
+sent nothing, and then nothing is said: a model told nothing makes no
+assumption worth correcting, and a model told a guess repeats it. For
+the same reason the setting is reported as what the shape says, "the
+avatar is", and never as what the person is.
+
+Both are written down with the conversation, and a later lookup that
+finds nothing leaves them alone, so somebody once seen stays known
+after they leave the region. Each lookup has its own 10 s limit and a
+failed one is logged and passed over: an answer without the
+introduction is better than no answer.

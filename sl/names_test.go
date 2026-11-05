@@ -339,6 +339,60 @@ func pickerRow(id, first, last, username, display string) string {
 		`</map>`
 }
 
+// displayNamesRow is one row of GetDisplayNames, in the shape the grid
+// answered with: the id as a uuid and the default flag as a boolean.
+func displayNamesRow(id, display string, def bool, first, last, username string) string {
+	b := "false"
+	if def {
+		b = "true"
+	}
+	return `<map>` +
+		`<key>id</key><uuid>` + id + `</uuid>` +
+		`<key>username</key><string>` + username + `</string>` +
+		`<key>is_display_name_default</key><boolean>` + b + `</boolean>` +
+		`<key>display_name</key><string>` + display + `</string>` +
+		`<key>legacy_first_name</key><string>` + first + `</string>` +
+		`<key>legacy_last_name</key><string>` + last + `</string>` +
+		`</map>`
+}
+
+// TestADisplayNameIsUsedOnlyWhenChosen: somebody who chose a display
+// name is called by it, and somebody who did not is called by their
+// first name rather than by the default made from their whole name.
+func TestADisplayNameIsUsedOnlyWhenChosen(t *testing.T) {
+	w, f := newFakeSession(t)
+	var asked []string
+	f.ServeCap(t, DisplayNameCap, func(rw http.ResponseWriter, r *http.Request) {
+		asked = r.URL.Query()["ids"]
+		rw.Header().Set("Content-Type", "application/llsd+xml")
+		rw.Write([]byte(pickerLLSD(
+			displayNamesRow(somebody.String(), "Quark Idlemind", true, "Quark", "Idlemind", "quark.idlemind"),
+			displayNamesRow(somebodyElse.String(), "Kit", false, "Someone", "Else", "someone.else"),
+			displayNamesRow("not a uuid", "Bad", false, "Bad", "Row", "bad"),
+		)))
+	})
+
+	got, err := w.DisplayNames(context.Background(), []msg.UUID{somebody, somebodyElse, nemo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(asked) != 3 {
+		t.Errorf("asked for %v, want all three ids", asked)
+	}
+	if len(got) != 2 {
+		t.Fatalf("came back %+v, want the two good rows", got)
+	}
+	if n := got[somebody].CallName(); n != "Quark" {
+		t.Errorf("default display name: called %q, want the first name", n)
+	}
+	if n := got[somebodyElse].CallName(); n != "Kit" {
+		t.Errorf("chosen display name: called %q, want it", n)
+	}
+	if _, ok := got[nemo]; ok {
+		t.Error("an id the grid did not answer for came back")
+	}
+}
+
 // TestLookupSearchesThroughTheCapability: the capability is the only
 // one of the two that searches on part of a name, which is what anybody
 // asking means, so it is used whenever the session has it.
