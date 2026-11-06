@@ -1370,7 +1370,9 @@ func TestAFailedReconnectIsSaidAndTriedAgain(t *testing.T) {
 	for !back {
 		select {
 		case ev := <-c.Notices():
-			back = strings.Contains(ev.GetDetail(), "session re-established")
+			// Exactly the notice clients look for, or slbotd would
+			// not dress the avatar again.
+			back = client.ReEstablished(ev)
 		case <-deadline:
 			t.Fatal("the client was not told the session came back")
 		}

@@ -546,6 +546,17 @@ func (c *Conn) Events() <-chan *Event { return c.events }
 // away, it came back -- rather than anything the grid said.
 func (c *Conn) Notices() <-chan *pb.AgentEvent { return c.notices }
 
+// SessionReEstablished is the detail of the region change slgod sends
+// when it has logged the avatar in again under this connection: a new
+// login, which leaves the avatar as a first one does.
+const SessionReEstablished = "session re-established"
+
+// ReEstablished says whether a notice is slgod logging the avatar in
+// again, as against a teleport or a crossing.
+func ReEstablished(n *pb.AgentEvent) bool {
+	return n.GetKind() == pb.AgentEvent_REGION_CHANGED && n.GetDetail() == SessionReEstablished
+}
+
 // RegionChanges yields the notices that say the avatar is in another
 // region, which is the one kind a client cannot afford to merely log:
 // see RegionChange.  It is closed with the rest when the stream ends.

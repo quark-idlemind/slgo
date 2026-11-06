@@ -75,7 +75,7 @@ func main() {
 		viewerKey = flag.String("viewer-key", "",
 			"PEM private key for -viewer-cert")
 		neighbors = flag.Bool("neighbors", false,
-			"hold a circuit to each neighbouring region, so the avatar can walk over a border;"+
+			"hold a circuit to each neighboring region, so the avatar can walk over a border;"+
 				" a profile's own neighbors setting wins over this")
 		group groupFlag
 		ver   = flag.Bool("version", false, "say which build this is, and exit")

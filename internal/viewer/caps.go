@@ -98,9 +98,9 @@ type EventQueue struct {
 // what takes a viewer out of the teleport tunnel.
 // Why: doc/handover.md#what-a-viewer-is-not-given
 var withheldEvents = map[string]string{
-	"EstablishAgentCommunication": "neighbouring regions are not offered to the viewer, " +
+	"EstablishAgentCommunication": "neighboring regions are not offered to the viewer, " +
 		"so it will draw this region and nothing beyond it",
-	"EnableSimulator": "a neighbouring simulator's address is not offered to the viewer: " +
+	"EnableSimulator": "a neighboring simulator's address is not offered to the viewer: " +
 		"it needs no capability to open a circuit there with this session's own ids",
 	"TeleportFinish": "the avatar has teleported, and the viewer is not told where to: " +
 		"handed the address it would open a circuit to that simulator itself",

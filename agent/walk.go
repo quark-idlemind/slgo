@@ -263,7 +263,7 @@ func (s MoveState) String() string {
 	case Blocked:
 		return "blocked"
 	case Cancelled:
-		return "cancelled"
+		return "canceled"
 	case OutOfRegion:
 		return "out of region"
 	case Refused:

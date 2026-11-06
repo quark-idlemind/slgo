@@ -8,7 +8,8 @@ package main
 // back without the rest.  See the note in sl/wearable.go for what was
 // measured.  A viewer covers the gap by putting on, once the Current
 // Outfit folder has loaded, whatever it names that is not on, and so
-// does this.
+// does this: on attaching, and again each time slgod logs the avatar
+// in again under the same stream.
 // Why: doc/slbotd.md#putting-the-outfit-back-on
 //
 // This is the attendant's job rather than slgod's because the work is

@@ -94,6 +94,12 @@ func seatRig(t *testing.T, seats Seats) (*Hosted, *fakeSim) {
 // seatRigWith sets the sim up before the login, and logs to log.
 func seatRigWith(t *testing.T, seats Seats, setup func(*fakeSim), log func(string, ...any)) (*Hosted, *fakeSim, *Server) {
 	t.Helper()
+	return seatRigStarting(t, "last", seats, setup, log)
+}
+
+// seatRigStarting is seatRigWith logging in at start.
+func seatRigStarting(t *testing.T, start string, seats Seats, setup func(*fakeSim), log func(string, ...any)) (*Hosted, *fakeSim, *Server) {
+	t.Helper()
 	sim := newSim(t)
 	t.Cleanup(sim.close)
 	if setup != nil {
@@ -127,7 +133,7 @@ func seatRigWith(t *testing.T, seats Seats, setup func(*fakeSim), log func(strin
 	t.Cleanup(cancel)
 
 	h, err := srv.StartAgent(ctx, "example",
-		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL, Start: "last"},
+		agent.Login{First: "Example", Last: "Resident", Password: "x", URL: hs.URL, Start: start},
 		agent.Options{Timeout: 10 * time.Second, SkipCaps: true, Idle: -1})
 	if err != nil {
 		t.Fatal(err)
@@ -360,6 +366,65 @@ func TestASeatInAnotherRegionIsNotAskedFor(t *testing.T) {
 	if on, in := seats.Seat("example"); on != seatChair || in != otherRegion {
 		t.Errorf("the seat is %v in %v, want it kept", on, in)
 	}
+
+	// Nor is it forgotten for the avatar standing here.  A login put it
+	// in this region because its own was down, and the seat is still
+	// there to be sat on when it gets home.
+	parentTo(sim, 0)
+	time.Sleep(10 * SeatWatch)
+	if on, in := seats.Seat("example"); on != seatChair || in != otherRegion {
+		t.Errorf("standing in another region left the seat %v in %v, want it kept", on, in)
+	}
+}
+
+// TestGettingHomeSitsDownAgain: the login that came up elsewhere could
+// not ask for the seat, so arriving home asks for it then.
+func TestGettingHomeSitsDownAgain(t *testing.T) {
+	quickSeating(t)
+	quickHoming(t)
+	seats := newSeatsIn("example", seatChair, seatRegion)
+	var logs logLines
+	_, sim, _ := seatRigStarting(t, "home", seats, inRegion(seatRegion), logs.add)
+
+	// The login's own attempts run out first, so that what comes after
+	// the arrival is the arrival's.
+	waitFor(t, 3*time.Second, "the login's attempts to end", func() bool {
+		return logs.has("could not sit on")
+	})
+	before := satOn(sim)
+	go func() {
+		for range time.Tick(5 * time.Millisecond) {
+			if asked(sim) > 0 {
+				sim.send(&msg.TeleportLocal{}, 0)
+				return
+			}
+		}
+	}()
+	waitFor(t, 3*time.Second, "arriving home", func() bool { return logs.has("home, after") })
+	waitFor(t, 3*time.Second, "a sit after arriving home", func() bool { return satOn(sim) > before })
+}
+
+// TestATeleportAskedForForgetsTheSeat: a client or a viewer moving the
+// avatar has taken it off the seat, as a stand does.  Any other message
+// leaves it.
+func TestATeleportAskedForForgetsTheSeat(t *testing.T) {
+	quickSeating(t)
+	SeatWatch = time.Hour
+	seats := newSeatsIn("example", seatChair, otherRegion)
+	var logs logLines
+	h, _, _ := seatRigWith(t, seats, inRegion(seatRegion), logs.add)
+
+	h.noteRequest(msg.IDOf(&msg.AgentUpdate{}), "a client")
+	if on, _ := seats.Seat("example"); on != seatChair {
+		t.Fatalf("an update forgot the seat: %v", on)
+	}
+	h.noteRequest(msg.IDOf(&msg.TeleportLocationRequest{}), "a viewer")
+	if on, _ := seats.Seat("example"); !on.IsZero() {
+		t.Errorf("the seat is %v after a teleport, want it forgotten", on)
+	}
+	if !logs.has("a viewer teleported this avatar") {
+		t.Error("forgetting the seat was not logged with who teleported")
+	}
 }
 
 // TestAnUnansweredSeatIsKept: no answer proves nothing, so the seat
@@ -417,7 +482,8 @@ func TestAStandJustBeforeLogoutIsWrittenDown(t *testing.T) {
 	// The watch is slower than the test, which is the case.
 	SeatWatch = time.Hour
 	// And no sit is asked, so the seat is still there at the stop.
-	seats := newSeatsIn("example", seatChair, otherRegion)
+	SeatSettle = time.Hour
+	seats := newSeatsIn("example", seatChair, seatRegion)
 	h, sim, srv := seatRigWith(t, seats, inRegion(seatRegion), nil)
 
 	parentTo(sim, 0)

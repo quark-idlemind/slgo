@@ -29,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/quark-idlemind/slgo/client"
 	"github.com/quark-idlemind/slgo/msg"
 	pb "github.com/quark-idlemind/slgo/proto/slgov1"
 	"github.com/quark-idlemind/slgo/sl"
@@ -102,11 +103,13 @@ func (b *bot) read(ctx context.Context, s *sl.Session, ims <-chan *sl.IM,
 		jobs.Wait()
 	}()
 
-	go b.drainNotices(jobCtx, notices)
 	// An avatar that has just been logged in may be missing part of
 	// its outfit: the simulator puts most attachments back, not all.
-	// See dress.go.
-	go b.keepDressed(jobCtx, s)
+	// slgod logging it in again under this stream is a login too, as
+	// after a region restart.  See dress.go.
+	redress := restarting(jobCtx, func(ctx context.Context) { b.keepDressed(ctx, s) })
+	go b.drainNotices(jobCtx, notices, redress)
+	redress()
 
 	for {
 		select {
@@ -131,10 +134,10 @@ func (b *bot) read(ctx context.Context, s *sl.Session, ims <-chan *sl.IM,
 // reconnect all arrive here and are the only warning a log gets that
 // the session under an attendant has been replaced.
 //
-// They are logged and nothing more.  Whether a session that went away
-// is coming back is not read off them: the stream ending is what says
-// it is not.  See read.
-func (b *bot) drainNotices(ctx context.Context, notices <-chan *pb.AgentEvent) {
+// They are logged, and a session logged in again calls relogged.
+// Whether a session that went away is coming back is not read off
+// them: the stream ending is what says it is not.  See read.
+func (b *bot) drainNotices(ctx context.Context, notices <-chan *pb.AgentEvent, relogged func()) {
 	if notices == nil {
 		return
 	}
@@ -151,7 +154,26 @@ func (b *bot) drainNotices(ctx context.Context, notices <-chan *pb.AgentEvent) {
 				detail = n.GetRegion()
 			}
 			b.logf("slgod reports %s %s", strings.ToLower(n.GetKind().String()), detail)
+			if client.ReEstablished(n) && relogged != nil {
+				relogged()
+			}
 		}
+	}
+}
+
+// restarting returns a function that runs job in the background,
+// stopping the run before it first, so that two never overlap.  Every
+// run ends with ctx.
+func restarting(ctx context.Context, job func(context.Context)) func() {
+	var mu sync.Mutex
+	stop := context.CancelFunc(func() {})
+	return func() {
+		mu.Lock()
+		defer mu.Unlock()
+		stop()
+		var run context.Context
+		run, stop = context.WithCancel(ctx)
+		go job(run)
 	}
 }
 

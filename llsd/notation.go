@@ -119,7 +119,7 @@ func (p *notation) value(depth int) (any, error) {
 	case 'b':
 		return p.binary()
 	}
-	return nil, fmt.Errorf("unrecognised character %q", c)
+	return nil, fmt.Errorf("unrecognized character %q", c)
 }
 
 // word reads the rest of true or false after its first letter: nothing,
