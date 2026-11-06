@@ -79,16 +79,26 @@ func TestALoginAgainDressesAgain(t *testing.T) {
 // would each put on what the other is putting on.
 func TestARestartStopsTheRunBeforeIt(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	var running, stopped atomic.Int32
+	var running, stopped, started atomic.Int32
 	again := restarting(ctx, func(ctx context.Context) {
 		running.Add(1)
+		started.Add(1)
 		<-ctx.Done()
 		running.Add(-1)
 		stopped.Add(1)
 	})
-	again()
-	again()
-	again()
+	// Each run is let start before the next is asked for: one canceled
+	// before it starts is skipped, which is not what this is about.
+	for i := int32(1); i <= 3; i++ {
+		again()
+		deadline := time.Now().Add(2 * time.Second)
+		for started.Load() < i {
+			if time.Now().After(deadline) {
+				t.Fatalf("run %d never started", i)
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
 	waitUntil := func(what string, ok func() bool) {
 		t.Helper()
 		deadline := time.Now().Add(2 * time.Second)
@@ -102,4 +112,80 @@ func TestARestartStopsTheRunBeforeIt(t *testing.T) {
 	waitUntil("two stopped and one running", func() bool { return stopped.Load() == 2 && running.Load() == 1 })
 	cancel()
 	waitUntil("the last stopped with its context", func() bool { return running.Load() == 0 })
+}
+
+// TestARestartWaitsForTheRunBeforeIt: a run that takes a while to stop,
+// as one with a wear in flight does, is not overlapped by the next.
+func TestARestartWaitsForTheRunBeforeIt(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var running, most, runs atomic.Int32
+	again := restarting(ctx, func(ctx context.Context) {
+		n := running.Add(1)
+		for m := most.Load(); n > m && !most.CompareAndSwap(m, n); m = most.Load() {
+		}
+		runs.Add(1)
+		<-ctx.Done()
+		time.Sleep(50 * time.Millisecond) // slow to stop
+		running.Add(-1)
+	})
+	again()
+	deadline := time.Now().Add(2 * time.Second)
+	for runs.Load() < 1 {
+		if time.Now().After(deadline) {
+			t.Fatal("the first run never started")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	again()
+	for runs.Load() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the second run never started: %d runs", runs.Load())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if m := most.Load(); m != 1 {
+		t.Errorf("%d runs at once; want 1", m)
+	}
+}
+
+// TestRestartsCanceledWhileWaitingStillWait: a run asked for and then
+// replaced while the one before it is still stopping must not let the
+// next start early.  Three in quick succession; at most one at a time.
+func TestRestartsCanceledWhileWaitingStillWait(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var running, most, runs atomic.Int32
+	again := restarting(ctx, func(ctx context.Context) {
+		n := running.Add(1)
+		for m := most.Load(); n > m && !most.CompareAndSwap(m, n); m = most.Load() {
+		}
+		runs.Add(1)
+		<-ctx.Done()
+		time.Sleep(50 * time.Millisecond) // slow to stop
+		running.Add(-1)
+	})
+	again()
+	deadline := time.Now().Add(2 * time.Second)
+	for runs.Load() < 1 {
+		if time.Now().After(deadline) {
+			t.Fatal("the first run never started")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	again() // waits for the first, which is stopping
+	again() // replaces the second before it starts
+	for runs.Load() < 2 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the last run never started: %d runs", runs.Load())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	time.Sleep(100 * time.Millisecond)
+	if m := most.Load(); m != 1 {
+		t.Errorf("%d runs at once; want 1", m)
+	}
+	if n := runs.Load(); n != 2 {
+		t.Errorf("%d runs; want 2, the one replaced while waiting skipped", n)
+	}
 }

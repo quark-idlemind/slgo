@@ -162,18 +162,30 @@ func (b *bot) drainNotices(ctx context.Context, notices <-chan *pb.AgentEvent, r
 }
 
 // restarting returns a function that runs job in the background,
-// stopping the run before it first, so that two never overlap.  Every
-// run ends with ctx.
+// canceling the run before it and starting only once that one has
+// returned, so that two never overlap.  A run canceled before it could
+// start is skipped.  The caller does not wait.  Every run ends with ctx.
 func restarting(ctx context.Context, job func(context.Context)) func() {
 	var mu sync.Mutex
 	stop := context.CancelFunc(func() {})
+	done := make(chan struct{})
+	close(done)
 	return func() {
 		mu.Lock()
 		defer mu.Unlock()
 		stop()
+		prev, next := done, make(chan struct{})
+		done = next
 		var run context.Context
 		run, stop = context.WithCancel(ctx)
-		go job(run)
+		go func() {
+			defer close(next)
+			<-prev // never returns early: the one before may still be going
+			if run.Err() != nil {
+				return
+			}
+			job(run)
+		}()
 	}
 }
 

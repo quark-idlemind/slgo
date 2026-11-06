@@ -241,9 +241,11 @@ is from before it was kept and reads as not known. At login:
   seven minutes later, where it stayed standing. Nothing then asked for
   the seat. That the watch had also forgotten it is read from the code
   rather than seen, since the watch logs nothing: it saw the avatar
-  standing every thirty seconds for those seven minutes. What leaves a seat on purpose is now written down
-  when it is asked for, as a stand is: a teleport a client or a viewer
-  asks for forgets the seat at once.
+  standing every thirty seconds for those seven minutes. What leaves a
+  seat on purpose is now written down when it is asked for, as a stand
+  is: a teleport a client or a viewer asks for forgets the seat at once.
+  The seat loop started on arriving home runs under the session, not
+  under the getting-home loop, so stopping that loop does not stop it.
 - the avatar is in the seat's region, or the region is not known: it is
   asked for as above. If every attempt was answered by
   `SitFailNotSameRegion` (recognized by the notification's name in the
