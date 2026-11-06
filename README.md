@@ -1,3 +1,5 @@
+<img src="assets/slgo.svg" width="128" alt="slgo">
+
 # slgo
 
 slgo lets you use Second Life from a terminal, or from your own Go
