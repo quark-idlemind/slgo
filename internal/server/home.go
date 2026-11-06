@@ -138,6 +138,7 @@ func (h *Hosted) keepHome(ctx context.Context) {
 		return
 	}
 
+	session := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	h.mu.Lock()
 	if h.homing != nil {
@@ -152,7 +153,7 @@ func (h *Hosted) keepHome(ctx context.Context) {
 	// that read them each time round would have its own timings change
 	// under it while it was running, which is a thing nobody would ever
 	// intend and which the race detector is right to object to.
-	go h.homeward(ctx, id, homePace{settle: homeSettle, retry: HomeRetry, answer: homeAnswerWait,
+	go h.homeward(ctx, session, id, homePace{settle: homeSettle, retry: HomeRetry, answer: homeAnswerWait,
 		limit: HomeLimit, now: homeClock})
 }
 
@@ -269,7 +270,11 @@ func (h *Hosted) noteRequest(id msg.ID, who string) {
 // homeward asks to go home until it does, until something stops it, or
 // until the grid has said no for long enough, or in a way, that asking
 // again is pointless.  See the head of this file for which.
-func (h *Hosted) homeward(ctx context.Context, id uint64, pace homePace) {
+//
+// ctx is the loop's own, which stopping it cancels; session is the
+// session's, which the seat loop started on arriving home runs under,
+// so that stopping this loop later does not stop that one.
+func (h *Hosted) homeward(ctx, session context.Context, id uint64, pace homePace) {
 	defer h.finishedHoming(id)
 
 	h.mu.RLock()
@@ -317,7 +322,7 @@ func (h *Hosted) homeward(ctx context.Context, id uint64, pace homePace) {
 			h.logf("home, after %s", attempts(attempt+1))
 			// The login that put it elsewhere could not sit it down,
 			// and the seat may well be here.  See seat.go.
-			h.keepSeat(ctx)
+			h.keepSeat(session)
 			return
 		case answer.blocked():
 			h.refusedHome(id, answer.refusal)
