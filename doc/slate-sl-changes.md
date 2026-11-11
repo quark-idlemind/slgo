@@ -108,7 +108,7 @@ The animation check is the one `placeTouches` uses. It is in the repository, wit
 
 ## Sculpt and mesh
 
-A sculpt and a mesh are one extra-parameter block, type `0x30`, 17 bytes: a texture or asset id and a type byte whose low three bits are the kind (`LL_SCULPT_TYPE_*`, `llvolume.h:189-199`: 1 to 4 sculpt, 5 mesh, 6 glTF) and whose top two are the invert and mirror flags. Their `ProfileCurve` and `PathCurve` are ordinary ones, so the shape alone cannot say a prim is not a torus. `agent.Object.Sculpt`, a `msg.SculptMark{Kind, ID}`, keeps the block; its zero value is neither (`isSculpt`, `llvolume.cpp:3300`, takes kind none as no sculpt).
+A sculpt and a mesh are one extra-parameter block, type `0x30` -- or, for a mesh, type `0x60`, which the viewer reads as the same block (`llviewerobject.cpp:6736-6739`) and which every mesh prim of an outfit measured on Agni on 2026-11-11 arrived as -- 17 bytes: a texture or asset id and a type byte whose low three bits are the kind (`LL_SCULPT_TYPE_*`, `llvolume.h:189-199`: 1 to 4 sculpt, 5 mesh, 6 glTF) and whose top two are the invert and mirror flags. Their `ProfileCurve` and `PathCurve` are ordinary ones, so the shape alone cannot say a prim is not a torus. `agent.Object.Sculpt`, a `msg.SculptMark{Kind, ID}`, keeps the block; its zero value is neither (`isSculpt`, `llvolume.cpp:3300`, takes kind none as no sculpt).
 
 A full or compressed update says it afresh, so one with no block clears it. A terse update and a compressed one that did not decode whole leave it alone, as they leave the shape. It crosses as `ObjectInfo` fields 18 and 19 and reaches `sl.Seen.Sculpt`.
 

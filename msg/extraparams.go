@@ -141,10 +141,13 @@ func DecodeExtraParams(b []byte) ([]ExtraParam, error) {
 	return out, r.err
 }
 
-// SculptOf returns the sculpt block if there is one.
+// SculptOf returns the sculpt block if there is one.  A mesh's may
+// come as type ExtraMesh, which the viewer reads as a sculpt block
+// (LLViewerObject::unpackParameterEntry, llviewerobject.cpp:6736-6739);
+// measured on Agni, every mesh prim of a worn outfit came that way.
 func SculptOf(params []ExtraParam) (Sculpt, bool) {
 	for _, p := range params {
-		if p.Type == ExtraSculpt && len(p.Data) >= 17 {
+		if (p.Type == ExtraSculpt || p.Type == ExtraMesh) && len(p.Data) >= 17 {
 			var s Sculpt
 			copy(s.Texture[:], p.Data[:16])
 			s.Type = p.Data[16]

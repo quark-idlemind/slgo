@@ -263,13 +263,13 @@ func (e *exporter) attachment(ctx context.Context, a *sl.Attached) exportAttachm
 	for i := range desc.Prims {
 		p := desc.Prims[i]
 		xp := exportPrim{Name: p.Name, Pos: p.Pos, Rot: p.Rot, Scale: p.Size, Faces: []exportFace{}}
-		if p.SculptType != nil && *p.SculptType&7 == int(msg.SculptMesh) && p.SculptMap != "" {
-			if id, err := msg.ParseUUID(p.SculptMap); err == nil {
-				xp.MeshID = id.String()
-				xp.Mesh = e.fetch(ctx, id, sl.AssetMesh, "meshes", ".llmesh")
-			}
-		}
 		if s, ok := byID[p.UUID]; ok {
+			// The region's sculpt block, not dump's, which writes a mesh
+			// as the box it cannot otherwise say.
+			if s.Sculpt.Kind == msg.SculptMesh && !s.Sculpt.ID.IsZero() {
+				xp.MeshID = s.Sculpt.ID.String()
+				xp.Mesh = e.fetch(ctx, s.Sculpt.ID, sl.AssetMesh, "meshes", ".llmesh")
+			}
 			if xp.Mesh == "" && xp.MeshID == "" && s.Shape != (msg.PrimShape{}) {
 				xp.Volume = volume(s.Shape)
 			}

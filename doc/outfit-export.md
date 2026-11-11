@@ -70,9 +70,19 @@ and not the simulator's list; doc/outfit.md says where the two differ.
 Each one is described as `dump` describes it, which puts each prim in
 the attachment point's frame, and each prim's faces are read as
 `texture` reads them. A mesh prim is one whose sculpt block is of the
-mesh kind; its sculpt id is its mesh asset, fetched as is.
+mesh kind; its sculpt id is its mesh asset, fetched as is. `dump` writes
+a mesh as a box, so the export reads the block from the region's
+description rather than from `dump`'s.
+
+The block may arrive as extra-parameter type `0x60` rather than the
+sculpt type `0x30`; the viewer reads both the same way
+(`newview/llviewerobject.cpp:6736-6739`). slgo read only `0x30`, and so
+recognized no mesh at all in the outfit this was measured with on Agni
+on 2026-11-11: every mesh prim of it arrived as `0x60`, in
+`ObjectUpdateCompressed`.
 
 A face's texture may be one of the bakes-on-mesh placeholders
 `IMG_USE_BAKED_*` (`llcommon/indra_constants.cpp:80-90`), which tells
 the viewer to draw the face with one of the wearer's bakes. Those are
-written as the bake they stand for rather than fetched.
+written as the id they are, which a reader of the manifest knows, and
+not fetched.
