@@ -94,6 +94,8 @@ type exportFace struct {
 	Fullbright bool       `json:"fullbright"`
 	Glow       float64    `json:"glow,omitempty"`
 	Material   string     `json:"material,omitempty"`
+	AlphaMode  string     `json:"alpha_mode,omitempty"`
+	AlphaCut   *float64   `json:"alpha_cutoff,omitempty"`
 }
 
 // exporter fetches each asset once, however many places name it.
@@ -301,10 +303,25 @@ func (e *exporter) face(ctx context.Context, f sl.Face) exportFace {
 	}
 	if !f.Material.IsZero() {
 		x.Material = f.Material.String()
+		// A face with no material is left for the reader to decide by
+		// the texture, as the viewer does.
+		mode, cut, err := e.sh.s.AlphaModeOf(ctx, f)
+		if err != nil {
+			e.problem("material %s: %v", f.Material, err)
+		} else if mode != sl.AlphaModeDefault {
+			x.AlphaMode = mode.String()
+			if mode == sl.AlphaModeMask {
+				c := float64(cut) / 255
+				x.AlphaCut = &c
+			}
+		}
 	}
 	// A bakes-on-mesh placeholder stays the id it is, which the reader
 	// knows; there is nothing to fetch for it.
-	if _, ok := sl.BakedPlaceholder(f.Texture); !ok && !f.Texture.IsZero() {
+	switch _, baked := sl.BakedPlaceholder(f.Texture); {
+	case baked:
+		x.Texture = f.Texture.String()
+	case !f.Texture.IsZero():
 		x.Texture = e.fetch(ctx, f.Texture, sl.AssetTexture, "textures", ".j2c")
 	}
 	return x
