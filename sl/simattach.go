@@ -58,6 +58,12 @@ type SimAttachments struct {
 	// VisualParams is the same appearance's visual parameters, one
 	// byte each in the order they were sent; Sex reads one of them.
 	VisualParams []byte
+
+	// TextureEntry is the same appearance's texture entry, whose baked
+	// slots Bakes reads, and AppearanceService the URL bakes are
+	// fetched under.
+	TextureEntry      []byte
+	AppearanceService string
 }
 
 // simAttachmentsFrom reads the list out of an appearance.  Nil for no
@@ -80,6 +86,7 @@ func simAttachmentsFrom(m *msg.AvatarAppearance, at time.Time) *SimAttachments {
 	for _, p := range m.VisualParam {
 		out.VisualParams = append(out.VisualParams, p.ParamValue)
 	}
+	out.TextureEntry = m.ObjectData.TextureEntry
 	return out
 }
 

@@ -2,6 +2,7 @@ package sl
 
 import (
 	"context"
+	"encoding/hex"
 	"sync"
 	"testing"
 
@@ -329,5 +330,23 @@ func TestAChangeRefusesAnAppearanceNothingHasDescribed(t *testing.T) {
 	}
 	if faces[0].Colour != [4]uint8{255, 255, 255, 255} {
 		t.Errorf("the report read %v, want plain white", faces[0].Colour)
+	}
+}
+
+// Face 7 is bit 0x80, which the viewer packs as 0x81 0x00: the high
+// seven bits first.
+func TestAppendFaceSetIsTheViewers(t *testing.T) {
+	for _, tc := range []struct {
+		bits uint64
+		want string
+	}{
+		{1, "01"},
+		{0x7f, "7f"},
+		{0x80, "8100"},
+		{1<<9 | 1<<44, "84808080808400"},
+	} {
+		if got := hex.EncodeToString(appendFaceSet(nil, tc.bits)); got != tc.want {
+			t.Errorf("%#x: %s, want %s", tc.bits, got, tc.want)
+		}
 	}
 }

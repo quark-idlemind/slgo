@@ -151,10 +151,10 @@ func TestDecodeTextureEntryWideFaceSet(t *testing.T) {
 		texA = "12b57e577e57c0deefe3b327af5dfe62"
 		texB = "1c117e577e57c0deda64e42aeda52a0a"
 	)
-	// 0x80 0x01: first byte has the top bit set so another follows and
-	// contributes nothing, second byte contributes bit 0 shifted seven
-	// places, which is face 7.
-	b := teBytes(t, texA+" 8001 "+texB+" 00 "+
+	// 0x81 0x00: the viewer packs the most significant seven bits first
+	// (llprimitive.cpp:1122-1126), so face 7, bit 0x80, is a first byte
+	// of 1 with the top bit set for another, then a byte of 0.
+	b := teBytes(t, texA+" 8100 "+texB+" 00 "+
 		"00000000 00 0000803f 00 0000803f 00 0000 00 0000 00 0000 00 00 00 00 00 00 00")
 
 	faces, err := DecodeTextureEntry(b, 9)
@@ -379,6 +379,41 @@ func TestWhatComesAfterTheBumpByteMayNotBeThere(t *testing.T) {
 	for i, f := range faces {
 		if f.Media != 0 || f.Glow != 0 || !f.Material.IsZero() {
 			t.Errorf("face %d has what the blob never said: %+v", i, f)
+		}
+	}
+}
+
+// An avatar's texture entry names its bakes at faces 8 to 44, so the
+// face sets that pick them out run to seven bytes.
+func TestDecodeTextureEntryBakeSlots(t *testing.T) {
+	const (
+		texA = "12b57e577e57c0deefe3b327af5dfe62"
+		texB = "1c117e577e57c0deda64e42aeda52a0a"
+	)
+	// Faces 9 and 44: bits 9 and 44, packed seven at a time, most
+	// significant first.
+	bits := uint64(1)<<9 | uint64(1)<<44
+	var groups []byte
+	for v := bits; v != 0; v >>= 7 {
+		groups = append([]byte{byte(v & 0x7f)}, groups...)
+	}
+	for i := range len(groups) - 1 {
+		groups[i] |= 0x80
+	}
+	set := hex.EncodeToString(groups)
+	b := teBytes(t, texA+" "+set+" "+texB+" 00 "+
+		"00000000 00 0000803f 00 0000803f 00 0000 00 0000 00 0000 00 00 00 00 00 00 00")
+	faces, err := DecodeTextureEntry(b, 45)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, f := range faces {
+		want := texA
+		if i == 9 || i == 44 {
+			want = texB
+		}
+		if got := strings.ReplaceAll(f.Texture.String(), "-", ""); got != want {
+			t.Errorf("face %d texture = %s, want %s", i, got, want)
 		}
 	}
 }

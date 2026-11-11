@@ -164,7 +164,7 @@ func textureEntryFaces(b []byte) (int, error) {
 	r := &teReader{b: b}
 	high := 0
 	err := r.exceptions(16, func(bits uint64, _ []byte) {
-		for i := range 32 {
+		for i := range 64 {
 			if bits&(1<<uint(i)) != 0 && i+1 > high {
 				high = i + 1
 			}
@@ -239,15 +239,15 @@ func (r *teReader) exceptions(width int, each func(bits uint64, v []byte)) error
 	}
 }
 
-// varint reads the face set: seven bits a byte, top bit meaning
-// another follows.
+// varint reads the face set: seven bits a byte, the most significant
+// first, top bit meaning another follows (llprimitive.cpp:1165-1177,
+// and the packing at :1110-1126).  Read least significant first, every
+// face from the eighth on lands on the wrong face.
 func (r *teReader) varint() (uint64, int, bool) {
 	var v uint64
-	var shift uint
 	for n := 0; r.i+n < len(r.b); n++ {
 		c := r.b[r.i+n]
-		v |= uint64(c&0x7f) << shift
-		shift += 7
+		v = v<<7 | uint64(c&0x7f)
 		if c&0x80 == 0 {
 			return v, n + 1, true
 		}
