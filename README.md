@@ -295,8 +295,11 @@ each commit. Changes go in by pull request.
   of reusing the connection it already has open to it.
 - Nothing from neighboring regions is kept, so you can't see objects
   or terrain across a border.
-- `UploadAsset` accepts sounds, animations and meshes, but so far
-  nothing here uploads anything except textures.
+- `UploadAsset` accepts sounds and animations, but so far nothing here
+  uploads anything except textures.
+- `putmesh` and `UploadMesh` upload a mesh the viewer's way and get a
+  price from the grid, but no mesh has been uploaded through them yet:
+  the accounts tried were not allowed to upload mesh. See doc/mesh.md.
 
 ## History
 

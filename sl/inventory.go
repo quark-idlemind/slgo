@@ -271,6 +271,11 @@ func (w *Session) upload(ctx context.Context, capName string, fields map[string]
 		return nil, err
 	}
 
+	return uploadResult(second), nil
+}
+
+// uploadResult reads the answer to the second half of an upload.
+func uploadResult(second []byte) *UploadResult {
 	m := llsd.Map(decodeLLSD(second))
 	res := &UploadResult{Body: second}
 	if m != nil {
@@ -285,7 +290,13 @@ func (w *Session) upload(ctx context.Context, capName string, fields map[string]
 			}
 		}
 	}
-	return res, nil
+	return res
+}
+
+// agentCapPost is a POST of an LLSD document to a URL a capability
+// handed out, such as an uploader.
+func agentCapPost(url string, body []byte) agent.CapRequest {
+	return agent.CapRequest{URL: url, Method: "POST", Type: "application/llsd+xml", Body: body}
 }
 
 // describeUpload is the first half of an upload -- saying what is about
