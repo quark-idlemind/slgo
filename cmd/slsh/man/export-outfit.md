@@ -19,9 +19,10 @@ The manifest has the shape -- the appearance's visual parameters, one
 number each in the order the simulator sent them -- and the bakes, by
 slot, with the id of each.  Each attachment is listed with its point and
 its prims: where each sits in the point's frame, as `dump` gives it, its
-size, its mesh or, for a prim that is not a mesh, its shape as `dump`
-writes it, and its faces.  A face names its texture file, or the bake it
-is drawn with (`"baked": "upper"`) when it is a bakes-on-mesh face.
+size, its mesh or, for a prim that is not a mesh, the shape fields of
+its update as the region sent them, and its faces.  A face names its texture file, or for a
+bakes-on-mesh face the placeholder id that says which bake it is drawn
+with, and its alpha mode and mask cutoff when its material has one.
 
 The shape and the bakes are from the appearance the simulator last sent
 about this avatar, so they are of the outfit as last baked.  An avatar

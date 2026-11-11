@@ -86,3 +86,11 @@ A face's texture may be one of the bakes-on-mesh placeholders
 the viewer to draw the face with one of the wearer's bakes. Those are
 written as the id they are, which a reader of the manifest knows, and
 not fetched.
+
+How a face uses its texture's alpha is in its legacy material, not its
+texture entry: `alpha_mode` and `alpha_cutoff` are read from the
+material the face names (doc/materials.md), and left out for a face
+with none, which the viewer draws by its texture. It matters most for a
+mesh body. Measured on Agni on 2026-11-11: every bakes-on-mesh face of
+the body measured was a mask at a cutoff of 128 of 255, so a bake whose
+alpha a worn alpha layer had cleared hid the body with it.
