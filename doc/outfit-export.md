@@ -94,3 +94,24 @@ with none, which the viewer draws by its texture. It matters most for a
 mesh body. Measured on Agni on 2026-11-11: every bakes-on-mesh face of
 the body measured was a mask at a cutoff of 128 of 255, so a bake whose
 alpha a worn alpha layer had cleared hid the body with it.
+
+## Items, without wearing them
+
+`export-items` writes inventory items one folder each, for a viewer that
+dresses an avatar in what it has rather than in what it wears.
+
+A body part or piece of clothing is its wearable asset, which the grid
+serves by its id whether or not the item is worn, and the textures that
+asset names (its `textures` block, as `LLWearable::importStream` reads
+it, `llappearance/llwearable.cpp:409-433`). Measured on Agni on
+2026-11-11: an unworn skin, a tattoo layer of three textures, came down
+with all three.
+
+An object does not. Measured the same day, on three worn attachments
+from a store, each no-modify (owner permissions `0x88000`): inventory
+names no asset for any of them, so there is nothing to ask for. That
+the grid withholds the asset id of an object its owner may not modify
+is inferred from those three; a modifiable one was not tried. What an
+object is can be read only from the region while it is worn, so
+`export-items` captures an attachment while it is on and keeps the
+folder afterwards.

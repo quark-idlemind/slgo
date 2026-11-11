@@ -10,6 +10,7 @@ package sl
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
@@ -123,4 +124,42 @@ var bakedPlaceholders = map[msg.UUID]string{
 func BakedPlaceholder(id msg.UUID) (string, bool) {
 	s, ok := bakedPlaceholders[id]
 	return s, ok
+}
+
+// WearableTexture is one texture a wearable asset names: the avatar
+// texture slot it fills and the texture.
+type WearableTexture struct {
+	Index   int
+	Texture msg.UUID
+}
+
+// WearableTextures reads the textures block out of a wearable asset,
+// as LLWearable::importStream reads it (llappearance/llwearable.cpp:409-433):
+// "textures N", then N lines of a slot and an id.
+func WearableTextures(b []byte) ([]WearableTexture, error) {
+	lines := strings.Split(strings.ReplaceAll(string(b), "\r", ""), "\n")
+	for i, l := range lines {
+		var n int
+		if _, err := fmt.Sscanf(strings.TrimSpace(l), "textures %d", &n); err != nil {
+			continue
+		}
+		if n < 0 || i+n >= len(lines) {
+			return nil, fmt.Errorf("sl: a wearable names %d textures and has %d lines after", n, len(lines)-i-1)
+		}
+		out := make([]WearableTexture, 0, n)
+		for _, t := range lines[i+1 : i+1+n] {
+			var idx int
+			var id string
+			if _, err := fmt.Sscanf(strings.TrimSpace(t), "%d %s", &idx, &id); err != nil {
+				return nil, fmt.Errorf("sl: wearable texture line %q: %w", t, err)
+			}
+			u, err := msg.ParseUUID(id)
+			if err != nil {
+				return nil, fmt.Errorf("sl: wearable texture line %q: %w", t, err)
+			}
+			out = append(out, WearableTexture{Index: idx, Texture: u})
+		}
+		return out, nil
+	}
+	return nil, nil
 }

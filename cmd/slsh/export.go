@@ -59,15 +59,26 @@ type outfitManifest struct {
 }
 
 type exportWearable struct {
-	Name  string `json:"name"`
-	Slot  string `json:"slot"`
-	Type  string `json:"type"`
-	Asset string `json:"asset,omitempty"`
-	File  string `json:"file,omitempty"`
+	Name     string          `json:"name"`
+	Slot     string          `json:"slot"`
+	Type     string          `json:"type"`
+	Item     string          `json:"item,omitempty"`
+	Asset    string          `json:"asset,omitempty"`
+	File     string          `json:"file,omitempty"`
+	Textures []exportTexture `json:"textures,omitempty"`
+}
+
+// exportTexture is one texture a wearable names, by the avatar texture
+// slot it fills.
+type exportTexture struct {
+	Index     int    `json:"index"`
+	Texture   string `json:"texture,omitempty"`
+	TextureID string `json:"texture_id"`
 }
 
 type exportAttachment struct {
 	Name  string       `json:"name"`
+	Item  string       `json:"item,omitempty"`
 	Point int          `json:"point"`
 	Where string       `json:"point_name"`
 	Prims []exportPrim `json:"prims"`
@@ -123,6 +134,11 @@ func (e *exporter) fetch(ctx context.Context, id msg.UUID, t sl.AssetType, sub, 
 		return ""
 	}
 	rel := filepath.Join(sub, id.String()+ext)
+	if err := os.MkdirAll(filepath.Join(e.dir, sub), 0o755); err != nil {
+		e.problem("%s: %v", sub, err)
+		e.files[id] = ""
+		return ""
+	}
 	if err := os.WriteFile(filepath.Join(e.dir, rel), b, 0o644); err != nil {
 		e.problem("%s: %v", rel, err)
 		e.files[id] = ""
@@ -212,14 +228,13 @@ func cmdExportOutfit(ctx context.Context, sh *Shell, out io.Writer, args []strin
 		if !l.Wearable {
 			continue
 		}
-		w := exportWearable{Name: l.Name, Slot: l.Slot.String(), Type: l.Kind.String()}
-		if it, err := sh.s.OutfitItem(ctx, l); err != nil {
+		it, err := sh.s.OutfitItem(ctx, l)
+		if err != nil {
 			e.problem("wearable %s: %v", l.Name, err)
-		} else {
-			w.Asset = it.AssetID.String()
-			w.File = e.fetch(ctx, it.AssetID, l.Kind, "wearables", ".bin")
+			m.Wearables = append(m.Wearables, exportWearable{Name: l.Name, Slot: l.Slot.String(), Type: l.Kind.String()})
+			continue
 		}
-		m.Wearables = append(m.Wearables, w)
+		m.Wearables = append(m.Wearables, e.wearable(ctx, l.Name, l.Slot, l.Kind, it.ID, it.AssetID))
 	}
 
 	worn, err := sh.s.WornObjects(ctx)
@@ -253,7 +268,7 @@ func cmdExportOutfit(ctx context.Context, sh *Shell, out io.Writer, args []strin
 // attachment is one worn object: each prim where dump puts it, its mesh
 // or its shape, and its faces.
 func (e *exporter) attachment(ctx context.Context, a *sl.Attached) exportAttachment {
-	x := exportAttachment{Name: a.Object.Name, Point: a.Point, Where: sl.AttachPointName(a.Point), Prims: []exportPrim{}}
+	x := exportAttachment{Name: a.Object.Name, Item: idOrEmpty(a.Item), Point: a.Point, Where: sl.AttachPointName(a.Point), Prims: []exportPrim{}}
 	desc, err := e.sh.s.Describe(ctx, &a.Object, exportLookWait)
 	if err != nil {
 		e.problem("attachment %s: %v", a.Object.Name, err)
@@ -357,4 +372,42 @@ func volume(p msg.PrimShape) map[string]int {
 		"profile_end":        int(p.ProfileEnd),
 		"profile_hollow":     int(p.ProfileHollow),
 	}
+}
+
+func idOrEmpty(id msg.UUID) string {
+	if id.IsZero() {
+		return ""
+	}
+	return id.String()
+}
+
+// wearable writes a body part or piece of clothing and the textures it
+// names, which a reader that bakes for itself composites.
+func (e *exporter) wearable(ctx context.Context, name string, slot sl.WearableType, kind sl.AssetType, item, asset msg.UUID) exportWearable {
+	w := exportWearable{Name: name, Slot: slot.String(), Type: kind.String(), Item: idOrEmpty(item), Asset: idOrEmpty(asset)}
+	if asset.IsZero() {
+		e.problem("wearable %s: the grid names no asset for it", name)
+		return w
+	}
+	w.File = e.fetch(ctx, asset, kind, "wearables", ".bin")
+	if w.File == "" {
+		return w
+	}
+	b, err := os.ReadFile(filepath.Join(e.dir, w.File))
+	if err != nil {
+		e.problem("wearable %s: %v", name, err)
+		return w
+	}
+	texs, err := sl.WearableTextures(b)
+	if err != nil {
+		e.problem("wearable %s: %v", name, err)
+	}
+	for _, t := range texs {
+		x := exportTexture{Index: t.Index, TextureID: t.Texture.String()}
+		if _, baked := sl.BakedPlaceholder(t.Texture); !baked && !t.Texture.IsZero() {
+			x.Texture = e.fetch(ctx, t.Texture, sl.AssetTexture, "textures", ".j2c")
+		}
+		w.Textures = append(w.Textures, x)
+	}
+	return w
 }
