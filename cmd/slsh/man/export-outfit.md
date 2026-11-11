@@ -30,7 +30,9 @@ that has not been baked since it logged in has none, and is asked for a
 bake first; `--bake` asks for one anyway.  Asking for a bake changes
 nothing worn.
 
-What could not be fetched is listed under `problems` in the manifest
+A face with no opacity draws nothing, and its texture is named but
+not fetched.  What could not be fetched, and any link in the outfit
+that leads nowhere, is listed under `problems` in the manifest
 and printed, and the rest is written regardless.  HUDs are left out.
 
 ## Options

@@ -204,6 +204,11 @@ func cmdExportOutfit(ctx context.Context, sh *Shell, out io.Writer, args []strin
 		e.problem("outfit: %v", err)
 	}
 	for _, l := range links {
+		if !l.Found && !l.Folder {
+			// Its kind is not known, so it may have been a wearable.
+			e.problem("outfit link %s leads to nothing this session found", l.Name)
+			continue
+		}
 		if !l.Wearable {
 			continue
 		}
@@ -321,7 +326,9 @@ func (e *exporter) face(ctx context.Context, f sl.Face) exportFace {
 	switch _, baked := sl.BakedPlaceholder(f.Texture); {
 	case baked:
 		x.Texture = f.Texture.String()
-	case !f.Texture.IsZero():
+	case !f.Texture.IsZero() && f.Colour[3] > 0:
+		// A face with no opacity at all draws nothing, so its texture
+		// is not fetched; texture_id still names it.
 		x.Texture = e.fetch(ctx, f.Texture, sl.AssetTexture, "textures", ".j2c")
 	}
 	return x
