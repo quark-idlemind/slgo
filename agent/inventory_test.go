@@ -1081,3 +1081,49 @@ func TestAFolderNamedOnlyByItsKeyIsKept(t *testing.T) {
 		t.Errorf("the folder named only by its key was lost: %+v", f)
 	}
 }
+
+// TestFetchItemReadsOneThingByItsID: an item is read by its id alone,
+// a link is told by its type, a folder is read the same way, and an id
+// the service has nothing by is ErrNotInInventory rather than an
+// answer with nothing in it.
+func TestFetchItemReadsOneThingByItsID(t *testing.T) {
+	link := msg.MustParseUUID("184c7e57-7e57-c0de-b90e-967c6ef40ba8")
+	folder := msg.MustParseUUID("6d907e57-7e57-c0de-9a8d-9d135f0207cf")
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/item/" + link.String():
+			fmt.Fprintf(w, `<llsd><map><key>item_id</key><string>%s</string>`+
+				`<key>parent_id</key><string>%s</string>`+
+				`<key>linked_id</key><string>%s</string>`+
+				`<key>name</key><string>a link</string>`+
+				`<key>type</key><integer>24</integer></map></llsd>`, link, folder, folder)
+		case "/category/" + folder.String():
+			fmt.Fprintf(w, `<llsd><map><key>category_id</key><string>%s</string>`+
+				`<key>name</key><string>a folder</string>`+
+				`<key>type_default</key><integer>-1</integer></map></llsd>`, folder)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer hs.Close()
+	a := invSession(hs.URL, msg.UUID{})
+	ctx := context.Background()
+
+	it, err := FetchItem(ctx, a, link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !it.IsLink || it.ParentID != folder || it.AssetID != folder || it.Name != "a link" {
+		t.Errorf("read %+v", it)
+	}
+	f, err := FetchCategory(ctx, a, folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.ID != folder || f.Name != "a folder" {
+		t.Errorf("read %+v", f)
+	}
+	if _, err := FetchItem(ctx, a, folder); !errors.Is(err, ErrNotInInventory) {
+		t.Errorf("an id with no item gave %v, want ErrNotInInventory", err)
+	}
+}

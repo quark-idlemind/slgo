@@ -224,9 +224,8 @@ type OutfitLink struct {
 
 	// InvType is the inventory type the link itself carries, which is
 	// its target's: an object link says object (InvTypeObject) without
-	// the target being found.  Outfit walks only a few folders deep, so
-	// a thing kept deeper than that is not Found, and this is all there
-	// is to tell an attachment's link from a wearable's.
+	// the target being found, and for a link whose target is gone this
+	// is all there is to tell an attachment's link from a wearable's.
 	InvType int
 }
 
@@ -236,11 +235,14 @@ const InvTypeObject = 6
 
 // Outfit reads the Current Outfit folder and follows every link in it.
 //
-// One walk of inventory for the lot.  The folder is a dozen or more
-// links and each has to be resolved to know what it is: a link carries
-// the name and the inventory type of its target but not the target's
-// asset type or flags, and the slot a wearable occupies lives in those
-// flags.
+// The folder is a dozen or more links and each has to be resolved to
+// know what it is: a link carries the name and the inventory type of
+// its target but not the target's asset type or flags, and the slot a
+// wearable occupies lives in those flags.  Each target is asked for by
+// its id, a few at a time, rather than found in a read of the whole
+// tree: a large inventory's tree is a reply larger than a capability
+// reply may be, and takes the better part of a minute to arrive.
+// Why: doc/outfit.md#following-the-links
 func (w *Session) Outfit(ctx context.Context) ([]OutfitLink, error) {
 	cof, err := w.CurrentOutfit(ctx)
 	if err != nil {
@@ -256,27 +258,37 @@ func (w *Session) outfitIn(ctx context.Context, cof msg.UUID) ([]OutfitLink, err
 	if err != nil {
 		return nil, err
 	}
-	all, err := w.ListInventory(ctx, "", 4)
-	if err != nil {
-		return nil, err
-	}
-	byID := make(map[msg.UUID]Entry, len(all))
-	for _, e := range all {
-		byID[e.ID] = e
-	}
 
 	out := make([]OutfitLink, 0, len(here))
 	for _, e := range here {
 		if !e.IsLink || e.Asset.IsZero() {
 			continue
 		}
-		l := OutfitLink{Link: e.ID, Item: e.Asset, Name: e.Name, InvType: e.InvType}
-		if to, ok := byID[e.Asset]; ok {
-			l.Found, l.Folder, l.Parent = true, to.Folder, to.Parent
+		out = append(out, OutfitLink{
+			Link: e.ID, Item: e.Asset, Name: e.Name, InvType: e.InvType,
+			Folder: AssetType(e.Type) == AssetLinkFolder,
+		})
+	}
+
+	targets := make([]msg.UUID, len(out))
+	for i, l := range out {
+		targets[i] = l.Item
+	}
+	found, err := w.Entries(ctx, targets)
+	if err != nil {
+		return nil, fmt.Errorf("sl: following the outfit's links: %w", err)
+	}
+	for i := range out {
+		l := &out[i]
+		to, ok := found[l.Item]
+		if !ok {
+			continue
+		}
+		l.Found, l.Folder, l.Parent = true, to.Folder, to.Parent
+		if !to.Folder {
 			l.Kind = AssetType(to.Type)
 			l.Slot, l.Wearable = SlotOf(l.Kind, to.Flags)
 		}
-		out = append(out, l)
 	}
 	return out, nil
 }

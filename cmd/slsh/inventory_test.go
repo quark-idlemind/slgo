@@ -1507,3 +1507,49 @@ func TestSaveRefusesBeforeItWritesAnything(t *testing.T) {
 		t.Errorf("save --help printed %q", got)
 	}
 }
+
+// TestFindSplitsAReadThatIsTooLarge: a large inventory read whole to a
+// depth is a reply larger than a reply may be.  The read is then made
+// again a folder at a time, one level less below each, and again below
+// any folder that is still too large, so that find answers as it would
+// have from the one read.
+// Why: doc/outfit.md#following-the-links
+func TestFindSplitsAReadThatIsTooLarge(t *testing.T) {
+	deep := msg.MustParseUUID("57eb7e57-7e57-c0de-e87e-8809cf4cd3e6")
+	level1 := msg.MustParseUUID("72f87e57-7e57-c0de-7ace-0f0c7da596ed")
+	level2 := msg.MustParseUUID("82427e57-7e57-c0de-318f-7d1e2501b65a")
+
+	x := newTestShell(t)
+	x.grid.mu.Lock()
+	objects := x.grid.inv.Dirs[0]
+	inner := &invDir{ID: level2, Name: "inner"}
+	inner.Items = append(inner.Items, &invItem{ID: deep, Name: "a deep thing", Type: int(sl.AssetNotecard)})
+	objects.Dirs = append(objects.Dirs, &invDir{ID: level1, Name: "outer", Dirs: []*invDir{inner}})
+	// The root and Objects are each too large to read to any depth.
+	var mu sync.Mutex
+	var refused int
+	x.grid.tooLarge = func(r agent.CapRequest) bool {
+		big := strings.HasPrefix(r.Path, "/category/"+testRoot.String()+"/") ||
+			strings.HasPrefix(r.Path, "/category/"+objects.ID.String()+"/")
+		if big && strings.Contains(r.Path, "depth=") {
+			mu.Lock()
+			refused++
+			mu.Unlock()
+			return true
+		}
+		return false
+	}
+	x.grid.mu.Unlock()
+
+	if got, want := x.do(t, "find deep"), "/Objects/outer/inner/a deep thing\n"; got != want {
+		t.Errorf("find printed %q, want %q", got, want)
+	}
+	if got := x.do(t, "find lamp"); got != "/Objects/a lamp\n" {
+		t.Errorf("find printed %q, want the lamp", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if refused == 0 {
+		t.Error("nothing was refused, so nothing was split")
+	}
+}

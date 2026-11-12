@@ -268,6 +268,28 @@ func (f *fakeGrid) serveInventory(t *testing.T) {
 			io.WriteString(w, `<?xml version="1.0" ?><llsd><map/></llsd>`)
 			return
 		}
+		// One item by its id, which is how an outfit's links are
+		// followed.
+		if parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/"); len(parts) == 2 && parts[0] == "item" {
+			item, _ := msg.ParseUUID(parts[1])
+			var b strings.Builder
+			f.mu.Lock()
+			if in := findItemDir(f.inv, item); in != nil {
+				for _, it := range in.Items {
+					if it.ID == item {
+						itemLLSD(&b, it, in.ID)
+					}
+				}
+			}
+			f.mu.Unlock()
+			if b.Len() == 0 {
+				http.Error(w, "no such item", http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/llsd+xml")
+			io.WriteString(w, `<?xml version="1.0" ?><llsd>`+b.String()+`</llsd>`)
+			return
+		}
 		id := capFolderID(r.URL.Path)
 		depth, _ := strconv.Atoi(r.URL.Query().Get("depth"))
 
@@ -328,6 +350,21 @@ func findItem(d *invDir, id msg.UUID) *invItem {
 	}
 	for _, sub := range d.Dirs {
 		if got := findItem(sub, id); got != nil {
+			return got
+		}
+	}
+	return nil
+}
+
+// findItemDir is the folder an item is in.
+func findItemDir(d *invDir, id msg.UUID) *invDir {
+	for _, it := range d.Items {
+		if it.ID == id {
+			return d
+		}
+	}
+	for _, sub := range d.Dirs {
+		if got := findItemDir(sub, id); got != nil {
 			return got
 		}
 	}
@@ -401,26 +438,32 @@ func itemsLLSD(b *strings.Builder, d *invDir, key string, links bool) {
 		if it.IsLink != links {
 			continue
 		}
-		fmt.Fprintf(b, `<key>%s</key><map>`, it.ID)
-		fmt.Fprintf(b, `<key>item_id</key><string>%s</string>`, it.ID)
-		fmt.Fprintf(b, `<key>parent_id</key><string>%s</string>`, d.ID)
-		if links {
-			fmt.Fprintf(b, `<key>linked_id</key><string>%s</string>`, it.Asset)
-		} else {
-			fmt.Fprintf(b, `<key>asset_id</key><string>%s</string>`, it.ID)
-		}
-		fmt.Fprintf(b, `<key>name</key><string>%s</string>`, xmlText(it.Name))
-		fmt.Fprintf(b, `<key>type</key><integer>%d</integer>`, it.Type)
-		invType := it.Type
-		if it.InvType != 0 {
-			invType = it.InvType
-		}
-		fmt.Fprintf(b, `<key>inv_type</key><integer>%d</integer>`, invType)
-		b.WriteString(`<key>permissions</key><map>`)
-		b.WriteString(`<key>owner_mask</key><integer>581632</integer>`)
-		b.WriteString(`</map></map>`)
+		fmt.Fprintf(b, `<key>%s</key>`, it.ID)
+		itemLLSD(b, it, d.ID)
 	}
 	b.WriteString(`</map>`)
+}
+
+// itemLLSD is what AIS says about one item, in the folder parent.
+func itemLLSD(b *strings.Builder, it *invItem, parent msg.UUID) {
+	b.WriteString(`<map>`)
+	fmt.Fprintf(b, `<key>item_id</key><string>%s</string>`, it.ID)
+	fmt.Fprintf(b, `<key>parent_id</key><string>%s</string>`, parent)
+	if it.IsLink {
+		fmt.Fprintf(b, `<key>linked_id</key><string>%s</string>`, it.Asset)
+	} else {
+		fmt.Fprintf(b, `<key>asset_id</key><string>%s</string>`, it.ID)
+	}
+	fmt.Fprintf(b, `<key>name</key><string>%s</string>`, xmlText(it.Name))
+	fmt.Fprintf(b, `<key>type</key><integer>%d</integer>`, it.Type)
+	invType := it.Type
+	if it.InvType != 0 {
+		invType = it.InvType
+	}
+	fmt.Fprintf(b, `<key>inv_type</key><integer>%d</integer>`, invType)
+	b.WriteString(`<key>permissions</key><map>`)
+	b.WriteString(`<key>owner_mask</key><integer>581632</integer>`)
+	b.WriteString(`</map></map>`)
 }
 
 func xmlText(s string) string {

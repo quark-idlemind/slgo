@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -96,6 +97,13 @@ func (a *Agent) http() *http.Client {
 	return &c
 }
 
+// maxCapReply is the most of a capability's reply that is read.
+const maxCapReply = 32 << 20
+
+// ErrReplyTooLarge is a capability reply longer than maxCapReply, 32
+// MiB.  An inventory folder read to a depth can be: ask for less of it.
+var ErrReplyTooLarge = errors.New("the reply is larger than 32 MiB")
+
 // maxRedirects is Go's own limit, which a client with a CheckRedirect
 // of its own no longer gets unless it says so.
 const maxRedirects = 10
@@ -187,9 +195,14 @@ func (a *Agent) DoCap(ctx context.Context, r CapRequest) (*CapResponse, error) {
 
 	// Read the body whatever the status: a failure usually explains
 	// itself there, and the caller can decide.
-	b, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, maxCapReply+1))
 	if err != nil {
 		return nil, fmt.Errorf("agent: %s%s: %w", r.Cap, r.Path, err)
+	}
+	// Refused whole rather than handed on cut short, which a decoder
+	// reports as a syntax error that names nothing of the cause.
+	if len(b) > maxCapReply {
+		return nil, fmt.Errorf("agent: %s%s: %w", r.Cap, r.Path, ErrReplyTooLarge)
 	}
 
 	// A reply may hand back a URL to post to next.  Remember those,

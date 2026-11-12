@@ -93,6 +93,53 @@ answer to what it was asked. Any other status still leaves the sentence
 about the link. The 410 path is tested over fakes only: a 410 could not
 be provoked on demand to measure it live.
 
+## Following the links
+
+A link in the Current Outfit folder carries its target's name and
+inventory type, but not the target's asset type or flags, and the slot a
+wearable occupies is in the flags. So every link has to be followed to
+say what is worn where.
+
+This was first done by reading the whole inventory from the root, four
+folders deep, in one AIS request (`?depth=4`), and looking each target
+up in that. On an avatar with a large inventory, that failed and took a
+long time:
+
+- `worn` took 72 s and said `clothing and body parts are not listed`.
+  The reason it gave was `XML syntax error on line 2: unexpected EOF`
+  from the listing of the inventory root.
+- The same request, made by itself, came back status 200 after 34 s.
+  Its body was exactly 33,554,432 bytes. That is the 32 MiB that
+  `Agent.DoCap` reads, so the reply had been cut off at that limit and
+  passed on as if it were complete. The XML is all on its second line,
+  which is why the decoder's error names line 2.
+- `wear` worked, and then reported that the item was not in the Current
+  Outfit folder, for the same reason. Naming the attachments that are
+  known only by id failed the same way, so `worn` printed their ids
+  instead of their names.
+
+On the same avatar, reading the Current Outfit folder alone took
+0.24 s, and `GET /item/<id>` for one target took 0.25 s. The reply to
+that request has the target's `type`, `flags` and `parent_id`.
+
+So each target is now looked up by its id, eight at a time
+(`Session.Entries`). A target that answers 404 or 410 is a link that
+has outlived its item. After the change, `worn` on the same avatar took
+1.5 s and named everything it listed. This also finds a target filed
+more than four folders down, which the depth-4 read never reached.
+
+`Agent.DoCap` now refuses a reply longer than it reads, with
+`ErrReplyTooLarge`, so a reply that is cut off reports why. slgod
+returns that error to its client as gRPC `ResourceExhausted`, and
+`client.Conn.DoCap` turns it back into `ErrReplyTooLarge`.
+
+Some commands read a folder to a depth on purpose: `find`, `ls -r` and
+`landmarks`. When that read gets `ErrReplyTooLarge`, slgo now reads the
+folder by itself and each folder inside it one level shallower, a few
+at a time, splitting again below any folder that is still too large
+(`Session.fetchTree` in `sl/list.go`). The answer is the same as from
+one read, but the oversized request is still paid for before the split.
+
 ## Putting an outfit back on
 
 The simulator puts most of an avatar's attachments back by itself at

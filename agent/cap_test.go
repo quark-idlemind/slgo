@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -146,6 +147,29 @@ func TestACapReplyThatStopsHalfway(t *testing.T) {
 	a := capAgent(Caps{"X": "http://" + ln.Addr().String()})
 	if _, err := a.DoCap(context.Background(), CapRequest{Cap: "X"}); err == nil {
 		t.Error("a truncated body was accepted as an answer")
+	}
+}
+
+// TestACapReplyLargerThanIsReadIsRefused: a reply longer than the most
+// that is read is an error that says so, rather than the first 32 MiB
+// handed on as though it were the whole -- which a decoder then reports
+// as a syntax error at the end of its input, naming nothing of why.
+// Why: doc/outfit.md#following-the-links
+func TestACapReplyLargerThanIsReadIsRefused(t *testing.T) {
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chunk := []byte(strings.Repeat("x", 1<<20))
+		for range maxCapReply>>20 + 1 {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer hs.Close()
+
+	a := capAgent(Caps{"X": hs.URL})
+	_, err := a.DoCap(context.Background(), CapRequest{Cap: "X"})
+	if !errors.Is(err, ErrReplyTooLarge) {
+		t.Errorf("a reply over %d bytes gave %v, want ErrReplyTooLarge", maxCapReply, err)
 	}
 }
 

@@ -2,9 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
 	"github.com/quark-idlemind/slgo/sl"
 )
@@ -658,5 +663,71 @@ func TestDressAsksForABakeWhenItHasNoListAndWaitsForWhatItNames(t *testing.T) {
 	}
 	if n := attachRequests(x) - asked; n != 0 {
 		t.Errorf("dress asked for %d attachments that were on already", n)
+	}
+}
+
+// TestWornFollowsEachLinkRatherThanReadingTheWholeTree.
+//
+// A large inventory read whole to a depth is a reply larger than a
+// capability reply may be, and took the better part of a minute to come
+// back cut short.  So each link in the outfit is followed by its id,
+// and the root is never asked for to a depth: which also finds a
+// wearable kept deeper than any depth that would have been asked for.
+// Why: doc/outfit.md#following-the-links
+func TestWornFollowsEachLinkRatherThanReadingTheWholeTree(t *testing.T) {
+	shirt := msg.MustParseUUID("2d9d7e57-7e57-c0de-697d-3ff2b924f090")
+	dirs := []msg.UUID{
+		msg.MustParseUUID("41847e57-7e57-c0de-84f3-67ad9fce4843"),
+		msg.MustParseUUID("46607e57-7e57-c0de-e884-4181e43afa19"),
+		msg.MustParseUUID("59157e57-7e57-c0de-38f6-d343e7645300"),
+		msg.MustParseUUID("6d177e57-7e57-c0de-c2bc-3df128c23e20"),
+		msg.MustParseUUID("85f47e57-7e57-c0de-db83-1000face9e60"),
+	}
+
+	x := newTestShell(t)
+	var deep []string
+	x.grid.mu.Lock()
+	at := x.grid.inv.Dirs[0]
+	for i, id := range dirs {
+		d := &invDir{ID: id, Name: fmt.Sprintf("level %d", i+1)}
+		at.Dirs = append(at.Dirs, d)
+		at = d
+		deep = append(deep, d.Name)
+	}
+	at.Items = append(at.Items, &invItem{
+		ID: shirt, Name: "a deep shirt", Type: int(sl.AssetClothing), InvType: 18,
+		Flags: uint32(sl.WearableShirt),
+	})
+	x.grid.mu.Unlock()
+
+	var mu sync.Mutex
+	var deepAsked []string
+	x.grid.ServeCap(t, agent.InventoryCap, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("depth") != "" {
+			mu.Lock()
+			deepAsked = append(deepAsked, r.URL.String())
+			mu.Unlock()
+		}
+		body, status := x.grid.inventoryRequest(r)
+		if status != http.StatusOK {
+			http.Error(w, body, status)
+			return
+		}
+		w.Header().Set("Content-Type", "application/llsd+xml")
+		io.WriteString(w, body)
+	})
+
+	x.do(t, "wear Objects/"+strings.Join(deep, "/")+"/a deep shirt")
+	got := x.do(t, "worn")
+	if !strings.Contains(got, "shirt              a deep shirt") {
+		t.Errorf("worn should list the shirt in its slot:\n%s", got)
+	}
+	if strings.Contains(got, "not listed") {
+		t.Errorf("worn could not read the outfit:\n%s", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(deepAsked) != 0 {
+		t.Errorf("inventory was read to a depth: %q", deepAsked)
 	}
 }

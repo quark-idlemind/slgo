@@ -3,7 +3,9 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"sort"
 	"strconv"
@@ -362,6 +364,68 @@ func FetchFolderDepth(ctx context.Context, d CapDoer, inv *Inventory, id msg.UUI
 	}
 	_, err := fetchDepth(ctx, d, inv, id, depth)
 	return err
+}
+
+// ErrNotInInventory is an id the inventory service has nothing by: an
+// item or folder deleted, or never there.
+var ErrNotInInventory = errors.New("agent: nothing in inventory has that id")
+
+// FetchItem reads one item by its id, wherever it is kept.  A link is
+// told by its type, since a reply about one item does not say which map
+// of a folder it would have been listed in.
+func FetchItem(ctx context.Context, d CapDoer, id msg.UUID) (*Item, error) {
+	m, err := fetchOneThing(ctx, d, "item", id)
+	if err != nil {
+		return nil, err
+	}
+	it := itemFrom(m)
+	it.IsLink = it.Type == assetLink || it.Type == assetLinkFolder
+	return it, nil
+}
+
+// FetchCategory reads one folder by its id, without what is inside it.
+func FetchCategory(ctx context.Context, d CapDoer, id msg.UUID) (*Folder, error) {
+	m, err := fetchOneThing(ctx, d, "category", id)
+	if err != nil {
+		return nil, err
+	}
+	return folderFrom(m), nil
+}
+
+// The asset types of a link to an item and a link to a folder.
+const (
+	assetLink       = 24
+	assetLinkFolder = 25
+)
+
+func fetchOneThing(ctx context.Context, d CapDoer, kind string, id msg.UUID) (map[string]any, error) {
+	if !d.HasCap(InventoryCap) {
+		return nil, fmt.Errorf("agent: no %s capability", InventoryCap)
+	}
+	resp, err := d.DoCap(ctx, CapRequest{Cap: InventoryCap, Path: "/" + kind + "/" + id.String()})
+	if err != nil {
+		return nil, fmt.Errorf("agent: inventory %s %s: %w", kind, id, err)
+	}
+	if resp.Status == http.StatusNotFound || resp.Status == http.StatusGone {
+		return nil, fmt.Errorf("agent: inventory %s %s: %w", kind, id, ErrNotInInventory)
+	}
+	if !resp.OK() {
+		snippet := resp.Body
+		if len(snippet) > 256 {
+			snippet = snippet[:256]
+		}
+		return nil, fmt.Errorf("agent: inventory %s %s: status %d: %s",
+			kind, id, resp.Status, strings.TrimSpace(string(snippet)))
+	}
+	v, err := llsd.Decode(bytes.NewReader(resp.Body))
+	if err != nil {
+		return nil, fmt.Errorf("agent: inventory %s %s: %w", kind, id, err)
+	}
+	m := llsd.Map(v)
+	if m == nil {
+		return nil, fmt.Errorf("agent: inventory %s %s: reply was %T, wanted a map", kind, id, v)
+	}
+	return m, nil
 }
 
 // FetchInventory fills the agent's own tree.

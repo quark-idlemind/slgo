@@ -531,7 +531,6 @@ func cmdWorn(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 	// still worth having, and the note at the foot says what is
 	// missing.
 	outfit, outfitErr := sh.s.Outfit(ctx)
-	names := sh.itemNames(ctx)
 
 	seen := make(map[msg.UUID]*sl.Attached, len(worn))
 	for _, a := range worn {
@@ -564,6 +563,13 @@ func cmdWorn(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 		}
 		rows = append(rows, r)
 	}
+	var unnamed []msg.UUID
+	for _, a := range worn {
+		if !inOutfit[a.Item] {
+			unnamed = append(unnamed, a.Item)
+		}
+	}
+	names := sh.itemNames(ctx, unnamed)
 	for _, a := range worn {
 		if inOutfit[a.Item] {
 			continue
@@ -715,20 +721,22 @@ const (
 )
 
 // itemNames maps inventory item ids to their names, for naming things
-// that are known only by id.
-//
-// Depth-limited, because the whole tree is a hundred requests and this
-// is wanted for a listing of eight things.  Anything not found is
-// reported as such rather than guessed at.
-func (sh *Shell) itemNames(ctx context.Context) map[msg.UUID]string {
+// that are known only by id.  Each id is looked up by itself, since the
+// tree read whole is, for a large inventory, more than a reply may be.
+// An id not found, or an inventory that cannot be read, is left out
+// rather than guessed at.
+func (sh *Shell) itemNames(ctx context.Context, ids []msg.UUID) map[msg.UUID]string {
 	out := map[msg.UUID]string{}
-	es, err := sh.s.ListInventory(ctx, "", 4)
+	if len(ids) == 0 {
+		return out
+	}
+	found, err := sh.s.Entries(ctx, ids)
 	if err != nil {
 		return out
 	}
-	for _, e := range es {
+	for id, e := range found {
 		if !e.Folder {
-			out[e.ID] = e.Name
+			out[id] = e.Name
 		}
 	}
 	return out
