@@ -41,6 +41,7 @@ func TestEveryPathResolverIsTheRightOne(t *testing.T) {
 		"cmdRm":      "deleting a link deletes the link, not what it points at",
 		"cmdCopy":    "copying a link makes another link, which is what cp means",
 		"cmdPut":     "names a destination folder, not a thing",
+		"cmdPutMesh": "names a destination folder, not a thing",
 
 		// The two that are the resolvers.
 		"entryAt": "is the resolver",

@@ -26,13 +26,13 @@
 # guessing.  The ones marked are either visible at the call site or have
 # been exercised from this tree.
 #
-# slgo asks for twenty-seven of them at login, in agent.DefaultCaps
+# slgo asks for twenty-eight of them at login, in agent.DefaultCaps
 # (agent/capsdoc_test.go holds this list to it):
 #
 #   AvatarPickerSearch  ChatSessionRequest  EventQueueGet
 #   FetchInventory2  FetchInventoryDescendents2  GetDisplayNames
 #   GetMesh2  GetTexture  InventoryAPIv3  LibraryAPIv3  LSLSyntax
-#   ModifyMaterialParams  NewFileAgentInventory  ObjectMedia
+#   MeshUploadFlag  ModifyMaterialParams  NewFileAgentInventory  ObjectMedia
 #   ParcelPropertiesUpdate  RemoteParcelRequest  RenderMaterials
 #   SimulatorFeatures
 #   UpdateAgentInformation  UpdateAvatarAppearance
@@ -40,8 +40,8 @@
 #   UpdateScriptAgent  UpdateScriptTask  UserInfo  ViewerAsset
 #   ViewerStats
 #
-# The two-step upload used by everything called Update...Inventory or
-# ...UploadFlag is worth knowing once: post an LLSD description of the
+# The two-step upload used by everything called Update...Inventory
+# is worth knowing once: post an LLSD description of the
 # item, get back a one-shot uploader URL, then post the bytes to that.
 # The second URL is not a capability and is good once.
 
@@ -104,7 +104,7 @@ LibraryAPIv3                      GET   the same, for the library rather than yo
 LSLSyntax                         GET   the keywords and functions this simulator's LSL understands
 MapLayer                          POST  the world map's background tiles
 MapLayerGod                       POST  the same, with everything visible, for administrators
-MeshUploadFlag                    GET   whether this region allows mesh uploads at all
+MeshUploadFlag                    GET   whether this account may upload mesh: mesh_upload_status, "valid" or not
 ModifyMaterialParams              POST  edits a gltf material on a face
 ModifyRegion                      GET   writes the region's terrain textures and heights
 NavMeshGenerationStatus           GET   how the region's navigation mesh rebuild is going

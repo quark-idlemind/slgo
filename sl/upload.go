@@ -109,6 +109,9 @@ func (w *Session) UploadAsset(ctx context.Context, u Upload, body []byte) (*Item
 	if len(body) == 0 {
 		return nil, nil, fmt.Errorf("sl: %s: nothing to upload", u.Name)
 	}
+	if u.Type == AssetMesh {
+		return nil, nil, fmt.Errorf("sl: %s: a mesh is uploaded with UploadMesh, which sends the model the grid prices", u.Name)
+	}
 	assetWord, ok := assetNames[u.Type]
 	if !ok {
 		return nil, nil, fmt.Errorf("sl: %s has no name in the protocol, so it cannot be uploaded", u.Type)

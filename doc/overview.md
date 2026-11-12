@@ -2205,8 +2205,10 @@ appearance changes only through its Current Outfit folder: `wear`,
 (`Session.UpdateAppearance`, and doc/outfit.md).  No
 `AgentSetAppearance` is ever sent.
 
-Textures encode, decode and resize. Sounds, animations and meshes go
-up through the same `UploadAsset` and none has been tried.
+Textures encode, decode and resize. Sounds and animations go up
+through the same `UploadAsset` and neither has been tried. A mesh goes
+up by `UploadMesh`, which quotes and uploads as the viewer does; see
+doc/mesh.md for how far that has been measured.
 
 `Receiver` allocates a message per packet through `New`. At the packet
 rates in the C client's stats — 600k in a long session — that is worth

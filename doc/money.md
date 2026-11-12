@@ -317,6 +317,13 @@ charges the fee there. That capability is not checked, and neither is any
 other capability but `AcceptGroupInvite`. The viewer's other route to
 L$, buying them with money, goes through the web and no message here.
 
+A mesh goes up through the same capability, but its price is not a
+fixed fee: the grid names it per model, when asked (doc/mesh.md).
+`UploadMesh` asks first and refuses a price above `MeshUpload.MaxPrice`
+before anything is charged, and `putmesh` pays nothing without `--max`.
+That cap is the only check. A profile's rules do not see a mesh's
+price, and it is not counted in the daily total.
+
 ## How each is checked
 
 By what the message says and what the session was told. Nothing is asked

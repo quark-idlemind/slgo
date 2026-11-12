@@ -30,6 +30,9 @@ var DefaultCaps = []string{
 	"UpdateNotecardTaskInventory",
 	"UpdateScriptTask",
 	"NewFileAgentInventory",
+	// Whether the account may upload mesh: a GET answering with its
+	// mesh_upload_status.  See sl.MeshUploadStatus.
+	"MeshUploadFlag",
 	// Searching for somebody by part of their name.  The UDP
 	// AvatarPickerRequest is still answered but only ever matches a
 	// whole name: "Quark Idlemind" finds them and "quark" finds
