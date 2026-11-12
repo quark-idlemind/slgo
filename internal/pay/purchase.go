@@ -6,8 +6,10 @@ package pay
 // a parcel of land or a pass to one, joining a group that charges for it,
 // publishing a classified, creating a group.  Each is a message a program
 // could send raw, so each is read here and checked through the same Gate,
-// and what it costs is counted in the same record.  Uploads are not: a
-// small fixed fee that slsh's put relies on.
+// and what it costs is counted in the same record.  Uploads are not.  A
+// file's is a small fixed fee that slsh's put relies on; a mesh's is
+// priced by the grid per model, and is held instead to the caller's
+// sl.MeshUpload.MaxPrice, which is not counted here.
 // Why: doc/money.md#what-else-spends-l
 
 import (
