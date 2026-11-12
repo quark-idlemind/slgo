@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/quark-idlemind/slgo/internal/private"
 )
 
 func tempConfig(t *testing.T) string {
@@ -83,6 +85,9 @@ options  = login-flags, global-textures
 // TestLoadProfileRejectsLooseFile: a credentials file anyone can read
 // is worth stopping for, the way ssh stops.
 func TestLoadProfileRejectsLooseFile(t *testing.T) {
+	if !private.Checked {
+		t.Skip("there are no Unix mode bits here; see internal/private")
+	}
 	dir := tempConfig(t)
 	writeProfile(t, dir, "loose", "first = A\nlast = B\npassword = x\n", 0o644)
 
@@ -96,6 +101,9 @@ func TestLoadProfileRejectsLooseFile(t *testing.T) {
 }
 
 func TestLoadProfileRejectsLooseDirectory(t *testing.T) {
+	if !private.Checked {
+		t.Skip("there are no Unix mode bits here; see internal/private")
+	}
 	dir := tempConfig(t)
 	writeProfile(t, dir, "example", "first = A\nlast = B\npassword = x\n", 0o600)
 	if err := os.Chmod(dir, 0o755); err != nil {
@@ -173,14 +181,14 @@ func TestSaveProfileRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m := fi.Mode().Perm(); m != 0o600 {
+	if m := fi.Mode().Perm(); private.Checked && m != 0o600 {
 		t.Errorf("profile written mode %04o, want 0600", m)
 	}
 	di, err := os.Stat(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m := di.Mode().Perm(); m != 0o700 {
+	if m := di.Mode().Perm(); private.Checked && m != 0o700 {
 		t.Errorf("directory mode %04o, want 0700", m)
 	}
 
@@ -213,6 +221,9 @@ func TestSaveProfileRoundTrip(t *testing.T) {
 }
 
 func TestSaveProfileTightensLooseDirectory(t *testing.T) {
+	if !private.Checked {
+		t.Skip("there are no Unix mode bits here; see internal/private")
+	}
 	dir := tempConfig(t)
 	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)

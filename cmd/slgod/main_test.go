@@ -35,7 +35,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -349,8 +348,9 @@ func runDaemon(t *testing.T, args ...string) *daemon {
 // stop sends the signal a daemon is stopped with and waits for it to
 // finish logging out.
 //
-// The signal goes to this process, which is safe only because main has
-// already installed its handler by the time anything calls this -- the
+// The signal goes to this process (stop_unix_test.go; elsewhere the
+// context main made is canceled instead), which is safe only because
+// main has already installed its handler by the time anything calls this -- the
 // caller has seen the daemon say it is serving.  Sent earlier it would
 // kill the test binary.
 func (d *daemon) stop(t *testing.T) {
@@ -360,7 +360,7 @@ func (d *daemon) stop(t *testing.T) {
 		return
 	default:
 	}
-	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+	if err := stopTheDaemon(); err != nil {
 		t.Fatalf("signalling the daemon: %v", err)
 	}
 	select {

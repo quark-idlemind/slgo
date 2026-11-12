@@ -23,11 +23,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -550,25 +548,6 @@ func (t *Term) readPlain() {
 		}
 		select {
 		case t.keys <- '\r':
-		case <-t.done:
-			return
-		}
-	}
-}
-
-func (t *Term) watchSize(fd int) {
-	ch := make(chan os.Signal, 1)
-	signal.Notify(ch, syscall.SIGWINCH)
-	defer signal.Stop(ch)
-	for {
-		select {
-		case <-ch:
-			if w, h, err := term.GetSize(fd); err == nil && w > 0 {
-				t.mu.Lock()
-				t.width, t.height = w, h
-				t.redrawLocked()
-				t.mu.Unlock()
-			}
 		case <-t.done:
 			return
 		}

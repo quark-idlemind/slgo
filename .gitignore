@@ -68,6 +68,10 @@
 greeted.json
 greeted.json.new
 
+# On Windows every binary is NAME.exe, wherever it was built, which no
+# name above matches.
+*.exe
+
 # Anything else built here.  Python's compiled copies too: bundle.py
 # imports apidoc.py and asks for none, but another script may not.
 __pycache__/

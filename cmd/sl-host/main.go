@@ -83,6 +83,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/quark-idlemind/slgo/internal/home"
 	"github.com/quark-idlemind/slgo/internal/version"
 )
 
@@ -184,7 +185,7 @@ func rulesPath() string {
 	if p := firstSet("SL_HOSTFILE", "RSSH_HOSTFILE"); p != "" {
 		return p
 	}
-	home, err := os.UserHomeDir()
+	home, err := home.Dir()
 	if err != nil {
 		return filepath.Join(".config", "sl-host")
 	}

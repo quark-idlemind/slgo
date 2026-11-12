@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -271,6 +272,9 @@ type screen struct {
 
 func start(t *testing.T, rows, cols int) *screen {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("goterm has no pseudo-terminal on Windows")
+	}
 	t.Setenv(harnessEnv, "1")
 
 	tm := goterm.New(rows, cols)

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -13,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/quark-idlemind/slgo/internal/private"
 )
 
 // TestMain lets this test binary stand in for the slgod binary: run with
@@ -100,6 +103,7 @@ func TestASecondInstanceFailsBeforeItLogsAnybodyIn(t *testing.T) {
 	hs, logins := countingLoginServer(t, sim)
 	profileDir(t, hs, "example")
 	t.Setenv("HOME", t.TempDir())
+	inUse := inUseText(t)
 
 	// The first instance: the real thing, up and serving.
 	first := runDaemon(t, "-listen", "127.0.0.1:0", "-no-auth", "example")
@@ -124,7 +128,7 @@ func TestASecondInstanceFailsBeforeItLogsAnybodyIn(t *testing.T) {
 	t.Run("the port is busy", func(t *testing.T) {
 		out, err := startMistake(t, []string{"SLGOD_CONFIG_DIR=" + otherConfig},
 			"-listen", addr, "-no-auth", "example")
-		wantRefused(t, out, err, "cannot listen on "+addr, "address already in use")
+		wantRefused(t, out, err, "cannot listen on "+addr, inUse)
 		if n := logins.Load(); n != 1 {
 			t.Errorf("a login was made: %d in all", n)
 		}
@@ -148,7 +152,7 @@ func TestASecondInstanceFailsBeforeItLogsAnybodyIn(t *testing.T) {
 		defer busy.Close()
 		out, err := startMistake(t, []string{"SLGOD_CONFIG_DIR=" + otherConfig},
 			"-listen", free(), "-viewer", busy.Addr().String(), "-no-auth", "example")
-		wantRefused(t, out, err, "-viewer "+busy.Addr().String(), "address already in use")
+		wantRefused(t, out, err, "-viewer "+busy.Addr().String(), inUse)
 		if n := logins.Load(); n != 1 {
 			t.Errorf("a login was made: %d in all", n)
 		}
@@ -188,7 +192,29 @@ func TestTheLockIsGoneWithItsHolder(t *testing.T) {
 		t.Fatalf("the lock was not released with its holder: %v", err)
 	}
 	g.Close()
-	if fi, err := os.Stat(filepath.Dir(path)); err != nil || fi.Mode().Perm() != 0o700 {
+	if fi, err := os.Stat(filepath.Dir(path)); err != nil || (private.Checked && fi.Mode().Perm() != 0o700) {
 		t.Errorf("the directory made for the lock is %v, %v; wanted 0700", fi, err)
 	}
+}
+
+// inUseText is how this system says an address is taken: "address
+// already in use" on Unix, and on Windows "Only one usage of each socket
+// address".
+func inUseText(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	again, err := net.Listen("tcp", ln.Addr().String())
+	if err == nil {
+		again.Close()
+		t.Fatal("one address was listened on twice")
+	}
+	var se *os.SyscallError
+	if !errors.As(err, &se) {
+		t.Fatalf("listening twice: %v", err)
+	}
+	return se.Err.Error()
 }

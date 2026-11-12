@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
 )
 
@@ -44,16 +42,4 @@ func lockConfigDir(path string) (*os.File, error) {
 		fmt.Fprintf(f, "%d\n", os.Getpid())
 	}
 	return f, nil
-}
-
-// holderOf is " (pid N)" from what the holder wrote, or "" when there is
-// nothing readable there.
-func holderOf(f *os.File) string {
-	b := make([]byte, 32)
-	n, _ := f.ReadAt(b, 0)
-	pid, err := strconv.Atoi(strings.TrimSpace(string(b[:n])))
-	if err != nil || pid <= 0 {
-		return ""
-	}
-	return fmt.Sprintf(" (pid %d)", pid)
 }

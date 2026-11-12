@@ -33,6 +33,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/quark-idlemind/slgo/internal/home"
 )
 
 // Config is what slsh needs to know before it can start.
@@ -568,7 +570,7 @@ func ConfigDir() (string, error) {
 	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
 		return filepath.Join(d, "slsh"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := home.Dir()
 	if err != nil {
 		return "", fmt.Errorf("slsh: no home directory: %w", err)
 	}

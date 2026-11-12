@@ -112,10 +112,13 @@ type Session struct {
 	owners      map[msg.UUID]msg.UUID // object id to owner
 	groups      map[msg.UUID]msg.UUID // object id to group, from its properties
 	objectNames map[msg.UUID]string   // object id to name
-	// nameAt is when each name in objectNames last arrived, so that
-	// asking for a name again can wait for an answer newer than the
-	// asking.  Why: doc/objects.md#a-name-a-script-changed
-	nameAt map[msg.UUID]time.Time
+	// nameAt numbers each name in objectNames by when it last arrived,
+	// from namesHeard, so that asking again can tell a name heard since
+	// it asked from one already there.  A count rather than a time: a
+	// Windows clock tick is long enough for both to read the same.
+	// Why: doc/objects.md#a-name-a-script-changed
+	nameAt     map[msg.UUID]uint64
+	namesHeard uint64
 	// reaskDone is when the last full re-ask of every name finished,
 	// and reaskFlight the one in progress, if any; see askAllNamesAgain.
 	reaskDone   time.Time
@@ -278,6 +281,10 @@ type Session struct {
 	// invite.go.
 	invites map[msg.UUID]*Invitation
 
+	// arrivals counts the offers, invitations, lures and requests noted,
+	// to order those heard in the same tick of the clock.
+	arrivals uint64
+
 	pickers map[msg.UUID]chan []Found
 
 	// Dialogs a script has put up, in arrival order.  Kept rather
@@ -410,7 +417,7 @@ func New(b Backend) (*Session, error) {
 		owners:      map[msg.UUID]msg.UUID{},
 		groups:      map[msg.UUID]msg.UUID{},
 		objectNames: map[msg.UUID]string{},
-		nameAt:      map[msg.UUID]time.Time{},
+		nameAt:      map[msg.UUID]uint64{},
 		parents:     map[uint32]uint32{},
 		attach:      map[msg.UUID]*Attached{},
 		killed:      map[uint32]bool{},
@@ -814,7 +821,8 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 		w.owners[t.ObjectData.ObjectID] = t.ObjectData.OwnerID
 		w.groups[t.ObjectData.ObjectID] = t.ObjectData.GroupID
 		w.objectNames[t.ObjectData.ObjectID] = trimNul(t.ObjectData.Name)
-		w.nameAt[t.ObjectData.ObjectID] = time.Now()
+		w.namesHeard++
+		w.nameAt[t.ObjectData.ObjectID] = w.namesHeard
 		w.mu.Unlock()
 
 	case *msg.ObjectProperties:
@@ -825,7 +833,8 @@ func (w *Session) handle(raw *client.Message, v msg.Message) {
 			w.owners[o.ObjectID] = o.OwnerID
 			w.groups[o.ObjectID] = o.GroupID
 			w.objectNames[o.ObjectID] = trimNul(o.Name)
-			w.nameAt[o.ObjectID] = time.Now()
+			w.namesHeard++
+			w.nameAt[o.ObjectID] = w.namesHeard
 			out = append(out, &Properties{
 				Object: o.ObjectID, Name: trimNul(o.Name),
 				Description: trimNul(o.Description),

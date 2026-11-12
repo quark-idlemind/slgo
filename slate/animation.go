@@ -126,7 +126,7 @@ func (r *runner) setupAnimations(ctx context.Context) error {
 	if err != nil || !uses {
 		return err
 	}
-	asked := time.Now()
+	asked := boundary()
 	stop, err := r.sess.ListenForAnimations()
 	if err != nil {
 		return &setupError{fmt.Sprintf("cannot listen for animations: %v", err)}

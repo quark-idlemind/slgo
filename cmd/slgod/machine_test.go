@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/internal/private"
 )
 
 func tempMachineDir(t *testing.T) string {
@@ -253,6 +254,9 @@ func TestReadMachineIDRejectsUnknownSetting(t *testing.T) {
 // TestMachineConfigIsPrivate: the file is created 0600 under a 0700
 // directory, like the rest of what slgo writes.
 func TestMachineConfigIsPrivate(t *testing.T) {
+	if !private.Checked {
+		t.Skip("there are no Unix mode bits here; see internal/private")
+	}
 	dir := filepath.Join(t.TempDir(), "slgod")
 	t.Setenv("SLGOD_CONFIG_DIR", dir)
 
@@ -290,7 +294,7 @@ func TestConfigDirHoldsProfilesAndTheDaemonsOwnFiles(t *testing.T) {
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := useConfigDir(dir); err == nil {
+	if err := useConfigDir(dir); err == nil && private.Checked {
 		t.Error("a directory others can list was taken; it holds credentials")
 	}
 

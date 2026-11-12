@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/private"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -286,7 +287,7 @@ func TestTheDailyTotalSurvivesARestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m := fi.Mode().Perm(); m != 0o600 {
+	if m := fi.Mode().Perm(); private.Checked && m != 0o600 {
 		t.Errorf("the record is mode %04o, want 0600", m)
 	}
 

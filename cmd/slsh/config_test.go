@@ -97,7 +97,8 @@ func TestAMissingConfigFileIsAnEmptyOne(t *testing.T) {
 	if err := os.WriteFile(path, []byte("addr = here:1\n"), 0o000); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Open(path); err == nil {
+	if f, err := os.Open(path); err == nil {
+		f.Close() // or Windows cannot remove it when the test ends
 		t.Skip("this user can read a file with no permissions on it")
 	}
 	if _, err := LoadConfig(); err == nil {

@@ -32,6 +32,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -1217,6 +1218,9 @@ func TestConnectSaysThatDirectIsTheAlternative(t *testing.T) {
 // than turned into a connection refused against this machine, which
 // would point the reader at the wrong problem entirely.
 func TestConnectWithNoAddressAsksSlHost(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake sl-host is a shell script")
+	}
 	dir := t.TempDir()
 	script := filepath.Join(dir, "sl-host")
 	body := "#!/bin/sh\necho 'no configuration for this network' >&2\nexit 1\n"

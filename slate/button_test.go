@@ -224,6 +224,7 @@ func button(t *testing.T, f *fakeGrid, p paintSpec, step string) (*Result, strin
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp) // Windows
 	f.paint(t, f.objects[0], p)
 	return play(t, f, hdr+step+"\n"), tmp
 }
@@ -617,7 +618,9 @@ func TestAButtonStepReportsWhereItClicked(t *testing.T) {
 	c := find(t, pic, imgfind.Box())[0].Center
 	f.paint(t, f.objects[0], paintSpec{pics: map[int]image.Image{2: pic}})
 	s := mustCheck(t, hdr+"touch sign button box\nexpect say \"never\" on public from anyone within 100ms\n")
-	t.Setenv("TMPDIR", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp) // Windows
 	ctx, cancel := context.WithTimeout(context.Background(), 20e9)
 	defer cancel()
 	res, err := run(ctx, f.session(t), s, Options{}, testCfg())

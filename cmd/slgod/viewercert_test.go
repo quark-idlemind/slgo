@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/quark-idlemind/slgo/internal/private"
 )
 
 // The certificate the viewer endpoint serves is kept rather than made
@@ -108,6 +110,9 @@ func TestTheCertificateIsKeptRatherThanRemade(t *testing.T) {
 // TestTheKeyIsNotReadableByAnybodyElse: it sits in a directory beside
 // the profiles, and serving with it is proof of being this endpoint.
 func TestTheKeyIsNotReadableByAnybodyElse(t *testing.T) {
+	if !private.Checked {
+		t.Skip("there are no Unix mode bits here; see internal/private")
+	}
 	certDir(t)
 	_, keyFile, err := viewerCertFiles("", "", "127.0.0.1", func(string, ...any) {})
 	if err != nil {

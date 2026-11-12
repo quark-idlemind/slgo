@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -46,7 +47,7 @@ func TestMemoryKeepsVisitors(t *testing.T) {
 	if err := m.save(); err != nil {
 		t.Fatal(err)
 	}
-	if fi, err := os.Stat(path); err != nil || fi.Mode().Perm() != 0o600 {
+	if fi, err := os.Stat(path); err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600) {
 		t.Fatalf("saved as %v, %v; want mode 600", fi.Mode().Perm(), err)
 	}
 	if _, err := os.Stat(path + ".new"); !os.IsNotExist(err) {

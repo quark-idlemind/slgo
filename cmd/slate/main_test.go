@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,7 +60,7 @@ func TestNothingDialledBeforeTheFileIsGood(t *testing.T) {
 		{"no file", nil, "", 4, "need exactly one FILE"},
 		{"two files", []string{good, good}, "", 4, "need exactly one FILE"},
 		{"unknown flag", []string{"-bogus", good}, "", 4, "flag provided but not defined"},
-		{"missing file", []string{filepath.Join(t.TempDir(), "absent.slate")}, "", 4, "no such file"},
+		{"missing file", []string{filepath.Join(t.TempDir(), "absent.slate")}, "", 4, missingText(t, false)},
 		{"run does not compile", []string{"-run", "(", good}, "", 4, "-run"},
 		{"run matches no test", []string{"-run", "^nothing$", good}, "", 4, "matches no test"},
 		{"parse error", nil, "slate 1\nbogus\n", 2, "t.slate:2:1:"},
@@ -243,4 +244,21 @@ func TestScreenAndHudZoomReachTheDrag(t *testing.T) {
 			}
 		})
 	}
+}
+
+// missingText is how this system says a file is not there -- "no such
+// file or directory" on Unix, and on Windows "cannot find the file" --
+// or, with dir, that the directory it was to be in is not.
+func missingText(t *testing.T, dir bool) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "absent")
+	if dir {
+		path = filepath.Join(path, "absent")
+	}
+	_, err := os.Open(path)
+	var pe *fs.PathError
+	if !errors.As(err, &pe) {
+		t.Fatalf("opening what is not there: %v", err)
+	}
+	return pe.Err.Error()
 }

@@ -69,10 +69,6 @@ func (a *animSim) set(list ...sl.PlayingAnimation) {
 }
 
 // after sets the list a while from now.
-func (a *animSim) after(d time.Duration, list ...sl.PlayingAnimation) {
-	time.AfterFunc(d, func() { a.set(list...) })
-}
-
 // onSay sets the list when the tester says trigger.
 func (a *animSim) onSay(f *fakeGrid, trigger string, list ...sl.PlayingAnimation) {
 	f.replyTo(func(m msg.Message) {
@@ -126,12 +122,14 @@ func TestAnAnimationAnObjectStartsStartsAndThenStops(t *testing.T) {
 		"animation "+idAnimExample.String()+" started from sign",
 		"slate: pass step 1")
 
-	// And it stops after a time: the list that follows lacks it.
+	// And it stops: the list that follows lacks it.  Stopped when told,
+	// not after a time, which a slow start (Windows) can outlast.
 	f2 := newGrid(t)
 	sim2 := f2.animating(playing(idAnimExample, idSign))
-	sim2.after(80 * time.Millisecond)
+	sim2.onSay(f2, "stop")
 	res = play(t, f2, hdr+"expect animation "+idAnimExample.String()+" is on from sign within 1s\n"+
-		"then expect animation "+idAnimExample.String()+" becomes off from sign within 2s\n")
+		"say \"stop\" on 0\n"+
+		"expect animation "+idAnimExample.String()+" becomes off from sign within 2s\n")
 	wantExit(t, res, 0)
 	mustHave(t, res,
 		"animation "+idAnimExample.String()+" playing from sign",

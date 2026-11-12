@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/quark-idlemind/slgo/internal/private"
 )
 
 const secret = "shared-secret"
@@ -204,6 +206,9 @@ func TestChallengesAreUnique(t *testing.T) {
 }
 
 func TestLoadSecretRefusesLooseMode(t *testing.T) {
+	if !private.Checked {
+		t.Skip("there are no Unix mode bits here; see internal/private")
+	}
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o700); err != nil {
 		t.Fatal(err)
@@ -484,7 +489,7 @@ func TestLoadSecretForAnAddress(t *testing.T) {
 	}
 
 	put("secret.192.0.2.30", "too-open-secret-value", 0o644)
-	if _, _, err := LoadSecretFor("192.0.2.30:7807"); err == nil {
+	if _, _, err := LoadSecretFor("192.0.2.30:7807"); err == nil && private.Checked {
 		t.Error("a secret for this host that others can read was passed over for the shared one")
 	}
 }
