@@ -11,9 +11,11 @@ package sl
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/quark-idlemind/slgo/agent"
 	"github.com/quark-idlemind/slgo/msg"
@@ -311,7 +313,8 @@ func (w *Session) listFolder(ctx context.Context, folder msg.UUID, at string, de
 // makes reading a whole inventory take a minute.
 func (w *Session) children(ctx context.Context, folder msg.UUID, depth uint) ([]Entry, error) {
 	inv := agent.NewInventory(folder)
-	if err := agent.FetchFolderDepth(ctx, w.b, inv, folder, int(depth)); err != nil {
+	slots := make(chan struct{}, entryLookups)
+	if err := w.fetchTree(ctx, inv, folder, int(depth), slots); err != nil {
 		return nil, fmt.Errorf("sl: listing %s: %w", folder, err)
 	}
 
@@ -319,33 +322,189 @@ func (w *Session) children(ctx context.Context, folder msg.UUID, depth uint) ([]
 	var walk func(id msg.UUID, prefix string, level int)
 	walk = func(id msg.UUID, prefix string, level int) {
 		for _, f := range inv.Children(id) {
-			e := Entry{
-				ID: f.ID, Parent: f.ParentID, Name: f.Name, Folder: true,
-				Path: join(prefix, f.Name), Depth: level, Type: f.Type,
-			}
+			e := folderEntry(f, join(prefix, f.Name), level)
 			out = append(out, e)
 			if uint(level) < depth {
 				walk(f.ID, e.Path, level+1)
 			}
 		}
 		for _, it := range inv.Contents(id) {
-			out = append(out, Entry{
-				ID: it.ID, Parent: it.ParentID, Name: it.Name, Flags: it.Flags,
-				Path: join(prefix, it.Name), Depth: level,
-				Type: it.Type, InvType: it.InvType, Asset: it.AssetID,
-				Desc: it.Desc, Created: it.Created, IsLink: it.IsLink,
-				Creator: it.CreatorID, Owner: it.OwnerID,
-				LastOwner: it.LastOwnerID, Group: it.GroupID,
-				BaseMask: it.BaseMask, OwnerMask: it.OwnerMask,
-				GroupMask: it.GroupMask, EveryoneMask: it.EveryoneMask,
-				NextOwnerMask: it.NextOwnerMask,
-				SaleType:      it.SaleType, SalePrice: it.SalePrice,
-			})
+			out = append(out, itemEntry(it, join(prefix, it.Name), level))
 		}
 	}
 	walk(folder, "", 0)
 	return out, nil
 }
+
+// fetchTree reads a folder to a depth into inv.  Where the reply to that
+// is more than a reply may be, the folder is read by itself and each
+// folder in it to one level less, a few at a time and splitting again
+// as far as it has to.  slots bounds the requests in flight, and is
+// held only for a request, never while waiting on the folders below.
+// Why: doc/outfit.md#following-the-links
+func (w *Session) fetchTree(ctx context.Context, inv *agent.Inventory, folder msg.UUID, depth int, slots chan struct{}) error {
+	fetch := func(depth int) error {
+		select {
+		case slots <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		defer func() { <-slots }()
+		return agent.FetchFolderDepth(ctx, w.b, inv, folder, depth)
+	}
+	err := fetch(depth)
+	if depth == 0 || !errors.Is(err, agent.ErrReplyTooLarge) {
+		return err
+	}
+	if err := fetch(0); err != nil {
+		return err
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var (
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		first error
+	)
+	for _, f := range inv.Children(folder) {
+		wg.Add(1)
+		go func(id msg.UUID) {
+			defer wg.Done()
+			if err := w.fetchTree(ctx, inv, id, depth-1, slots); err != nil {
+				mu.Lock()
+				if first == nil {
+					first = err
+					cancel()
+				}
+				mu.Unlock()
+			}
+		}(f.ID)
+	}
+	wg.Wait()
+	return first
+}
+
+func folderEntry(f *agent.Folder, path string, level int) Entry {
+	return Entry{
+		ID: f.ID, Parent: f.ParentID, Name: f.Name, Folder: true,
+		Path: path, Depth: level, Type: f.Type,
+	}
+}
+
+func itemEntry(it *agent.Item, path string, level int) Entry {
+	return Entry{
+		ID: it.ID, Parent: it.ParentID, Name: it.Name, Flags: it.Flags,
+		Path: path, Depth: level,
+		Type: it.Type, InvType: it.InvType, Asset: it.AssetID,
+		Desc: it.Desc, Created: it.Created, IsLink: it.IsLink,
+		Creator: it.CreatorID, Owner: it.OwnerID,
+		LastOwner: it.LastOwnerID, Group: it.GroupID,
+		BaseMask: it.BaseMask, OwnerMask: it.OwnerMask,
+		GroupMask: it.GroupMask, EveryoneMask: it.EveryoneMask,
+		NextOwnerMask: it.NextOwnerMask,
+		SaleType:      it.SaleType, SalePrice: it.SalePrice,
+	}
+}
+
+// ErrNotInInventory is an id inventory has nothing by.
+var ErrNotInInventory = agent.ErrNotInInventory
+
+// Entry reads one item or folder by its id, wherever it is kept, in one
+// request or two: an id is asked about as an item, then as a folder.
+// Its Path is its own name, since nothing above it was read; PathTo
+// gives the folders it is in.
+//
+// This and not a listing from the root is the way to find something by
+// id: a large inventory read whole to any depth is a reply larger than
+// a capability reply may be.
+// Why: doc/outfit.md#following-the-links
+func (w *Session) Entry(ctx context.Context, id msg.UUID) (Entry, error) {
+	it, err := agent.FetchItem(ctx, w.b, id)
+	if err == nil {
+		return itemEntry(it, EscapeName(it.Name), 0), nil
+	}
+	if !errors.Is(err, agent.ErrNotInInventory) {
+		return Entry{}, fmt.Errorf("sl: %w", err)
+	}
+	f, err := agent.FetchCategory(ctx, w.b, id)
+	if err != nil {
+		return Entry{}, fmt.Errorf("sl: %w", err)
+	}
+	return folderEntry(f, EscapeName(f.Name), 0), nil
+}
+
+// Entries is Entry for several ids, a few at a time.  An id inventory
+// has nothing by is left out of the answer rather than failing it; any
+// other failure fails it.
+func (w *Session) Entries(ctx context.Context, ids []msg.UUID) (map[msg.UUID]Entry, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	var (
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		first error
+		out   = make(map[msg.UUID]Entry, len(ids))
+		slots = make(chan struct{}, entryLookups)
+	)
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id msg.UUID) {
+			defer wg.Done()
+			select {
+			case slots <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-slots }()
+			e, err := w.Entry(ctx, id)
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case err == nil:
+				out[id] = e
+			case errors.Is(err, ErrNotInInventory):
+			case first == nil:
+				first = err
+				cancel()
+			}
+		}(id)
+	}
+	wg.Wait()
+	if first != nil {
+		return nil, first
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// entryLookups is how many ids Entries asks about at once.
+const entryLookups = 8
+
+// PathTo is the names of the folders an entry is in, from the
+// inventory root down, read a folder at a time up its parents.  An
+// entry outside the tree the root heads, the Library's, gives the names
+// as far up as its parents go.
+func (w *Session) PathTo(ctx context.Context, e Entry) ([]string, error) {
+	var names []string
+	for at, n := e.Parent, 0; !at.IsZero() && at != w.invRoot; n++ {
+		if n >= maxFolderDepth {
+			return nil, fmt.Errorf("sl: %s is more than %d folders deep", e.Name, maxFolderDepth)
+		}
+		f, err := agent.FetchCategory(ctx, w.b, at)
+		if err != nil {
+			return nil, fmt.Errorf("sl: %w", err)
+		}
+		names = append([]string{f.Name}, names...)
+		at = f.ParentID
+	}
+	return names, nil
+}
+
+// maxFolderDepth stops PathTo on a tree whose parents go round.
+const maxFolderDepth = 64
 
 // join adds a name to a path, escaping it on the way in so the result
 // splits back into the names it was built from.

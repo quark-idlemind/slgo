@@ -170,6 +170,11 @@ type fakeGrid struct {
 
 	presenceErr, objectsErr, regionErr, friendsErr, sendErr, capErr error
 
+	// tooLarge, where set, picks the capability requests whose reply
+	// is more than a reply may be, as a large inventory's is when read
+	// whole to a depth.
+	tooLarge func(r agent.CapRequest) bool
+
 	// how is what Descriptions says of each object, by id.
 	how map[msg.UUID][]sl.Description
 
@@ -538,12 +543,41 @@ func (f *fakeGrid) inventoryRequest(r *http.Request) (string, int) {
 		return empty, http.StatusOK
 	}
 
+	// One thing by its id, which is how an outfit's links are followed.
+	switch {
+	case kind == "item":
+		in := findItemDir(f.inv, id)
+		if in == nil {
+			return "no such item", http.StatusNotFound
+		}
+		var b strings.Builder
+		for _, it := range in.Items {
+			if it.ID == id {
+				invItemLLSD(&b, it, in.ID)
+			}
+		}
+		return `<?xml version="1.0" ?><llsd>` + b.String() + `</llsd>`, http.StatusOK
+	case kind == "category" && !children:
+		dir, parent := findDir(f.inv, id), testRoot
+		if dir == nil {
+			return "no such folder", http.StatusNotFound
+		}
+		if up := findParentDir(f.inv, id); up != nil {
+			parent = up.ID
+		}
+		return `<?xml version="1.0" ?><llsd>` + dirLLSD(dir, parent, 0) + `</llsd>`, http.StatusOK
+	}
+
 	dir := findDir(f.inv, capFolderID(r.URL.Path))
 	if dir == nil {
 		return "no such folder", http.StatusNotFound
 	}
 	depth, _ := strconv.Atoi(r.URL.Query().Get("depth"))
-	return `<?xml version="1.0" ?><llsd>` + dirLLSD(dir, testRoot, depth) + `</llsd>`, http.StatusOK
+	parent := testRoot
+	if up := findParentDir(f.inv, dir.ID); up != nil {
+		parent = up.ID
+	}
+	return `<?xml version="1.0" ?><llsd>` + dirLLSD(dir, parent, depth) + `</llsd>`, http.StatusOK
 }
 
 func readAll(r *http.Request) []byte {
@@ -561,6 +595,40 @@ func invPath(path string) (kind string, id msg.UUID, children bool) {
 	}
 	id, _ = msg.ParseUUID(parts[1])
 	return parts[0], id, len(parts) > 2 && parts[2] == "children"
+}
+
+// findItemDir is the folder an item is in.
+func findItemDir(d *invDir, id msg.UUID) *invDir {
+	if d == nil {
+		return nil
+	}
+	for _, it := range d.Items {
+		if it.ID == id {
+			return d
+		}
+	}
+	for _, sub := range d.Dirs {
+		if got := findItemDir(sub, id); got != nil {
+			return got
+		}
+	}
+	return nil
+}
+
+// findParentDir is the folder a folder is in.
+func findParentDir(d *invDir, id msg.UUID) *invDir {
+	if d == nil {
+		return nil
+	}
+	for _, sub := range d.Dirs {
+		if sub.ID == id {
+			return d
+		}
+		if got := findParentDir(sub, id); got != nil {
+			return got
+		}
+	}
+	return nil
 }
 
 func findItem(d *invDir, id msg.UUID) *invItem {
@@ -764,37 +832,44 @@ func invItemsLLSD(b *strings.Builder, d *invDir, key string, links bool) {
 		if it.IsLink != links {
 			continue
 		}
-		fmt.Fprintf(b, `<key>%s</key><map>`, it.ID)
-		fmt.Fprintf(b, `<key>item_id</key><string>%s</string>`, it.ID)
-		fmt.Fprintf(b, `<key>parent_id</key><string>%s</string>`, d.ID)
-		if links {
-			fmt.Fprintf(b, `<key>linked_id</key><string>%s</string>`, it.Asset)
-		} else {
-			fmt.Fprintf(b, `<key>asset_id</key><string>%s</string>`, it.Asset)
-		}
-		fmt.Fprintf(b, `<key>name</key><string>%s</string>`, xmlText(it.Name))
-		fmt.Fprintf(b, `<key>desc</key><string>%s</string>`, xmlText(it.Desc))
-		fmt.Fprintf(b, `<key>type</key><integer>%d</integer>`, it.Type)
-		fmt.Fprintf(b, `<key>inv_type</key><integer>%d</integer>`, it.InvType)
-		fmt.Fprintf(b, `<key>created_at</key><integer>%d</integer>`, it.Created)
-		fmt.Fprintf(b, `<key>flags</key><integer>%d</integer>`, it.Flags)
-		b.WriteString(`<key>permissions</key><map>`)
-		if m := it.Masks; m != nil {
-			for _, f := range []struct {
-				key  string
-				mask uint32
-			}{
-				{"base_mask", m.Base}, {"owner_mask", m.Owner}, {"group_mask", m.Group},
-				{"everyone_mask", m.Everyone}, {"next_owner_mask", m.Next},
-			} {
-				fmt.Fprintf(b, `<key>%s</key><integer>%d</integer>`, f.key, f.mask)
-			}
-		} else {
-			b.WriteString(`<key>owner_mask</key><integer>581632</integer>`)
-		}
-		b.WriteString(`</map></map>`)
+		fmt.Fprintf(b, `<key>%s</key>`, it.ID)
+		invItemLLSD(b, it, d.ID)
 	}
 	b.WriteString(`</map>`)
+}
+
+// invItemLLSD is what AIS says about one item, in the folder parent.
+func invItemLLSD(b *strings.Builder, it *invItem, parent msg.UUID) {
+	links := it.IsLink
+	b.WriteString(`<map>`)
+	fmt.Fprintf(b, `<key>item_id</key><string>%s</string>`, it.ID)
+	fmt.Fprintf(b, `<key>parent_id</key><string>%s</string>`, parent)
+	if links {
+		fmt.Fprintf(b, `<key>linked_id</key><string>%s</string>`, it.Asset)
+	} else {
+		fmt.Fprintf(b, `<key>asset_id</key><string>%s</string>`, it.Asset)
+	}
+	fmt.Fprintf(b, `<key>name</key><string>%s</string>`, xmlText(it.Name))
+	fmt.Fprintf(b, `<key>desc</key><string>%s</string>`, xmlText(it.Desc))
+	fmt.Fprintf(b, `<key>type</key><integer>%d</integer>`, it.Type)
+	fmt.Fprintf(b, `<key>inv_type</key><integer>%d</integer>`, it.InvType)
+	fmt.Fprintf(b, `<key>created_at</key><integer>%d</integer>`, it.Created)
+	fmt.Fprintf(b, `<key>flags</key><integer>%d</integer>`, it.Flags)
+	b.WriteString(`<key>permissions</key><map>`)
+	if m := it.Masks; m != nil {
+		for _, f := range []struct {
+			key  string
+			mask uint32
+		}{
+			{"base_mask", m.Base}, {"owner_mask", m.Owner}, {"group_mask", m.Group},
+			{"everyone_mask", m.Everyone}, {"next_owner_mask", m.Next},
+		} {
+			fmt.Fprintf(b, `<key>%s</key><integer>%d</integer>`, f.key, f.mask)
+		}
+	} else {
+		b.WriteString(`<key>owner_mask</key><integer>581632</integer>`)
+	}
+	b.WriteString(`</map></map>`)
 }
 
 func xmlText(s string) string {
@@ -2134,10 +2209,13 @@ func (f *fakeGrid) HasCap(name string) bool {
 
 func (f *fakeGrid) DoCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
 	f.mu.Lock()
-	err, base := f.capErr, f.caps[r.Cap]
+	err, base, tooLarge := f.capErr, f.caps[r.Cap], f.tooLarge
 	f.mu.Unlock()
 	if err != nil {
 		return nil, err
+	}
+	if tooLarge != nil && tooLarge(r) {
+		return nil, fmt.Errorf("fake: %s%s: %w", r.Cap, r.Path, agent.ErrReplyTooLarge)
 	}
 	url := r.URL
 	if url == "" {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -687,6 +688,29 @@ func TestCapProxy(t *testing.T) {
 	}
 	if gotMethod != "POST" || gotPath != "/base/thing" || gotBody != "a request" {
 		t.Errorf("server sent %s %s %q", gotMethod, gotPath, gotBody)
+	}
+}
+
+// TestCapProxyTooLargeReachesTheClientAsItself: a reply larger than is
+// read comes back to the client as agent.ErrReplyTooLarge, which is
+// what tells it to ask for less, and not as a failure like any other.
+func TestCapProxyTooLargeReachesTheClientAsItself(t *testing.T) {
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		chunk := []byte(strings.Repeat("x", 1<<20))
+		for range 33 {
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer hs.Close()
+
+	r := newRig(t, agent.Caps{"Big": hs.URL})
+	c := r.dial(t)
+	defer c.Close()
+	_, err := c.DoCap(context.Background(), agent.CapRequest{Cap: "Big"})
+	if !errors.Is(err, agent.ErrReplyTooLarge) {
+		t.Errorf("a reply over 32 MiB gave %v, want agent.ErrReplyTooLarge", err)
 	}
 }
 

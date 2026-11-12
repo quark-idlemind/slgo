@@ -1303,6 +1303,11 @@ func (c *Conn) doCap(ctx context.Context, r agent.CapRequest) (*agent.CapRespons
 		ContentType: r.Type,
 		Url:         r.URL,
 	}, grpc.MaxCallRecvMsgSize(64<<20))
+	// A reply larger than slgod reads, or than this end takes, is the
+	// one failure a caller can do something about: ask for less.
+	if status.Code(err) == codes.ResourceExhausted {
+		return nil, fmt.Errorf("%w: %s", agent.ErrReplyTooLarge, status.Convert(err).Message())
+	}
 	if err != nil {
 		return nil, err
 	}

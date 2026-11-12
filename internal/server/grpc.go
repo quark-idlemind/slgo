@@ -1275,6 +1275,11 @@ func (s *Server) Cap(ctx context.Context, req *pb.CapRequest) (*pb.CapResponse, 
 		return nil, status.Errorf(codes.PermissionDenied, "slgod refused it: %s", why)
 	}
 	resp, err := a.DoCap(ctx, r)
+	if errors.Is(err, agent.ErrReplyTooLarge) {
+		// Its own code, so that a client can ask for less; see
+		// client.Conn.DoCap.
+		return nil, status.Errorf(codes.ResourceExhausted, "%v", err)
+	}
 	if err != nil {
 		return nil, status.Errorf(codes.Unavailable, "%v", err)
 	}

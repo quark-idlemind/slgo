@@ -268,14 +268,13 @@ func (sh *Shell) entriesIn(ctx context.Context, path string) ([]string, []sl.Ent
 	return in, found, nil
 }
 
-// entryByID looks for an id here, then four levels down from the root,
+// entryByID looks for an id here, then asks inventory for it by id,
 // and says which folder it was found in as the names that lead to it.
 //
-// Here first because that is nearly always where it is, and the whole
-// tree is a hundred requests.  The two searches know where they looked
-// in different ways: this folder is the one the shell is in, and the
-// listing from the root carries each entry's path, whose last name is
-// the entry's own.
+// Here first because that is nearly always where it is.  Elsewhere it
+// is one request for the thing and one for each folder above it, where
+// a read of the whole tree is, for a large inventory, more than a reply
+// may be.
 func (sh *Shell) entryByID(ctx context.Context, id msg.UUID) (sl.Entry, []string, error) {
 	sh.mu.Lock()
 	cwd, here := sh.cwdID, append([]string(nil), sh.cwd...)
@@ -288,17 +287,18 @@ func (sh *Shell) entryByID(ctx context.Context, id msg.UUID) (sl.Entry, []string
 			}
 		}
 	}
-	es, err := sh.s.ListInventory(ctx, "", 4)
+	e, err := sh.s.Entry(ctx, id)
+	if errors.Is(err, sl.ErrNotInInventory) {
+		return sl.Entry{}, nil, fmt.Errorf("nothing here has the id %s", id)
+	}
 	if err != nil {
 		return sl.Entry{}, nil, err
 	}
-	for _, e := range es {
-		if e.ID == id {
-			at := sl.SplitPath(e.Path)
-			return e, at[:len(at)-1], nil
-		}
+	in, err := sh.s.PathTo(ctx, e)
+	if err != nil {
+		return sl.Entry{}, nil, err
 	}
-	return sl.Entry{}, nil, fmt.Errorf("nothing here has the id %s", id)
+	return e, in, nil
 }
 
 // thingAt is what a path names, followed through a link if it is one.
@@ -445,9 +445,9 @@ type longFormat struct {
 	// follow is -L: show what a link points at rather than the link.
 	follow bool
 
-	// byID is every entry four levels down from the root, for following
-	// those links.  Nil when nothing in the listing is a link, and nil
-	// when the walk that would have built it failed.
+	// byID is what the listing's links point at, by id.  Nil when
+	// nothing in the listing is a link, and nil when the lookups that
+	// would have built it failed.
 	byID map[msg.UUID]sl.Entry
 }
 
@@ -497,39 +497,35 @@ func lsPerms(e sl.Entry) string {
 
 // longFormatFor builds the format one listing wants.
 //
-// One walk of inventory, four levels down from the root, for the lot,
-// and only when the listing holds a link at all.  A Current Outfit
-// folder is a dozen or more links, and a lookup apiece would be a dozen
-// walks of the tree to answer one listing.
+// Each link's target is asked for by its id, a few at a time, and only
+// when the listing holds a link at all.  A read of the whole tree would
+// be one request, but for a large inventory one larger than a reply may
+// be.
 //
-// A walk that fails is not an error here.  What -L asks for is the kind
-// and the id; the id is on the link already, so a failed walk still
-// answers most of the question, and refusing a whole listing because
-// one extra read did not come back would be worse than a column that
-// says "link".
+// A lookup that fails is not an error here.  What -L asks for is the
+// kind and the id; the id is on the link already, so a failed lookup
+// still answers most of the question, and refusing a whole listing
+// because one extra read did not come back would be worse than a column
+// that says "link".
 func (sh *Shell) longFormatFor(ctx context.Context, follow bool, es []sl.Entry) longFormat {
 	f := longFormat{follow: follow}
 	if !follow {
 		return f
 	}
-	any := false
+	var targets []msg.UUID
 	for _, e := range es {
 		if e.IsLink && !e.Asset.IsZero() {
-			any = true
-			break
+			targets = append(targets, e.Asset)
 		}
 	}
-	if !any {
+	if len(targets) == 0 {
 		return f
 	}
-	all, err := sh.s.ListInventory(ctx, "", 4)
+	byID, err := sh.s.Entries(ctx, targets)
 	if err != nil {
 		return f
 	}
-	f.byID = make(map[msg.UUID]sl.Entry, len(all))
-	for _, e := range all {
-		f.byID[e.ID] = e
-	}
+	f.byID = byID
 	return f
 }
 

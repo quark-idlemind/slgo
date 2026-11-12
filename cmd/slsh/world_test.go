@@ -438,7 +438,7 @@ func TestItemNamesGivesUpQuietly(t *testing.T) {
 	x.grid.caps = map[string]string{} // no inventory capability at all
 	x.grid.mu.Unlock()
 
-	if got := x.itemNames(context.Background()); len(got) != 0 {
+	if got := x.itemNames(context.Background(), []msg.UUID{testLamp}); len(got) != 0 {
 		t.Errorf("an unreadable inventory should name nothing, got %v", got)
 	}
 }

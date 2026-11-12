@@ -247,7 +247,7 @@ func cmdWear(ctx context.Context, sh *Shell, out io.Writer, args []string) error
 // its clause than the whole command is as a failure.
 //
 // Names are looked up only when there is something to name, since that
-// costs a walk of inventory.  A name that is not there falls back to the
+// costs a request for each.  A name that is not there falls back to the
 // item's id, the way detach's does: an id is poor but it is true, and it
 // is what "worn -l" prints.
 // Why: doc/slsh.md#naming-what-a-replace-took-off
@@ -268,7 +268,7 @@ func cameOff(ctx context.Context, sh *Shell, before []*sl.Attached, point int, i
 	if len(ids) == 0 {
 		return ""
 	}
-	byID := sh.itemNames(ctx)
+	byID := sh.itemNames(ctx, ids)
 	names := make([]string, 0, len(ids))
 	for _, id := range ids {
 		name := byID[id]
@@ -628,7 +628,7 @@ func findWorn(ctx context.Context, sh *Shell, worn []*sl.Attached, want string) 
 	if id, err := msg.ParseUUID(strings.TrimSpace(want)); err == nil {
 		for _, a := range worn {
 			if a.Item == id || a.Object.ID == id {
-				name := sh.itemNames(ctx)[a.Item]
+				name := sh.itemNames(ctx, []msg.UUID{a.Item})[a.Item]
 				if name == "" {
 					name = a.Item.String()
 				}
@@ -644,7 +644,11 @@ func findWorn(ctx context.Context, sh *Shell, worn []*sl.Attached, want string) 
 	}
 	leaf := names[len(names)-1]
 
-	byID := sh.itemNames(ctx)
+	items := make([]msg.UUID, len(worn))
+	for i, a := range worn {
+		items[i] = a.Item
+	}
+	byID := sh.itemNames(ctx, items)
 	a, err := sl.PickNamedFunc(worn, leaf, "", "on the avatar",
 		func(a *sl.Attached) (string, msg.UUID) { return byID[a.Item], a.Item })
 	var ne *sl.NameError
