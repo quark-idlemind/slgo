@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -210,7 +211,7 @@ func TestRedirectionToSomewhereUnwritableIsReported(t *testing.T) {
 	if err == nil {
 		t.Fatal("writing into a directory that is not there should fail")
 	}
-	if got := x.out.String(); !strings.Contains(got, "no such") {
+	if got, want := x.out.String(), missingText(t); !strings.Contains(got, want) {
 		t.Errorf("the failure should reach the terminal, got %q", got)
 	}
 }
@@ -1146,4 +1147,16 @@ func TestTheBannerNamesARegionItWasNotTold(t *testing.T) {
 	if got := x.out.String(); !strings.Contains(got, "in an unnamed region") {
 		t.Errorf("the banner reads %q", got)
 	}
+}
+
+// missingText is how this system says a file's directory is not there:
+// "no such file or directory" on Unix, "cannot find the path" on Windows.
+func missingText(t *testing.T) string {
+	t.Helper()
+	_, err := os.Open(filepath.Join(t.TempDir(), "absent", "absent"))
+	var pe *fs.PathError
+	if !errors.As(err, &pe) {
+		t.Fatalf("opening what is not there: %v", err)
+	}
+	return pe.Err.Error()
 }

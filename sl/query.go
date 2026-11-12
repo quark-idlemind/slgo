@@ -632,13 +632,15 @@ func (w *Session) resolveWith(ctx context.Context, want []msg.UUID, timeout time
 	if len(want) == 0 {
 		return nil
 	}
-	asked := time.Now()
-	deadline := asked.Add(timeout)
+	deadline := time.Now().Add(timeout)
+	w.mu.Lock()
+	asked := w.namesHeard
+	w.mu.Unlock()
 	// answered says an object has been named: at all, or when asking
 	// again, since the asking.  Called under w.mu.
 	answered := func(id msg.UUID) bool {
 		if again {
-			return w.nameAt[id].After(asked)
+			return w.nameAt[id] > asked
 		}
 		_, ok := w.objectNames[id]
 		return ok

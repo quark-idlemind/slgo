@@ -26,6 +26,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/quark-idlemind/slgo/internal/home"
 )
 
 // transcript is an open log file.  A nil one, or one with no file
@@ -44,7 +46,7 @@ func logDir() (string, error) {
 	if d := os.Getenv("XDG_DATA_HOME"); d != "" {
 		return filepath.Join(d, "slgo"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := home.Dir()
 	if err != nil {
 		return "", err
 	}

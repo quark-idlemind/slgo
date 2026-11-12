@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -372,6 +373,9 @@ func TestNoCommandIsUsage(t *testing.T) {
 // whatever sl-host this machine really has.
 func fakeSLHost(t *testing.T, script string) {
 	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake sl-host is a shell script")
+	}
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "sl-host"), []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
 		t.Fatal(err)

@@ -91,6 +91,10 @@ type Invitation struct {
 
 	// key is slgod's name for it; see Offer.
 	key string
+
+	// seq orders it among things heard in the same tick of the clock;
+	// see byArrival.
+	seq uint64
 }
 
 func (i *Invitation) String() string {
@@ -142,7 +146,7 @@ func (w *Session) noteInvitation(im *IM, key string, recorded bool) {
 	w.invites[im.From] = &Invitation{
 		At: im.At, Group: im.From, By: im.FromName, Text: im.Text,
 		Transaction: im.ID, Role: role, Fee: fee, Stated: stated,
-		Recorded: recorded, key: key,
+		Recorded: recorded, key: key, seq: w.nextArrival(),
 	}
 	w.mu.Unlock()
 }
@@ -156,11 +160,7 @@ func (w *Session) Invitations() []*Invitation {
 	for _, i := range w.invites {
 		out = append(out, i)
 	}
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].At.Before(out[j-1].At); j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
+	byArrival(out, func(i *Invitation) (time.Time, uint64) { return i.At, i.seq })
 	return out
 }
 

@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -210,6 +211,9 @@ func TestALaunchWithNothingToRunSaysSo(t *testing.T) {
 // logs nobody in, and looks exactly like success.  That is the one
 // outcome worth refusing outright.
 func TestARunningViewerIsRefusedRatherThanRaised(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("this test runs true(1) and false(1)")
+	}
 	x, d := newDaemonShell(t)
 	d.status = aViewerStatus(false)
 	d.credential = aCredential()
@@ -235,6 +239,9 @@ func TestARunningViewerIsRefusedRatherThanRaised(t *testing.T) {
 // would leave it in a scrollback that outlives the five minutes it is
 // good for.
 func TestALaunchRunsTheCommandAndKeepsThePasswordOutOfSight(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("this test runs true(1) and false(1)")
+	}
 	x, d := newDaemonShell(t)
 	d.status = aViewerStatus(false)
 	d.credential = aCredential()
@@ -315,6 +322,9 @@ func TestARunningCheckThatCannotRunIsNotReadAsNo(t *testing.T) {
 // TestARunningCheckIsAnExitStatus: pgrep's shape -- nothing found is a
 // failure and not an error -- is the whole contract of the setting.
 func TestARunningCheckIsAnExitStatus(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("this test runs true(1) and false(1)")
+	}
 	for _, tc := range []struct {
 		command string
 		want    bool

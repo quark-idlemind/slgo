@@ -22,7 +22,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -170,15 +169,15 @@ func main() {
 				shown = auth.DefaultSecretPath()
 			}
 			log.Fatalf("cannot start: %v\n"+
-				"Create one with:  (umask 077; mkdir -p %s; openssl rand -hex 32 > %s)\n"+
-				"Or pass -no-auth to serve loopback without it.", err, filepath.Dir(shown), shown)
+				"Create one with:  %s\n"+
+				"Or pass -no-auth to serve loopback without it.", err, auth.MakeSecretCommand(shown))
 		}
 		if path == "" {
 			path = auth.DefaultSecretPath()
 		}
 		log.Printf("secret: %s", path)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signalContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	// The record of what crossed the wire.  It is here rather than in
@@ -773,3 +772,7 @@ func (g *groupFlag) For(name, fromProfile string) string {
 	}
 	return fromProfile
 }
+
+// signalContext is signal.NotifyContext.  A test replaces it on a
+// system where a process cannot send itself SIGTERM.
+var signalContext = signal.NotifyContext

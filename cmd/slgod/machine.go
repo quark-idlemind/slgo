@@ -30,6 +30,7 @@ import (
 	"strings"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/internal/private"
 )
 
 // machineID is the computer slgod claims to be.
@@ -78,7 +79,7 @@ func useConfigDir(dir string) error {
 	if !fi.IsDir() {
 		return fmt.Errorf("%s is not a directory", abs)
 	}
-	if m := fi.Mode().Perm(); m&0o077 != 0 {
+	if m := fi.Mode().Perm(); private.Open(fi) {
 		return fmt.Errorf("%s is mode %04o, wanted 0700: chmod 700 %s", abs, m, abs)
 	}
 	if err := os.Setenv("SLGO_CONFIG_DIR", abs); err != nil {

@@ -65,7 +65,9 @@ func swapOnGo(t *testing.T, f *fakeGrid, pic image.Image) {
 
 func runBtn(t *testing.T, f *fakeGrid, p paintSpec, cfg runCfg, src string) *Result {
 	t.Helper()
-	t.Setenv("TMPDIR", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp) // Windows
 	f.paint(t, f.objects[0], p)
 	return playWith(t, f, hdr+src, Options{}, cfg)
 }
@@ -234,7 +236,9 @@ func TestAReadingIsStampedWhenItsFaceWasRead(t *testing.T) {
 // guarded runs a before each with a guarded touch and its convergence step.
 func guarded(t *testing.T, f *fakeGrid, p paintSpec, touch, then string) (*Result, error) {
 	t.Helper()
-	t.Setenv("TMPDIR", t.TempDir())
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+	t.Setenv("TMP", tmp) // Windows
 	f.paint(t, f.objects[0], p)
 	return tryPlay(t, f, hdr+"before each {\n"+touch+"\nthen expect "+then+"\n}\ntest \"t\" { expect "+then+" }\n", Options{}, testCfg())
 }

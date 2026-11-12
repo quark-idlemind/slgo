@@ -39,9 +39,13 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/quark-idlemind/slgo/internal/home"
+	"github.com/quark-idlemind/slgo/internal/private"
 )
 
 // ChallengeSize is how many random bytes each side offers.
@@ -241,7 +245,7 @@ func (s *Server) expireLocked() {
 // the new path is documented; with neither present, the new path is
 // what an error names and where a new secret should go.
 func DefaultSecretPath() string {
-	home, err := os.UserHomeDir()
+	home, err := home.Dir()
 	if err != nil {
 		return ""
 	}
@@ -277,7 +281,7 @@ func DefaultSecretPath() string {
 // A host that could name another directory gets no file of its own.
 func SecretPathsFor(addr string) []string {
 	def := DefaultSecretPath()
-	home, err := os.UserHomeDir()
+	home, err := home.Dir()
 	if def == "" || err != nil {
 		return nil
 	}
@@ -409,8 +413,8 @@ func warnIfShort(path, secret string) {
 	}
 	Warnf("WARNING: the shared secret in %s is %d bytes, which is short enough to guess; "+
 		"at least %d is wanted.  Make a new one with:  "+
-		"(umask 077; openssl rand -hex 32 > %s)  and restart slgod and its clients",
-		path, len(secret), MinSecretLength, path)
+		"%s  and restart slgod and its clients",
+		path, len(secret), MinSecretLength, MakeSecretCommand(path))
 }
 
 func checkMode(path string, want os.FileMode) error {
@@ -418,7 +422,7 @@ func checkMode(path string, want os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	if got := fi.Mode().Perm(); got&^want != 0 {
+	if got := fi.Mode().Perm(); private.Wider(fi, want) {
 		return fmt.Errorf("%s has mode %04o, must be %04o -- it holds the shared secret; chmod %04o %s",
 			path, got, want, want, path)
 	}
@@ -459,4 +463,20 @@ func trimSpace(s string) string {
 		j--
 	}
 	return s[i:j]
+}
+
+// MakeSecretCommand is a command line that makes a secret at path, for
+// a message to give somebody who has none: a shell's on Unix, and on
+// Windows, which has neither umask nor openssl, PowerShell's.  The file
+// is private by its mode on Unix and by the profile directory's access
+// list on Windows; see internal/private.
+func MakeSecretCommand(path string) string {
+	dir := filepath.Dir(path)
+	if runtime.GOOS == "windows" {
+		return fmt.Sprintf("New-Item -ItemType Directory -Force '%s' | Out-Null; "+
+			"$b = New-Object byte[] 32; "+
+			"[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); "+
+			"-join ($b | %% { $_.ToString('x2') }) | Set-Content '%s'", dir, path)
+	}
+	return fmt.Sprintf("(umask 077; mkdir -p %s; openssl rand -hex 32 > %s)", dir, path)
 }

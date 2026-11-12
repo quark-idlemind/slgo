@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/private"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -199,7 +200,7 @@ func TestAnUnparsableConversationIsSetAsideAndBegunAgain(t *testing.T) {
 	if b, _ := os.ReadFile(aside[0]); string(b) != "not json at all" {
 		t.Errorf("what was kept reads %q", b)
 	}
-	if fi, err := os.Stat(aside[0]); err != nil || fi.Mode().Perm() != 0o640 {
+	if fi, err := os.Stat(aside[0]); err != nil || (private.Checked && fi.Mode().Perm() != 0o640) {
 		t.Errorf("kept with mode %v (%v), want 0640", fi.Mode().Perm(), err)
 	}
 	// A conversation begun again is an ordinary one from then on.

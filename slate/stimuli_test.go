@@ -1,6 +1,7 @@
 package slate
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -345,7 +346,13 @@ func TestARefusedPaymentFailsTheStepAndIsNotRetried(t *testing.T) {
 	res := playWith(t, f, payHdr+"pay vendor L$5 reason \"tip\"\nexpect say \"x\" on public from object vendor within 250ms\n", Options{Pay: true}, testCfg())
 	wantExit(t, res, 1)
 	mustHave(t, res, "refused it", "Not allowed", "payment: L$5", `pay L$5 to "Example Tip Jar"`)
-	mustHave(t, res, "waited: 0s") // the expectations did not run
+	// The expectations did not run: what was waited is the payment's
+	// answer, well inside the 250ms they would have been given.
+	if m := regexp.MustCompile(`waited: (\S+)`).FindStringSubmatch(res.Transcript); m == nil {
+		t.Errorf("transcript says nothing of a wait:\n%s", res.Transcript)
+	} else if d, err := time.ParseDuration(m[1]); err != nil || d >= 250*time.Millisecond {
+		t.Errorf("waited %s, as though the expectations ran:\n%s", m[1], res.Transcript)
+	}
 	if got := sentOf[*msg.MoneyTransferRequest](f); len(got) != 1 {
 		t.Errorf("%d transfers sent", len(got))
 	}

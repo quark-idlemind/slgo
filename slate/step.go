@@ -129,7 +129,7 @@ func (s *stepRun) run(ctx context.Context) error {
 			return err
 		}
 	}
-	s.end = time.Now()
+	s.end = boundary()
 	if s.state == stPassed {
 		s.t.next = later(s.arm, s.stimReturned, s.matchedAt())
 		s.r.printf("slate: pass step %d", s.n)
@@ -233,7 +233,7 @@ func (s *stepRun) armed(ctx context.Context) error {
 	if err := s.r.drain(); err != nil {
 		return err
 	}
-	now := time.Now()
+	now := boundary()
 	s.start = now
 	if s.x.Phase == PhaseBody && s.t.ownStart.IsZero() {
 		s.t.ownStart = now // where `original` is read: after before each
@@ -303,7 +303,7 @@ func (s *stepRun) rearm(ctx context.Context) error {
 	if err := s.r.drain(); err != nil {
 		return err
 	}
-	s.arm = time.Now()
+	s.arm = boundary()
 	s.stimReturned = later(s.stimReturned, s.arm)
 	return nil
 }

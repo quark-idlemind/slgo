@@ -58,6 +58,10 @@ type Lure struct {
 
 	// key is slgod's name for it; see Offer.
 	key string
+
+	// seq orders it among things heard in the same tick of the clock;
+	// see byArrival.
+	seq uint64
 }
 
 func (l Lure) String() string {
@@ -85,7 +89,7 @@ func (w *Session) noteLure(im *IM, key string, recorded bool) {
 	}
 	w.lures[im.From] = &Lure{
 		At: im.At, From: im.From, Name: name, Text: im.Text, ID: im.ID,
-		Recorded: recorded, key: key,
+		Recorded: recorded, key: key, seq: w.nextArrival(),
 	}
 	w.mu.Unlock()
 }
@@ -99,11 +103,7 @@ func (w *Session) Lures() []*Lure {
 	for _, l := range w.lures {
 		out = append(out, l)
 	}
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].At.Before(out[j-1].At); j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
+	byArrival(out, func(l *Lure) (time.Time, uint64) { return l.At, l.seq })
 	return out
 }
 
@@ -236,6 +236,10 @@ type TeleportRequest struct {
 
 	// key is slgod's name for it; see Offer.
 	key string
+
+	// seq orders it among things heard in the same tick of the clock;
+	// see byArrival.
+	seq uint64
 }
 
 func (r TeleportRequest) String() string {
@@ -262,7 +266,7 @@ func (w *Session) noteTeleportRequest(im *IM, key string, recorded bool) {
 	}
 	w.tpRequests[im.From] = &TeleportRequest{
 		At: im.At, From: im.From, Name: name, Text: im.Text,
-		Recorded: recorded, key: key,
+		Recorded: recorded, key: key, seq: w.nextArrival(),
 	}
 	w.mu.Unlock()
 }
@@ -276,11 +280,7 @@ func (w *Session) TeleportRequests() []*TeleportRequest {
 	for _, r := range w.tpRequests {
 		out = append(out, r)
 	}
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].At.Before(out[j-1].At); j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
+	byArrival(out, func(r *TeleportRequest) (time.Time, uint64) { return r.At, r.seq })
 	return out
 }
 

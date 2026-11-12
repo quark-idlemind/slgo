@@ -43,6 +43,8 @@ import (
 	"time"
 
 	"github.com/quark-idlemind/slgo/agent"
+	"github.com/quark-idlemind/slgo/internal/home"
+	"github.com/quark-idlemind/slgo/internal/private"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -366,7 +368,7 @@ func LoadConfig(path string) (Config, error) {
 	// readable all along is finding out too late.
 	dir := filepath.Dir(path)
 	if fi, err := os.Stat(dir); err == nil {
-		if m := fi.Mode().Perm(); m&0o077 != 0 {
+		if m := fi.Mode().Perm(); private.Open(fi) {
 			return Config{}, fmt.Errorf(
 				"%s is mode %04o, wanted 0700: chmod 700 %s", dir, m, dir)
 		}
@@ -790,7 +792,7 @@ func lookProgram(name string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if fi.IsDir() || fi.Mode().Perm()&0o111 == 0 {
+		if fi.IsDir() || (private.Checked && fi.Mode().Perm()&0o111 == 0) {
 			return "", fmt.Errorf("%s is not something that can be run", name)
 		}
 		return name, nil
@@ -834,7 +836,7 @@ func (c *Config) ChatStore() (string, error) {
 	if d := os.Getenv("XDG_STATE_HOME"); d != "" {
 		return filepath.Join(d, "slbotd"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := home.Dir()
 	if err != nil {
 		return "", fmt.Errorf("no home directory: %w", err)
 	}
@@ -851,7 +853,7 @@ func expandHome(path string) string {
 	if path != "~" && !strings.HasPrefix(path, "~/") {
 		return path
 	}
-	home, err := os.UserHomeDir()
+	home, err := home.Dir()
 	if err != nil {
 		return path
 	}

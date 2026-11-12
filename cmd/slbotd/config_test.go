@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quark-idlemind/slgo/internal/private"
 	"github.com/quark-idlemind/slgo/msg"
 )
 
@@ -221,6 +222,9 @@ func TestLoadConfigReadsAFile(t *testing.T) {
 // Saying so when the configuration is read is saying so before the
 // first login rather than after it.
 func TestAReadableDirectoryIsRefused(t *testing.T) {
+	if !private.Checked {
+		t.Skip("there are no Unix mode bits here; see internal/private")
+	}
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatal(err)

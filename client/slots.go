@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -202,8 +203,10 @@ func (c *Conn) ask(ctx context.Context, stream pb.Grid_StreamClient, w *asking, 
 			g := grantOf(got)
 			// A refusal once the deadline has passed is the daemon's
 			// word that the wait ran out: it started its clock after
-			// this one, so it cannot say so any sooner.
-			if within > 0 && !g.Held() && !time.Now().Before(deadline) {
+			// this one, so it cannot say so any sooner.  The clock is
+			// read allowing for its grain, which on Windows is coarse
+			// enough that a deadline just passed can read as not yet.
+			if within > 0 && !g.Held() && !time.Now().Add(clockGrain).Before(deadline) {
 				return nil, ErrStillBusy
 			}
 			return g, nil
@@ -318,3 +321,14 @@ func (g *granting) deliver(got *pb.SlotsGranted) (giveBack string) {
 	}
 	return ""
 }
+
+// clockGrain is how far behind the real time a reading of the clock can
+// be: nothing on Unix, and on Windows one step of its clock -- half a
+// millisecond on the machine measured, and allowed for here up to the
+// 15.6 ms Windows documents as its default timer period.
+var clockGrain = func() time.Duration {
+	if runtime.GOOS == "windows" {
+		return 16 * time.Millisecond
+	}
+	return 0
+}()

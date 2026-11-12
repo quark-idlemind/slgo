@@ -525,7 +525,7 @@ func (r *runner) runTest(ctx context.Context, et ExpandedTest) (TestResult, bool
 	if err := t.watch.start(ctx); err != nil {
 		return tr, true, err
 	}
-	t.start = time.Now()
+	t.start = boundary()
 	t.next = t.start
 	t.mark = r.log.mark()
 

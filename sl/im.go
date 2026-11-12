@@ -331,6 +331,10 @@ type Offer struct {
 	key string
 
 	w *Session
+
+	// seq orders it among things heard in the same tick of the clock;
+	// see byArrival.
+	seq uint64
 }
 
 func (o *Offer) String() string { return o.Name + " offers friendship" }
@@ -429,6 +433,10 @@ type InventoryOffer struct {
 	key string
 
 	w *Session
+
+	// seq orders it among things heard in the same tick of the clock;
+	// see byArrival.
+	seq uint64
 }
 
 func (o *InventoryOffer) String() string {
@@ -512,11 +520,7 @@ func (w *Session) InventoryOffers() []*InventoryOffer {
 	for _, o := range w.invOffers {
 		out = append(out, o)
 	}
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].At.Before(out[j-1].At); j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
+	byArrival(out, func(o *InventoryOffer) (time.Time, uint64) { return o.At, o.seq })
 	return out
 }
 
@@ -676,11 +680,7 @@ func (w *Session) Offers() []*Offer {
 	for _, o := range w.offers {
 		out = append(out, o)
 	}
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && out[j].At.Before(out[j-1].At); j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
-	}
+	byArrival(out, func(o *Offer) (time.Time, uint64) { return o.At, o.seq })
 	return out
 }
 
@@ -844,7 +844,7 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 		}
 		w.offers[im.From] = &Offer{
 			At: im.At, From: im.From, Name: name, Transaction: b.ID,
-			Recorded: recorded, key: key, w: w,
+			Recorded: recorded, key: key, w: w, seq: w.nextArrival(),
 		}
 		w.mu.Unlock()
 	}
@@ -882,6 +882,7 @@ func (w *Session) instantMessage(raw *client.Message, m *msg.ImprovedInstantMess
 		if w.invOffers == nil {
 			w.invOffers = map[msg.UUID]*InventoryOffer{}
 		}
+		o.seq = w.nextArrival()
 		w.invOffers[o.Transaction] = o
 		w.mu.Unlock()
 	}

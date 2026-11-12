@@ -20,8 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,6 +27,9 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/pborman/getopt/v2"
 

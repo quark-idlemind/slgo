@@ -74,6 +74,7 @@ import (
 	"math"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -295,13 +296,17 @@ func lslOrPath(what, s string) string {
 	return string(data)
 }
 
-// looksLikePath is the whole of the rule.  See lslOrPath.
+// looksLikePath is the whole of the rule.  See lslOrPath.  On Windows a
+// path may also be absolute with a drive (C:\code.lsl) or begin .\ or
+// ..\, none of which is how LSL begins either.
 func looksLikePath(s string) bool {
 	switch {
 	case strings.HasPrefix(s, "//"):
 		return false
 	case strings.HasPrefix(s, "/"), strings.HasPrefix(s, "./"), strings.HasPrefix(s, "../"):
 		return true
+	case os.PathSeparator == '\\':
+		return filepath.IsAbs(s) || strings.HasPrefix(s, `.\`) || strings.HasPrefix(s, `..\`)
 	}
 	return false
 }

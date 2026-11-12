@@ -22,6 +22,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"github.com/quark-idlemind/slgo/internal/private"
 )
 
 // FileMode is what a log or trace is created with, and narrowed to.
@@ -62,7 +64,7 @@ func Append(path string) (*os.File, error) {
 		return nil, err
 	case !fi.IsDir():
 		return nil, fmt.Errorf("%s is not a directory", dir)
-	case fi.Mode().Perm()&0o077 != 0:
+	case private.Open(fi):
 		return nil, fmt.Errorf("%s is mode %03o, so other users can read or replace what is "+
 			"logged there; a log directory has to be %03o (chmod %03o %s), or log somewhere else",
 			dir, fi.Mode().Perm(), DirMode, DirMode, dir)
@@ -109,7 +111,7 @@ func open(path string, flag int) (*os.File, error) {
 		f.Close()
 		return nil, fmt.Errorf("%s belongs to another user, who can read whatever is written to it", path)
 	}
-	if fi.Mode().Perm()&0o077 != 0 {
+	if private.Open(fi) {
 		if err := f.Chmod(FileMode); err != nil {
 			f.Close()
 			return nil, err

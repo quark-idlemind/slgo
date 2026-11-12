@@ -21,6 +21,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -639,6 +640,9 @@ func TestAFileThatWillNotOpenIsSaid(t *testing.T) {
 // sl-host that will not answer therefore stops the run rather than
 // leaving it to dial a guess.
 func TestWhereSLGODRunsIsAQuestionForSLHost(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake sl-host is a shell script")
+	}
 	dir := t.TempDir()
 	script := filepath.Join(dir, "sl-host")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'no idea' >&2\nexit 1\n"), 0o755); err != nil {
@@ -698,6 +702,9 @@ func TestAShellReadsUntilTheInputRunsOut(t *testing.T) {
 // address in the failure, which is the seam; nothing listens on port 1.
 // Why: doc/guide.md#saying-where-slgod-is
 func TestWhereSlgodIsFollowsFlagThenEnvironmentThenSLHost(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake sl-host is a shell script")
+	}
 	fake := t.TempDir()
 	script := "#!/bin/sh\necho sl-host-says.example:1\n"
 	if err := os.WriteFile(filepath.Join(fake, "sl-host"), []byte(script), 0o755); err != nil {

@@ -7,6 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/quark-idlemind/slgo/internal/home"
+	"github.com/quark-idlemind/slgo/internal/private"
 )
 
 // Credentials live in one file per account under a private directory:
@@ -56,7 +59,7 @@ func ConfigDir() (string, error) {
 	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
 		return filepath.Join(d, "slgo"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := home.Dir()
 	if err != nil {
 		return "", fmt.Errorf("agent: no home directory: %w", err)
 	}
@@ -76,7 +79,7 @@ func DaemonConfigDir() (string, error) {
 	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" {
 		return filepath.Join(d, "slgod"), nil
 	}
-	home, err := os.UserHomeDir()
+	home, err := home.Dir()
 	if err != nil {
 		return "", fmt.Errorf("agent: no home directory: %w", err)
 	}
@@ -112,7 +115,7 @@ func LoadProfile(name string) (Login, error) {
 
 	dir := filepath.Dir(path)
 	if fi, err := os.Stat(dir); err == nil {
-		if m := fi.Mode().Perm(); m&0o077 != 0 {
+		if m := fi.Mode().Perm(); private.Open(fi) {
 			return Login{}, fmt.Errorf(
 				"agent: %s is mode %04o, wanted 0700: chmod 700 %s", dir, m, dir)
 		}
@@ -128,7 +131,7 @@ func LoadProfile(name string) (Login, error) {
 	if err != nil {
 		return Login{}, err
 	}
-	if m := fi.Mode().Perm(); m&0o077 != 0 {
+	if m := fi.Mode().Perm(); private.Open(fi) {
 		return Login{}, fmt.Errorf(
 			"agent: %s is mode %04o, wanted 0600: chmod 600 %s", path, m, path)
 	}
@@ -339,6 +342,11 @@ func ListProfiles() ([]string, error) {
 	}
 	ents, err := os.ReadDir(dir)
 	if err != nil {
+		// Windows says a file read as a directory does not exist,
+		// where Unix says it is not a directory.
+		if fi, serr := os.Stat(dir); serr == nil && !fi.IsDir() {
+			return nil, fmt.Errorf("agent: %s is not a directory", dir)
+		}
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
