@@ -327,7 +327,7 @@ type LoginRequest struct {
 	//
 	// Ugly, but proto has no formal way of limiting the length of a
 	// field.  A string is whatever length the sender says, up to the
-	// whole 4 MB message, and this one arrives before the caller has
+	// whole 64 MiB message, and this one arrives before the caller has
 	// proved anything and is kept, in every pending challenge, until it
 	// answers.  So the name is carried in fields that cannot be
 	// longer: fixed64 rather than uint64 because a varint is itself of

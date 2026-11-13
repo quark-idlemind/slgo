@@ -122,6 +122,28 @@ uploader. A completed upload answers `state` "complete" with
 `new_inventory_item` and `new_asset`; the viewer then corrects the item's
 asset type to "object" (`:3375`).
 
+## How large a request slgod takes
+
+A client's capability request reaches slgod as one gRPC message, with
+the upload inside it whole, and gRPC refuses a message over 4 MB unless
+it is told otherwise. On 2026-11-12 a model of about 78,000 triangles
+encoded to 4.2 MB, its quote request through slgod was 5.5 MB, and
+slgod refused it before anything reached the grid. The client called
+that "the reply is larger than 32 MiB", because it took every refusal
+for size as the one about a reply.
+
+Both ends now take up to 64 MiB (`client.MaxMessage`): room for an
+upload, and for the 32 MiB slgod reads of a capability's reply. A
+request larger than that is refused by the client before it is sent,
+with `client.ErrRequestTooLarge`. Against an slgod built before this,
+a request over 4 MB is still refused, and the client passes on gRPC's
+own words, which name both sizes:
+
+    grpc: received message larger than max (6291484 vs. 4194304)
+
+That line is from the test that sends 6 MiB to an slgod without the
+raised limit, not from the grid.
+
 ## The right to upload mesh
 
 Both test accounts were refused at the second request:

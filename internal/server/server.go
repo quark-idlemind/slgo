@@ -225,6 +225,10 @@ type Hosted struct {
 // errNoSession is a request made of a connection that is not up.
 var errNoSession = errors.New("server: no session")
 
+// maxMessage is the largest message the server takes, 64 MiB, the same
+// as client.MaxMessage: a Cap request carries an upload whole.
+const maxMessage = 64 << 20
+
 // logf says something to whoever is running the daemon.  Silent when
 // nobody is listening, which is what a test wants.
 func (h *Hosted) logf(format string, v ...any) {
@@ -942,14 +946,17 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 			PermitWithoutStream: true,
 		}),
 	}
-	// The receive limit is left at gRPC's own 4 MB, although a caller
-	// that has proved nothing could be held to far less.  gRPC reads a
-	// whole message before any interceptor or handler sees it, and the
-	// limit is one number for the server, not for a method or for a
-	// connection that has not authenticated -- and a Cap request
-	// carrying an upload needs the room.  What an unauthenticated
-	// caller sends is bounded instead by what is kept of it: nothing of
-	// a Login but a challenge and a name of fixed size.
+	// The receive limit is raised from gRPC's 4 MB to maxMessage, the
+	// client's own, because a Cap request carries an upload whole: a
+	// mesh's quote request was 5.5 MB.  A caller that has proved nothing
+	// could be held to far less, but gRPC reads a whole message before
+	// any interceptor or handler sees it, and the limit is one number
+	// for the server, not for a method or for a connection that has not
+	// authenticated.  What an unauthenticated caller sends is bounded
+	// instead by what is kept of it: nothing of a Login but a challenge
+	// and a name of fixed size.
+	// Why: doc/mesh.md#how-large-a-request-slgod-takes
+	opts = append(opts, grpc.MaxRecvMsgSize(maxMessage))
 	if s.auth != nil {
 		creds, err := auth.ServerTLS()
 		if err != nil {
