@@ -230,6 +230,7 @@ func TestSculptMarkOf(t *testing.T) {
 		{"a light only", []ExtraParam{{Type: ExtraLight, Data: lightData(1, 2, 3, 4, 1, 1, 1)}}, SculptMark{}},
 		{"sphere", []ExtraParam{{Type: ExtraSculpt, Data: sculptData(tex, 1)}}, SculptMark{SculptSphere, tex}},
 		{"mesh", []ExtraParam{{Type: ExtraSculpt, Data: sculptData(tex, 5)}}, SculptMark{SculptMesh, tex}},
+		{"mesh as its own type", []ExtraParam{{Type: ExtraMesh, Data: sculptData(tex, 5)}}, SculptMark{SculptMesh, tex}},
 		{"mirrored plane", []ExtraParam{{Type: ExtraSculpt, Data: sculptData(tex, 0x80|3)}}, SculptMark{SculptPlane, tex}},
 		{"kind none", []ExtraParam{{Type: ExtraSculpt, Data: sculptData(tex, 0x40)}}, SculptMark{}},
 		{"too short", []ExtraParam{{Type: ExtraSculpt, Data: []byte{1, 2, 3}}}, SculptMark{}},

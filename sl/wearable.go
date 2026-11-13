@@ -746,6 +746,13 @@ func (w *Session) bakeAndHear(ctx context.Context, wait time.Duration) bool {
 
 const bakeHearPoll = 250 * time.Millisecond
 
+// Rebake asks the grid to bake the outfit the Current Outfit folder
+// names, which changes nothing worn, and waits up to wait for the
+// appearance that answers, saying whether it came.
+func (w *Session) Rebake(ctx context.Context, wait time.Duration) bool {
+	return w.bakeAndHear(ctx, wait)
+}
+
 // takeStock is how many attachments this avatar has from each
 // inventory item, as the region has described them, and the
 // simulator's account set against that -- read together so that the
@@ -769,6 +776,14 @@ func (w *Session) takeStock(ctx context.Context) (map[msg.UUID]int, *AttachmentA
 		return nil, nil, err
 	}
 	return on, acct, nil
+}
+
+// OutfitItem is the item an outfit link points at, with its asset id.
+func (w *Session) OutfitItem(ctx context.Context, l OutfitLink) (*Item, error) {
+	if !l.Found || l.Folder {
+		return nil, fmt.Errorf("sl: %s does not lead to an item this session found", l.Name)
+	}
+	return w.itemIn(ctx, l.Parent, l.Item)
 }
 
 // itemIn is one item out of a folder, by id.

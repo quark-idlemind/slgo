@@ -313,7 +313,11 @@ func (d *Direct) SimAttachments(ctx context.Context, avatar msg.UUID) (*SimAttac
 		avatar = d.a.Account.AgentID
 	}
 	m, at := d.a.Appearances().Heard(avatar)
-	return simAttachmentsFrom(m, at), nil
+	out := simAttachmentsFrom(m, at)
+	if out != nil {
+		out.AppearanceService = d.a.AppearanceService()
+	}
+	return out, nil
 }
 
 func (d *Direct) Presence(ctx context.Context, drawDistance float32) (*Presence, error) {

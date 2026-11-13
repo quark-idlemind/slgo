@@ -1367,6 +1367,15 @@ message AttachmentsResponse {
   // the simulator sent them.  What a position means is the client's
   // business: sl reads the shape's sex out of it.
   bytes visual_params = 5;
+
+  // The appearance's texture entry, as the simulator sent it: one face
+  // per avatar texture slot, the baked ones among them.
+  bytes texture_entry = 6;
+
+  // Where this session's grid serves baked textures: the login
+  // response's agent_appearance_service.  The same for every avatar
+  // asked about, and empty when the login named none.
+  string appearance_service = 7;
 }
 
 // SimAttachment is one entry in an avatar's attachment list.

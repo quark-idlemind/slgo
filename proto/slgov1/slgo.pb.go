@@ -4555,9 +4555,16 @@ type AttachmentsResponse struct {
 	// The appearance's visual parameters, one byte each, in the order
 	// the simulator sent them.  What a position means is the client's
 	// business: sl reads the shape's sex out of it.
-	VisualParams  []byte `protobuf:"bytes,5,opt,name=visual_params,json=visualParams,proto3" json:"visual_params,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	VisualParams []byte `protobuf:"bytes,5,opt,name=visual_params,json=visualParams,proto3" json:"visual_params,omitempty"`
+	// The appearance's texture entry, as the simulator sent it: one face
+	// per avatar texture slot, the baked ones among them.
+	TextureEntry []byte `protobuf:"bytes,6,opt,name=texture_entry,json=textureEntry,proto3" json:"texture_entry,omitempty"`
+	// Where this session's grid serves baked textures: the login
+	// response's agent_appearance_service.  The same for every avatar
+	// asked about, and empty when the login named none.
+	AppearanceService string `protobuf:"bytes,7,opt,name=appearance_service,json=appearanceService,proto3" json:"appearance_service,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *AttachmentsResponse) Reset() {
@@ -4623,6 +4630,20 @@ func (x *AttachmentsResponse) GetVisualParams() []byte {
 		return x.VisualParams
 	}
 	return nil
+}
+
+func (x *AttachmentsResponse) GetTextureEntry() []byte {
+	if x != nil {
+		return x.TextureEntry
+	}
+	return nil
+}
+
+func (x *AttachmentsResponse) GetAppearanceService() string {
+	if x != nil {
+		return x.AppearanceService
+	}
+	return ""
 }
 
 // SimAttachment is one entry in an avatar's attachment list.
@@ -8023,7 +8044,7 @@ const file_slgo_proto_rawDesc = "" +
 	"\x06powers\x18\x03 \x01(\x04R\x06powers\"B\n" +
 	"\x12AttachmentsRequest\x12\x14\n" +
 	"\x05agent\x18\x01 \x01(\tR\x05agent\x12\x16\n" +
-	"\x06avatar\x18\x02 \x01(\tR\x06avatar\"\xcc\x01\n" +
+	"\x06avatar\x18\x02 \x01(\tR\x06avatar\"\xa0\x02\n" +
 	"\x13AttachmentsResponse\x12\x14\n" +
 	"\x05known\x18\x01 \x01(\bR\x05known\x12\x1f\n" +
 	"\vcof_version\x18\x02 \x01(\x05R\n" +
@@ -8031,7 +8052,9 @@ const file_slgo_proto_rawDesc = "" +
 	"\vreceived_at\x18\x03 \x01(\x03R\n" +
 	"receivedAt\x128\n" +
 	"\vattachments\x18\x04 \x03(\v2\x16.slgo.v1.SimAttachmentR\vattachments\x12#\n" +
-	"\rvisual_params\x18\x05 \x01(\fR\fvisualParams\"B\n" +
+	"\rvisual_params\x18\x05 \x01(\fR\fvisualParams\x12#\n" +
+	"\rtexture_entry\x18\x06 \x01(\fR\ftextureEntry\x12-\n" +
+	"\x12appearance_service\x18\a \x01(\tR\x11appearanceService\"B\n" +
 	"\rSimAttachment\x12\x1b\n" +
 	"\tobject_id\x18\x01 \x01(\tR\bobjectId\x12\x14\n" +
 	"\x05point\x18\x02 \x01(\rR\x05point\"^\n" +

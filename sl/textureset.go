@@ -181,20 +181,18 @@ func groups(vals []string) []faceGroup {
 	return out
 }
 
-// appendFaceSet writes a face bitfield, seven bits to a byte with the
-// top bit meaning another follows.
+// appendFaceSet writes a face bitfield, seven bits to a byte, the most
+// significant first, with the top bit meaning another follows -- as the
+// viewer packs it (llprimitive.cpp:1110-1126).
 func appendFaceSet(b []byte, bits uint64) []byte {
-	for {
-		c := byte(bits & 0x7f)
-		bits >>= 7
-		if bits != 0 {
-			c |= 0x80
-		}
-		b = append(b, c)
-		if bits == 0 {
-			return b
-		}
+	n := 1
+	for v := bits >> 7; v != 0; v >>= 7 {
+		n++
 	}
+	for i := n - 1; i > 0; i-- {
+		b = append(b, byte(bits>>(7*uint(i))&0x7f)|0x80)
+	}
+	return append(b, byte(bits&0x7f))
 }
 
 func f32bytes(f float32) []byte {

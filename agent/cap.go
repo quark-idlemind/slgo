@@ -270,9 +270,42 @@ func (a *Agent) knownURL(u string) bool {
 		return true
 	}
 	a.urlMu.Unlock()
+	if a.underAppearanceService(u) {
+		return true
+	}
 	// A URL on the same host as a capability is one the simulator
 	// serves, which is the property that matters.
 	return a.sameHostAsACap(u)
+}
+
+// AppearanceService is where the grid serves this session's baked
+// textures: the login response's agent_appearance_service, or empty.
+func (a *Agent) AppearanceService() string {
+	if a.Account == nil {
+		return ""
+	}
+	s, _ := a.Account.Raw["agent_appearance_service"].(string)
+	return s
+}
+
+// underAppearanceService reports whether u is a URL under the
+// appearance service the login named: the grid gave that URL as surely
+// as a simulator gives a capability, and a viewer fetches bakes there
+// (LLVOAvatar::getImageURL).  Same scheme and host, no user name, and a
+// path inside the service's.
+func (a *Agent) underAppearanceService(u string) bool {
+	base := a.AppearanceService()
+	if base == "" {
+		return false
+	}
+	pb, err1 := neturl.Parse(base)
+	pu, err2 := neturl.Parse(u)
+	if err1 != nil || err2 != nil || pb.Host == "" || pu.User != nil {
+		return false
+	}
+	dir := strings.TrimSuffix(pb.Path, "/") + "/"
+	return pu.Scheme == pb.Scheme && pu.Host == pb.Host && strings.HasPrefix(pu.Path, dir) &&
+		!strings.Contains(pu.Path+"/", "/../")
 }
 
 // sameHostAsACap reports whether u is served by a host the simulator

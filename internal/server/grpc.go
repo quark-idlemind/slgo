@@ -852,6 +852,8 @@ func (s *Server) Attachments(ctx context.Context, req *pb.AttachmentsRequest) (*
 	for _, p := range m.VisualParam {
 		out.VisualParams = append(out.VisualParams, p.ParamValue)
 	}
+	out.TextureEntry = m.ObjectData.TextureEntry
+	out.AppearanceService = a.AppearanceService()
 	return out, nil
 }
 

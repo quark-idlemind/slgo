@@ -342,6 +342,9 @@ func (h *Hosted) SimAttachments(ctx context.Context, avatar msg.UUID) (*SimAttac
 		CofVersion:   int(r.GetCofVersion()),
 		Heard:        time.UnixMicro(r.GetReceivedAt()),
 		VisualParams: r.GetVisualParams(),
+
+		TextureEntry:      r.GetTextureEntry(),
+		AppearanceService: r.GetAppearanceService(),
 	}
 	for _, a := range r.GetAttachments() {
 		// Empty is pending; anything else that will not parse is not
