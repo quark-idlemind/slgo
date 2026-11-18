@@ -1,11 +1,13 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -711,6 +713,59 @@ func TestCapProxyTooLargeReachesTheClientAsItself(t *testing.T) {
 	_, err := c.DoCap(context.Background(), agent.CapRequest{Cap: "Big"})
 	if !errors.Is(err, agent.ErrReplyTooLarge) {
 		t.Errorf("a reply over 32 MiB gave %v, want agent.ErrReplyTooLarge", err)
+	}
+}
+
+// A Cap request carries an upload whole, and a mesh's quote request was
+// 5.5 MB, over gRPC's default 4 MB.
+func TestCapProxyTakesARequestLargerThanGRPCsDefault(t *testing.T) {
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		b, _ := io.ReadAll(req.Body)
+		fmt.Fprintf(w, "%d", len(b))
+	}))
+	defer hs.Close()
+
+	r := newRig(t, agent.Caps{"Upload": hs.URL})
+	c := r.dial(t)
+	defer c.Close()
+	const size = 6 << 20
+	resp, err := c.DoCap(context.Background(), agent.CapRequest{
+		Cap: "Upload", Method: "POST", Body: bytes.Repeat([]byte("x"), size),
+	})
+	if err != nil {
+		t.Fatalf("a %d-byte request gave %v", size, err)
+	}
+	if got := string(resp.Body); got != fmt.Sprint(size) {
+		t.Errorf("the capability read %s bytes, want %d", got, size)
+	}
+}
+
+func TestCapRequestLargerThanTheLimitIsRefusedBeforeItIsSent(t *testing.T) {
+	sent := make(chan struct{}, 1)
+	hs := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		sent <- struct{}{}
+	}))
+	defer hs.Close()
+
+	r := newRig(t, agent.Caps{"Upload": hs.URL})
+	c := r.dial(t)
+	defer c.Close()
+	_, err := c.DoCap(context.Background(), agent.CapRequest{
+		Cap: "Upload", Method: "POST", Body: make([]byte, client.MaxMessage+1),
+	})
+	if !errors.Is(err, client.ErrRequestTooLarge) {
+		t.Errorf("a request over the limit gave %v, want client.ErrRequestTooLarge", err)
+	}
+	select {
+	case <-sent:
+		t.Error("the request reached the capability")
+	default:
+	}
+}
+
+func TestTheServerTakesWhatTheClientSends(t *testing.T) {
+	if maxMessage != client.MaxMessage {
+		t.Errorf("the server takes %d bytes and the client sends up to %d", maxMessage, client.MaxMessage)
 	}
 }
 

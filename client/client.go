@@ -65,6 +65,7 @@ import (
 	"github.com/quark-idlemind/slgo/internal/auth"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1265,6 +1266,16 @@ func (c *Conn) Caps() []string {
 	return out
 }
 
+// MaxMessage is the largest message either end of a connection to
+// slgod takes, 64 MiB: room for a capability request that carries an
+// upload, and for the 32 MiB that slgod reads of a reply.  slgod holds
+// itself to the same number.
+const MaxMessage = 64 << 20
+
+// ErrRequestTooLarge is a capability request larger than MaxMessage,
+// refused before it is sent.
+var ErrRequestTooLarge = errors.New("the request is larger than 64 MiB")
+
 // DoCap makes a capability request through the server.
 //
 // A named capability answered 404 "cap not found" is taken for one
@@ -1294,7 +1305,7 @@ func capNotFound(r *agent.CapResponse) bool {
 func (c *Conn) doCap(ctx context.Context, r agent.CapRequest) (*agent.CapResponse, error) {
 	name := c.agentName()
 
-	resp, err := c.grid.Cap(ctx, &pb.CapRequest{
+	req := &pb.CapRequest{
 		Agent:       name,
 		Cap:         r.Cap,
 		Method:      r.Method,
@@ -1302,11 +1313,23 @@ func (c *Conn) doCap(ctx context.Context, r agent.CapRequest) (*agent.CapRespons
 		Body:        r.Body,
 		ContentType: r.Type,
 		Url:         r.URL,
-	}, grpc.MaxCallRecvMsgSize(64<<20))
-	// A reply larger than slgod reads, or than this end takes, is the
-	// one failure a caller can do something about: ask for less.
+	}
+	if n := proto.Size(req); n > MaxMessage {
+		return nil, fmt.Errorf("client: %s%s: %w (%d bytes)", r.Cap, r.Path, ErrRequestTooLarge, n)
+	}
+	resp, err := c.grid.Cap(ctx, req,
+		grpc.MaxCallRecvMsgSize(MaxMessage), grpc.MaxCallSendMsgSize(MaxMessage))
+	// A reply larger than slgod reads is the one failure a caller can
+	// do something about: ask for less.  Anything else refused for its
+	// size -- a request over an older slgod's 4 MB -- is passed on in
+	// gRPC's own words, which say which limit it was.
+	// Why: doc/mesh.md#how-large-a-request-slgod-takes
 	if status.Code(err) == codes.ResourceExhausted {
-		return nil, fmt.Errorf("%w: %s", agent.ErrReplyTooLarge, status.Convert(err).Message())
+		m := status.Convert(err).Message()
+		if strings.Contains(m, agent.ErrReplyTooLarge.Error()) {
+			return nil, fmt.Errorf("%w: %s", agent.ErrReplyTooLarge, m)
+		}
+		return nil, fmt.Errorf("client: slgod refused %s%s: %s", r.Cap, r.Path, m)
 	}
 	if err != nil {
 		return nil, err
